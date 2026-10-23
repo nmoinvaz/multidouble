@@ -1,5 +1,5 @@
 //! The 8-lane types against the scalar ones, bit for bit, on whichever backend this build selected
-//! (`V8::ISA`: avx512, avx2 or portable). CI runs these on every backend, so the three agree with each other too.
+//! (`V8::ISA`: avx512, avx2, sse2, neon or portable). CI runs these on every backend, so the three agree with each other too.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -24,7 +24,11 @@ fn dd8(r: &mut Rng) -> ([DD; 8], DV) {
 
 #[test]
 fn backend_is_reported() {
-    assert!(["avx512", "avx2", "portable"].contains(&V8::ISA), "{}", V8::ISA);
+    assert!(
+        ["avx512", "avx2", "sse2", "neon", "portable"].contains(&V8::ISA),
+        "{}",
+        V8::ISA
+    );
     println!("V8 backend: {}", V8::ISA);
 }
 

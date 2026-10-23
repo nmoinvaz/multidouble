@@ -51,16 +51,19 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - name: Ubuntu x86_64 portable
+          - name: Ubuntu x86_64 SSE2
             os: ubuntu-latest
           - name: Ubuntu x86_64 AVX2
             os: ubuntu-latest
             rustflags: -C target-feature=+avx2,+fma
-          - name: Ubuntu ARM64
+          - name: Ubuntu x86_64 portable
+            os: ubuntu-latest
+            cargo-args: --features portable
+          - name: Ubuntu ARM64 NEON
             os: ubuntu-24.04-arm
-          - name: macOS ARM64
+          - name: macOS ARM64 NEON
             os: macos-latest
-          - name: Windows MSVC x64
+          - name: Windows MSVC x64 SSE2
             os: windows-latest
     runs-on: ${{ matrix.os }}
     env:
@@ -73,10 +76,10 @@ jobs:
 
       - name: Run tests
         timeout-minutes: 30
-        run: cargo test --release --locked --all-features
+        run: cargo test --release --locked --features mutate ${{ matrix.cargo-args }}
 
       - name: Package dry run
-        if: runner.os == 'Linux' && !matrix.rustflags
+        if: runner.os == 'Linux' && !matrix.rustflags && !matrix.cargo-args
         run: cargo publish --locked --dry-run
 
   release:

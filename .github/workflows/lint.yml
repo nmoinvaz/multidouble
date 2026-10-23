@@ -14,19 +14,27 @@ jobs:
     - name: Run rustfmt
       run: cargo fmt --check
 
-  # The V8 backend is selected by target features, so each backend is its own code to lint.
+  # The V8 backend is selected by the target and its features, so each backend is its own code to lint.
   clippy:
     name: Clippy ${{ matrix.name }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          - name: SSE2
+            os: ubuntu-latest
           - name: portable
+            os: ubuntu-latest
+            features: portable,mutate
           - name: AVX2
+            os: ubuntu-latest
             rustflags: -C target-feature=+avx2,+fma
           - name: AVX-512
+            os: ubuntu-latest
             rustflags: -C target-feature=+avx512f,+avx2,+fma
+          - name: NEON
+            os: ubuntu-24.04-arm
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
@@ -34,7 +42,7 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      run: cargo clippy --all-targets --features ${{ matrix.features || 'mutate' }} -- -D warnings
 
   docs:
     name: Docs

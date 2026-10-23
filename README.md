@@ -4,7 +4,7 @@
 [![Lint](https://github.com/nmoinvaz/multidouble/actions/workflows/lint.yml/badge.svg)](https://github.com/nmoinvaz/multidouble/actions/workflows/lint.yml)
 
 Double-double and quad-double floating-point arithmetic for Rust, scalar and on 8-lane SIMD vectors, with **bitwise the
-same results on AVX-512, AVX2 and portable builds**. It also has forward-mode dual numbers over these lanes and a dense
+same results on AVX-512, AVX2, SSE2, NEON and portable builds**. It also has forward-mode dual numbers over these lanes and a dense
 LU factorization in double-double.
 
 A double-double is an unevaluated sum `hi + lo` of two `f64`, about 32 significant digits. A quad-double is a sum of four,
@@ -13,7 +13,7 @@ speed, with no allocation and no arbitrary-precision library.
 
 | Type | What it is |
 |---|---|
-| `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, or a plain array, with fused multiply-add throughout |
+| `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout |
 | `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `dv::DotAcc` accumulates sums of products |
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, and f64 versions, behind the `dual::Lane` trait |
@@ -42,8 +42,16 @@ let y = x * x + DV::splat(third);
 assert_eq!(y.lane(2), DD::from_f64(9.0) + third);
 ```
 
-The SIMD backend is chosen at compile time by the enabled target features. Build with
-`RUSTFLAGS="-C target-cpu=native"`, or `-C target-feature=+avx2,+fma`, to get the AVX-512 or AVX2 code;
+The SIMD backend is chosen at compile time by the target and its enabled features:
+
+| Backend | When | Registers |
+|---|---|---|
+| `avx512` | x86-64 with AVX-512F enabled (`RUSTFLAGS="-C target-cpu=native"` on such a CPU) | one zmm |
+| `avx2` | x86-64 with AVX2 and FMA enabled (`-C target-feature=+avx2,+fma`) | two ymm |
+| `sse2` | x86 and x86-64 otherwise; SSE2 has no fused multiply-add, so that one operation runs per lane through `f64::mul_add` | four xmm |
+| `neon` | aarch64 | four NEON |
+| `portable` | every other target, or any target with the cargo feature `portable` | a plain array |
+
 `V8::ISA` reports which one was compiled in. Results are the same on every backend; only the speed changes.
 
 ## Accuracy
@@ -79,18 +87,21 @@ Every check can fail. Two kinds of controls show it:
 ## Testing, coverage and benchmarks
 
 ```sh
-cargo test --release                                            # portable backend
+cargo test --release                                            # SSE2 on x86, NEON on aarch64
+cargo test --release --features portable                        # the plain-array backend
 RUSTFLAGS="-C target-feature=+avx2,+fma" cargo test --release   # AVX2
 RUSTFLAGS="-C target-cpu=native" cargo test --release           # AVX-512 where the CPU has it
 cargo test --release --features mutate                          # the mutation controls
-cargo llvm-cov --release --all-features                         # coverage (cargo-llvm-cov)
+cargo llvm-cov --release --features mutate                      # coverage (cargo-llvm-cov)
 cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double
 cargo bench --bench linalg                                      # double-double LU against f64 LU
 ```
 
-`tests/lanes.rs` checks that `V8`, `DV` and `QV` match the scalar types bit for bit. CI runs the whole suite on:
+`tests/lanes.rs` checks that `V8`, `DV` and `QV` match the scalar types bit for bit. The NEON backend's code is also
+compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
+every runner, not only on ARM. CI runs the whole suite on:
 
-- the portable, AVX2 and AVX-512 backends;
+- the portable, SSE2, AVX2, AVX-512 and NEON backends;
 - Linux on x86-64, ARM64, ARMv7, PPC64LE, RISC-V 64 and S390X (big-endian);
 - macOS on ARM64;
 - Windows on x64 and x86.
@@ -107,4 +118,5 @@ Jacobian at the speed of SIMD f64 code. The solver itself stays in that reposito
 
 ## License
 
-[Zlib](LICENSE.md). The quad-double algorithms follow the QD library, whose license is in [LICENSE-QD](LICENSE-QD).
+[BSD 3-Clause](LICENSE), the license of the QD library whose quad-double algorithms `src/qd.rs` and `src/qv.rs`
+follow. QD's own notice is kept in [LICENSE-QD](LICENSE-QD).

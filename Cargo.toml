@@ -3,15 +3,17 @@ name = "multidouble"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-description = "Double-double and quad-double arithmetic, scalar and 8-lane SIMD (AVX-512, AVX2, portable) with bitwise identical results, dual numbers and double-double LU"
-license = "Zlib"
+description = "Double-double and quad-double arithmetic, scalar and 8-lane SIMD (AVX-512, AVX2, SSE2, NEON, portable) with bitwise identical results, dual numbers and double-double LU"
+license = "BSD-3-Clause"
 repository = "https://github.com/nmoinvaz/multidouble"
 readme = "README.md"
 keywords = ["double-double", "quad-double", "extended-precision", "simd", "floating-point"]
 categories = ["mathematics", "science"]
-exclude = ["/.github"]
+exclude = ["/.github", "/.claude", "/CLAUDE.md"]
 
 [features]
+# Use the plain-array V8 backend whatever the target features, e.g. to compare it with the SIMD ones.
+portable = []
 # Deliberate breakage of the quad-double algorithms, for the controls of the accuracy tests (qd::mutate).
 mutate = []
 

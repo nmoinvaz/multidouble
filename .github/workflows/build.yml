@@ -9,10 +9,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The V8 backend is chosen at compile time by the enabled target features: the plain build is the
-          # portable one, and the AVX2 and AVX-512 builds must give bitwise the same results (tests/lanes.rs).
+          # The V8 backend is chosen at compile time by the target and its features: the plain x86-64 build is
+          # SSE2, aarch64 is NEON, and the feature portable forces the plain array. All must give bitwise the
+          # same results (tests/lanes.rs).
+          - name: Ubuntu x86_64 SSE2
+            os: ubuntu-latest
+
           - name: Ubuntu x86_64 portable
             os: ubuntu-latest
+            cargo-args: --features portable
 
           - name: Ubuntu x86_64 AVX2
             os: ubuntu-latest
@@ -28,8 +33,12 @@ jobs:
             os: ubuntu-latest
             cargo-args: --features mutate
 
-          - name: Ubuntu ARM64
+          - name: Ubuntu ARM64 NEON
             os: ubuntu-24.04-arm
+
+          - name: Ubuntu ARM64 portable
+            os: ubuntu-24.04-arm
+            cargo-args: --features portable
 
           # The rest of Ubuntu's architectures, cross compiled and run under QEMU. S390X is big-endian.
           - name: Ubuntu ARMv7
@@ -56,17 +65,17 @@ jobs:
             gnu: s390x-linux-gnu
             cargo-args: --target s390x-unknown-linux-gnu
 
-          - name: macOS ARM64
+          - name: macOS ARM64 NEON
             os: macos-latest
 
-          - name: Windows MSVC x64
+          - name: Windows MSVC x64 SSE2
             os: windows-latest
 
           - name: Windows MSVC x64 AVX2
             os: windows-latest
             rustflags: -C target-feature=+avx2,+fma
 
-          - name: Windows MSVC x86
+          - name: Windows MSVC x86 SSE2
             os: windows-latest
             target: i686-pc-windows-msvc
             cargo-args: --target i686-pc-windows-msvc
@@ -114,6 +123,7 @@ jobs:
           cargo check --lib
           RUSTFLAGS="-C target-feature=+avx2,+fma" cargo check --lib
           RUSTFLAGS="-C target-feature=+avx512f,+avx2,+fma" cargo check --lib
+          cargo check --lib --features portable
 
       - name: Build project
         if: ${{ !matrix.msrv }}
@@ -157,10 +167,11 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      # All features, so the mutation controls count too; portable backend, the one every target can run.
+      # With the mutation controls; the SSE2 backend of the runner (the portable and NEON code is covered by
+      # their own test runs and, for NEON, the intrinsic model in v8.rs).
       - name: Collect coverage
         run: |
-          cargo llvm-cov --release --all-features --lcov --output-path lcov.info
+          cargo llvm-cov --release --features mutate --lcov --output-path lcov.info
           cargo llvm-cov report --release --summary-only
 
       - name: Upload report

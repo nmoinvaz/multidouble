@@ -1,4 +1,4 @@
-The quad-double algorithms in this crate follow the QD library (Y. Hida, X. S. Li, D. H. Bailey,
+The quad-double algorithms in this crate (src/qd.rs, src/qv.rs) follow the QD library (Y. Hida, X. S. Li, D. H. Bailey,
 https://github.com/BL-highprecision/qd), distributed under the following license.
 
 BSD 3-Clause License
