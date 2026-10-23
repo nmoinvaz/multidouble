@@ -79,8 +79,7 @@ two repairs found by these tests:
 - **The accurate add.** It lost a term when all parts are read with three emitted.
 - **The square root.** It lost accuracy far from 1. It now scales its argument by a power of four first.
 
-[docs/QUAD_DOUBLE.md](docs/QUAD_DOUBLE.md) has the full record. Quad-double costs 8–29 times double-double per
-operation, and 14–17 times in sums of products.
+Quad-double costs 8–29 times double-double per operation, and 14–17 times in sums of products.
 
 Every check can fail. Two kinds of controls show it:
 

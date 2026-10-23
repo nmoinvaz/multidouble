@@ -11,7 +11,7 @@
 //! The operators use the library's default configuration: `+`, `-` the sloppy add, `*` the sloppy multiply, `/` the
 //! sloppy divide; `ieee_add`, `accurate_mul` and `accurate_div` are the others.
 //!
-//! Two repairs of QD, both found by the tests (docs/QUAD_DOUBLE.md, section 3): the accurate add keeps u + v where
+//! Two repairs of QD, both found by the tests: the accurate add keeps u + v where
 //! QD keeps u alone (when all parts are read with three emitted), and sqrt scales its argument by an exact power of
 //! four into [1, 4) (QD's iteration loses accuracy above about 2^860 and below about 2^-860).
 //!
@@ -330,7 +330,7 @@ impl QD {
 
     /// QD's accurate add (merge by magnitude, double-length accumulator), IEEE-style error bound, with one change:
     /// when every part has been read with three already emitted, the last part is u + v where QD keeps u alone
-    /// (docs/QUAD_DOUBLE.md: QD's version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, this
+    /// (QD's version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, this
     /// one 0.12 u in 200000)
     #[inline]
     // the merge keeps QD's branch order, in which the first and last branches take the same part
@@ -646,7 +646,7 @@ impl QD {
     /// Square root: QD's Newton iteration on 1/sqrt(a) (three steps from the f64 value, then times a), applied to a
     /// scaled by an exact power of four into [1, 4) and the result scaled back. Unscaled, as in QD, the iteration
     /// loses accuracy above about 2^860 (1/a's lower parts underflow) and below about 2^-860 (a/2 drops bits of
-    /// subnormal parts); the near-overflow tests found it (docs/QUAD_DOUBLE.md).
+    /// subnormal parts); the near-overflow tests found it.
     #[inline]
     pub fn sqrt(self) -> QD {
         if self.is_zero() {

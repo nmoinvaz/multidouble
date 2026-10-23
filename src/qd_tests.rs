@@ -354,7 +354,7 @@ fn op_cray(op: Op) -> bool {
     matches!(op, Op::SloppyAdd | Op::AddF | Op::AddDd)
 }
 
-/// pass threshold in units of 2^-209 (docs/QUAD_DOUBLE.md, fixed before the runs)
+/// pass threshold in units of 2^-209 (fixed before the runs)
 fn op_thr(op: Op) -> f64 {
     match op {
         Op::IeeeAdd => 1.0,
@@ -1552,7 +1552,7 @@ fn bench_qd() {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// diagnostics of the two exceedances of the pre-registered thresholds (docs/QUAD_DOUBLE.md, section 3)
+// diagnostics of the two exceedances of the pre-registered thresholds
 // -------------------------------------------------------------------------------------------------------------
 
 /// QD's accurate add exactly as in QD 2.3 (qd_inline.h, ieee_add), for comparison with `QD::ieee_add`, which keeps

@@ -9,7 +9,7 @@
 //!   cargo feature `portable` forces the plain array), with fused multiply-add throughout.
 //! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DotAcc`] a sum-of-products accumulator.
 //! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with two
-//!   repairs found by this crate's tests: see `docs/QUAD_DOUBLE.md`), exact decimal parsing and printing;
+//!   repairs found by this crate's tests), exact decimal parsing and printing;
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,

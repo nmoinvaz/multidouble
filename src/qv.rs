@@ -19,8 +19,8 @@
 //! relative to that sum, not to the terms, so the levels grow (level 3 to about n^1.5 2^-159 sum |a_i b_i|): a first
 //! design that summed level 3 in plain f64, with those errors mixed into the per-term ones, gave errors growing
 //! like n (72 u at n = 512, u = 2^-209). Here every running-sum error enters the next level by its own two-sum,
-//! level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of `finish`
-//! (docs/QUAD_DOUBLE.md). It costs about a third of a sloppy multiply plus a sloppy add.
+//! level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of `finish`.
+//! It costs about a third of a sloppy multiply plus a sloppy add.
 use crate::dd::DD;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
 use crate::qd::{mutate, QD};
