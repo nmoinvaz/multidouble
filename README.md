@@ -121,7 +121,7 @@ The minimum Rust version is 1.89, where the AVX-512 intrinsics became stable.
 
 This code was written for a double-double solver of Choptuik's critical collapse in D dimensions
 ([choptuik-large-d](https://github.com/nmoinvaz/choptuik-large-d)). That solver needs about 30 digits and an exact
-Jacobian at the speed of SIMD f64 code. The solver itself stays in that repository.
+Jacobian at the speed of SIMD f64 code.
 
 ## License
 
