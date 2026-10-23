@@ -1,0 +1,178 @@
+name: Build
+on: [push, pull_request]
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The V8 backend is chosen at compile time by the enabled target features: the plain build is the
+          # portable one, and the AVX2 and AVX-512 builds must give bitwise the same results (tests/lanes.rs).
+          - name: Ubuntu x86_64 portable
+            os: ubuntu-latest
+
+          - name: Ubuntu x86_64 AVX2
+            os: ubuntu-latest
+            rustflags: -C target-feature=+avx2,+fma
+
+          # Runners do not all have AVX-512: the tests run only on one that does, the build always.
+          - name: Ubuntu x86_64 AVX-512
+            os: ubuntu-latest
+            rustflags: -C target-feature=+avx512f,+avx2,+fma
+            needs-cpu: avx512f
+
+          - name: Ubuntu x86_64 mutation controls
+            os: ubuntu-latest
+            cargo-args: --features mutate
+
+          - name: Ubuntu ARM64
+            os: ubuntu-24.04-arm
+
+          # The rest of Ubuntu's architectures, cross compiled and run under QEMU. S390X is big-endian.
+          - name: Ubuntu ARMv7
+            os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            gnu: arm-linux-gnueabihf
+            cargo-args: --target armv7-unknown-linux-gnueabihf
+
+          - name: Ubuntu PPC64LE
+            os: ubuntu-latest
+            target: powerpc64le-unknown-linux-gnu
+            gnu: powerpc64le-linux-gnu
+            cargo-args: --target powerpc64le-unknown-linux-gnu
+
+          - name: Ubuntu RISC-V 64
+            os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            gnu: riscv64-linux-gnu
+            cargo-args: --target riscv64gc-unknown-linux-gnu
+
+          - name: Ubuntu S390X
+            os: ubuntu-latest
+            target: s390x-unknown-linux-gnu
+            gnu: s390x-linux-gnu
+            cargo-args: --target s390x-unknown-linux-gnu
+
+          - name: macOS ARM64
+            os: macos-latest
+
+          - name: Windows MSVC x64
+            os: windows-latest
+
+          - name: Windows MSVC x64 AVX2
+            os: windows-latest
+            rustflags: -C target-feature=+avx2,+fma
+
+          - name: Windows MSVC x86
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            cargo-args: --target i686-pc-windows-msvc
+
+          # The oldest supported Rust: AVX-512 intrinsics are stable from 1.89.
+          - name: Ubuntu x86_64 MSRV
+            os: ubuntu-latest
+            toolchain: "1.89"
+            msrv: true
+
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install toolchain
+        if: matrix.toolchain
+        run: |
+          rustup toolchain install ${{ matrix.toolchain }} --profile minimal
+          rustup default ${{ matrix.toolchain }}
+
+      - name: Install target
+        if: matrix.target
+        run: rustup target add ${{ matrix.target }}
+
+      # The cross compiler brings the target's C library, and binfmt hands what gets built to QEMU.
+      - name: Install cross toolchain
+        if: matrix.gnu
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-${{ matrix.gnu }} qemu-user-binfmt
+          target=${{ matrix.target }}
+          target=${target//-/_}
+          {
+            echo "CARGO_TARGET_${target^^}_LINKER=${{ matrix.gnu }}-gcc"
+            echo "QEMU_LD_PREFIX=/usr/${{ matrix.gnu }}"
+          } >> "$GITHUB_ENV"
+
+      # The library alone at the MSRV; the dev-dependencies (criterion) may need a newer compiler.
+      - name: Check library (MSRV)
+        if: matrix.msrv
+        run: |
+          cargo check --lib
+          RUSTFLAGS="-C target-feature=+avx2,+fma" cargo check --lib
+          RUSTFLAGS="-C target-feature=+avx512f,+avx2,+fma" cargo check --lib
+
+      - name: Build project
+        if: ${{ !matrix.msrv }}
+        run: cargo build --release ${{ matrix.cargo-args }}
+
+      - name: Check CPU
+        id: cpu
+        if: matrix.needs-cpu
+        run: |
+          if grep -qw ${{ matrix.needs-cpu }} /proc/cpuinfo; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::This runner has no ${{ matrix.needs-cpu }}: built, tests skipped"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Release mode: the accuracy tests run tens of thousands of quad-double operations against exact arithmetic.
+      - name: Run tests
+        if: ${{ !matrix.msrv && (!matrix.needs-cpu || steps.cpu.outputs.run == 'true') }}
+        timeout-minutes: 30
+        run: cargo test --release ${{ matrix.cargo-args }}
+
+      - name: Build benchmarks
+        if: ${{ !matrix.msrv && !matrix.cargo-args }}
+        run: cargo bench --no-run
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install llvm-tools
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      # All features, so the mutation controls count too; portable backend, the one every target can run.
+      - name: Collect coverage
+        run: |
+          cargo llvm-cov --release --all-features --lcov --output-path lcov.info
+          cargo llvm-cov report --release --summary-only
+
+      - name: Upload report
+        uses: actions/upload-artifact@v7
+        with:
+          name: lcov
+          path: lcov.info
+
+      - name: Upload to Codecov
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false
