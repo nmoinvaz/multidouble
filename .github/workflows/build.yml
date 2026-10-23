@@ -182,10 +182,11 @@ jobs:
 
       # With the mutation controls; the SSE2 backend of the runner (the portable and NEON code is covered by
       # their own test runs and, for NEON, the intrinsic model in v8.rs).
+      # Debug build: optimized code inlines across functions and llvm-cov drops the counts it cannot match.
       - name: Collect coverage
         run: |
-          cargo llvm-cov --release --features mutate --lcov --output-path lcov.info
-          cargo llvm-cov report --release --summary-only
+          cargo llvm-cov --features mutate --lcov --output-path lcov.info
+          cargo llvm-cov report --summary-only
 
       - name: Upload report
         uses: actions/upload-artifact@v7

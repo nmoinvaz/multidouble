@@ -98,7 +98,7 @@ RUSTFLAGS="-C target-feature=+avx2,+fma" cargo test --release   # AVX2
 RUSTFLAGS="-C target-cpu=native" cargo test --release           # AVX-512 where the CPU has it
 cargo test --release --features mutate                          # the mutation controls
 cargo +nightly test --release --features f128                   # the f128 conversions
-cargo llvm-cov --release --features mutate                      # coverage (cargo-llvm-cov)
+cargo llvm-cov --features mutate                                # coverage (cargo-llvm-cov)
 cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double
 cargo bench --bench linalg                                      # double-double LU against f64 LU
 ```
