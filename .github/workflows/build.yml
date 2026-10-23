@@ -23,11 +23,13 @@ jobs:
             os: ubuntu-latest
             rustflags: -C target-feature=+avx2,+fma
 
-          # Runners do not all have AVX-512: the tests run only on one that does, the build always.
+          # Runners do not all have AVX-512: the tests run only on one that does, the build always. The explicit
+          # --target keeps RUSTFLAGS off the build scripts, which run on the runner and would crash without AVX-512.
           - name: Ubuntu x86_64 AVX-512
             os: ubuntu-latest
             rustflags: -C target-feature=+avx512f,+avx2,+fma
             needs-cpu: avx512f
+            cargo-args: --target x86_64-unknown-linux-gnu
 
           - name: Ubuntu x86_64 mutation controls
             os: ubuntu-latest
@@ -122,7 +124,7 @@ jobs:
         run: |
           cargo check --lib
           RUSTFLAGS="-C target-feature=+avx2,+fma" cargo check --lib
-          RUSTFLAGS="-C target-feature=+avx512f,+avx2,+fma" cargo check --lib
+          RUSTFLAGS="-C target-feature=+avx512f,+avx2,+fma" cargo check --lib --target x86_64-unknown-linux-gnu
           cargo check --lib --features portable
 
       - name: Build project
