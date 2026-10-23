@@ -70,6 +70,27 @@ impl DD {
     }
 }
 
+#[cfg(feature = "f128")]
+impl DD {
+    /// hi = RN(x), lo = RN(x - hi): the greedy parts, to about 2^-106 relative (x - hi is exact in f128)
+    #[inline(always)]
+    pub fn from_f128(x: f128) -> DD {
+        let hi = x as f64;
+        if !hi.is_finite() {
+            return DD::from_f64(hi);
+        }
+        DD {
+            hi,
+            lo: (x - hi as f128) as f64,
+        }
+    }
+    /// correctly rounded (hi + lo is rounded once)
+    #[inline(always)]
+    pub fn to_f128(self) -> f128 {
+        self.hi as f128 + self.lo as f128
+    }
+}
+
 impl Add for DD {
     type Output = DD;
     #[inline(always)]

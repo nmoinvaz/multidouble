@@ -55,6 +55,10 @@ The SIMD backend is chosen at compile time by the target and its enabled feature
 
 `V8::ISA` reports which one was compiled in. Results are the same on every backend; only the speed changes.
 
+The cargo feature `f128` adds conversions between `f128` and the scalar types. It needs nightly Rust, as `f128` is
+unstable. `QD::from_f128` is exact, `DD::from_f128` rounds to the nearest parts, and both `to_f128` are correctly
+rounded.
+
 ## Accuracy
 
 The tests compare against exact arithmetic (`exact`), which shares no code with the algorithms under test. Errors are
@@ -83,7 +87,8 @@ Every check can fail. Two kinds of controls show it:
 - **Built-in breakage.** The feature `mutate` breaks the quad-double algorithms one at a time on purpose, and
   `cargo test --release --features mutate` checks that each breakage fails a test.
 - **Hand-written controls.** The integration tests contain controls that feed deliberately wrong results to the same
-  checks: a double-double add without its low parts, a wrong derivative, and a perturbed LU factor.
+  checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor, and f128 conversions
+  that round twice.
 
 ## Testing, coverage and benchmarks
 
@@ -93,6 +98,7 @@ cargo test --release --features portable                        # the plain-arra
 RUSTFLAGS="-C target-feature=+avx2,+fma" cargo test --release   # AVX2
 RUSTFLAGS="-C target-cpu=native" cargo test --release           # AVX-512 where the CPU has it
 cargo test --release --features mutate                          # the mutation controls
+cargo +nightly test --release --features f128                   # the f128 conversions
 cargo llvm-cov --release --features mutate                      # coverage (cargo-llvm-cov)
 cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double
 cargo bench --bench linalg                                      # double-double LU against f64 LU
@@ -105,7 +111,8 @@ every runner, not only on ARM. CI runs the whole suite on:
 - the portable, SSE2, AVX2, AVX-512 and NEON backends;
 - Linux on x86-64, ARM64, ARMv7, PPC64LE, RISC-V 64 and S390X (big-endian);
 - macOS on ARM64;
-- Windows on x64 and x86.
+- Windows on x64 and x86;
+- nightly Rust with the feature `f128`, on x86-64 and ARM64 Linux.
 
 It also runs coverage, clippy on each backend, and a library check at the minimum Rust version.
 

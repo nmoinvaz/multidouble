@@ -833,6 +833,132 @@ impl QD {
     }
 }
 
+#[cfg(feature = "f128")]
+impl QD {
+    /// greedy round-to-nearest parts (x0 = RN(x), x1 = RN(x - x0), ...), exact when RN(x) is finite and the last bit
+    /// of x is at least 2^-1074: the 113 bits fill at most three parts, and each remainder is exact in f128
+    pub fn from_f128(x: f128) -> QD {
+        let mut q = QD::ZERO;
+        let mut r = x;
+        for xi in q.x.iter_mut() {
+            *xi = r as f64;
+            if !xi.is_finite() {
+                break;
+            }
+            r -= *xi as f128;
+        }
+        q
+    }
+    /// correctly rounded, for any four parts: their exact sum in a fixed-point accumulator, rounded once
+    pub fn to_f128(self) -> f128 {
+        sum_to_f128(self.x)
+    }
+}
+
+/// Limbs of the fixed-point accumulator, in two's complement: bit p weighs 2^(p - 1074), from the least f64 bit to
+/// beyond 2^1026, which bounds a sum of four f64.
+#[cfg(feature = "f128")]
+const ACC_LIMBS: usize = 33;
+
+/// the exact sum of four f64, rounded to the nearest f128 (ties to even)
+#[cfg(feature = "f128")]
+fn sum_to_f128(x: [f64; 4]) -> f128 {
+    // infinities and NaN as IEEE addition gives them
+    if x.iter().any(|v| !v.is_finite()) {
+        return x[0] as f128 + x[1] as f128 + x[2] as f128 + x[3] as f128;
+    }
+    let mut acc = [0u64; ACC_LIMBS];
+    for v in x {
+        let b = v.to_bits();
+        let ex = (b >> 52 & 0x7ff) as usize;
+        let m = (b & ((1 << 52) - 1)) | ((ex > 0) as u64) << 52;
+        // v = ±m·2^(p - 1074)
+        let p = ex.max(1) - 1;
+        acc_add(&mut acc, p / 64, (m as u128) << (p % 64), b >> 63 == 1);
+    }
+    let neg = acc[ACC_LIMBS - 1] >> 63 == 1;
+    if neg {
+        let mut c = 1;
+        for a in acc.iter_mut() {
+            let (s, o) = (!*a).overflowing_add(c);
+            *a = s;
+            c = o as u64;
+        }
+    }
+    let Some(t) = acc.iter().rposition(|&a| a != 0) else {
+        // an exact zero is -0 only when every part is -0, as in IEEE addition
+        return if x.iter().all(|v| v.is_sign_negative()) {
+            -0.0
+        } else {
+            0.0
+        };
+    };
+    // leading bit l, the 113-bit significand from bit l - 112
+    let mut l = 64 * t + 63 - acc[t].leading_zeros() as usize;
+    let m = if l < 113 {
+        acc_bits(&acc, 0) << (112 - l)
+    } else {
+        let lo = l - 112;
+        let m = acc_bits(&acc, lo);
+        let half = acc[(lo - 1) / 64] >> ((lo - 1) % 64) & 1 == 1;
+        let up = half && (acc_any_below(&acc, lo - 1) || m & 1 == 1);
+        let m = m + up as u128;
+        if m >> 113 == 1 {
+            l += 1;
+            m >> 1
+        } else {
+            m
+        }
+    };
+    // m·2^(l - 112 - 1074) with m in [2^112, 2^113): always a normal f128
+    let biased = (l + 16383 - 1074) as u128;
+    f128::from_bits((neg as u128) << 127 | biased << 112 | (m & ((1 << 112) - 1)))
+}
+
+/// acc += w·2^(64k), or acc -= w·2^(64k) when neg, carrying or borrowing up to the top limb
+#[cfg(feature = "f128")]
+fn acc_add(acc: &mut [u64; ACC_LIMBS], k: usize, w: u128, neg: bool) {
+    let mut c = 0;
+    for j in k..ACC_LIMBS {
+        let d = if j < k + 2 { (w >> (64 * (j - k))) as u64 } else { 0 };
+        let (s, o1) = if neg {
+            acc[j].overflowing_sub(d)
+        } else {
+            acc[j].overflowing_add(d)
+        };
+        let (s, o2) = if neg {
+            s.overflowing_sub(c)
+        } else {
+            s.overflowing_add(c)
+        };
+        acc[j] = s;
+        c = (o1 || o2) as u64;
+        if j > k && c == 0 {
+            break;
+        }
+    }
+}
+
+/// the 128 bits of acc from bit lo up
+#[cfg(feature = "f128")]
+fn acc_bits(acc: &[u64; ACC_LIMBS], lo: usize) -> u128 {
+    let limb = |i: usize| acc.get(i).copied().unwrap_or(0) as u128;
+    let (i, s) = (lo / 64, lo % 64);
+    let w = limb(i) | limb(i + 1) << 64;
+    if s == 0 {
+        w
+    } else {
+        w >> s | limb(i + 2) << (128 - s)
+    }
+}
+
+/// any bit of acc below bit n
+#[cfg(feature = "f128")]
+fn acc_any_below(acc: &[u64; ACC_LIMBS], n: usize) -> bool {
+    let (i, s) = (n / 64, n % 64);
+    acc[..i].iter().any(|&a| a != 0) || (s > 0 && acc[i] & ((1 << s) - 1) != 0)
+}
+
 /// a0 b3 + a1 b2 + a2 b1 + a3 b0 (the O(eps^3) partial products), by FMA in QD's order
 #[inline(always)]
 fn eps3(a: [f64; 4], b: [f64; 4]) -> f64 {

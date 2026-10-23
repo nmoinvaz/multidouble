@@ -16,6 +16,11 @@ exclude = ["/.github", "/.claude", "/CLAUDE.md"]
 portable = []
 # Deliberate breakage of the quad-double algorithms, for the controls of the accuracy tests (qd::mutate).
 mutate = []
+# Conversions between f128 and DD/QD. Nightly only, f128 is unstable.
+f128 = []
+
+[package.metadata.docs.rs]
+features = ["f128"]
 
 [dependencies]
 rayon = "1.10"
@@ -27,6 +32,10 @@ criterion = "0.8"
 opt-level = 3
 codegen-units = 1
 lto = "fat"
+
+[[test]]
+name = "f128"
+required-features = ["f128"]
 
 [[bench]]
 name = "arith"

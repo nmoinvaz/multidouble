@@ -82,6 +82,17 @@ jobs:
             target: i686-pc-windows-msvc
             cargo-args: --target i686-pc-windows-msvc
 
+          # f128 is unstable: its conversions build and run on nightly only.
+          - name: Ubuntu x86_64 f128
+            os: ubuntu-latest
+            toolchain: nightly
+            cargo-args: --features f128
+
+          - name: Ubuntu ARM64 f128
+            os: ubuntu-24.04-arm
+            toolchain: nightly
+            cargo-args: --features f128
+
           # The oldest supported Rust: AVX-512 intrinsics are stable from 1.89.
           - name: Ubuntu x86_64 MSRV
             os: ubuntu-latest

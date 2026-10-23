@@ -20,6 +20,9 @@
 //!
 //! All operations are IEEE round-to-nearest with no reassociation, which the error-free transformations need.
 //!
+//! The cargo feature `f128` adds conversions between `f128` and [`dd::DD`] and [`qd::QD`]. It needs a nightly
+//! compiler, as `f128` is unstable.
+//!
 //! ```
 //! use multidouble::dd::DD;
 //! use multidouble::qd::QD;
@@ -33,6 +36,7 @@
 // Numerical kernels index several arrays with one loop variable, and the lane and accumulator types keep inherent
 // add/sub/mul/div methods (the std::ops traits are implemented where they apply).
 #![allow(clippy::needless_range_loop, clippy::should_implement_trait)]
+#![cfg_attr(feature = "f128", feature(f128))]
 
 pub mod dd;
 pub mod dual;

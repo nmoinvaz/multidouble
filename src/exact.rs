@@ -18,6 +18,11 @@ impl BigU {
         r.trim();
         r
     }
+    pub fn from_u128(x: u128) -> BigU {
+        let mut r = BigU(vec![x as u64, (x >> 64) as u64]);
+        r.trim();
+        r
+    }
     fn trim(&mut self) {
         while self.0.last() == Some(&0) {
             self.0.pop();
@@ -275,6 +280,58 @@ pub fn round_to_f64(m: &BigU, e: i64, sticky: bool) -> f64 {
     ldexp_exact(q, k)
 }
 
+/// q·2^k for q < 2^114 when the result is exactly representable in f128 (or overflows to infinity)
+#[cfg(feature = "f128")]
+fn ldexp_exact_f128(q: u128, k: i64) -> f128 {
+    if q == 0 {
+        return 0.0;
+    }
+    let s = 113 - (128 - q.leading_zeros() as i64); // shift to put the leading bit at bit 112 (may be -1)
+    let (q, k) = if s >= 0 { (q << s, k - s) } else { (q >> 1, k + 1) };
+    let lead = k + 112;
+    if lead > 16383 {
+        return f128::INFINITY;
+    }
+    if lead >= -16382 {
+        return f128::from_bits((((lead + 16383) as u128) << 112) | (q & ((1u128 << 112) - 1)));
+    }
+    // subnormal: q·2^k = (q >> (-16494 - k))·2^-16494, exact by assumption
+    let sh = -16494 - k;
+    if sh >= 128 {
+        return 0.0;
+    }
+    f128::from_bits(q >> sh)
+}
+
+/// Round-to-nearest-even of m·2^e (+ a positive amount below 2^e if sticky) to f128, with subnormals and overflow.
+#[cfg(feature = "f128")]
+pub fn round_to_f128(m: &BigU, e: i64, sticky: bool) -> f128 {
+    let low = |b: &BigU| b.0.first().copied().unwrap_or(0) as u128 | (b.0.get(1).copied().unwrap_or(0) as u128) << 64;
+    let l = m.bits() as i64;
+    if l == 0 {
+        return 0.0;
+    }
+    let lead = e + l - 1;
+    if lead > 16383 {
+        return f128::INFINITY;
+    }
+    // bits of precision available at this exponent
+    let p = if lead >= -16382 { 113 } else { lead + 16495 };
+    let drop = l - p;
+    assert!(!sticky || drop > 0, "round_to_f128: sticky with an exact mantissa");
+    let (q, k) = if drop <= 0 {
+        (low(m) << (-drop) as u64, e + drop) // exact (l <= p <= 113)
+    } else {
+        let d = drop as u64;
+        let q = low(&m.shr(d));
+        let half = m.bit(d - 1);
+        let rest = sticky || m.any_below(d - 1);
+        let up = half && (rest || q & 1 == 1);
+        (q + up as u128, e + drop)
+    };
+    ldexp_exact_f128(q, k)
+}
+
 /// Signed dyadic rational (-1)^neg · m · 2^e.
 #[derive(Clone, Debug, Default)]
 pub struct Dy {
@@ -305,6 +362,25 @@ impl Dy {
         Dy {
             neg: neg && m != 0,
             m: BigU::from_u64(m),
+            e,
+        }
+    }
+    /// exact value of a finite f128
+    #[cfg(feature = "f128")]
+    pub fn from_f128(x: f128) -> Dy {
+        assert!(x.is_finite(), "Dy::from_f128({x:?})");
+        let b = x.to_bits();
+        let neg = b >> 127 == 1;
+        let ex = ((b >> 112) & 0x7fff) as i64;
+        let fr = b & ((1u128 << 112) - 1);
+        let (m, e) = if ex == 0 {
+            (fr, -16494)
+        } else {
+            (fr | (1u128 << 112), ex - 16495)
+        };
+        Dy {
+            neg: neg && m != 0,
+            m: BigU::from_u128(m),
             e,
         }
     }
@@ -417,6 +493,16 @@ impl Dy {
     /// value rounded to nearest f64
     pub fn to_f64(&self) -> f64 {
         let v = round_to_f64(&self.m, self.e, false);
+        if self.neg {
+            -v
+        } else {
+            v
+        }
+    }
+    /// value rounded to nearest f128
+    #[cfg(feature = "f128")]
+    pub fn to_f128(&self) -> f128 {
+        let v = round_to_f128(&self.m, self.e, false);
         if self.neg {
             -v
         } else {

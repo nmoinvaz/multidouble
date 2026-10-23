@@ -37,11 +37,22 @@ jobs:
             target-args: --target x86_64-unknown-linux-gnu
           - name: NEON
             os: ubuntu-24.04-arm
+          # f128 is unstable, so its code is linted on nightly
+          - name: f128
+            os: ubuntu-latest
+            toolchain: nightly
+            features: f128,mutate
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
+
+    - name: Install toolchain
+      if: matrix.toolchain
+      run: |
+        rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component clippy
+        rustup default ${{ matrix.toolchain }}
 
     - name: Run clippy
       run: cargo clippy --all-targets --features ${{ matrix.features || 'mutate' }} ${{ matrix.target-args }} -- -D warnings
@@ -56,4 +67,4 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Build documentation
-      run: cargo doc --no-deps --all-features
+      run: cargo doc --no-deps --features portable,mutate
