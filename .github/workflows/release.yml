@@ -1,0 +1,113 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, also the tag, e.g. 0.1.0
+        required: true
+        type: string
+      ref:
+        description: Commit, tag, or branch to build
+        required: true
+        type: string
+        default: main
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The package carries the version, and a release must match it.
+      - name: Version matches the sources
+        run: |
+          want="${{ inputs.version }}"
+          cargo=$(sed -n 's/^version = "\([0-9.]*\)".*/\1/p' Cargo.toml | head -n 1)
+          test "$cargo" = "$want" || { echo "Cargo.toml says $cargo, not $want"; exit 1; }
+          if git ls-remote --exit-code origin "refs/tags/$want" > /dev/null; then
+            echo "tag $want already exists"
+            exit 1
+          fi
+
+      - name: Resolve the commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  # A library has no binaries to ship: the release gate is the test suite on the backends and the main targets,
+  # at the exact commit that gets tagged.
+  test:
+    name: ${{ matrix.name }}
+    needs: check
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: Ubuntu x86_64 portable
+            os: ubuntu-latest
+          - name: Ubuntu x86_64 AVX2
+            os: ubuntu-latest
+            rustflags: -C target-feature=+avx2,+fma
+          - name: Ubuntu ARM64
+            os: ubuntu-24.04-arm
+          - name: macOS ARM64
+            os: macos-latest
+          - name: Windows MSVC x64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+
+      - name: Run tests
+        timeout-minutes: 30
+        run: cargo test --release --locked --all-features
+
+      - name: Package dry run
+        if: runner.os == 'Linux' && !matrix.rustflags
+        run: cargo publish --locked --dry-run
+
+  release:
+    name: Publish release
+    needs: [check, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create ${{ inputs.version }}
+          --repo ${{ github.repository }}
+          --target ${{ needs.check.outputs.sha }}
+          --title "multidouble ${{ inputs.version }}"
+          --generate-notes
+
+  # A published crate cannot be taken back, so it goes last, after everything else held.
+  crate:
+    name: Publish crate
+    needs: [check, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+
+      - name: Publish crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked

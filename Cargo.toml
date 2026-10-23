@@ -1,0 +1,35 @@
+[package]
+name = "multidouble"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Double-double and quad-double arithmetic, scalar and 8-lane SIMD (AVX-512, AVX2, portable) with bitwise identical results, dual numbers and double-double LU"
+license = "Zlib"
+repository = "https://github.com/nmoinvaz/multidouble"
+readme = "README.md"
+keywords = ["double-double", "quad-double", "extended-precision", "simd", "floating-point"]
+categories = ["mathematics", "science"]
+exclude = ["/.github"]
+
+[features]
+# Deliberate breakage of the quad-double algorithms, for the controls of the accuracy tests (qd::mutate).
+mutate = []
+
+[dependencies]
+rayon = "1.10"
+
+[dev-dependencies]
+criterion = "0.8"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"
+
+[[bench]]
+name = "arith"
+harness = false
+
+[[bench]]
+name = "linalg"
+harness = false
