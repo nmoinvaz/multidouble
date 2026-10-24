@@ -53,18 +53,24 @@ jobs:
         include:
           - name: Ubuntu x86_64 SSE2
             os: ubuntu-latest
+
           - name: Ubuntu x86_64 AVX2
             os: ubuntu-latest
             rustflags: -C target-feature=+avx2,+fma
+
           - name: Ubuntu x86_64 portable
             os: ubuntu-latest
             cargo-args: --features portable
+
           - name: Ubuntu ARM64 NEON
             os: ubuntu-24.04-arm
+
           - name: macOS ARM64 NEON
             os: macos-latest
+
           - name: Windows MSVC x64 SSE2
             os: windows-latest
+
     runs-on: ${{ matrix.os }}
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
@@ -94,7 +100,7 @@ jobs:
           gh release create ${{ inputs.version }}
           --repo ${{ github.repository }}
           --target ${{ needs.check.outputs.sha }}
-          --title "multidouble ${{ inputs.version }}"
+          --title ${{ inputs.version }}
           --generate-notes
 
   # A published crate cannot be taken back, so it goes last, after everything else held.
