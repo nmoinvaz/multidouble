@@ -17,11 +17,11 @@
 use crate::dd::DD;
 use crate::dv::{DotAcc, DV};
 use crate::exact::{BigU, Dy};
+use crate::native::V8;
 #[cfg(feature = "mutate")]
 use crate::qd::mutate;
 use crate::qd::{QdAcc, QD};
 use crate::qv::{QDotAcc, QV};
-use crate::v8::V8;
 use std::cmp::Ordering;
 
 /// 2^-209, the unit of the error tables

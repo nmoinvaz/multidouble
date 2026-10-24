@@ -10,7 +10,7 @@
 //!   trajectory computed once (and to double-double accuracy) for all of them.
 use crate::dd::DD;
 use crate::dv::{DotAcc, DV};
-use crate::v8::V8;
+use crate::native::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub trait Lane:

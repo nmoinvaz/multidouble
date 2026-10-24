@@ -23,8 +23,8 @@
 //! It costs about a third of a sloppy multiply plus a sloppy add.
 use crate::dd::DD;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
+use crate::native::{M8, V8};
 use crate::qd::{mutate, QD};
-use crate::v8::{M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 // Inlining: the hot operations (renormalizations, sloppy add and multiply, times and plus f64, the accumulator) are

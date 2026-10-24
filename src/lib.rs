@@ -45,7 +45,15 @@ pub mod exact;
 pub mod linalg;
 pub mod qd;
 pub mod qv;
+pub mod simd;
 pub mod v8;
+
+/// The lane types on the compile-time backend [`simd::Native`], for code that does not dispatch.
+pub mod native {
+    use crate::simd::Native;
+    pub type V8 = crate::v8::V8<Native>;
+    pub type M8 = crate::v8::M8<Native>;
+}
 
 #[cfg(test)]
 mod qd_tests;
