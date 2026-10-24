@@ -1,17 +1,19 @@
 // arith.rs -- throughput of the arithmetic, scalar against 8-lane, f64 against double-double against quad-double
 //
 // Each benchmark runs a dependent chain over a small array, so the result is used and the compiler cannot drop the
-// work; throughput is counted in element operations (8 per lane operation). Build with the backend to measure, e.g.
-// RUSTFLAGS="-C target-cpu=native" cargo bench --bench arith; the group names carry V8::ISA.
+// work; throughput is counted in element operations (8 per lane operation). The lane benchmarks run on every backend
+// the CPU has, one group each ("lanes avx2", "lanes sse2", ...).
 
+use std::cell::RefCell;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
-use multidouble::native::QV;
-use multidouble::native::V8;
-use multidouble::native::{DotAcc, DV};
+use multidouble::dv::{DotAcc, DV};
 use multidouble::qd::QD;
+use multidouble::qv::QV;
+use multidouble::simd::{self, Kernel, Simd};
+use multidouble::v8::V8;
 
 const N: usize = 1024;
 
@@ -60,39 +62,103 @@ fn scalar(c: &mut Criterion) {
     g.finish();
 }
 
+/// the lane benchmarks on one backend; criterion calls each measured closure from its own code, so the closure enters
+/// the backend's instructions again with `S::vectorize`
+#[derive(Clone)]
+struct Lanes<'a, 'b>(&'a RefCell<&'b mut Criterion>);
+
+impl Kernel for Lanes<'_, '_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let (a, b) = inputs();
+        let dv: Vec<DV<S>> = (0..N / 8)
+            .map(|i| DV::load(&a[8 * i..8 * i + 8], &b[8 * i..8 * i + 8]))
+            .collect();
+        let v8: Vec<V8<S>> = (0..N / 8).map(|i| V8::load(&a[8 * i..8 * i + 8])).collect();
+        let qv: Vec<QV<S>> = dv.iter().map(|&d| QV::from_dv(d)).collect();
+        let mut c = self.0.borrow_mut();
+        let mut g = c.benchmark_group(format!("lanes {}", S::NAME));
+        g.throughput(Throughput::Elements(N as u64));
+        g.bench_function("v8 fma", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || v8.iter().fold(V8::zero(), |s, &x| x.fma(V8::splat(1.000_000_1), s)),
+                )
+            })
+        });
+        g.bench_function("dv add", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || dv.iter().fold(DV::zero(), |s, &x| s + x),
+                )
+            })
+        });
+        g.bench_function("dv mul", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || dv.iter().fold(DV::splat_f(1.0), |s, &x| s * black_box(x)),
+                )
+            })
+        });
+        g.bench_function("dv div", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || dv.iter().fold(DV::splat_f(1.0), |s, &x| s / x),
+                )
+            })
+        });
+        g.bench_function("dv dot (DotAcc)", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || dv.iter().fold(DotAcc::zero(), |s, &x| s.add_prod(x, x)).finish(),
+                )
+            })
+        });
+        g.bench_function("qv add", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || qv.iter().fold(QV::zero(), |s, &x| s + x),
+                )
+            })
+        });
+        g.bench_function("qv mul", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || qv.iter().fold(QV::splat_f(1.0), |s, &x| s * x),
+                )
+            })
+        });
+        g.bench_function("qv div", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || qv.iter().fold(QV::splat_f(1.0), |s, &x| s / x),
+                )
+            })
+        });
+        g.bench_function("qv sqrt", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || qv.iter().map(|&x| x.sqrt()).fold(QV::zero(), |s, r| s + r),
+                )
+            })
+        });
+        g.finish();
+    }
+}
+
 fn lanes(c: &mut Criterion) {
-    let (a, b) = inputs();
-    let dv: Vec<DV> = (0..N / 8)
-        .map(|i| DV::load(&a[8 * i..8 * i + 8], &b[8 * i..8 * i + 8]))
-        .collect();
-    let v8: Vec<V8> = (0..N / 8).map(|i| V8::load(&a[8 * i..8 * i + 8])).collect();
-    let qv: Vec<QV> = dv.iter().map(|&d| QV::from_dv(d)).collect();
-    let mut g = c.benchmark_group(format!("lanes {}", V8::ISA));
-    g.throughput(Throughput::Elements(N as u64));
-    g.bench_function("v8 fma", |bch| {
-        bch.iter(|| v8.iter().fold(V8::zero(), |s, &x| x.fma(V8::splat(1.000_000_1), s)))
-    });
-    g.bench_function("dv add", |bch| bch.iter(|| dv.iter().fold(DV::zero(), |s, &x| s + x)));
-    g.bench_function("dv mul", |bch| {
-        bch.iter(|| dv.iter().fold(DV::splat_f(1.0), |s, &x| s * black_box(x)))
-    });
-    g.bench_function("dv div", |bch| {
-        bch.iter(|| dv.iter().fold(DV::splat_f(1.0), |s, &x| s / x))
-    });
-    g.bench_function("dv dot (DotAcc)", |bch| {
-        bch.iter(|| dv.iter().fold(DotAcc::zero(), |s, &x| s.add_prod(x, x)).finish())
-    });
-    g.bench_function("qv add", |bch| bch.iter(|| qv.iter().fold(QV::zero(), |s, &x| s + x)));
-    g.bench_function("qv mul", |bch| {
-        bch.iter(|| qv.iter().fold(QV::splat_f(1.0), |s, &x| s * x))
-    });
-    g.bench_function("qv div", |bch| {
-        bch.iter(|| qv.iter().fold(QV::splat_f(1.0), |s, &x| s / x))
-    });
-    g.bench_function("qv sqrt", |bch| {
-        bch.iter(|| qv.iter().map(|&x| x.sqrt()).fold(QV::zero(), |s, r| s + r))
-    });
-    g.finish();
+    let c = RefCell::new(c);
+    simd::for_each_available(Lanes(&c));
 }
 
 criterion_group!(benches, scalar, lanes);

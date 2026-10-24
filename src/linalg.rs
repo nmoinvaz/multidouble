@@ -1495,6 +1495,57 @@ mod tests {
             }
         }
     }
+
+    /// everything `linalg` dispatches, on one backend, its results flattened
+    #[derive(Clone)]
+    struct OnBackend {
+        n: usize,
+        ld: usize,
+        h: Vec<f64>,
+        l: Vec<f64>,
+    }
+
+    impl Kernel for OnBackend {
+        type Output = Vec<f64>;
+        #[inline(always)]
+        fn run<S: Simd>(self) -> Vec<f64> {
+            let (n, ld, k) = (self.n, self.ld, 11);
+            let u = DDLu::factor_unblocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true).unwrap();
+            let b = DDLu::factor_blocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true).unwrap();
+            let f = DDLu::factor_f64_on::<S>(n, ld, self.h.clone(), true).unwrap();
+            let (mut xh, mut xl) = (self.h[..k * n].to_vec(), self.l[..k * n].to_vec());
+            b.solve_many_on::<S>(&mut xh, &mut xl, k, false, true);
+            let (gh, gl, g) = gram_on::<S>(n, ld, &self.h, &self.l, &self.h[..ld], &self.l[..ld]);
+            let g: Vec<f64> = g.iter().flat_map(|d| [d.hi, d.lo]).collect();
+            [u.hi, u.lo, b.hi, b.lo, f.hi, xh, xl, gh, gl, g].concat()
+        }
+    }
+
+    fn bits_differ(a: &[f64], b: &[f64]) -> usize {
+        assert_eq!(a.len(), b.len());
+        a.iter().zip(b).filter(|(x, y)| x.to_bits() != y.to_bits()).count()
+    }
+
+    /// The factors, the solutions and the Gram matrix are bitwise the same on every backend this CPU runs.
+    #[test]
+    fn every_backend_gives_the_same_bits() {
+        let n = 157;
+        let (ld, h, l) = sparse(n, 20, 5);
+        let ran = simd::for_each_available(OnBackend { n, ld, h, l });
+        let (first, want) = (ran[0].0, &ran[0].1);
+        for (name, got) in &ran[1..] {
+            assert_eq!(bits_differ(want, got), 0, "{name} against {first}");
+        }
+        // control: one flipped low bit is caught by the same comparison
+        let mut wrong = want.clone();
+        let m = want.len() / 2;
+        wrong[m] = f64::from_bits(wrong[m].to_bits() ^ 1);
+        assert_eq!(bits_differ(want, &wrong), 1);
+        println!(
+            "linalg bitwise the same on {:?}",
+            ran.iter().map(|r| r.0).collect::<Vec<_>>()
+        );
+    }
 }
 
 #[cfg(test)]
