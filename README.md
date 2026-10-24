@@ -46,17 +46,50 @@ let y = x * x + DV::splat(third);
 assert_eq!(y.lane(2), DD::from_f64(9.0) + third);
 ```
 
-The SIMD backend is chosen at compile time by the target and its enabled features:
+The SIMD backend is the best one the CPU has, detected at run time:
 
-| Backend | When | Registers |
+| Backend | Chosen when | Registers |
 |---|---|---|
-| `avx512` | x86-64 with AVX-512F enabled (`RUSTFLAGS="-C target-cpu=native"` on such a CPU) | one zmm |
-| `avx2` | x86-64 with AVX2 and FMA enabled (`-C target-feature=+avx2,+fma`) | two ymm |
-| `sse2` | x86 and x86-64 otherwise; SSE2 has no fused multiply-add, so that one operation runs per lane through `f64::mul_add` | four xmm |
+| `avx512` | the x86-64 CPU has AVX-512F | one zmm |
+| `avx2` | the x86-64 CPU has AVX2 and FMA | two ymm |
+| `sse2` | any other x86 or x86-64 CPU; SSE2 has no fused multiply-add, so that one operation runs per lane through `f64::mul_add` | four xmm |
 | `neon` | aarch64 | four NEON |
 | `portable` | every other target, or any target with the cargo feature `portable` | a plain array |
 
-`V8::ISA` reports which one was compiled in. Results are the same on every backend; only the speed changes.
+`linalg` picks it by itself. Code of your own, written once over the backend `S: Simd`, runs on it through
+`simd::dispatch`:
+
+```rust
+use multidouble::dd::DD;
+use multidouble::dv::{DotAcc, DV};
+use multidouble::simd::{self, Kernel, Simd};
+
+/// the sum of squares of the double-doubles (hi, lo), 8 lanes at a time
+struct SumSq<'a>(&'a [f64], &'a [f64]);
+
+impl Kernel for SumSq<'_> {
+    type Output = DD;
+    // inlined into the backend's instruction set, so that the lane operations become its instructions
+    #[inline(always)]
+    fn run<S: Simd>(self) -> DD {
+        let mut acc = DotAcc::<S>::zero();
+        for (h, l) in self.0.chunks_exact(8).zip(self.1.chunks_exact(8)) {
+            let x = DV::load(h, l);
+            acc = acc.add_prod(x, x);
+        }
+        let v = acc.finish();
+        (0..8).fold(DD::ZERO, |s, j| s + v.lane(j))
+    }
+}
+
+let (hi, lo) = (vec![1.5; 64], vec![0.0; 64]);
+assert_eq!(simd::dispatch(SumSq(&hi, &lo)).to_f64(), 144.0);
+println!("ran on {}", simd::isa());
+```
+
+The aliases in `native` (`native::DV`, `native::QV`, ...) are the lane types on the backend the build's target
+features select at compile time, for code that does not dispatch (`RUSTFLAGS="-C target-cpu=native"` makes that the
+best one too). Results are the same on every backend; only the speed changes.
 
 The cargo feature `f128` adds conversions between `f128` and the scalar types. It needs nightly Rust, as `f128` is
 unstable. `QD::from_f128` is exact, `DD::from_f128` rounds to the nearest parts, and both `to_f128` are correctly
@@ -106,7 +139,7 @@ cargo bench --bench arith                                       # scalar against
 cargo bench --bench linalg                                      # double-double LU against f64 LU
 ```
 
-`tests/lanes.rs` checks that `V8`, `DV` and `QV` match the scalar types bit for bit. The NEON backend's code is also
+`tests/lanes.rs` checks that `V8`, `DV` and `QV` match the scalar types bit for bit, on every backend the CPU has. The NEON backend's code is also
 compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
 every runner, not only on ARM. CI runs the whole suite on:
 

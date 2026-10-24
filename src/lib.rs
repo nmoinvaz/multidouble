@@ -5,8 +5,10 @@
 //! results per lane** as the scalar types, on every backend:
 //!
 //! * [`v8::V8`]: 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or four NEON registers, or a plain
-//!   array, chosen at compile time by the enabled target features (e.g. `RUSTFLAGS="-C target-cpu=native"`; the
-//!   cargo feature `portable` forces the plain array), with fused multiply-add throughout.
+//!   array (the cargo feature `portable` forces it), with fused multiply-add throughout.
+//! * [`simd`]: the backends behind `V8`. [`simd::dispatch`] runs code written once over the backend on the best one
+//!   the CPU has, detected at run time; [`native`] has the lane types on the backend the build's target features
+//!   select at compile time.
 //! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DotAcc`] a sum-of-products accumulator.
 //! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with two
 //!   repairs found by this crate's tests), exact decimal parsing and printing;
