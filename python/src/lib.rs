@@ -93,13 +93,13 @@ fn elementwise<'py>(
     }
     let mut oh = vec![0.0; n];
     let mut ol = vec![0.0; n];
-    py.detach(|| {
-        simd::dispatch(Elementwise {
-            op,
-            a: (a0, a1),
-            b: (b0, b1),
-            out: (&mut oh, &mut ol),
-        })
+    // with the GIL held: the slices borrow the input arrays, which another thread could change or reallocate
+    // (ndarray.resize with refcheck=False) while it is released; the operation is a single pass over memory
+    simd::dispatch(Elementwise {
+        op,
+        a: (a0, a1),
+        b: (b0, b1),
+        out: (&mut oh, &mut ol),
     });
     Ok((oh.into_pyarray(py), ol.into_pyarray(py)))
 }

@@ -30,17 +30,30 @@ def two_sum(a, b):
 
 
 _SPLIT = 134217729.0  # 2^27 + 1
+_BIG = 2.0**996  # above it _SPLIT * a overflows
+
+
+def _split(a):
+    """a = hi + lo exactly, hi with at most 26 significant bits (Dekker), elementwise. Operands above 2^996 are split
+    at 2^-28 times their value and scaled back (exact), so that _SPLIT * a cannot overflow; below it the result is
+    bitwise that of the plain split."""
+    a = np.asarray(a, dtype=np.float64)
+    big = np.abs(a) > _BIG
+    s = np.where(big, a * 2.0**-28, a)
+    t = _SPLIT * s
+    hi = t - (t - s)
+    lo = s - hi
+    if big.any():
+        hi = np.where(big, hi * 2.0**28, hi)
+        lo = np.where(big, lo * 2.0**28, lo)
+    return hi, lo
 
 
 def two_prod(a, b):
-    """a b = p + e exactly (Dekker), elementwise"""
+    """a b = p + e exactly (Dekker), elementwise, wherever p and the partial products are finite"""
     p = a * b
-    t = _SPLIT * a
-    ah = t - (t - a)
-    al = a - ah
-    t = _SPLIT * b
-    bh = t - (t - b)
-    bl = b - bh
+    ah, al = _split(a)
+    bh, bl = _split(b)
     return p, ((ah * bh - p) + ah * bl + al * bh) + al * bl
 
 
