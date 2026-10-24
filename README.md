@@ -24,6 +24,21 @@ speed, with no allocation and no arbitrary-precision library.
 Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for
 computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable.
 
+## Installation
+
+Add the crate from [crates.io](https://crates.io/crates/multidouble):
+
+```sh
+cargo add multidouble
+```
+
+or as a dependency in `Cargo.toml`:
+
+```toml
+[dependencies]
+multidouble = "1.0"
+```
+
 ## Usage
 
 ```rust
