@@ -55,6 +55,8 @@ pub mod native {
     pub type M8 = crate::v8::M8<Native>;
     pub type DV = crate::dv::DV<Native>;
     pub type DotAcc = crate::dv::DotAcc<Native>;
+    pub type QV = crate::qv::QV<Native>;
+    pub type QDotAcc = crate::qv::QDotAcc<Native>;
 }
 
 #[cfg(test)]

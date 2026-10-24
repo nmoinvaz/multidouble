@@ -4,10 +4,10 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
+use multidouble::native::QV;
 use multidouble::native::V8;
 use multidouble::native::{DotAcc, DV};
 use multidouble::qd::QD;
-use multidouble::qv::QV;
 
 const ROUNDS: usize = 4000;
 

@@ -8,10 +8,10 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
+use multidouble::native::QV;
 use multidouble::native::V8;
 use multidouble::native::{DotAcc, DV};
 use multidouble::qd::QD;
-use multidouble::qv::QV;
 
 const N: usize = 1024;
 

@@ -57,6 +57,10 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     /// f run with this instruction set enabled. f should be an `#[inline(always)]` closure, so that its body is
     /// compiled inside, where the backend's instructions inline.
     fn vectorize<T>(f: impl FnOnce() -> T) -> T;
+    /// f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 and left to the compiler on
+    /// the other backends: for the large hot operations of `qv`. Forced inlining of those on the plain array made the
+    /// test build exceed 3 GB of memory and 17 minutes.
+    fn hot<T>(f: impl FnOnce() -> T) -> T;
 }
 
 /// The backends, one zero-sized type each. Not exported, so that outside the crate only [`Native`] can be named.
