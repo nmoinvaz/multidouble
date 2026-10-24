@@ -1,12 +1,13 @@
-//! 8-lane f64 vector, the backend chosen at compile time by the enabled target features:
+//! 8-lane f64 vector `V8<S>` on a backend `S` ([`crate::simd`]), chosen at run time by [`crate::simd::dispatch`] or
+//! at compile time as [`crate::simd::Native`]:
 //!
-//! * `avx512`: AVX-512F (`-C target-cpu=native` on such a CPU), one zmm register, every operation one intrinsic;
+//! * `avx512`: AVX-512F, one zmm register, every operation one intrinsic;
 //! * `avx2`: AVX2 + FMA, two ymm registers;
 //! * `sse2`: x86 and x86-64 otherwise (SSE2 is part of the x86-64 baseline), four xmm registers, with the fused
 //!   operations per lane through `f64::mul_add` (SSE2 has no FMA instruction);
 //! * `neon`: aarch64, four NEON registers, fused multiply-add in hardware;
-//! * `portable`: every other target, or any target with the cargo feature `portable`: a plain array, `f64::mul_add`
-//!   for the fused operations, which the double-double algorithms need to be exact.
+//! * `portable`: every target, a plain array, `f64::mul_add` for the fused operations, which the double-double
+//!   algorithms need to be exact.
 //!
 //! All operations are IEEE round-to-nearest with no reassociation, as the error-free transformations in `dv`
 //! require, so every backend gives bitwise the same results for finite inputs. (`max` follows each instruction set
@@ -14,8 +15,10 @@
 //! comparisons `ne`, `eq`, `gt`, `ge`, with per-lane select `sel`: the quad-double lanes (`qv`) run QD's
 //! data-dependent branches with them.
 
-#[cfg(all(not(feature = "portable"), target_arch = "x86_64", target_feature = "avx512f"))]
-mod imp {
+use crate::simd::{backend, Simd};
+
+#[cfg(target_arch = "x86_64")]
+mod avx512 {
     use std::arch::x86_64::*;
 
     #[derive(Clone, Copy, Debug)]
@@ -148,14 +151,8 @@ mod imp {
     }
 }
 
-#[cfg(all(
-    not(feature = "portable"),
-    target_arch = "x86_64",
-    not(target_feature = "avx512f"),
-    target_feature = "avx2",
-    target_feature = "fma"
-))]
-mod imp {
+#[cfg(target_arch = "x86_64")]
+mod avx2 {
     use std::arch::x86_64::*;
 
     #[derive(Clone, Copy, Debug)]
@@ -335,14 +332,8 @@ mod imp {
     }
 }
 
-#[cfg(all(
-    not(feature = "portable"),
-    any(target_arch = "x86", target_arch = "x86_64"),
-    target_feature = "sse2",
-    not(all(target_arch = "x86_64", target_feature = "avx512f")),
-    not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))
-))]
-mod imp {
+#[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
+mod sse2 {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::*;
     #[cfg(target_arch = "x86_64")]
@@ -384,6 +375,16 @@ mod imp {
     #[allow(unused_unsafe)]
     impl V8 {
         pub const ISA: &'static str = "sse2";
+        #[inline(always)]
+        fn to_array(self) -> [f64; 8] {
+            let mut a = [0.0; 8];
+            self.store(&mut a);
+            a
+        }
+        #[inline(always)]
+        fn from_array(a: [f64; 8]) -> Self {
+            Self::load(&a)
+        }
         #[inline(always)]
         pub fn splat(x: f64) -> Self {
             unsafe {
@@ -564,22 +565,13 @@ mod imp {
     }
 }
 
-#[cfg(all(not(feature = "portable"), target_arch = "aarch64", target_feature = "neon"))]
-mod imp {
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+mod neon {
     use core::arch::aarch64::*;
     include!("v8_neon.rs");
 }
 
-#[cfg(any(
-    feature = "portable",
-    not(any(
-        all(target_arch = "x86_64", target_feature = "avx512f"),
-        all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"),
-        all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"),
-        all(target_arch = "aarch64", target_feature = "neon")
-    ))
-))]
-mod imp {
+mod portable {
     #[derive(Clone, Copy, Debug)]
     pub struct V8(pub [f64; 8]);
 
@@ -735,9 +727,239 @@ mod imp {
     }
 }
 
-pub use imp::{M8, V8};
+/// `Simd` for a backend type from its module's `V8` and `M8`, with the target features its `vectorize` enables.
+macro_rules! simd {
+    ($b:ty, $m:ident $(, $feat:literal)?) => {
+        impl crate::simd::sealed::Sealed for $b {}
+        impl Simd for $b {
+            const NAME: &'static str = $m::V8::ISA;
+            type R = $m::V8;
+            type M = $m::M8;
+            #[inline(always)]
+            fn splat(x: f64) -> $m::V8 {
+                $m::V8::splat(x)
+            }
+            #[inline(always)]
+            fn zero() -> $m::V8 {
+                $m::V8::zero()
+            }
+            #[inline(always)]
+            fn load(s: &[f64]) -> $m::V8 {
+                $m::V8::load(s)
+            }
+            #[inline(always)]
+            fn store(a: $m::V8, s: &mut [f64]) {
+                a.store(s)
+            }
+            #[inline(always)]
+            fn add(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.add(b)
+            }
+            #[inline(always)]
+            fn sub(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.sub(b)
+            }
+            #[inline(always)]
+            fn mul(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.mul(b)
+            }
+            #[inline(always)]
+            fn div(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.div(b)
+            }
+            #[inline(always)]
+            fn fma(a: $m::V8, b: $m::V8, c: $m::V8) -> $m::V8 {
+                a.fma(b, c)
+            }
+            #[inline(always)]
+            fn fms(a: $m::V8, b: $m::V8, c: $m::V8) -> $m::V8 {
+                a.fms(b, c)
+            }
+            #[inline(always)]
+            fn abs(a: $m::V8) -> $m::V8 {
+                a.abs()
+            }
+            #[inline(always)]
+            fn max(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.max(b)
+            }
+            #[inline(always)]
+            fn bcast(a: $m::V8, j: usize) -> $m::V8 {
+                a.bcast(j)
+            }
+            #[inline(always)]
+            fn sqrt(a: $m::V8) -> $m::V8 {
+                a.sqrt()
+            }
+            #[inline(always)]
+            fn pow2_floor(a: $m::V8) -> $m::V8 {
+                a.pow2_floor()
+            }
+            #[inline(always)]
+            fn ne(a: $m::V8, b: $m::V8) -> $m::M8 {
+                a.ne(b)
+            }
+            #[inline(always)]
+            fn eq(a: $m::V8, b: $m::V8) -> $m::M8 {
+                a.eq(b)
+            }
+            #[inline(always)]
+            fn gt(a: $m::V8, b: $m::V8) -> $m::M8 {
+                a.gt(b)
+            }
+            #[inline(always)]
+            fn ge(a: $m::V8, b: $m::V8) -> $m::M8 {
+                a.ge(b)
+            }
+            #[inline(always)]
+            fn and(m: $m::M8, n: $m::M8) -> $m::M8 {
+                m.and(n)
+            }
+            #[inline(always)]
+            fn or(m: $m::M8, n: $m::M8) -> $m::M8 {
+                m.or(n)
+            }
+            #[inline(always)]
+            fn not(m: $m::M8) -> $m::M8 {
+                m.not()
+            }
+            #[inline(always)]
+            fn sel(m: $m::M8, t: $m::V8, f: $m::V8) -> $m::V8 {
+                m.sel(t, f)
+            }
+            #[inline(always)]
+            fn bits(m: $m::M8) -> u8 {
+                m.bits()
+            }
+            simd!(@vectorize $($feat)?);
+        }
+    };
+    (@vectorize) => {
+        #[inline(always)]
+        fn vectorize<T>(f: impl FnOnce() -> T) -> T {
+            f()
+        }
+    };
+    (@vectorize $feat:literal) => {
+        #[inline(always)]
+        fn vectorize<T>(f: impl FnOnce() -> T) -> T {
+            #[target_feature(enable = $feat)]
+            unsafe fn with<T>(f: impl FnOnce() -> T) -> T {
+                f()
+            }
+            // SAFETY: the backend's type reaches code only through dispatch on a CPU that has these features, or as
+            // Native, which the build already requires.
+            unsafe { with(f) }
+        }
+    };
+}
 
-impl V8 {
+#[cfg(target_arch = "x86_64")]
+simd!(backend::Avx512, avx512, "avx512f,avx2,fma");
+#[cfg(target_arch = "x86_64")]
+simd!(backend::Avx2, avx2, "avx2,fma");
+#[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
+simd!(backend::Sse2, sse2);
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+simd!(backend::Neon, neon);
+simd!(backend::Portable, portable);
+
+/// 8 f64 lanes on the backend S.
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub struct V8<S: Simd>(pub S::R);
+
+/// 8-lane mask on the backend S.
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub struct M8<S: Simd>(pub S::M);
+
+impl<S: Simd> V8<S> {
+    pub const ISA: &'static str = S::NAME;
+    #[inline(always)]
+    pub fn splat(x: f64) -> Self {
+        V8(S::splat(x))
+    }
+    #[inline(always)]
+    pub fn zero() -> Self {
+        V8(S::zero())
+    }
+    #[inline(always)]
+    pub fn load(s: &[f64]) -> Self {
+        V8(S::load(s))
+    }
+    #[inline(always)]
+    pub fn store(self, s: &mut [f64]) {
+        S::store(self.0, s)
+    }
+    #[inline(always)]
+    pub fn add(self, o: Self) -> Self {
+        V8(S::add(self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn sub(self, o: Self) -> Self {
+        V8(S::sub(self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn mul(self, o: Self) -> Self {
+        V8(S::mul(self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn div(self, o: Self) -> Self {
+        V8(S::div(self.0, o.0))
+    }
+    /// self * b + c with one rounding
+    #[inline(always)]
+    pub fn fma(self, b: Self, c: Self) -> Self {
+        V8(S::fma(self.0, b.0, c.0))
+    }
+    /// self * b - c with one rounding
+    #[inline(always)]
+    pub fn fms(self, b: Self, c: Self) -> Self {
+        V8(S::fms(self.0, b.0, c.0))
+    }
+    #[inline(always)]
+    pub fn abs(self) -> Self {
+        V8(S::abs(self.0))
+    }
+    #[inline(always)]
+    pub fn max(self, o: Self) -> Self {
+        V8(S::max(self.0, o.0))
+    }
+    /// all lanes = lane j
+    #[inline(always)]
+    pub fn bcast(self, j: usize) -> Self {
+        V8(S::bcast(self.0, j))
+    }
+    #[inline(always)]
+    pub fn sqrt(self) -> Self {
+        V8(S::sqrt(self.0))
+    }
+    /// the exponent bits only: 2^floor(log2 |x|) for normal x
+    #[inline(always)]
+    pub fn pow2_floor(self) -> Self {
+        V8(S::pow2_floor(self.0))
+    }
+    /// self != o (true when either is NaN, as C's !=)
+    #[inline(always)]
+    pub fn ne(self, o: Self) -> M8<S> {
+        M8(S::ne(self.0, o.0))
+    }
+    /// self == o (false when either is NaN)
+    #[inline(always)]
+    pub fn eq(self, o: Self) -> M8<S> {
+        M8(S::eq(self.0, o.0))
+    }
+    /// self > o (false when either is NaN)
+    #[inline(always)]
+    pub fn gt(self, o: Self) -> M8<S> {
+        M8(S::gt(self.0, o.0))
+    }
+    /// self >= o (false when either is NaN)
+    #[inline(always)]
+    pub fn ge(self, o: Self) -> M8<S> {
+        M8(S::ge(self.0, o.0))
+    }
     #[inline(always)]
     pub fn to_array(self) -> [f64; 8] {
         let mut a = [0.0; 8];
@@ -751,6 +973,31 @@ impl V8 {
     #[inline(always)]
     pub fn hmax(self) -> f64 {
         self.to_array().iter().fold(f64::NEG_INFINITY, |m, &v| m.max(v))
+    }
+}
+
+impl<S: Simd> M8<S> {
+    #[inline(always)]
+    pub fn and(self, o: Self) -> Self {
+        M8(S::and(self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn or(self, o: Self) -> Self {
+        M8(S::or(self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn not(self) -> Self {
+        M8(S::not(self.0))
+    }
+    /// per lane: t where set, f elsewhere
+    #[inline(always)]
+    pub fn sel(self, t: V8<S>, f: V8<S>) -> V8<S> {
+        V8(S::sel(self.0, t.0, f.0))
+    }
+    /// bit j = lane j
+    #[inline(always)]
+    pub fn bits(self) -> u8 {
+        S::bits(self.0)
     }
 }
 

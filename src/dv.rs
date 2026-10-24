@@ -6,7 +6,7 @@
 //! its leading part is added to s with an error-free two-sum and all error terms go into err (Ogita-Rump-Oishi
 //! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
 use crate::dd::DD;
-use crate::v8::V8;
+use crate::native::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug)]

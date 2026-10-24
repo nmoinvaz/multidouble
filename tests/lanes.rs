@@ -5,9 +5,9 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dv::{DotAcc, DV};
+use multidouble::native::V8;
 use multidouble::qd::QD;
 use multidouble::qv::QV;
-use multidouble::v8::V8;
 
 const ROUNDS: usize = 4000;
 

@@ -4,7 +4,7 @@
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, and Gram matrices.
 use crate::dd::{two_prod, two_sum, DD};
 use crate::dv::{self, DV};
-use crate::v8::V8;
+use crate::native::V8;
 use rayon::prelude::*;
 
 #[derive(Clone)]
