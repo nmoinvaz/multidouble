@@ -23,3 +23,7 @@ pyo3 = { version = "0.30", features = ["extension-module"] }
 [profile.release]
 opt-level = 3
 codegen-units = 1
+# Cargo strips debuginfo from release builds by default, with rustc's bundled llvm-objcopy. On macOS that can leave
+# the Mach-O string table at an offset that is not a multiple of 8, and macOS 27's dyld then refuses to load the
+# extension ("mis-aligned LINKEDIT string pool"). An unstripped build has it aligned. The machine code is the same.
+strip = false
