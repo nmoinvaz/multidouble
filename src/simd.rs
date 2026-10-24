@@ -2,8 +2,8 @@
 //!
 //! The lane types ([`crate::v8::V8`], [`crate::dv::DV`], [`crate::qv::QV`], the dual lanes) are generic over an
 //! instruction set `S: Simd`. Code written once over `S` runs on the best one the CPU has through [`dispatch`]:
-//! AVX-512F, then AVX2 + FMA, then SSE2 on x86-64, NEON on aarch64, a plain array elsewhere. Every backend gives
-//! bitwise the same results, so the choice changes only the speed.
+//! AVX-512F (with AVX2 and FMA), then AVX2 + FMA, then SSE2 on x86-64, NEON on aarch64, a plain array elsewhere.
+//! Every backend gives bitwise the same results, so the choice changes only the speed.
 //!
 //! [`Native`] is the backend the build's target features select at compile time, the one the aliases in
 //! [`crate::native`] use. The others can be named only inside [`Kernel::run`], which [`dispatch`] and
@@ -167,7 +167,12 @@ fn runs(l: Level) -> bool {
     }
     match l {
         #[cfg(target_arch = "x86_64")]
-        Level::Avx512 => std::arch::is_x86_feature_detected!("avx512f"),
+        // every feature the backend's `vectorize` enables: a hypervisor can mask AVX2 or FMA under AVX-512F
+        Level::Avx512 => {
+            std::arch::is_x86_feature_detected!("avx512f")
+                && std::arch::is_x86_feature_detected!("avx2")
+                && std::arch::is_x86_feature_detected!("fma")
+        }
         #[cfg(target_arch = "x86_64")]
         Level::Avx2 => std::arch::is_x86_feature_detected!("avx2") && std::arch::is_x86_feature_detected!("fma"),
         Level::Sse2 => cfg!(all(

@@ -50,7 +50,7 @@ The SIMD backend is the best one the CPU has, detected at run time:
 
 | Backend | Chosen when | Registers |
 |---|---|---|
-| `avx512` | the x86-64 CPU has AVX-512F | one zmm |
+| `avx512` | the x86-64 CPU has AVX-512F, AVX2 and FMA | one zmm |
 | `avx2` | the x86-64 CPU has AVX2 and FMA | two ymm |
 | `sse2` | any other x86 or x86-64 CPU; SSE2 has no fused multiply-add, so that one operation runs per lane through `f64::mul_add` | four xmm |
 | `neon` | aarch64 | four NEON |
