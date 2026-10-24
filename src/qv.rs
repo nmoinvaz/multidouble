@@ -338,8 +338,8 @@ impl<S: Simd> QV<S> {
                 let (ha, hb) = (pick(&a, i), pick(&b, j));
                 let ta = gt(ha, hb);
                 let v = ta.sel(ha, hb);
-                i = i.add(ta.sel(one, z));
-                j = j.add(ta.sel(z, one));
+                i = i.add_where(ta, one);
+                j = j.add_where(ta.not(), one);
                 let (mut u, mut v) = quick_two_sum(u, v);
                 let mut x = [z; 4];
                 let mut k = z;
@@ -353,7 +353,7 @@ impl<S: Simd> QV<S> {
                     // all parts read: x[k] = u, x[k+1] = v (k < 3), or x[3] = u and v as a fifth term (k = 3); stop
                     let fin = done.not().and(ea.and(eb));
                     for m in 0..4 {
-                        let at = fin.and(k.eq(V8::splat(m as f64)));
+                        let at = fin.and_eq(k, V8::splat(m as f64));
                         if m < 3 {
                             x[m] = at.sel(u, x[m]);
                             x[m + 1] = at.sel(v, x[m + 1]);
@@ -374,8 +374,8 @@ impl<S: Simd> QV<S> {
                     let (ha, hb) = (pick(&a, ia), pick(&b, j));
                     let take_a = ea.not().and(eb.or(gt(ha, hb)));
                     let t = take_a.sel(ha, hb);
-                    i = i.add(act.and(take_a).sel(one, z));
-                    j = j.add(act.and(take_a.not()).sel(one, z));
+                    i = i.add_where(act.and(take_a), one);
+                    j = j.add_where(act.and(take_a.not()), one);
                     // quick_three_accum(u, v, t)
                     let (s, bb) = two_sum(v, t);
                     let (s, aa) = two_sum(u, s);
@@ -386,11 +386,11 @@ impl<S: Simd> QV<S> {
                     v = act.sel(zb.sel(bb, aa), v);
                     let ret = both.sel(s, z);
                     // a part that does not fit: x[k++] = ret
-                    let w = act.and(ret.ne(z));
+                    let w = act.and_ne(ret, z);
                     for m in 0..4 {
-                        x[m] = w.and(k.eq(V8::splat(m as f64))).sel(ret, x[m]);
+                        x[m] = w.and_eq(k, V8::splat(m as f64)).sel(ret, x[m]);
                     }
-                    k = k.add(w.sel(one, z));
+                    k = k.add_where(w, one);
                     done = done.or(k.ge(four));
                     if done.bits() == 0xff {
                         break;
@@ -398,10 +398,10 @@ impl<S: Simd> QV<S> {
                 }
                 // the parts not read go into x[3], a's first, in order
                 for kk in 0..4 {
-                    x[3] = i.ge(V8::splat(kk as f64 + 1.0)).sel(x[3], x[3].add(a[kk]));
+                    x[3] = x[3].add_where(V8::splat(kk as f64 + 1.0).gt(i), a[kk]);
                 }
                 for kk in 0..4 {
-                    x[3] = j.ge(V8::splat(kk as f64 + 1.0)).sel(x[3], x[3].add(b[kk]));
+                    x[3] = x[3].add_where(V8::splat(kk as f64 + 1.0).gt(j), b[kk]);
                 }
                 let r4 = renorm4(x[0], x[1], x[2], x[3]);
                 if five.bits() == 0 {
