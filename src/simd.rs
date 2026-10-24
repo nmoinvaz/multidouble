@@ -146,6 +146,11 @@ pub type Native = backend::Portable;
 /// `run` should be `#[inline(always)]`: it is then compiled inside the backend's [`Simd::vectorize`], where its lane
 /// operations become the backend's instructions. Closures it hands to other threads (rayon) leave that context and
 /// should enter it again with `S::vectorize(#[inline(always)] || ...)`.
+///
+/// Loops over lanes in `run` should be plain `for` loops. An iterator adapter that takes the loop body as a closure,
+/// such as `fold` or `for_each`, runs it inside a std function. The compiler may keep that function out of line,
+/// compiled without the backend's target features, and every lane operation in it is then a call (27 times slower
+/// for `QV` addition on AVX2).
 pub trait Kernel {
     type Output;
     fn run<S: Simd>(self) -> Self::Output;
