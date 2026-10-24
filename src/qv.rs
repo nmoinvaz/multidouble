@@ -24,7 +24,7 @@
 use crate::dd::DD;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
 use crate::qd::{mutate, QD};
-use crate::simd::{Native, Simd};
+use crate::simd::Simd;
 use crate::v8::{M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -888,19 +888,20 @@ impl<S: Simd> QDotAcc<S> {
 /// trait passes constants and inputs as double-double (`DV`): they enter exactly (`from_dv`) but carry only
 /// double-double accuracy, and `val` rounds back to double-double. So this instantiation computes in quad-double with
 /// double-double data.
-impl crate::dual::Lane for QV<Native> {
-    type Acc = QDotAcc<Native>;
+impl<S: Simd> crate::dual::Lane for QV<S> {
+    type S = S;
+    type Acc = QDotAcc<S>;
     const TANGENT: bool = false;
     #[inline(always)]
     fn zero() -> Self {
         QV::zero()
     }
     #[inline(always)]
-    fn cst(c: DV<Native>) -> Self {
+    fn cst(c: DV<S>) -> Self {
         QV::from_dv(c)
     }
     #[inline(always)]
-    fn mulc(self, c: DV<Native>) -> Self {
+    fn mulc(self, c: DV<S>) -> Self {
         self * QV::from_dv(c)
     }
     #[inline(always)]
@@ -912,7 +913,7 @@ impl crate::dual::Lane for QV<Native> {
         QV::mul_pwr2(self, s)
     }
     #[inline(always)]
-    fn addc(self, c: DV<Native>) -> Self {
+    fn addc(self, c: DV<S>) -> Self {
         self + QV::from_dv(c)
     }
     #[inline(always)]
@@ -920,35 +921,35 @@ impl crate::dual::Lane for QV<Native> {
         QV::bcast(self, j)
     }
     #[inline(always)]
-    fn val(self) -> DV<Native> {
+    fn val(self) -> DV<S> {
         self.to_dv()
     }
     #[inline(always)]
-    fn tan(self) -> DV<Native> {
+    fn tan(self) -> DV<S> {
         DV::zero()
     }
     #[inline(always)]
-    fn from_vt(v: DV<Native>, _t: DV<Native>) -> Self {
+    fn from_vt(v: DV<S>, _t: DV<S>) -> Self {
         QV::from_dv(v)
     }
     #[inline(always)]
-    fn acc0() -> QDotAcc<Native> {
+    fn acc0() -> QDotAcc<S> {
         QDotAcc::zero()
     }
     #[inline(always)]
-    fn acc(a: QDotAcc<Native>, x: Self, y: Self) -> QDotAcc<Native> {
+    fn acc(a: QDotAcc<S>, x: Self, y: Self) -> QDotAcc<S> {
         a.add_prod(x, y)
     }
     #[inline(always)]
-    fn accc(a: QDotAcc<Native>, x: Self, c: DV<Native>) -> QDotAcc<Native> {
+    fn accc(a: QDotAcc<S>, x: Self, c: DV<S>) -> QDotAcc<S> {
         a.add_prod(x, QV::from_dv(c))
     }
     #[inline(always)]
-    fn acc1(a: QDotAcc<Native>, x: Self) -> QDotAcc<Native> {
+    fn acc1(a: QDotAcc<S>, x: Self) -> QDotAcc<S> {
         a.add(x)
     }
     #[inline(always)]
-    fn fin(a: QDotAcc<Native>) -> Self {
+    fn fin(a: QDotAcc<S>) -> Self {
         a.finish()
     }
 }

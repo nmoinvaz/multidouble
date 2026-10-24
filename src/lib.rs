@@ -57,6 +57,11 @@ pub mod native {
     pub type DotAcc = crate::dv::DotAcc<Native>;
     pub type QV = crate::qv::QV<Native>;
     pub type QDotAcc = crate::qv::QDotAcc<Native>;
+    pub type Du = crate::dual::Du<Native>;
+    pub type F8 = crate::dual::F8<Native>;
+    pub type Fu = crate::dual::Fu<Native>;
+    pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;
+    pub type Fun<const N: usize> = crate::dual::Fun<Native, N>;
 }
 
 #[cfg(test)]

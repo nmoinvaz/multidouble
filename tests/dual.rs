@@ -5,9 +5,11 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{Dtn, Du, Fu, Fun, Lane, F8};
-use multidouble::native::DV;
-use multidouble::native::V8;
+use multidouble::dual::Lane;
+use multidouble::dv::DV;
+use multidouble::native::{Dtn, Du, Fu, Fun, F8};
+use multidouble::simd::{Native, Simd};
+use multidouble::v8::V8;
 
 /// f(x, y) = (x^3 + 2 x y) / (x + 3), written once over the `Lane` trait
 fn f<T: Lane>(x: T, y: T) -> T {
@@ -34,7 +36,7 @@ fn inputs(r: &mut Rng) -> ([DD; 8], [DD; 8]) {
     (x, y)
 }
 
-fn dv(v: &[DD; 8]) -> DV {
+fn dv<S: Simd>(v: &[DD; 8]) -> DV<S> {
     let hi: Vec<f64> = v.iter().map(|d| d.hi).collect();
     let lo: Vec<f64> = v.iter().map(|d| d.lo).collect();
     DV::load(&hi, &lo)
@@ -49,7 +51,7 @@ fn values_match_the_scalar_formula() {
     let mut r = Rng(21);
     for _ in 0..500 {
         let (x, y) = inputs(&mut r);
-        let v = f(dv(&x), dv(&y));
+        let v = f(dv::<Native>(&x), dv(&y));
         for j in 0..8 {
             assert!(rel(v.lane(j), f_dd(x[j], y[j]).0) < 1e-30);
         }
@@ -168,7 +170,7 @@ fn control_wrong_derivative_is_caught() {
 
 /// g(x, y) = ((c x - s y)(x/2) + x y + c x - (y + c)) / (x_0 + 3), written once over `Lane` through every one of its
 /// methods: the product sum by the accumulator, and x_0, lane 0's x, by `bcast`
-fn g<T: Lane>(x: T, y: T, c: DV, s: DD) -> T {
+fn g<T: Lane>(x: T, y: T, c: DV<T::S>, s: DD) -> T {
     let a = x.mulc(c) - y.muls(s);
     let p = T::fin(T::acc1(T::accc(T::acc(T::acc0(), x, y), x, c), -y.addc(c)));
     T::zero() + (a * x.mulf(0.5) + p) / (x.bcast(0) + T::splat(DD::from_f64(3.0)))
@@ -244,7 +246,7 @@ fn every_lane_method_on_every_lane_type() {
         );
         assert!(within::<T>(e), "{name}: {e:?}");
     }
-    run::<DV>("DV");
+    run::<DV<Native>>("DV");
     run::<F8>("F8");
     run::<Du>("Du");
     run::<Fu>("Fu");
@@ -259,7 +261,7 @@ fn controls_on_bcast_are_caught() {
     fn own_x(x: DD, y: DD, c: DD, s: DD, _x0: DD) -> (DD, DD, DD) {
         g_dd(x, y, c, s, x)
     }
-    assert!(!within::<DV>(errors::<DV>(own_x)));
+    assert!(!within::<DV<Native>>(errors::<DV<Native>>(own_x)));
     assert!(!within::<F8>(errors::<F8>(own_x)));
     fn no_bcast_tangent(x: DD, y: DD, c: DD, s: DD, x0: DD) -> (DD, DD, DD) {
         let (val, _, fy) = g_dd(x, y, c, s, x0);
@@ -275,7 +277,7 @@ fn controls_on_bcast_are_caught() {
 /// every part of a lane, value and tangents, as bits
 fn parts<T: Lane>(x: T) -> Vec<u64> {
     let mut out = Vec::new();
-    let mut push = |v: V8| {
+    let mut push = |v: V8<T::S>| {
         let mut a = [0.0; 8];
         v.store(&mut a);
         out.extend(a.iter().map(|f| f.to_bits()));
@@ -327,7 +329,7 @@ fn scales_exactly<T: Lane>(scale: impl Fn(T, f64) -> T) -> bool {
 
 #[test]
 fn mul_pwr2_is_exact_on_every_lane_type() {
-    assert!(scales_exactly::<DV>(|x, s| x.mul_pwr2(s)), "DV");
+    assert!(scales_exactly::<DV<Native>>(|x, s| x.mul_pwr2(s)), "DV");
     assert!(scales_exactly::<F8>(|x, s| x.mul_pwr2(s)), "F8");
     assert!(scales_exactly::<Du>(|x, s| x.mul_pwr2(s)), "Du");
     assert!(scales_exactly::<Fu>(|x, s| x.mul_pwr2(s)), "Fu");
@@ -354,7 +356,7 @@ fn controls_on_mul_pwr2_are_caught() {
     fn wrong_power<T: Lane>(x: T, s: f64) -> T {
         x.mul_pwr2(2.0 * s)
     }
-    assert!(!scales_exactly::<DV>(wrong_power));
+    assert!(!scales_exactly::<DV<Native>>(wrong_power));
     assert!(!scales_exactly::<F8>(wrong_power));
     assert!(!scales_exactly::<Du>(wrong_power));
     assert!(!scales_exactly::<Fu>(wrong_power));
@@ -374,7 +376,7 @@ fn controls_on_mul_pwr2_are_caught() {
         }
         z
     }
-    assert!(!scales_exactly::<DV>(lo_unscaled));
+    assert!(!scales_exactly::<DV<Native>>(lo_unscaled));
     assert!(!scales_exactly::<Du>(lo_unscaled));
     assert!(!scales_exactly::<Dtn<2>>(lo_unscaled));
     fn tangent_unscaled<T: Lane>(x: T, s: f64) -> T {
