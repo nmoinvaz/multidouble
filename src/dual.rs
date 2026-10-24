@@ -468,10 +468,12 @@ impl<S: Simd> Div for Fu<S> {
     #[inline(always)]
     fn div(self, o: Fu<S>) -> Fu<S> {
         // (d - q o.d) / o.v, with d - q o.d as one fused operation (negated q o.d - d)
-        let q = self.v.div(o.v);
+        // both divisions by o.v share its divisor (on AVX-512 its reciprocal)
+        let r = o.v.divisor();
+        let q = self.v.div_by(r);
         Fu {
             v: q,
-            d: V8::zero().sub(q.fms(o.d, self.d)).div(o.v),
+            d: V8::zero().sub(q.fms(o.d, self.d)).div_by(r),
         }
     }
 }
@@ -837,10 +839,12 @@ impl<S: Simd, const N: usize> Div for Fun<S, N> {
     type Output = Self;
     #[inline(always)]
     fn div(self, o: Self) -> Self {
-        let q = self.v.div(o.v);
+        // the N + 1 divisions by o.v share its divisor (on AVX-512 its reciprocal)
+        let r = o.v.divisor();
+        let q = self.v.div_by(r);
         let mut d = self.d;
         for i in 0..N {
-            d[i] = V8::zero().sub(q.fms(o.d[i], self.d[i])).div(o.v);
+            d[i] = V8::zero().sub(q.fms(o.d[i], self.d[i])).div_by(r);
         }
         Fun { v: q, d }
     }
