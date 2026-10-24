@@ -28,7 +28,7 @@ computing in a variable rescaled by 2^k, such as a power series whose coefficien
 
 ```rust
 use multidouble::dd::DD;
-use multidouble::dv::DV;
+use multidouble::native::DV;
 use multidouble::qd::QD;
 
 // double-double: about 32 digits

@@ -9,8 +9,8 @@
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
 //!   trajectory computed once (and to double-double accuracy) for all of them.
 use crate::dd::DD;
-use crate::dv::{DotAcc, DV};
 use crate::native::V8;
+use crate::native::{DotAcc, DV};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 pub trait Lane:

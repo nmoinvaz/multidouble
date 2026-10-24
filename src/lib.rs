@@ -53,6 +53,8 @@ pub mod native {
     use crate::simd::Native;
     pub type V8 = crate::v8::V8<Native>;
     pub type M8 = crate::v8::M8<Native>;
+    pub type DV = crate::dv::DV<Native>;
+    pub type DotAcc = crate::dv::DotAcc<Native>;
 }
 
 #[cfg(test)]

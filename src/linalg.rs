@@ -3,7 +3,8 @@
 //! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, and Gram matrices.
 use crate::dd::{two_prod, two_sum, DD};
-use crate::dv::{self, DV};
+use crate::dv;
+use crate::native::DV;
 use crate::native::V8;
 use rayon::prelude::*;
 
