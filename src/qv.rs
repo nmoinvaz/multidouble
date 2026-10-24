@@ -22,7 +22,8 @@
 //! level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of `finish`.
 //! It costs about a third of a sloppy multiply plus a sloppy add.
 use crate::dd::DD;
-use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
+use crate::dv::{quick_two_sum, two_prod, two_sum};
+use crate::native::DV;
 use crate::native::{M8, V8};
 use crate::qd::{mutate, QD};
 use std::ops::{Add, Div, Mul, Neg, Sub};

@@ -6,58 +6,59 @@
 //! its leading part is added to s with an error-free two-sum and all error terms go into err (Ogita-Rump-Oishi
 //! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
 use crate::dd::DD;
-use crate::native::V8;
+use crate::simd::Simd;
+use crate::v8::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug)]
-pub struct DV {
-    pub hi: V8,
-    pub lo: V8,
+pub struct DV<S: Simd> {
+    pub hi: V8<S>,
+    pub lo: V8<S>,
 }
 
 #[inline(always)]
-pub fn two_sum(a: V8, b: V8) -> (V8, V8) {
+pub fn two_sum<S: Simd>(a: V8<S>, b: V8<S>) -> (V8<S>, V8<S>) {
     let s = a.add(b);
     let bb = s.sub(a);
     (s, a.sub(s.sub(bb)).add(b.sub(bb)))
 }
 
 #[inline(always)]
-pub fn quick_two_sum(a: V8, b: V8) -> (V8, V8) {
+pub fn quick_two_sum<S: Simd>(a: V8<S>, b: V8<S>) -> (V8<S>, V8<S>) {
     let s = a.add(b);
     (s, b.sub(s.sub(a)))
 }
 
 #[inline(always)]
-pub fn two_prod(a: V8, b: V8) -> (V8, V8) {
+pub fn two_prod<S: Simd>(a: V8<S>, b: V8<S>) -> (V8<S>, V8<S>) {
     let p = a.mul(b);
     (p, a.fms(b, p))
 }
 
-impl DV {
+impl<S: Simd> DV<S> {
     #[inline(always)]
-    pub fn zero() -> DV {
+    pub fn zero() -> Self {
         DV {
             hi: V8::zero(),
             lo: V8::zero(),
         }
     }
     #[inline(always)]
-    pub fn splat(x: DD) -> DV {
+    pub fn splat(x: DD) -> Self {
         DV {
             hi: V8::splat(x.hi),
             lo: V8::splat(x.lo),
         }
     }
     #[inline(always)]
-    pub fn splat_f(x: f64) -> DV {
+    pub fn splat_f(x: f64) -> Self {
         DV {
             hi: V8::splat(x),
             lo: V8::zero(),
         }
     }
     #[inline(always)]
-    pub fn load(hi: &[f64], lo: &[f64]) -> DV {
+    pub fn load(hi: &[f64], lo: &[f64]) -> Self {
         DV {
             hi: V8::load(hi),
             lo: V8::load(lo),
@@ -76,7 +77,7 @@ impl DV {
         }
     }
     #[inline(always)]
-    pub fn bcast(self, j: usize) -> DV {
+    pub fn bcast(self, j: usize) -> Self {
         DV {
             hi: self.hi.bcast(j),
             lo: self.lo.bcast(j),
@@ -84,19 +85,19 @@ impl DV {
     }
     /// times an exact f64 vector
     #[inline(always)]
-    pub fn mul_v(self, b: V8) -> DV {
+    pub fn mul_v(self, b: V8<S>) -> Self {
         let (p, e) = two_prod(self.hi, b);
         let e = self.lo.fma(b, e);
         let (h, l) = quick_two_sum(p, e);
         DV { hi: h, lo: l }
     }
     #[inline(always)]
-    pub fn mul_f(self, b: f64) -> DV {
+    pub fn mul_f(self, b: f64) -> Self {
         self.mul_v(V8::splat(b))
     }
     /// times a power of two b, as `DD::mul_pwr2`: both parts scaled, exact barring overflow and underflow
     #[inline(always)]
-    pub fn mul_pwr2(self, b: f64) -> DV {
+    pub fn mul_pwr2(self, b: f64) -> Self {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
         let c = V8::splat(b);
         DV {
@@ -105,22 +106,22 @@ impl DV {
         }
     }
     #[inline(always)]
-    pub fn add_v(self, b: V8) -> DV {
+    pub fn add_v(self, b: V8<S>) -> Self {
         let (s, e) = two_sum(self.hi, b);
         let e = e.add(self.lo);
         let (h, l) = quick_two_sum(s, e);
         DV { hi: h, lo: l }
     }
     #[inline(always)]
-    pub fn abs_hi(self) -> V8 {
+    pub fn abs_hi(self) -> V8<S> {
         self.hi.abs()
     }
 }
 
-impl Add for DV {
-    type Output = DV;
+impl<S: Simd> Add for DV<S> {
+    type Output = Self;
     #[inline(always)]
-    fn add(self, b: DV) -> DV {
+    fn add(self, b: Self) -> Self {
         let (s, e) = two_sum(self.hi, b.hi);
         let (t, f) = two_sum(self.lo, b.lo);
         let e = e.add(t);
@@ -131,10 +132,10 @@ impl Add for DV {
     }
 }
 
-impl Neg for DV {
-    type Output = DV;
+impl<S: Simd> Neg for DV<S> {
+    type Output = Self;
     #[inline(always)]
-    fn neg(self) -> DV {
+    fn neg(self) -> Self {
         let z = V8::zero();
         DV {
             hi: z.sub(self.hi),
@@ -143,18 +144,18 @@ impl Neg for DV {
     }
 }
 
-impl Sub for DV {
-    type Output = DV;
+impl<S: Simd> Sub for DV<S> {
+    type Output = Self;
     #[inline(always)]
-    fn sub(self, b: DV) -> DV {
+    fn sub(self, b: Self) -> Self {
         self + (-b)
     }
 }
 
-impl Mul for DV {
-    type Output = DV;
+impl<S: Simd> Mul for DV<S> {
+    type Output = Self;
     #[inline(always)]
-    fn mul(self, b: DV) -> DV {
+    fn mul(self, b: Self) -> Self {
         let (p, e) = two_prod(self.hi, b.hi);
         let e = self.hi.fma(b.lo, e);
         let e = self.lo.fma(b.hi, e);
@@ -163,10 +164,10 @@ impl Mul for DV {
     }
 }
 
-impl Div for DV {
-    type Output = DV;
+impl<S: Simd> Div for DV<S> {
+    type Output = Self;
     #[inline(always)]
-    fn div(self, b: DV) -> DV {
+    fn div(self, b: Self) -> Self {
         let q1 = self.hi.div(b.hi);
         let r = self - b.mul_v(q1);
         let q2 = r.hi.div(b.hi);
@@ -179,14 +180,14 @@ impl Div for DV {
 
 /// Accumulator for sums of double-double products (see the module doc).
 #[derive(Clone, Copy, Debug)]
-pub struct DotAcc {
-    pub s: V8,
-    pub e: V8,
+pub struct DotAcc<S: Simd> {
+    pub s: V8<S>,
+    pub e: V8<S>,
 }
 
-impl DotAcc {
+impl<S: Simd> DotAcc<S> {
     #[inline(always)]
-    pub fn zero() -> DotAcc {
+    pub fn zero() -> Self {
         DotAcc {
             s: V8::zero(),
             e: V8::zero(),
@@ -194,7 +195,7 @@ impl DotAcc {
     }
     /// self + a * b
     #[inline(always)]
-    pub fn add_prod(self, a: DV, b: DV) -> DotAcc {
+    pub fn add_prod(self, a: DV<S>, b: DV<S>) -> Self {
         let (p, pe) = two_prod(a.hi, b.hi);
         let pe = a.hi.fma(b.lo, pe);
         let pe = a.lo.fma(b.hi, pe);
@@ -206,7 +207,7 @@ impl DotAcc {
     }
     /// self + a
     #[inline(always)]
-    pub fn add(self, a: DV) -> DotAcc {
+    pub fn add(self, a: DV<S>) -> Self {
         let (s, t) = two_sum(self.s, a.hi);
         DotAcc {
             s,
@@ -214,7 +215,7 @@ impl DotAcc {
         }
     }
     #[inline(always)]
-    pub fn finish(self) -> DV {
+    pub fn finish(self) -> DV<S> {
         // s and e may be of comparable size after cancellation: a full two-sum, not the quick one
         let (h, l) = two_sum(self.s, self.e);
         DV { hi: h, lo: l }

@@ -8,8 +8,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
-use multidouble::dv::{DotAcc, DV};
 use multidouble::native::V8;
+use multidouble::native::{DotAcc, DV};
 use multidouble::qd::QD;
 use multidouble::qv::QV;
 

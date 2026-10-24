@@ -6,7 +6,7 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{Dtn, Du, Fu, Fun, Lane, F8};
-use multidouble::dv::DV;
+use multidouble::native::DV;
 use multidouble::native::V8;
 
 /// f(x, y) = (x^3 + 2 x y) / (x + 3), written once over the `Lane` trait

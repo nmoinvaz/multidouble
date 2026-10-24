@@ -15,9 +15,9 @@
 //! target-feature=+avx2,+fma" (AVX2), none (portable). The digest line of qd_accuracy hashes every scalar result; it
 //! is the same on every backend, and the 8-lane results equal the scalar ones bit for bit.
 use crate::dd::DD;
-use crate::dv::{DotAcc, DV};
 use crate::exact::{BigU, Dy};
 use crate::native::V8;
+use crate::native::{DotAcc, DV};
 #[cfg(feature = "mutate")]
 use crate::qd::mutate;
 use crate::qd::{QdAcc, QD};
