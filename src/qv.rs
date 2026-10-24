@@ -269,9 +269,10 @@ impl QV {
             c: [0, 1, 2, 3].map(|k| neg.sel(n.c[k], self.c[k])),
         }
     }
-    /// times a power of two (exact barring underflow)
+    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> QV {
+        debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
         let b = V8::splat(b);
         QV {
             c: self.c.map(|v| v.mul(b)),
@@ -877,6 +878,10 @@ impl crate::dual::Lane for QV {
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
         self.mul_f(s)
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        QV::mul_pwr2(self, s)
     }
     #[inline(always)]
     fn addc(self, c: DV) -> Self {

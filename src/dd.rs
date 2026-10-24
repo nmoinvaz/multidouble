@@ -27,6 +27,13 @@ pub fn two_prod(a: f64, b: f64) -> (f64, f64) {
     (p, a.mul_add(b, -p))
 }
 
+/// b is a normal power of two (positive or negative): the scales `mul_pwr2` accepts
+#[inline(always)]
+pub fn is_pwr2(b: f64) -> bool {
+    let e = (b.to_bits() >> 52) & 0x7ff;
+    b.to_bits() & 0x000f_ffff_ffff_ffff == 0 && e != 0 && e != 0x7ff
+}
+
 impl DD {
     pub const ZERO: DD = DD { hi: 0.0, lo: 0.0 };
     pub const ONE: DD = DD { hi: 1.0, lo: 0.0 };
@@ -67,6 +74,16 @@ impl DD {
         let e = self.lo.mul_add(b, e);
         let (h, l) = quick_two_sum(p, e);
         DD { hi: h, lo: l }
+    }
+    /// times a power of two b (`is_pwr2`): both parts scaled, exact barring overflow and underflow, so bitwise
+    /// `mul_f(b)` without its rounding steps; for computing in a variable rescaled by 2^k
+    #[inline(always)]
+    pub fn mul_pwr2(self, b: f64) -> DD {
+        debug_assert!(is_pwr2(b), "mul_pwr2: {b} is not a power of two");
+        DD {
+            hi: self.hi * b,
+            lo: self.lo * b,
+        }
     }
 }
 

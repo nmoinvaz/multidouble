@@ -298,9 +298,10 @@ impl QD {
             self
         }
     }
-    /// times a power of two (exact barring underflow)
+    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> QD {
+        debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
         QD {
             x: self.x.map(|v| v * b),
         }

@@ -1,6 +1,6 @@
 //! Forward-mode dual lanes: one generic function evaluated with value lanes, with a double-double tangent (`Du`), with
 //! N f64 tangents (`Dtn<N>`) and in plain f64 (`Fu`), against derivatives written out by hand in scalar double-double.
-//! A second function goes through every method of `Lane` on all six lane types.
+//! A second function goes through every method of `Lane` on all six lane types, and `mul_pwr2` is checked bit for bit.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -270,4 +270,153 @@ fn controls_on_bcast_are_caught() {
     assert!(!within::<Fu>(errors::<Fu>(no_bcast_tangent)));
     assert!(!within::<Dtn<2>>(errors::<Dtn<2>>(no_bcast_tangent)));
     assert!(!within::<Fun<2>>(errors::<Fun<2>>(no_bcast_tangent)));
+}
+
+/// every part of a lane, value and tangents, as bits
+fn parts<T: Lane>(x: T) -> Vec<u64> {
+    let mut out = Vec::new();
+    let mut push = |v: V8| {
+        let mut a = [0.0; 8];
+        v.store(&mut a);
+        out.extend(a.iter().map(|f| f.to_bits()));
+    };
+    let v = x.val();
+    push(v.hi);
+    push(v.lo);
+    if T::TAN_F64 {
+        for k in 0..T::NT {
+            push(x.tan64(k));
+        }
+    } else if T::TANGENT {
+        let t = x.tan();
+        push(t.hi);
+        push(t.lo);
+    }
+    out
+}
+
+/// a lane with random normalized parts of either sign: value, and every tangent
+fn random_lane<T: Lane>(r: &mut Rng) -> T {
+    let v: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+    let t: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+    let mut x = T::from_vt(dv(&v), dv(&t));
+    if T::TAN_F64 {
+        for k in 0..T::NT {
+            let a: [f64; 8] = std::array::from_fn(|_| r.dd(8).hi);
+            x.set_tan64(k, V8::load(&a));
+        }
+    }
+    x
+}
+
+/// `scale` (the method under test, or a wrong one in the controls) against `mulf`, bit for bit, at random powers of
+/// two 2^-200..2^200 (every part stays normal), and the round trip: scaling by 2^k and then by 2^-k gives every part
+/// back bit for bit
+fn scales_exactly<T: Lane>(scale: impl Fn(T, f64) -> T) -> bool {
+    let mut r = Rng(53);
+    for _ in 0..2000 {
+        let x = random_lane::<T>(&mut r);
+        let s = 2f64.powi((r.next_u64() % 401) as i32 - 200);
+        let y = scale(x, s);
+        if parts(y) != parts(x.mulf(s)) || parts(scale(y, 1.0 / s)) != parts(x) {
+            return false;
+        }
+    }
+    true
+}
+
+#[test]
+fn mul_pwr2_is_exact_on_every_lane_type() {
+    assert!(scales_exactly::<DV>(|x, s| x.mul_pwr2(s)), "DV");
+    assert!(scales_exactly::<F8>(|x, s| x.mul_pwr2(s)), "F8");
+    assert!(scales_exactly::<Du>(|x, s| x.mul_pwr2(s)), "Du");
+    assert!(scales_exactly::<Fu>(|x, s| x.mul_pwr2(s)), "Fu");
+    assert!(scales_exactly::<Dtn<2>>(|x, s| x.mul_pwr2(s)), "Dtn<2>");
+    assert!(scales_exactly::<Fun<2>>(|x, s| x.mul_pwr2(s)), "Fun<2>");
+    // the scalar double-double, through lane 0 of DV
+    let mut r = Rng(54);
+    for _ in 0..2000 {
+        let x = r.dd(30);
+        let s = 2f64.powi((r.next_u64() % 401) as i32 - 200);
+        let y = x.mul_pwr2(s);
+        assert_eq!((y.hi.to_bits(), y.lo.to_bits()), {
+            let m = x.mul_f(s);
+            (m.hi.to_bits(), m.lo.to_bits())
+        });
+        assert_eq!(y.mul_pwr2(1.0 / s), x);
+    }
+}
+
+/// Controls: wrong scalings are caught. One power of two too many, on every lane type; the low part left unscaled, on
+/// the double-double value lanes; the (first) tangent left unscaled, on every tangent lane type.
+#[test]
+fn controls_on_mul_pwr2_are_caught() {
+    fn wrong_power<T: Lane>(x: T, s: f64) -> T {
+        x.mul_pwr2(2.0 * s)
+    }
+    assert!(!scales_exactly::<DV>(wrong_power));
+    assert!(!scales_exactly::<F8>(wrong_power));
+    assert!(!scales_exactly::<Du>(wrong_power));
+    assert!(!scales_exactly::<Fu>(wrong_power));
+    assert!(!scales_exactly::<Dtn<2>>(wrong_power));
+    assert!(!scales_exactly::<Fun<2>>(wrong_power));
+    fn lo_unscaled<T: Lane>(x: T, s: f64) -> T {
+        let y = x.mul_pwr2(s);
+        let v = DV {
+            hi: y.val().hi,
+            lo: x.val().lo,
+        };
+        let mut z = T::from_vt(v, y.tan());
+        if T::TAN_F64 {
+            for k in 0..T::NT {
+                z.set_tan64(k, y.tan64(k));
+            }
+        }
+        z
+    }
+    assert!(!scales_exactly::<DV>(lo_unscaled));
+    assert!(!scales_exactly::<Du>(lo_unscaled));
+    assert!(!scales_exactly::<Dtn<2>>(lo_unscaled));
+    fn tangent_unscaled<T: Lane>(x: T, s: f64) -> T {
+        let mut y = x.mul_pwr2(s);
+        if T::TAN_F64 {
+            y.set_tan64(0, x.tan64(0));
+        } else {
+            y = T::from_vt(y.val(), x.tan());
+        }
+        y
+    }
+    assert!(!scales_exactly::<Du>(tangent_unscaled));
+    assert!(!scales_exactly::<Fu>(tangent_unscaled));
+    assert!(!scales_exactly::<Dtn<2>>(tangent_unscaled));
+    assert!(!scales_exactly::<Fun<2>>(tangent_unscaled));
+}
+
+/// the scales `mul_pwr2` accepts: normal powers of two of either sign, nothing else
+#[test]
+fn is_pwr2_accepts_normal_powers_of_two_only() {
+    use multidouble::dd::is_pwr2;
+    for k in -1022..=1023 {
+        assert!(is_pwr2(2f64.powi(k)) && is_pwr2(-(2f64.powi(k))), "2^{k}");
+    }
+    for b in [
+        0.0,
+        -0.0,
+        3.0,
+        0.75,
+        1.0 + f64::EPSILON,
+        f64::MIN_POSITIVE / 2.0,
+        f64::INFINITY,
+        f64::NAN,
+    ] {
+        assert!(!is_pwr2(b), "{b:e}");
+    }
+}
+
+/// in debug builds, a scale that is not a power of two is refused (release builds do not check)
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "not a power of two")]
+fn mul_pwr2_refuses_other_scales_in_debug() {
+    let _ = Du::from_vt(DV::splat_f(1.0), DV::splat_f(1.0)).mul_pwr2(3.0);
 }

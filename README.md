@@ -21,6 +21,9 @@ speed, with no allocation and no arbitrary-precision library.
 | `linalg::DDLu` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, Gram matrices |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
 
+Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for
+computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable.
+
 ## Usage
 
 ```rust

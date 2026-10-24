@@ -48,6 +48,10 @@ pub trait Lane:
     }
     /// times an exact f64 (small integers, 1/2)
     fn mulf(self, s: f64) -> Self;
+    /// times a power of two s (`dd::is_pwr2`): every part, value and tangents, scaled exactly (barring overflow and
+    /// underflow), so bitwise `mulf(s)`; for computing in a variable rescaled by 2^k, e.g. a power series in x / 2^k
+    /// whose coefficients would overflow in x
+    fn mul_pwr2(self, s: f64) -> Self;
     /// plus a constant lane vector
     fn addc(self, c: DV) -> Self;
     /// all 8 lanes = lane j
@@ -93,6 +97,10 @@ impl Lane for DV {
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
         self.mul_f(s)
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        DV::mul_pwr2(self, s)
     }
     #[inline(always)]
     fn addc(self, c: DV) -> Self {
@@ -219,6 +227,13 @@ impl Lane for Du {
         }
     }
     #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        Du {
+            v: self.v.mul_pwr2(s),
+            d: self.d.mul_pwr2(s),
+        }
+    }
+    #[inline(always)]
     fn addc(self, c: DV) -> Self {
         Du {
             v: self.v + c,
@@ -339,6 +354,11 @@ impl Lane for F8 {
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
+        F8(self.0.mul(V8::splat(s)))
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        debug_assert!(crate::dd::is_pwr2(s), "mul_pwr2: {s} is not a power of two");
         F8(self.0.mul(V8::splat(s)))
     }
     #[inline(always)]
@@ -503,6 +523,15 @@ impl Lane for Fu {
         }
     }
     #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        debug_assert!(crate::dd::is_pwr2(s), "mul_pwr2: {s} is not a power of two");
+        let c = V8::splat(s);
+        Fu {
+            v: self.v.mul(c),
+            d: self.d.mul(c),
+        }
+    }
+    #[inline(always)]
     fn addc(self, c: DV) -> Self {
         Fu {
             v: self.v.add(c.hi),
@@ -653,6 +682,14 @@ impl<const N: usize> Lane for Dtn<N> {
         let c = V8::splat(s);
         Dtn {
             v: self.v.mul_f(s),
+            d: self.d.map(|x| x.mul(c)),
+        }
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        let c = V8::splat(s);
+        Dtn {
+            v: self.v.mul_pwr2(s),
             d: self.d.map(|x| x.mul(c)),
         }
     }
@@ -842,6 +879,15 @@ impl<const N: usize> Lane for Fun<N> {
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
+        let c = V8::splat(s);
+        Fun {
+            v: self.v.mul(c),
+            d: self.d.map(|x| x.mul(c)),
+        }
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        debug_assert!(crate::dd::is_pwr2(s), "mul_pwr2: {s} is not a power of two");
         let c = V8::splat(s);
         Fun {
             v: self.v.mul(c),

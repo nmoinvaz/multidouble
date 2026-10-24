@@ -94,6 +94,16 @@ impl DV {
     pub fn mul_f(self, b: f64) -> DV {
         self.mul_v(V8::splat(b))
     }
+    /// times a power of two b, as `DD::mul_pwr2`: both parts scaled, exact barring overflow and underflow
+    #[inline(always)]
+    pub fn mul_pwr2(self, b: f64) -> DV {
+        debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
+        let c = V8::splat(b);
+        DV {
+            hi: self.hi.mul(c),
+            lo: self.lo.mul(c),
+        }
+    }
     #[inline(always)]
     pub fn add_v(self, b: V8) -> DV {
         let (s, e) = two_sum(self.hi, b);
