@@ -2,7 +2,9 @@
 //
 // Each benchmark runs a dependent chain over a small array, so the result is used and the compiler cannot drop the
 // work; throughput is counted in element operations (8 per lane operation). The lane benchmarks run on every backend
-// the CPU has, one group each ("lanes avx2", "lanes sse2", ...).
+// the CPU has, one group each ("lanes avx2", "lanes sse2", ...). The lane chains are plain for loops, since an adapter
+// such as fold runs the loop inside std, in a function the compiler may keep out of line and compile without the
+// backend's target features.
 
 use std::cell::RefCell;
 use std::hint::black_box;
@@ -85,7 +87,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || v8.iter().fold(V8::zero(), |s, &x| x.fma(V8::splat(1.000_000_1), s)),
+                    || {
+                        let mut s = V8::zero();
+                        for &x in &v8 {
+                            s = x.fma(V8::splat(1.000_000_1), s);
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -93,7 +101,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || dv.iter().fold(DV::zero(), |s, &x| s + x),
+                    || {
+                        let mut s = DV::zero();
+                        for &x in &dv {
+                            s = s + x;
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -101,7 +115,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || dv.iter().fold(DV::splat_f(1.0), |s, &x| s * black_box(x)),
+                    || {
+                        let mut s = DV::splat_f(1.0);
+                        for &x in &dv {
+                            s = s * black_box(x);
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -109,7 +129,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || dv.iter().fold(DV::splat_f(1.0), |s, &x| s / x),
+                    || {
+                        let mut s = DV::splat_f(1.0);
+                        for &x in &dv {
+                            s = s / x;
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -173,7 +199,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || dv.iter().fold(DotAcc::zero(), |s, &x| s.add_prod(x, x)).finish(),
+                    || {
+                        let mut s = DotAcc::zero();
+                        for &x in &dv {
+                            s = s.add_prod(x, x);
+                        }
+                        s.finish()
+                    },
                 )
             })
         });
@@ -181,7 +213,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || qv.iter().fold(QV::zero(), |s, &x| s + x),
+                    || {
+                        let mut s = QV::zero();
+                        for &x in &qv {
+                            s = s + x;
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -189,7 +227,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || qv.iter().fold(QV::zero(), |s, &x| s.ieee_add(x)),
+                    || {
+                        let mut s = QV::zero();
+                        for &x in &qv {
+                            s = s.ieee_add(x);
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -197,7 +241,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || qv.iter().fold(QV::splat_f(1.0), |s, &x| s * x),
+                    || {
+                        let mut s = QV::splat_f(1.0);
+                        for &x in &qv {
+                            s = s * x;
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -205,7 +255,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || qv.iter().fold(QV::splat_f(1.0), |s, &x| s / x),
+                    || {
+                        let mut s = QV::splat_f(1.0);
+                        for &x in &qv {
+                            s = s / x;
+                        }
+                        s
+                    },
                 )
             })
         });
@@ -213,7 +269,13 @@ impl Kernel for Lanes<'_, '_> {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
-                    || qv.iter().map(|&x| x.sqrt()).fold(QV::zero(), |s, r| s + r),
+                    || {
+                        let mut s = QV::zero();
+                        for &x in &qv {
+                            s = s + x.sqrt();
+                        }
+                        s
+                    },
                 )
             })
         });
