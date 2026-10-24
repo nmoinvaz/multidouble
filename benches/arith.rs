@@ -9,6 +9,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
+use multidouble::dual::{Fu, Fun};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::qd::QD;
 use multidouble::qv::QV;
@@ -112,6 +113,62 @@ impl Kernel for Lanes<'_, '_> {
                 )
             })
         });
+        // independent quotients, so throughput rather than the latency of a chain
+        g.bench_function("dv div, independent", |bch| {
+            let mut out = vec![DV::<S>::zero(); dv.len()];
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        for (k, o) in out.iter_mut().enumerate() {
+                            *o = dv[k] / dv[dv.len() - 1 - k];
+                        }
+                    },
+                );
+                black_box(&out);
+            })
+        });
+        // dual lanes: the value and every tangent divided by the same o.v
+        let fu: Vec<Fu<S>> = (0..v8.len())
+            .map(|k| Fu {
+                v: v8[k],
+                d: v8[(k + 1) % v8.len()],
+            })
+            .collect();
+        let fun: Vec<Fun<S, 8>> = (0..v8.len())
+            .map(|k| Fun {
+                v: v8[k],
+                d: std::array::from_fn(|j| v8[(k + j + 1) % v8.len()]),
+            })
+            .collect();
+        g.bench_function("fu div, independent", |bch| {
+            let mut out = fu.clone();
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        for (k, o) in out.iter_mut().enumerate() {
+                            *o = fu[k] / fu[fu.len() - 1 - k];
+                        }
+                    },
+                );
+                black_box(&out);
+            })
+        });
+        g.bench_function("fun<8> div, independent", |bch| {
+            let mut out = fun.clone();
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        for (k, o) in out.iter_mut().enumerate() {
+                            *o = fun[k] / fun[fun.len() - 1 - k];
+                        }
+                    },
+                );
+                black_box(&out);
+            })
+        });
         g.bench_function("dv dot (DotAcc)", |bch| {
             bch.iter(|| {
                 S::vectorize(
@@ -125,6 +182,14 @@ impl Kernel for Lanes<'_, '_> {
                 S::vectorize(
                     #[inline(always)]
                     || qv.iter().fold(QV::zero(), |s, &x| s + x),
+                )
+            })
+        });
+        g.bench_function("qv ieee_add", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || qv.iter().fold(QV::zero(), |s, &x| s.ieee_add(x)),
                 )
             })
         });
