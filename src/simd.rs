@@ -32,6 +32,12 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn sub(a: Self::R, b: Self::R) -> Self::R;
     fn mul(a: Self::R, b: Self::R) -> Self::R;
     fn div(a: Self::R, b: Self::R) -> Self::R;
+    /// a divisor prepared for several divisions by it ([`Simd::div_by`])
+    type D: Copy + Send + Sync + Debug;
+    /// b as a divisor, on AVX-512 with its reciprocal and elsewhere b itself
+    fn divisor(b: Self::R) -> Self::D;
+    /// a / b for d = divisor(b), bitwise the same as `div`
+    fn div_by(a: Self::R, d: Self::D) -> Self::R;
     /// a b + c with one rounding
     fn fma(a: Self::R, b: Self::R, c: Self::R) -> Self::R;
     /// a b - c with one rounding

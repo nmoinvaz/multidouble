@@ -14,7 +14,7 @@ speed, with no allocation and no arbitrary-precision library.
 
 | Type | What it is |
 |---|---|
-| `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout |
+| `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout; `divisor` and `div_by` for several divisions by one vector, on AVX-512 by its reciprocal (`rcp14`, Newton steps and one correction), bitwise the same as `div` |
 | `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `dv::DotAcc` accumulates sums of products |
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, and f64 versions, behind the `dual::Lane` trait |

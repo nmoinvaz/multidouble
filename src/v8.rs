@@ -124,6 +124,77 @@ mod avx512 {
         pub fn add_where(self, m: M8, o: Self) -> Self {
             unsafe { V8(_mm512_mask_add_pd(self.0, m.0, self.0, o.0)) }
         }
+        /// self as a divisor, with y = RN(1/self) on the lanes ok, those with |self| in [LO, HI]
+        #[inline(always)]
+        pub fn divisor(self) -> D {
+            unsafe {
+                let (b, one) = (self.0, _mm512_set1_pd(1.0));
+                let ab = _mm512_abs_pd(b);
+                let ok = _mm512_mask_cmp_pd_mask::<_CMP_LE_OQ>(
+                    _mm512_cmp_pd_mask::<_CMP_GE_OQ>(ab, _mm512_set1_pd(LO)),
+                    ab,
+                    _mm512_set1_pd(HI),
+                );
+                // rcp14 is within 2^-14 relative, and two Newton steps leave y within 0.14 ulp before its rounding, so
+                // y is faithful
+                let mut y = _mm512_rcp14_pd(b);
+                y = _mm512_fmadd_pd(y, _mm512_fnmadd_pd(b, y, one), y);
+                y = _mm512_fmadd_pd(y, _mm512_fnmadd_pd(b, y, one), y);
+                // a third step from a faithful y, with 1 - b y exact, gives RN(1/b) (Markstein), except for a
+                // significand of all ones, where y can stay at the power of two below 1/b and RN(1/b) is that
+                // power with its last bit set
+                y = _mm512_fmadd_pd(y, _mm512_fnmadd_pd(b, y, one), y);
+                let sig = _mm512_set1_epi64(0x000f_ffff_ffff_ffff);
+                let ones = _mm512_cmpeq_epi64_mask(_mm512_and_si512(_mm512_castpd_si512(b), sig), sig);
+                let y = _mm512_castsi512_pd(_mm512_mask_or_epi64(
+                    _mm512_castpd_si512(y),
+                    ones,
+                    _mm512_castpd_si512(y),
+                    _mm512_set1_epi64(1),
+                ));
+                D { b, y, ok }
+            }
+        }
+        /// self / d.b, correctly rounded, as q = RN(a y) and one correction RN(q + (a - b q) y). When q is within an
+        /// ulp of a / b, the remainder is exact and the correction gives RN(a/b) (Markstein). When it is not, a and b
+        /// normalized to [1, 2) have a < b, and a / b is at least (2 - a) 2^-54 from every midpoint, while the
+        /// corrected value is within 1.75 2^-105 of a / b. It can cross a midpoint only for a within 3.5 ulps of 2,
+        /// which the tests check exhaustively. Lanes with |a| or |b| out of [LO, HI] take `div`.
+        #[inline(always)]
+        pub fn div_by(self, d: D) -> Self {
+            unsafe {
+                let a = self.0;
+                let aa = _mm512_abs_pd(a);
+                let fast = _mm512_mask_cmp_pd_mask::<_CMP_LE_OQ>(
+                    _mm512_mask_cmp_pd_mask::<_CMP_GE_OQ>(d.ok, aa, _mm512_set1_pd(LO)),
+                    aa,
+                    _mm512_set1_pd(HI),
+                );
+                // for a = 0, a y is the zero with the sign of a / b, which the masked correction keeps
+                let zero = _mm512_mask_cmp_pd_mask::<_CMP_EQ_OQ>(d.ok, a, _mm512_setzero_pd());
+                let q = _mm512_mul_pd(a, d.y);
+                let q = _mm512_mask3_fmadd_pd(_mm512_fnmadd_pd(d.b, q, a), d.y, q, fast);
+                let slow = !(fast | zero);
+                if slow == 0 {
+                    V8(q)
+                } else {
+                    V8(_mm512_mask_div_pd(q, slow, a, d.b))
+                }
+            }
+        }
+    }
+
+    /// The range of |a| and |b| where `div_by` takes the reciprocal, so that a / b, 1 / b and the remainders a - b q
+    /// stay normal and exact.
+    const LO: f64 = f64::from_bits((1023 - 500) << 52);
+    const HI: f64 = f64::from_bits((1023 + 500) << 52);
+
+    /// A divisor b with y = RN(1/b) on the lanes ok.
+    #[derive(Clone, Copy, Debug)]
+    pub struct D {
+        b: __m512d,
+        y: __m512d,
+        ok: __mmask8,
     }
 
     /// 8-lane mask (one bit per lane).
@@ -743,11 +814,21 @@ mod portable {
 }
 
 /// `Simd` for a backend type from its module's `V8` and `M8`: whether `hot` forces inlining (`always` or `hint`),
-/// the target features its `vectorize` enables, and optionally in braces its overrides of the trait's default
-/// operations.
+/// the target features its `vectorize` enables, and optionally in braces the divisor (`D`, `divisor`, `div_by`) and
+/// the overrides of the trait's default operations. Without them the divisor is b itself.
 macro_rules! simd {
     ($b:ty, $m:ident, $hot:ident $(, $feat:literal)?) => {
-        simd!($b, $m, $hot $(, $feat)? {});
+        simd!($b, $m, $hot $(, $feat)? {
+            type D = $m::V8;
+            #[inline(always)]
+            fn divisor(b: $m::V8) -> $m::V8 {
+                b
+            }
+            #[inline(always)]
+            fn div_by(a: $m::V8, b: $m::V8) -> $m::V8 {
+                a.div(b)
+            }
+        });
     };
     ($b:ty, $m:ident, $hot:ident $(, $feat:literal)? { $($extra:item)* }) => {
         impl crate::simd::sealed::Sealed for $b {}
@@ -890,6 +971,15 @@ macro_rules! simd {
 
 #[cfg(target_arch = "x86_64")]
 simd!(backend::Avx512, avx512, always, "avx512f,avx2,fma" {
+    type D = avx512::D;
+    #[inline(always)]
+    fn divisor(b: avx512::V8) -> avx512::D {
+        b.divisor()
+    }
+    #[inline(always)]
+    fn div_by(a: avx512::V8, d: avx512::D) -> avx512::V8 {
+        a.div_by(d)
+    }
     #[inline(always)]
     fn add_where(m: avx512::M8, a: avx512::V8, b: avx512::V8) -> avx512::V8 {
         a.add_where(m, b)
@@ -920,6 +1010,11 @@ pub struct V8<S: Simd>(pub S::R);
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct M8<S: Simd>(pub S::M);
+
+/// A divisor for several divisions by it ([`V8::div_by`]), on AVX-512 with its reciprocal.
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub struct Divisor<S: Simd>(pub S::D);
 
 impl<S: Simd> V8<S> {
     pub const ISA: &'static str = S::NAME;
@@ -954,6 +1049,16 @@ impl<S: Simd> V8<S> {
     #[inline(always)]
     pub fn div(self, o: Self) -> Self {
         V8(S::div(self.0, o.0))
+    }
+    /// self as a divisor, for several divisions by it
+    #[inline(always)]
+    pub fn divisor(self) -> Divisor<S> {
+        Divisor(S::divisor(self.0))
+    }
+    /// self / b for d = b.divisor(), bitwise the same as `div`: on AVX-512 by b's reciprocal and one correction
+    #[inline(always)]
+    pub fn div_by(self, d: Divisor<S>) -> Self {
+        V8(S::div_by(self.0, d.0))
     }
     /// self * b + c with one rounding
     #[inline(always)]
