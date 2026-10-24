@@ -727,9 +727,10 @@ mod portable {
     }
 }
 
-/// `Simd` for a backend type from its module's `V8` and `M8`, with the target features its `vectorize` enables.
+/// `Simd` for a backend type from its module's `V8` and `M8`: whether `hot` forces inlining (`always` or `hint`),
+/// and the target features its `vectorize` enables.
 macro_rules! simd {
-    ($b:ty, $m:ident $(, $feat:literal)?) => {
+    ($b:ty, $m:ident, $hot:ident $(, $feat:literal)?) => {
         impl crate::simd::sealed::Sealed for $b {}
         impl Simd for $b {
             const NAME: &'static str = $m::V8::ISA;
@@ -832,6 +833,19 @@ macro_rules! simd {
                 m.bits()
             }
             simd!(@vectorize $($feat)?);
+            simd!(@hot $hot);
+        }
+    };
+    (@hot always) => {
+        #[inline(always)]
+        fn hot<T>(f: impl FnOnce() -> T) -> T {
+            f()
+        }
+    };
+    (@hot hint) => {
+        #[inline]
+        fn hot<T>(f: impl FnOnce() -> T) -> T {
+            f()
         }
     };
     (@vectorize) => {
@@ -855,14 +869,14 @@ macro_rules! simd {
 }
 
 #[cfg(target_arch = "x86_64")]
-simd!(backend::Avx512, avx512, "avx512f,avx2,fma");
+simd!(backend::Avx512, avx512, always, "avx512f,avx2,fma");
 #[cfg(target_arch = "x86_64")]
-simd!(backend::Avx2, avx2, "avx2,fma");
+simd!(backend::Avx2, avx2, always, "avx2,fma");
 #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
-simd!(backend::Sse2, sse2);
+simd!(backend::Sse2, sse2, hint);
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-simd!(backend::Neon, neon);
-simd!(backend::Portable, portable);
+simd!(backend::Neon, neon, hint);
+simd!(backend::Portable, portable, hint);
 
 /// 8 f64 lanes on the backend S.
 #[derive(Clone, Copy, Debug)]
