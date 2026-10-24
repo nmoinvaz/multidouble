@@ -3,9 +3,9 @@
 //! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, and Gram matrices.
 use crate::dd::{two_prod, two_sum, DD};
-use crate::dv;
-use crate::native::DV;
-use crate::native::V8;
+use crate::dv::{self, DV};
+use crate::simd::{self, Kernel, Simd};
+use crate::v8::V8;
 use rayon::prelude::*;
 
 #[derive(Clone)]
@@ -24,7 +24,7 @@ pub fn ld_for(n: usize) -> usize {
 
 /// a - l t on 8 rows (l, a lane vectors; t scalar), as one DD product added with an error-free sum
 #[inline(always)]
-fn axpy8(a: DV, l: DV, nt: DV) -> DV {
+fn axpy8<S: Simd>(a: DV<S>, l: DV<S>, nt: DV<S>) -> DV<S> {
     let (p, pe) = dv::two_prod(l.hi, nt.hi);
     let pe = l.hi.fma(nt.lo, pe);
     let pe = l.lo.fma(nt.hi, pe);
@@ -55,7 +55,7 @@ const TR: usize = 2;
 
 /// Scalar negation of every lane (-x, as DD's Neg: keeps signed zeros as the scalar solve has them).
 #[inline(always)]
-fn neg_lanes(v: DV) -> DV {
+fn neg_lanes<S: Simd>(v: DV<S>) -> DV<S> {
     let (h, l) = (v.hi.to_array(), v.lo.to_array());
     DV {
         hi: V8::from_array(h.map(|x| -x)),
@@ -65,7 +65,7 @@ fn neg_lanes(v: DV) -> DV {
 
 /// Scalar DD division of every lane by d.
 #[inline(always)]
-fn div_lanes(v: DV, d: DD) -> DV {
+fn div_lanes<S: Simd>(v: DV<S>, d: DD) -> DV<S> {
     let (h, l) = (v.hi.to_array(), v.lo.to_array());
     let mut qh = [0.0f64; 8];
     let mut ql = [0.0f64; 8];
@@ -82,7 +82,7 @@ fn div_lanes(v: DV, d: DD) -> DV {
 
 /// u, except the lanes r with z[r] == 0, which keep old (the scalar solve skips those updates).
 #[inline(always)]
-fn keep_lanes(u: DV, old: DV, z: &[f64; 8]) -> DV {
+fn keep_lanes<S: Simd>(u: DV<S>, old: DV<S>, z: &[f64; 8]) -> DV<S> {
     let (mut uh, mut ul) = (u.hi.to_array(), u.lo.to_array());
     let (oh, ol) = (old.hi.to_array(), old.lo.to_array());
     for r in 0..8 {
@@ -101,7 +101,7 @@ fn keep_lanes(u: DV, old: DV, z: &[f64; 8]) -> DV {
 /// row swaps within the panel, scaling, and updates of the later panel columns, as `factor_unblocked` does them,
 /// except that updates which cannot change a value are skipped: 8-row blocks whose multipliers are all exactly zero,
 /// and columns whose pivot-row entry is exactly zero (a - 0 t and a - l 0 return a; at most the sign of a zero differs).
-fn panel_getf2(
+fn panel_getf2<S: Simd>(
     n: usize,
     ld: usize,
     j0: usize,
@@ -110,96 +110,101 @@ fn panel_getf2(
     pl: &mut [f64],
     perm: &mut [usize],
 ) -> Result<(), String> {
-    let mut mh = vec![0.0f64; ld];
-    let mut ml = vec![0.0f64; ld];
-    let mut blocks: Vec<usize> = Vec::with_capacity(ld / 8);
-    for c in 0..jb {
-        let k = j0 + c;
-        let ck = c * ld;
-        let mut p = k;
-        let mut best = ph[ck + k].abs();
-        for i in k + 1..n {
-            let v = ph[ck + i].abs();
-            if v > best {
-                best = v;
-                p = i;
-            }
-        }
-        if best == 0.0 || !best.is_finite() {
-            return Err(format!("singular or non-finite pivot at column {k} ({best})"));
-        }
-        perm[k] = p;
-        if p != k {
-            for j in 0..jb {
-                ph.swap(j * ld + k, j * ld + p);
-                pl.swap(j * ld + k, j * ld + p);
-            }
-        }
-        let inv = DD::ONE
-            / DD {
-                hi: ph[ck + k],
-                lo: pl[ck + k],
-            };
-        for i in k + 1..n {
-            if ph[ck + i] == 0.0 && pl[ck + i] == 0.0 {
-                continue;
-            }
-            let v = DD {
-                hi: ph[ck + i],
-                lo: pl[ck + i],
-            } * inv;
-            ph[ck + i] = v.hi;
-            pl[ck + i] = v.lo;
-        }
-        if k + 1 == n || c + 1 == jb {
-            continue;
-        }
-        let r0 = 8 * ((k + 1) / 8);
-        blocks.clear();
-        let mut i = r0;
-        while i < ld {
-            let mut nz = false;
-            for r in i..i + 8 {
-                if r > k && r < n {
-                    mh[r] = ph[ck + r];
-                    ml[r] = pl[ck + r];
-                } else {
-                    mh[r] = 0.0;
-                    ml[r] = 0.0;
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            let mut mh = vec![0.0f64; ld];
+            let mut ml = vec![0.0f64; ld];
+            let mut blocks: Vec<usize> = Vec::with_capacity(ld / 8);
+            for c in 0..jb {
+                let k = j0 + c;
+                let ck = c * ld;
+                let mut p = k;
+                let mut best = ph[ck + k].abs();
+                for i in k + 1..n {
+                    let v = ph[ck + i].abs();
+                    if v > best {
+                        best = v;
+                        p = i;
+                    }
                 }
-                nz |= mh[r] != 0.0 || ml[r] != 0.0;
+                if best == 0.0 || !best.is_finite() {
+                    return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                }
+                perm[k] = p;
+                if p != k {
+                    for j in 0..jb {
+                        ph.swap(j * ld + k, j * ld + p);
+                        pl.swap(j * ld + k, j * ld + p);
+                    }
+                }
+                let inv = DD::ONE
+                    / DD {
+                        hi: ph[ck + k],
+                        lo: pl[ck + k],
+                    };
+                for i in k + 1..n {
+                    if ph[ck + i] == 0.0 && pl[ck + i] == 0.0 {
+                        continue;
+                    }
+                    let v = DD {
+                        hi: ph[ck + i],
+                        lo: pl[ck + i],
+                    } * inv;
+                    ph[ck + i] = v.hi;
+                    pl[ck + i] = v.lo;
+                }
+                if k + 1 == n || c + 1 == jb {
+                    continue;
+                }
+                let r0 = 8 * ((k + 1) / 8);
+                blocks.clear();
+                let mut i = r0;
+                while i < ld {
+                    let mut nz = false;
+                    for r in i..i + 8 {
+                        if r > k && r < n {
+                            mh[r] = ph[ck + r];
+                            ml[r] = pl[ck + r];
+                        } else {
+                            mh[r] = 0.0;
+                            ml[r] = 0.0;
+                        }
+                        nz |= mh[r] != 0.0 || ml[r] != 0.0;
+                    }
+                    if nz {
+                        blocks.push(i);
+                    }
+                    i += 8;
+                }
+                if blocks.is_empty() {
+                    continue;
+                }
+                let (_, rh) = ph.split_at_mut((c + 1) * ld);
+                let (_, rl) = pl.split_at_mut((c + 1) * ld);
+                let w = jb - c - 1;
+                for (ch, cl) in rh[..w * ld].chunks_mut(ld).zip(rl[..w * ld].chunks_mut(ld)) {
+                    if ch[k] == 0.0 && cl[k] == 0.0 {
+                        continue;
+                    }
+                    let nt = DV::<S>::splat(DD { hi: -ch[k], lo: -cl[k] });
+                    for &i in &blocks {
+                        let a = DV::load(&ch[i..i + 8], &cl[i..i + 8]);
+                        let l = DV::load(&mh[i..i + 8], &ml[i..i + 8]);
+                        axpy8(a, l, nt).store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
+                    }
+                }
             }
-            if nz {
-                blocks.push(i);
-            }
-            i += 8;
-        }
-        if blocks.is_empty() {
-            continue;
-        }
-        let (_, rh) = ph.split_at_mut((c + 1) * ld);
-        let (_, rl) = pl.split_at_mut((c + 1) * ld);
-        let w = jb - c - 1;
-        for (ch, cl) in rh[..w * ld].chunks_mut(ld).zip(rl[..w * ld].chunks_mut(ld)) {
-            if ch[k] == 0.0 && cl[k] == 0.0 {
-                continue;
-            }
-            let nt = DV::splat(DD { hi: -ch[k], lo: -cl[k] });
-            for &i in &blocks {
-                let a = DV::load(&ch[i..i + 8], &cl[i..i + 8]);
-                let l = DV::load(&mh[i..i + 8], &ml[i..i + 8]);
-                axpy8(a, l, nt).store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
-            }
-        }
-    }
-    Ok(())
+            Ok(())
+        },
+    )
 }
 
 /// The trailing update of one panel on the given columns (offsets into ch / cl, leading dimension ld) and 8-row blocks
 /// (row offsets): entry -= l_ik u_kj for the panel's k in order, with TR row blocks x NC columns in registers.
 /// nt[j]: offset of column j's -u values (jb each) in nth / ntl; ph / pl: packed multipliers, [row block][k][lane].
 #[allow(clippy::too_many_arguments)]
-fn gemm(
+fn gemm<S: Simd>(
     ld: usize,
     jb: usize,
     ch: &mut [f64],
@@ -212,59 +217,68 @@ fn gemm(
     ph: &[f64],
     pl: &[f64],
 ) {
-    let mut j = 0;
-    while j < cols.len() {
-        let w = (cols.len() - j).min(NC);
-        let mut r = 0;
-        while r < rows.len() {
-            let h = (rows.len() - r).min(TR);
-            match (h, w) {
-                (TR, NC) => tile_rows::<TR, NC>(ld, jb, ch, cl, &cols[j..], &nto[j..], nth, ntl, &rows[r..], ph, pl),
-                (1, NC) => tile_rows::<1, NC>(ld, jb, ch, cl, &cols[j..], &nto[j..], nth, ntl, &rows[r..], ph, pl),
-                (TR, _) => {
-                    for q in 0..w {
-                        tile_rows::<TR, 1>(
-                            ld,
-                            jb,
-                            ch,
-                            cl,
-                            &cols[j + q..],
-                            &nto[j + q..],
-                            nth,
-                            ntl,
-                            &rows[r..],
-                            ph,
-                            pl,
-                        )
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            let mut j = 0;
+            while j < cols.len() {
+                let w = (cols.len() - j).min(NC);
+                let mut r = 0;
+                while r < rows.len() {
+                    let h = (rows.len() - r).min(TR);
+                    match (h, w) {
+                        (TR, NC) => {
+                            tile_rows::<S, TR, NC>(ld, jb, ch, cl, &cols[j..], &nto[j..], nth, ntl, &rows[r..], ph, pl)
+                        }
+                        (1, NC) => {
+                            tile_rows::<S, 1, NC>(ld, jb, ch, cl, &cols[j..], &nto[j..], nth, ntl, &rows[r..], ph, pl)
+                        }
+                        (TR, _) => {
+                            for q in 0..w {
+                                tile_rows::<S, TR, 1>(
+                                    ld,
+                                    jb,
+                                    ch,
+                                    cl,
+                                    &cols[j + q..],
+                                    &nto[j + q..],
+                                    nth,
+                                    ntl,
+                                    &rows[r..],
+                                    ph,
+                                    pl,
+                                )
+                            }
+                        }
+                        _ => {
+                            for q in 0..w {
+                                tile_rows::<S, 1, 1>(
+                                    ld,
+                                    jb,
+                                    ch,
+                                    cl,
+                                    &cols[j + q..],
+                                    &nto[j + q..],
+                                    nth,
+                                    ntl,
+                                    &rows[r..],
+                                    ph,
+                                    pl,
+                                )
+                            }
+                        }
                     }
+                    r += h;
                 }
-                _ => {
-                    for q in 0..w {
-                        tile_rows::<1, 1>(
-                            ld,
-                            jb,
-                            ch,
-                            cl,
-                            &cols[j + q..],
-                            &nto[j + q..],
-                            nth,
-                            ntl,
-                            &rows[r..],
-                            ph,
-                            pl,
-                        )
-                    }
-                }
+                j += w;
             }
-            r += h;
-        }
-        j += w;
-    }
+        },
+    )
 }
 
 #[inline(always)]
 #[allow(clippy::too_many_arguments)]
-fn tile_rows<const R: usize, const W: usize>(
+fn tile_rows<S: Simd, const R: usize, const W: usize>(
     ld: usize,
     jb: usize,
     ch: &mut [f64],
@@ -278,7 +292,7 @@ fn tile_rows<const R: usize, const W: usize>(
     pl: &[f64],
 ) {
     let _ = ld;
-    let mut acc = [[DV::zero(); W]; R];
+    let mut acc = [[DV::<S>::zero(); W]; R];
     for r in 0..R {
         let i = rows[r].0;
         for q in 0..W {
@@ -324,90 +338,104 @@ impl DDLu {
     }
 
     /// LAPACK getf2 order: for each column k, pivot, scale, and update all trailing columns (in parallel if par).
-    pub fn factor_unblocked(
+    pub fn factor_unblocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
+        simd::dispatch(FactorUnblocked { n, ld, hi, lo, par })
+    }
+
+    fn factor_unblocked_on<S: Simd>(
         n: usize,
         ld: usize,
         mut hi: Vec<f64>,
         mut lo: Vec<f64>,
         par: bool,
     ) -> Result<DDLu, String> {
-        assert!(ld.is_multiple_of(8) && ld >= n && hi.len() >= ld * n && lo.len() >= ld * n);
-        let mut perm = vec![0usize; n];
-        let mut mh = vec![0.0f64; ld];
-        let mut ml = vec![0.0f64; ld];
-        for k in 0..n {
-            let ck = k * ld;
-            let mut p = k;
-            let mut best = hi[ck + k].abs();
-            for i in k + 1..n {
-                let v = hi[ck + i].abs();
-                if v > best {
-                    best = v;
-                    p = i;
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert!(ld.is_multiple_of(8) && ld >= n && hi.len() >= ld * n && lo.len() >= ld * n);
+                let mut perm = vec![0usize; n];
+                let mut mh = vec![0.0f64; ld];
+                let mut ml = vec![0.0f64; ld];
+                for k in 0..n {
+                    let ck = k * ld;
+                    let mut p = k;
+                    let mut best = hi[ck + k].abs();
+                    for i in k + 1..n {
+                        let v = hi[ck + i].abs();
+                        if v > best {
+                            best = v;
+                            p = i;
+                        }
+                    }
+                    if best == 0.0 || !best.is_finite() {
+                        return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                    }
+                    perm[k] = p;
+                    if p != k {
+                        for j in 0..n {
+                            hi.swap(j * ld + k, j * ld + p);
+                            lo.swap(j * ld + k, j * ld + p);
+                        }
+                    }
+                    let inv = DD::ONE
+                        / DD {
+                            hi: hi[ck + k],
+                            lo: lo[ck + k],
+                        };
+                    for i in k + 1..n {
+                        let v = DD {
+                            hi: hi[ck + i],
+                            lo: lo[ck + i],
+                        } * inv;
+                        hi[ck + i] = v.hi;
+                        lo[ck + i] = v.lo;
+                    }
+                    if k + 1 == n {
+                        break;
+                    }
+                    let r0 = 8 * ((k + 1) / 8);
+                    for i in r0..ld {
+                        if i > k && i < n {
+                            mh[i] = hi[ck + i];
+                            ml[i] = lo[ck + i];
+                        } else {
+                            mh[i] = 0.0;
+                            ml[i] = 0.0;
+                        }
+                    }
+                    let (_, rh) = hi.split_at_mut((k + 1) * ld);
+                    let (_, rl) = lo.split_at_mut((k + 1) * ld);
+                    let ncols = n - k - 1;
+                    let upd = |(ch, cl): (&mut [f64], &mut [f64])| {
+                        S::vectorize(
+                            #[inline(always)]
+                            || {
+                                let nt = DV::<S>::splat(DD { hi: -ch[k], lo: -cl[k] });
+                                let mut i = r0;
+                                while i < ld {
+                                    let a = DV::load(&ch[i..i + 8], &cl[i..i + 8]);
+                                    let l = DV::load(&mh[i..i + 8], &ml[i..i + 8]);
+                                    axpy8(a, l, nt).store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
+                                    i += 8;
+                                }
+                            },
+                        )
+                    };
+                    if par && ncols * (ld - r0) > 32768 {
+                        rh[..ncols * ld]
+                            .par_chunks_mut(ld)
+                            .zip(rl[..ncols * ld].par_chunks_mut(ld))
+                            .for_each(upd);
+                    } else {
+                        rh[..ncols * ld]
+                            .chunks_mut(ld)
+                            .zip(rl[..ncols * ld].chunks_mut(ld))
+                            .for_each(upd);
+                    }
                 }
-            }
-            if best == 0.0 || !best.is_finite() {
-                return Err(format!("singular or non-finite pivot at column {k} ({best})"));
-            }
-            perm[k] = p;
-            if p != k {
-                for j in 0..n {
-                    hi.swap(j * ld + k, j * ld + p);
-                    lo.swap(j * ld + k, j * ld + p);
-                }
-            }
-            let inv = DD::ONE
-                / DD {
-                    hi: hi[ck + k],
-                    lo: lo[ck + k],
-                };
-            for i in k + 1..n {
-                let v = DD {
-                    hi: hi[ck + i],
-                    lo: lo[ck + i],
-                } * inv;
-                hi[ck + i] = v.hi;
-                lo[ck + i] = v.lo;
-            }
-            if k + 1 == n {
-                break;
-            }
-            let r0 = 8 * ((k + 1) / 8);
-            for i in r0..ld {
-                if i > k && i < n {
-                    mh[i] = hi[ck + i];
-                    ml[i] = lo[ck + i];
-                } else {
-                    mh[i] = 0.0;
-                    ml[i] = 0.0;
-                }
-            }
-            let (_, rh) = hi.split_at_mut((k + 1) * ld);
-            let (_, rl) = lo.split_at_mut((k + 1) * ld);
-            let ncols = n - k - 1;
-            let upd = |(ch, cl): (&mut [f64], &mut [f64])| {
-                let nt = DV::splat(DD { hi: -ch[k], lo: -cl[k] });
-                let mut i = r0;
-                while i < ld {
-                    let a = DV::load(&ch[i..i + 8], &cl[i..i + 8]);
-                    let l = DV::load(&mh[i..i + 8], &ml[i..i + 8]);
-                    axpy8(a, l, nt).store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
-                    i += 8;
-                }
-            };
-            if par && ncols * (ld - r0) > 32768 {
-                rh[..ncols * ld]
-                    .par_chunks_mut(ld)
-                    .zip(rl[..ncols * ld].par_chunks_mut(ld))
-                    .for_each(upd);
-            } else {
-                rh[..ncols * ld]
-                    .chunks_mut(ld)
-                    .zip(rl[..ncols * ld].chunks_mut(ld))
-                    .for_each(upd);
-            }
-        }
-        Ok(DDLu { n, ld, hi, lo, perm })
+                Ok(DDLu { n, ld, hi, lo, perm })
+            },
+        )
     }
 
     /// Blocked right-looking LU (panel width NB) that applies to every entry the operations of `factor_unblocked`, in
@@ -423,127 +451,147 @@ impl DDLu {
     ///     whole trailing matrix through memory for every k).
     ///
     /// Step 3 runs in parallel over chunks of CW columns when par.
-    pub fn factor_blocked(n: usize, ld: usize, mut hi: Vec<f64>, mut lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
-        assert!(ld.is_multiple_of(8) && ld >= n && hi.len() >= ld * n && lo.len() >= ld * n);
-        let mut perm = vec![0usize; n];
-        let mut j0 = 0;
-        while j0 < n {
-            let jb = NB.min(n - j0);
-            let je = j0 + jb;
-            let (left_h, rest_h) = hi.split_at_mut(j0 * ld);
-            let (left_l, rest_l) = lo.split_at_mut(j0 * ld);
-            let (pan_h, right_h) = rest_h.split_at_mut(jb * ld);
-            let (pan_l, right_l) = rest_l.split_at_mut(jb * ld);
-            panel_getf2(n, ld, j0, jb, pan_h, pan_l, &mut perm)?;
-            let pv = &perm[j0..je];
-            // 2. swaps left of the panel
-            for (ch, cl) in left_h.chunks_mut(ld).zip(left_l.chunks_mut(ld)) {
-                for (c, &p) in pv.iter().enumerate() {
-                    if p != j0 + c {
-                        ch.swap(j0 + c, p);
-                        cl.swap(j0 + c, p);
-                    }
-                }
-            }
-            if je == n {
-                break;
-            }
-            // 3. multipliers: rows j0..je for the triangular part (zero for rows <= k, as getf2's mh), rows je..ld
-            //    packed as [row block][k][lane] for the tiles (zero for padding rows >= n)
-            let pan_h: &[f64] = pan_h;
-            let pan_l: &[f64] = pan_l;
-            let mut th = vec![0.0f64; jb * jb];
-            let mut tl = vec![0.0f64; jb * jb];
-            for c in 0..jb {
-                for i in j0 + c + 1..je.min(n) {
-                    th[c * jb + i - j0] = pan_h[c * ld + i];
-                    tl[c * jb + i - j0] = pan_l[c * ld + i];
-                }
-            }
-            let nrb = (ld - je) / 8;
-            let mut ph = vec![0.0f64; nrb * jb * 8];
-            let mut pl = vec![0.0f64; nrb * jb * 8];
-            // row blocks with a nonzero multiplier: (row offset, packed offset)
-            let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
-            for rb in 0..nrb {
-                let mut nz = false;
-                for c in 0..jb {
-                    for r in 0..8 {
-                        let i = je + rb * 8 + r;
-                        if i < n {
-                            let (x, y) = (pan_h[c * ld + i], pan_l[c * ld + i]);
-                            ph[(rb * jb + c) * 8 + r] = x;
-                            pl[(rb * jb + c) * 8 + r] = y;
-                            nz |= x != 0.0 || y != 0.0;
+    pub fn factor_blocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
+        simd::dispatch(FactorBlocked { n, ld, hi, lo, par })
+    }
+
+    fn factor_blocked_on<S: Simd>(
+        n: usize,
+        ld: usize,
+        mut hi: Vec<f64>,
+        mut lo: Vec<f64>,
+        par: bool,
+    ) -> Result<DDLu, String> {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert!(ld.is_multiple_of(8) && ld >= n && hi.len() >= ld * n && lo.len() >= ld * n);
+                let mut perm = vec![0usize; n];
+                let mut j0 = 0;
+                while j0 < n {
+                    let jb = NB.min(n - j0);
+                    let je = j0 + jb;
+                    let (left_h, rest_h) = hi.split_at_mut(j0 * ld);
+                    let (left_l, rest_l) = lo.split_at_mut(j0 * ld);
+                    let (pan_h, right_h) = rest_h.split_at_mut(jb * ld);
+                    let (pan_l, right_l) = rest_l.split_at_mut(jb * ld);
+                    panel_getf2::<S>(n, ld, j0, jb, pan_h, pan_l, &mut perm)?;
+                    let pv = &perm[j0..je];
+                    // 2. swaps left of the panel
+                    for (ch, cl) in left_h.chunks_mut(ld).zip(left_l.chunks_mut(ld)) {
+                        for (c, &p) in pv.iter().enumerate() {
+                            if p != j0 + c {
+                                ch.swap(j0 + c, p);
+                                cl.swap(j0 + c, p);
+                            }
                         }
                     }
-                }
-                if nz {
-                    rows.push((je + rb * 8, rb * jb * 8));
-                }
-            }
-            let ncols = n - je;
-            let task = |(ch, cl): (&mut [f64], &mut [f64])| {
-                let w = ch.len() / ld;
-                // nt[j]: -(entry (j0 + c, column j)) as read at step k = j0 + c (as getf2 reads it)
-                let mut nth = vec![0.0f64; w * jb];
-                let mut ntl = vec![0.0f64; w * jb];
-                let mut cols: Vec<usize> = Vec::with_capacity(w);
-                let mut nto: Vec<usize> = Vec::with_capacity(w);
-                for j in 0..w {
-                    let (h, l) = (&mut ch[j * ld..(j + 1) * ld], &mut cl[j * ld..(j + 1) * ld]);
-                    for (c, &p) in pv.iter().enumerate() {
-                        if p != j0 + c {
-                            h.swap(j0 + c, p);
-                            l.swap(j0 + c, p);
-                        }
+                    if je == n {
+                        break;
                     }
-                    // a column that is zero on the panel's rows stays zero there (U12 = 0) and gets no update
-                    if h[j0..je].iter().all(|&x| x == 0.0) && l[j0..je].iter().all(|&x| x == 0.0) {
-                        continue;
-                    }
+                    // 3. multipliers: rows j0..je for the triangular part (zero for rows <= k, as getf2's mh), rows je..ld
+                    //    packed as [row block][k][lane] for the tiles (zero for padding rows >= n)
+                    let pan_h: &[f64] = pan_h;
+                    let pan_l: &[f64] = pan_l;
+                    let mut th = vec![0.0f64; jb * jb];
+                    let mut tl = vec![0.0f64; jb * jb];
                     for c in 0..jb {
-                        let k = j0 + c;
-                        let (a, b) = (-h[k], -l[k]);
-                        nth[j * jb + c] = a;
-                        ntl[j * jb + c] = b;
-                        if a == 0.0 && b == 0.0 {
-                            continue;
-                        }
-                        let nt = DV::splat(DD { hi: a, lo: b });
-                        let mut i = 8 * ((k + 1) / 8);
-                        while i < je {
-                            let x = DV::load(&h[i..i + 8], &l[i..i + 8]);
-                            let m = DV::load(
-                                &th[c * jb + i - j0..c * jb + i - j0 + 8],
-                                &tl[c * jb + i - j0..c * jb + i - j0 + 8],
-                            );
-                            axpy8(x, m, nt).store(&mut h[i..i + 8], &mut l[i..i + 8]);
-                            i += 8;
+                        for i in j0 + c + 1..je.min(n) {
+                            th[c * jb + i - j0] = pan_h[c * ld + i];
+                            tl[c * jb + i - j0] = pan_l[c * ld + i];
                         }
                     }
-                    if nth[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0)
-                        || ntl[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0)
-                    {
-                        cols.push(j * ld);
-                        nto.push(j * jb);
+                    let nrb = (ld - je) / 8;
+                    let mut ph = vec![0.0f64; nrb * jb * 8];
+                    let mut pl = vec![0.0f64; nrb * jb * 8];
+                    // row blocks with a nonzero multiplier: (row offset, packed offset)
+                    let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
+                    for rb in 0..nrb {
+                        let mut nz = false;
+                        for c in 0..jb {
+                            for r in 0..8 {
+                                let i = je + rb * 8 + r;
+                                if i < n {
+                                    let (x, y) = (pan_h[c * ld + i], pan_l[c * ld + i]);
+                                    ph[(rb * jb + c) * 8 + r] = x;
+                                    pl[(rb * jb + c) * 8 + r] = y;
+                                    nz |= x != 0.0 || y != 0.0;
+                                }
+                            }
+                        }
+                        if nz {
+                            rows.push((je + rb * 8, rb * jb * 8));
+                        }
                     }
+                    let ncols = n - je;
+                    let task = |(ch, cl): (&mut [f64], &mut [f64])| {
+                        S::vectorize(
+                            #[inline(always)]
+                            || {
+                                let w = ch.len() / ld;
+                                // nt[j]: -(entry (j0 + c, column j)) as read at step k = j0 + c (as getf2 reads it)
+                                let mut nth = vec![0.0f64; w * jb];
+                                let mut ntl = vec![0.0f64; w * jb];
+                                let mut cols: Vec<usize> = Vec::with_capacity(w);
+                                let mut nto: Vec<usize> = Vec::with_capacity(w);
+                                for j in 0..w {
+                                    let (h, l) = (&mut ch[j * ld..(j + 1) * ld], &mut cl[j * ld..(j + 1) * ld]);
+                                    for (c, &p) in pv.iter().enumerate() {
+                                        if p != j0 + c {
+                                            h.swap(j0 + c, p);
+                                            l.swap(j0 + c, p);
+                                        }
+                                    }
+                                    // a column that is zero on the panel's rows stays zero there (U12 = 0) and gets no update
+                                    if h[j0..je].iter().all(|&x| x == 0.0) && l[j0..je].iter().all(|&x| x == 0.0) {
+                                        continue;
+                                    }
+                                    for c in 0..jb {
+                                        let k = j0 + c;
+                                        let (a, b) = (-h[k], -l[k]);
+                                        nth[j * jb + c] = a;
+                                        ntl[j * jb + c] = b;
+                                        if a == 0.0 && b == 0.0 {
+                                            continue;
+                                        }
+                                        let nt = DV::<S>::splat(DD { hi: a, lo: b });
+                                        let mut i = 8 * ((k + 1) / 8);
+                                        while i < je {
+                                            let x = DV::load(&h[i..i + 8], &l[i..i + 8]);
+                                            let m = DV::load(
+                                                &th[c * jb + i - j0..c * jb + i - j0 + 8],
+                                                &tl[c * jb + i - j0..c * jb + i - j0 + 8],
+                                            );
+                                            axpy8(x, m, nt).store(&mut h[i..i + 8], &mut l[i..i + 8]);
+                                            i += 8;
+                                        }
+                                    }
+                                    if nth[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0)
+                                        || ntl[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0)
+                                    {
+                                        cols.push(j * ld);
+                                        nto.push(j * jb);
+                                    }
+                                }
+                                if !rows.is_empty() {
+                                    gemm::<S>(ld, jb, ch, cl, &cols, &nto, &nth, &ntl, &rows, &ph, &pl);
+                                }
+                            },
+                        )
+                    };
+                    let (rh, rl) = (&mut right_h[..ncols * ld], &mut right_l[..ncols * ld]);
+                    if par && ncols * (ld - j0) > 16384 {
+                        rh.par_chunks_mut(CW * ld)
+                            .zip(rl.par_chunks_mut(CW * ld))
+                            .for_each(task);
+                    } else {
+                        rh.chunks_mut(CW * ld).zip(rl.chunks_mut(CW * ld)).for_each(task);
+                    }
+                    j0 = je;
                 }
-                if !rows.is_empty() {
-                    gemm(ld, jb, ch, cl, &cols, &nto, &nth, &ntl, &rows, &ph, &pl);
-                }
-            };
-            let (rh, rl) = (&mut right_h[..ncols * ld], &mut right_l[..ncols * ld]);
-            if par && ncols * (ld - j0) > 16384 {
-                rh.par_chunks_mut(CW * ld)
-                    .zip(rl.par_chunks_mut(CW * ld))
-                    .for_each(task);
-            } else {
-                rh.chunks_mut(CW * ld).zip(rl.chunks_mut(CW * ld)).for_each(task);
-            }
-            j0 = je;
-        }
-        Ok(DDLu { n, ld, hi, lo, perm })
+                Ok(DDLu { n, ld, hi, lo, perm })
+            },
+        )
     }
 
     /// Solve A x = b (transpose: A^T x = b) for nrhs right-hand sides at once, b row-major (nrhs, n) as (hi, lo),
@@ -551,49 +599,70 @@ impl DDLu {
     /// Each lane does exactly the operations of `solve` / `solve_t`, so every row of the result is bitwise the
     /// single right-hand-side solve.
     pub fn solve_many(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
-        let n = self.n;
-        assert!(bh.len() >= nrhs * n && bl.len() >= nrhs * n);
-        let ng = nrhs.div_ceil(8);
-        let (bh0, bl0): (&[f64], &[f64]) = (bh, bl);
-        let rg = self.col_ranges();
-        let rg = &rg;
-        let group = |g: usize| -> Vec<DV> {
-            let live = (nrhs - 8 * g).min(8);
-            let mut v = vec![DV::zero(); n];
-            let mut h = [0.0f64; 8];
-            let mut l = [0.0f64; 8];
-            for (i, vi) in v.iter_mut().enumerate() {
-                for r in 0..live {
-                    h[r] = bh0[(8 * g + r) * n + i];
-                    l[r] = bl0[(8 * g + r) * n + i];
-                }
-                *vi = DV {
-                    hi: V8::from_array(h),
-                    lo: V8::from_array(l),
+        simd::dispatch(SolveMany {
+            lu: self,
+            bh,
+            bl,
+            nrhs,
+            transpose,
+            par,
+        })
+    }
+
+    fn solve_many_on<S: Simd>(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let n = self.n;
+                assert!(bh.len() >= nrhs * n && bl.len() >= nrhs * n);
+                let ng = nrhs.div_ceil(8);
+                let (bh0, bl0): (&[f64], &[f64]) = (bh, bl);
+                let rg = self.col_ranges();
+                let rg = &rg;
+                let group = |g: usize| -> Vec<DV<S>> {
+                    S::vectorize(
+                        #[inline(always)]
+                        || {
+                            let live = (nrhs - 8 * g).min(8);
+                            let mut v = vec![DV::<S>::zero(); n];
+                            let mut h = [0.0f64; 8];
+                            let mut l = [0.0f64; 8];
+                            for (i, vi) in v.iter_mut().enumerate() {
+                                for r in 0..live {
+                                    h[r] = bh0[(8 * g + r) * n + i];
+                                    l[r] = bl0[(8 * g + r) * n + i];
+                                }
+                                *vi = DV {
+                                    hi: V8::from_array(h),
+                                    lo: V8::from_array(l),
+                                };
+                            }
+                            if transpose {
+                                self.solve_t_dv(&mut v, rg);
+                            } else {
+                                self.solve_dv(&mut v, rg);
+                            }
+                            v
+                        },
+                    )
                 };
-            }
-            if transpose {
-                self.solve_t_dv(&mut v, rg);
-            } else {
-                self.solve_dv(&mut v, rg);
-            }
-            v
-        };
-        let out: Vec<Vec<DV>> = if par && ng > 1 {
-            (0..ng).into_par_iter().map(group).collect()
-        } else {
-            (0..ng).map(group).collect()
-        };
-        for (g, v) in out.iter().enumerate() {
-            let live = (nrhs - 8 * g).min(8);
-            for (i, vi) in v.iter().enumerate() {
-                let (h, l) = (vi.hi.to_array(), vi.lo.to_array());
-                for r in 0..live {
-                    bh[(8 * g + r) * n + i] = h[r];
-                    bl[(8 * g + r) * n + i] = l[r];
+                let out: Vec<Vec<DV<S>>> = if par && ng > 1 {
+                    (0..ng).into_par_iter().map(group).collect()
+                } else {
+                    (0..ng).map(group).collect()
+                };
+                for (g, v) in out.iter().enumerate() {
+                    let live = (nrhs - 8 * g).min(8);
+                    for (i, vi) in v.iter().enumerate() {
+                        let (h, l) = (vi.hi.to_array(), vi.lo.to_array());
+                        for r in 0..live {
+                            bh[(8 * g + r) * n + i] = h[r];
+                            bl[(8 * g + r) * n + i] = l[r];
+                        }
+                    }
                 }
-            }
-        }
+            },
+        )
     }
 
     /// For each column of the factors, the first and one past the last row holding a nonzero entry. Entries outside
@@ -614,94 +683,104 @@ impl DDLu {
     }
 
     /// `solve` lane by lane (padding lanes hold zeros and stay zero).
-    fn solve_dv(&self, b: &mut [DV], rg: &[(usize, usize)]) {
-        let n = self.n;
-        for k in 0..n {
-            let p = self.perm[k];
-            if p != k {
-                b.swap(k, p);
-            }
-        }
-        for k in 0..n {
-            let nt = neg_lanes(b[k]);
-            let z = nt.hi.to_array();
-            let nz = z.iter().filter(|&&x| x == 0.0).count();
-            if nz == 8 {
-                continue;
-            }
-            let col = k * self.ld;
-            for i in (k + 1).max(rg[k].0)..rg[k].1.max(k + 1) {
-                let u = axpy8(
-                    b[i],
-                    DV::splat(DD {
-                        hi: self.hi[col + i],
-                        lo: self.lo[col + i],
-                    }),
-                    nt,
-                );
-                b[i] = if nz == 0 { u } else { keep_lanes(u, b[i], &z) };
-            }
-        }
-        for k in (0..n).rev() {
-            let q = div_lanes(b[k], self.at(k, k));
-            b[k] = q;
-            let nt = neg_lanes(q);
-            let col = k * self.ld;
-            for i in rg[k].0.min(k)..rg[k].1.min(k) {
-                b[i] = axpy8(
-                    b[i],
-                    DV::splat(DD {
-                        hi: self.hi[col + i],
-                        lo: self.lo[col + i],
-                    }),
-                    nt,
-                );
-            }
-        }
+    fn solve_dv<S: Simd>(&self, b: &mut [DV<S>], rg: &[(usize, usize)]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let n = self.n;
+                for k in 0..n {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+                for k in 0..n {
+                    let nt = neg_lanes(b[k]);
+                    let z = nt.hi.to_array();
+                    let nz = z.iter().filter(|&&x| x == 0.0).count();
+                    if nz == 8 {
+                        continue;
+                    }
+                    let col = k * self.ld;
+                    for i in (k + 1).max(rg[k].0)..rg[k].1.max(k + 1) {
+                        let u = axpy8(
+                            b[i],
+                            DV::splat(DD {
+                                hi: self.hi[col + i],
+                                lo: self.lo[col + i],
+                            }),
+                            nt,
+                        );
+                        b[i] = if nz == 0 { u } else { keep_lanes(u, b[i], &z) };
+                    }
+                }
+                for k in (0..n).rev() {
+                    let q = div_lanes(b[k], self.at(k, k));
+                    b[k] = q;
+                    let nt = neg_lanes(q);
+                    let col = k * self.ld;
+                    for i in rg[k].0.min(k)..rg[k].1.min(k) {
+                        b[i] = axpy8(
+                            b[i],
+                            DV::splat(DD {
+                                hi: self.hi[col + i],
+                                lo: self.lo[col + i],
+                            }),
+                            nt,
+                        );
+                    }
+                }
+            },
+        )
     }
 
     /// `solve_t` lane by lane.
-    fn solve_t_dv(&self, b: &mut [DV], rg: &[(usize, usize)]) {
-        let n = self.n;
-        let mut nb = vec![DV::zero(); n];
-        for k in 0..n {
-            let col = k * self.ld;
-            let mut acc = b[k];
-            for i in rg[k].0.min(k)..rg[k].1.min(k) {
-                acc = axpy8(
-                    acc,
-                    DV::splat(DD {
-                        hi: self.hi[col + i],
-                        lo: self.lo[col + i],
-                    }),
-                    nb[i],
-                );
-            }
-            b[k] = div_lanes(acc, self.at(k, k));
-            nb[k] = neg_lanes(b[k]);
-        }
-        for k in (0..n).rev() {
-            let col = k * self.ld;
-            let mut acc = b[k];
-            for i in (k + 1).max(rg[k].0)..rg[k].1.max(k + 1) {
-                acc = axpy8(
-                    acc,
-                    DV::splat(DD {
-                        hi: self.hi[col + i],
-                        lo: self.lo[col + i],
-                    }),
-                    nb[i],
-                );
-            }
-            b[k] = acc;
-            nb[k] = neg_lanes(acc);
-        }
-        for k in (0..n).rev() {
-            let p = self.perm[k];
-            if p != k {
-                b.swap(k, p);
-            }
-        }
+    fn solve_t_dv<S: Simd>(&self, b: &mut [DV<S>], rg: &[(usize, usize)]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let n = self.n;
+                let mut nb = vec![DV::<S>::zero(); n];
+                for k in 0..n {
+                    let col = k * self.ld;
+                    let mut acc = b[k];
+                    for i in rg[k].0.min(k)..rg[k].1.min(k) {
+                        acc = axpy8(
+                            acc,
+                            DV::splat(DD {
+                                hi: self.hi[col + i],
+                                lo: self.lo[col + i],
+                            }),
+                            nb[i],
+                        );
+                    }
+                    b[k] = div_lanes(acc, self.at(k, k));
+                    nb[k] = neg_lanes(b[k]);
+                }
+                for k in (0..n).rev() {
+                    let col = k * self.ld;
+                    let mut acc = b[k];
+                    for i in (k + 1).max(rg[k].0)..rg[k].1.max(k + 1) {
+                        acc = axpy8(
+                            acc,
+                            DV::splat(DD {
+                                hi: self.hi[col + i],
+                                lo: self.lo[col + i],
+                            }),
+                            nb[i],
+                        );
+                    }
+                    b[k] = acc;
+                    nb[k] = neg_lanes(acc);
+                }
+                for k in (0..n).rev() {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+            },
+        )
     }
 
     #[inline(always)]
@@ -830,7 +909,7 @@ impl DDLu {
 // ---------------------------------------------------------------------------------------------------------------
 
 /// `panel_getf2` in f64 (one array; multipliers by the pivot's reciprocal, as LAPACK's dgetf2).
-fn panel_getf2_f64(
+fn panel_getf2_f64<S: Simd>(
     n: usize,
     ld: usize,
     j0: usize,
@@ -838,73 +917,78 @@ fn panel_getf2_f64(
     pa: &mut [f64],
     perm: &mut [usize],
 ) -> Result<(), String> {
-    let mut m = vec![0.0f64; ld];
-    let mut blocks: Vec<usize> = Vec::with_capacity(ld / 8);
-    for c in 0..jb {
-        let k = j0 + c;
-        let ck = c * ld;
-        let mut p = k;
-        let mut best = pa[ck + k].abs();
-        for i in k + 1..n {
-            let v = pa[ck + i].abs();
-            if v > best {
-                best = v;
-                p = i;
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            let mut m = vec![0.0f64; ld];
+            let mut blocks: Vec<usize> = Vec::with_capacity(ld / 8);
+            for c in 0..jb {
+                let k = j0 + c;
+                let ck = c * ld;
+                let mut p = k;
+                let mut best = pa[ck + k].abs();
+                for i in k + 1..n {
+                    let v = pa[ck + i].abs();
+                    if v > best {
+                        best = v;
+                        p = i;
+                    }
+                }
+                if best == 0.0 || !best.is_finite() {
+                    return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                }
+                perm[k] = p;
+                if p != k {
+                    for j in 0..jb {
+                        pa.swap(j * ld + k, j * ld + p);
+                    }
+                }
+                let inv = 1.0 / pa[ck + k];
+                for i in k + 1..n {
+                    pa[ck + i] *= inv;
+                }
+                if k + 1 == n || c + 1 == jb {
+                    continue;
+                }
+                let r0 = 8 * ((k + 1) / 8);
+                blocks.clear();
+                let mut i = r0;
+                while i < ld {
+                    let mut nz = false;
+                    for r in i..i + 8 {
+                        m[r] = if r > k && r < n { pa[ck + r] } else { 0.0 };
+                        nz |= m[r] != 0.0;
+                    }
+                    if nz {
+                        blocks.push(i);
+                    }
+                    i += 8;
+                }
+                if blocks.is_empty() {
+                    continue;
+                }
+                let (_, ra) = pa.split_at_mut((c + 1) * ld);
+                let w = jb - c - 1;
+                for ch in ra[..w * ld].chunks_mut(ld) {
+                    if ch[k] == 0.0 {
+                        continue;
+                    }
+                    let nt = V8::<S>::splat(-ch[k]);
+                    for &i in &blocks {
+                        V8::load(&m[i..i + 8])
+                            .fma(nt, V8::load(&ch[i..i + 8]))
+                            .store(&mut ch[i..i + 8]);
+                    }
+                }
             }
-        }
-        if best == 0.0 || !best.is_finite() {
-            return Err(format!("singular or non-finite pivot at column {k} ({best})"));
-        }
-        perm[k] = p;
-        if p != k {
-            for j in 0..jb {
-                pa.swap(j * ld + k, j * ld + p);
-            }
-        }
-        let inv = 1.0 / pa[ck + k];
-        for i in k + 1..n {
-            pa[ck + i] *= inv;
-        }
-        if k + 1 == n || c + 1 == jb {
-            continue;
-        }
-        let r0 = 8 * ((k + 1) / 8);
-        blocks.clear();
-        let mut i = r0;
-        while i < ld {
-            let mut nz = false;
-            for r in i..i + 8 {
-                m[r] = if r > k && r < n { pa[ck + r] } else { 0.0 };
-                nz |= m[r] != 0.0;
-            }
-            if nz {
-                blocks.push(i);
-            }
-            i += 8;
-        }
-        if blocks.is_empty() {
-            continue;
-        }
-        let (_, ra) = pa.split_at_mut((c + 1) * ld);
-        let w = jb - c - 1;
-        for ch in ra[..w * ld].chunks_mut(ld) {
-            if ch[k] == 0.0 {
-                continue;
-            }
-            let nt = V8::splat(-ch[k]);
-            for &i in &blocks {
-                V8::load(&m[i..i + 8])
-                    .fma(nt, V8::load(&ch[i..i + 8]))
-                    .store(&mut ch[i..i + 8]);
-            }
-        }
-    }
-    Ok(())
+            Ok(())
+        },
+    )
 }
 
 #[inline(always)]
 #[allow(clippy::too_many_arguments)]
-fn tile_rows_f64<const R: usize, const W: usize>(
+fn tile_rows_f64<S: Simd, const R: usize, const W: usize>(
     ch: &mut [f64],
     cols: &[usize],
     nto: &[usize],
@@ -913,7 +997,7 @@ fn tile_rows_f64<const R: usize, const W: usize>(
     pk: &[f64],
     jb: usize,
 ) {
-    let mut acc = [[V8::zero(); W]; R];
+    let mut acc = [[V8::<S>::zero(); W]; R];
     for r in 0..R {
         for q in 0..W {
             let o = cols[q] + rows[r].0;
@@ -942,27 +1026,48 @@ fn tile_rows_f64<const R: usize, const W: usize>(
 }
 
 /// `gemm` in f64 (4 row blocks x NC columns per register tile)
-fn gemm_f64(jb: usize, ch: &mut [f64], cols: &[usize], nto: &[usize], nt: &[f64], rows: &[(usize, usize)], pk: &[f64]) {
+fn gemm_f64<S: Simd>(
+    jb: usize,
+    ch: &mut [f64],
+    cols: &[usize],
+    nto: &[usize],
+    nt: &[f64],
+    rows: &[(usize, usize)],
+    pk: &[f64],
+) {
     const TR64: usize = 4;
-    let mut j = 0;
-    while j < cols.len() {
-        let w = (cols.len() - j).min(NC);
-        let mut r = 0;
-        while r < rows.len() {
-            let h = (rows.len() - r).min(TR64);
-            if w == NC && h == TR64 {
-                tile_rows_f64::<TR64, NC>(ch, &cols[j..], &nto[j..], nt, &rows[r..], pk, jb);
-            } else {
-                for q in 0..w {
-                    for rr in 0..h {
-                        tile_rows_f64::<1, 1>(ch, &cols[j + q..], &nto[j + q..], nt, &rows[r + rr..], pk, jb);
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            let mut j = 0;
+            while j < cols.len() {
+                let w = (cols.len() - j).min(NC);
+                let mut r = 0;
+                while r < rows.len() {
+                    let h = (rows.len() - r).min(TR64);
+                    if w == NC && h == TR64 {
+                        tile_rows_f64::<S, TR64, NC>(ch, &cols[j..], &nto[j..], nt, &rows[r..], pk, jb);
+                    } else {
+                        for q in 0..w {
+                            for rr in 0..h {
+                                tile_rows_f64::<S, 1, 1>(
+                                    ch,
+                                    &cols[j + q..],
+                                    &nto[j + q..],
+                                    nt,
+                                    &rows[r + rr..],
+                                    pk,
+                                    jb,
+                                );
+                            }
+                        }
                     }
+                    r += h;
                 }
+                j += w;
             }
-            r += h;
-        }
-        j += w;
-    }
+        },
+    )
 }
 
 impl DDLu {
@@ -970,125 +1075,155 @@ impl DDLu {
     /// f64 on an f64 matrix: an f64 LU with partial pivoting (backward stable: L U = P (A + E), |E| of the order of
     /// n eps |L| |U|), stored with lo = 0 so that the double-double solves (solve, solve_t, solve_many, chord) use these
     /// factors as they are. For the mixed-precision Newton step, whose Jacobian is f64 to begin with.
-    pub fn factor_f64(n: usize, ld: usize, mut a: Vec<f64>, par: bool) -> Result<DDLu, String> {
-        assert!(ld.is_multiple_of(8) && ld >= n && a.len() >= ld * n);
-        let mut perm = vec![0usize; n];
-        let mut j0 = 0;
-        while j0 < n {
-            let jb = NB.min(n - j0);
-            let je = j0 + jb;
-            let (left, rest) = a.split_at_mut(j0 * ld);
-            let (pan, right) = rest.split_at_mut(jb * ld);
-            panel_getf2_f64(n, ld, j0, jb, pan, &mut perm)?;
-            let pv = &perm[j0..je];
-            for ch in left.chunks_mut(ld) {
-                for (c, &p) in pv.iter().enumerate() {
-                    if p != j0 + c {
-                        ch.swap(j0 + c, p);
-                    }
-                }
-            }
-            if je == n {
-                break;
-            }
-            let pan: &[f64] = pan;
-            let mut tri = vec![0.0f64; jb * jb];
-            for c in 0..jb {
-                for i in j0 + c + 1..je.min(n) {
-                    tri[c * jb + i - j0] = pan[c * ld + i];
-                }
-            }
-            let nrb = (ld - je) / 8;
-            let mut pk = vec![0.0f64; nrb * jb * 8];
-            let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
-            for rb in 0..nrb {
-                let mut nz = false;
-                for c in 0..jb {
-                    for r in 0..8 {
-                        let i = je + rb * 8 + r;
-                        if i < n {
-                            let x = pan[c * ld + i];
-                            pk[(rb * jb + c) * 8 + r] = x;
-                            nz |= x != 0.0;
+    pub fn factor_f64(n: usize, ld: usize, a: Vec<f64>, par: bool) -> Result<DDLu, String> {
+        simd::dispatch(FactorF64 { n, ld, a, par })
+    }
+
+    fn factor_f64_on<S: Simd>(n: usize, ld: usize, mut a: Vec<f64>, par: bool) -> Result<DDLu, String> {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert!(ld.is_multiple_of(8) && ld >= n && a.len() >= ld * n);
+                let mut perm = vec![0usize; n];
+                let mut j0 = 0;
+                while j0 < n {
+                    let jb = NB.min(n - j0);
+                    let je = j0 + jb;
+                    let (left, rest) = a.split_at_mut(j0 * ld);
+                    let (pan, right) = rest.split_at_mut(jb * ld);
+                    panel_getf2_f64::<S>(n, ld, j0, jb, pan, &mut perm)?;
+                    let pv = &perm[j0..je];
+                    for ch in left.chunks_mut(ld) {
+                        for (c, &p) in pv.iter().enumerate() {
+                            if p != j0 + c {
+                                ch.swap(j0 + c, p);
+                            }
                         }
                     }
-                }
-                if nz {
-                    rows.push((je + rb * 8, rb * jb * 8));
-                }
-            }
-            let ncols = n - je;
-            let task = |ch: &mut [f64]| {
-                let w = ch.len() / ld;
-                let mut nt = vec![0.0f64; w * jb];
-                let mut cols: Vec<usize> = Vec::with_capacity(w);
-                let mut nto: Vec<usize> = Vec::with_capacity(w);
-                for j in 0..w {
-                    let h = &mut ch[j * ld..(j + 1) * ld];
-                    for (c, &p) in pv.iter().enumerate() {
-                        if p != j0 + c {
-                            h.swap(j0 + c, p);
-                        }
+                    if je == n {
+                        break;
                     }
-                    if h[j0..je].iter().all(|&x| x == 0.0) {
-                        continue;
-                    }
+                    let pan: &[f64] = pan;
+                    let mut tri = vec![0.0f64; jb * jb];
                     for c in 0..jb {
-                        let k = j0 + c;
-                        let t = -h[k];
-                        nt[j * jb + c] = t;
-                        if t == 0.0 {
-                            continue;
-                        }
-                        let tv = V8::splat(t);
-                        let mut i = 8 * ((k + 1) / 8);
-                        while i < je {
-                            let mv = V8::load(&tri[c * jb + i - j0..c * jb + i - j0 + 8]);
-                            mv.fma(tv, V8::load(&h[i..i + 8])).store(&mut h[i..i + 8]);
-                            i += 8;
+                        for i in j0 + c + 1..je.min(n) {
+                            tri[c * jb + i - j0] = pan[c * ld + i];
                         }
                     }
-                    if nt[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0) {
-                        cols.push(j * ld);
-                        nto.push(j * jb);
+                    let nrb = (ld - je) / 8;
+                    let mut pk = vec![0.0f64; nrb * jb * 8];
+                    let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
+                    for rb in 0..nrb {
+                        let mut nz = false;
+                        for c in 0..jb {
+                            for r in 0..8 {
+                                let i = je + rb * 8 + r;
+                                if i < n {
+                                    let x = pan[c * ld + i];
+                                    pk[(rb * jb + c) * 8 + r] = x;
+                                    nz |= x != 0.0;
+                                }
+                            }
+                        }
+                        if nz {
+                            rows.push((je + rb * 8, rb * jb * 8));
+                        }
                     }
+                    let ncols = n - je;
+                    let task = |ch: &mut [f64]| {
+                        S::vectorize(
+                            #[inline(always)]
+                            || {
+                                let w = ch.len() / ld;
+                                let mut nt = vec![0.0f64; w * jb];
+                                let mut cols: Vec<usize> = Vec::with_capacity(w);
+                                let mut nto: Vec<usize> = Vec::with_capacity(w);
+                                for j in 0..w {
+                                    let h = &mut ch[j * ld..(j + 1) * ld];
+                                    for (c, &p) in pv.iter().enumerate() {
+                                        if p != j0 + c {
+                                            h.swap(j0 + c, p);
+                                        }
+                                    }
+                                    if h[j0..je].iter().all(|&x| x == 0.0) {
+                                        continue;
+                                    }
+                                    for c in 0..jb {
+                                        let k = j0 + c;
+                                        let t = -h[k];
+                                        nt[j * jb + c] = t;
+                                        if t == 0.0 {
+                                            continue;
+                                        }
+                                        let tv = V8::<S>::splat(t);
+                                        let mut i = 8 * ((k + 1) / 8);
+                                        while i < je {
+                                            let mv = V8::load(&tri[c * jb + i - j0..c * jb + i - j0 + 8]);
+                                            mv.fma(tv, V8::load(&h[i..i + 8])).store(&mut h[i..i + 8]);
+                                            i += 8;
+                                        }
+                                    }
+                                    if nt[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0) {
+                                        cols.push(j * ld);
+                                        nto.push(j * jb);
+                                    }
+                                }
+                                if !rows.is_empty() {
+                                    gemm_f64::<S>(jb, ch, &cols, &nto, &nt, &rows, &pk);
+                                }
+                            },
+                        )
+                    };
+                    let r = &mut right[..ncols * ld];
+                    if par && ncols * (ld - j0) > 16384 {
+                        r.par_chunks_mut(CW * ld).for_each(task);
+                    } else {
+                        r.chunks_mut(CW * ld).for_each(task);
+                    }
+                    j0 = je;
                 }
-                if !rows.is_empty() {
-                    gemm_f64(jb, ch, &cols, &nto, &nt, &rows, &pk);
-                }
-            };
-            let r = &mut right[..ncols * ld];
-            if par && ncols * (ld - j0) > 16384 {
-                r.par_chunks_mut(CW * ld).for_each(task);
-            } else {
-                r.chunks_mut(CW * ld).for_each(task);
-            }
-            j0 = je;
-        }
-        let lo = vec![0.0; a.len()];
-        Ok(DDLu { n, ld, hi: a, lo, perm })
+                let lo = vec![0.0; a.len()];
+                Ok(DDLu { n, ld, hi: a, lo, perm })
+            },
+        )
     }
 }
 
 /// Gram matrix G = J^T J and g = J^T b for a column-major J (n x n, leading dimension ld): G column-major with
 /// leading dimension ld (only what LU needs; G is symmetric and filled completely).
 pub fn gram(n: usize, ld: usize, jh: &[f64], jl: &[f64], bh: &[f64], bl: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<DD>) {
+    simd::dispatch(Gram { n, ld, jh, jl, bh, bl })
+}
+
+fn gram_on<S: Simd>(
+    n: usize,
+    ld: usize,
+    jh: &[f64],
+    jl: &[f64],
+    bh: &[f64],
+    bl: &[f64],
+) -> (Vec<f64>, Vec<f64>, Vec<DD>) {
     let dot = |a: usize, bh2: &[f64], bl2: &[f64]| -> DD {
-        let mut acc = dv::DotAcc::zero();
-        let mut i = 0;
-        while i < ld {
-            let x = DV::load(&jh[a * ld + i..a * ld + i + 8], &jl[a * ld + i..a * ld + i + 8]);
-            let y = DV::load(&bh2[i..i + 8], &bl2[i..i + 8]);
-            acc = acc.add_prod(x, y);
-            i += 8;
-        }
-        let v = acc.finish();
-        let (h, l) = (v.hi.to_array(), v.lo.to_array());
-        let mut s = DD::ZERO;
-        for k in 0..8 {
-            s = s + DD { hi: h[k], lo: l[k] };
-        }
-        s
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let mut acc = dv::DotAcc::<S>::zero();
+                let mut i = 0;
+                while i < ld {
+                    let x = DV::load(&jh[a * ld + i..a * ld + i + 8], &jl[a * ld + i..a * ld + i + 8]);
+                    let y = DV::load(&bh2[i..i + 8], &bl2[i..i + 8]);
+                    acc = acc.add_prod(x, y);
+                    i += 8;
+                }
+                let v = acc.finish();
+                let (h, l) = (v.hi.to_array(), v.lo.to_array());
+                let mut s = DD::ZERO;
+                for k in 0..8 {
+                    s = s + DD { hi: h[k], lo: l[k] };
+                }
+                s
+            },
+        )
     };
     let cols: Vec<Vec<DD>> = (0..n)
         .into_par_iter()
@@ -1117,8 +1252,89 @@ pub fn gram(n: usize, ld: usize, jh: &[f64], jl: &[f64], bh: &[f64], bl: &[f64])
     (gh, gl, g)
 }
 
-#[allow(dead_code)]
-fn _unused(_: V8) {}
+// The public entry points as kernels, so that `simd::dispatch` runs them on the best backend the CPU has.
+
+struct FactorUnblocked {
+    n: usize,
+    ld: usize,
+    hi: Vec<f64>,
+    lo: Vec<f64>,
+    par: bool,
+}
+
+impl Kernel for FactorUnblocked {
+    type Output = Result<DDLu, String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        DDLu::factor_unblocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par)
+    }
+}
+
+struct FactorBlocked {
+    n: usize,
+    ld: usize,
+    hi: Vec<f64>,
+    lo: Vec<f64>,
+    par: bool,
+}
+
+impl Kernel for FactorBlocked {
+    type Output = Result<DDLu, String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        DDLu::factor_blocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par)
+    }
+}
+
+struct FactorF64 {
+    n: usize,
+    ld: usize,
+    a: Vec<f64>,
+    par: bool,
+}
+
+impl Kernel for FactorF64 {
+    type Output = Result<DDLu, String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        DDLu::factor_f64_on::<S>(self.n, self.ld, self.a, self.par)
+    }
+}
+
+struct SolveMany<'a> {
+    lu: &'a DDLu,
+    bh: &'a mut [f64],
+    bl: &'a mut [f64],
+    nrhs: usize,
+    transpose: bool,
+    par: bool,
+}
+
+impl Kernel for SolveMany<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu
+            .solve_many_on::<S>(self.bh, self.bl, self.nrhs, self.transpose, self.par)
+    }
+}
+
+struct Gram<'a> {
+    n: usize,
+    ld: usize,
+    jh: &'a [f64],
+    jl: &'a [f64],
+    bh: &'a [f64],
+    bl: &'a [f64],
+}
+
+impl Kernel for Gram<'_> {
+    type Output = (Vec<f64>, Vec<f64>, Vec<DD>);
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        gram_on::<S>(self.n, self.ld, self.jh, self.jl, self.bh, self.bl)
+    }
+}
 
 #[cfg(test)]
 mod tests {
