@@ -9,7 +9,7 @@ repository = "https://github.com/nmoinvaz/multidouble"
 readme = "README.md"
 keywords = ["double-double", "quad-double", "extended-precision", "simd", "floating-point"]
 categories = ["mathematics", "science"]
-exclude = ["/.github", "/.claude", "/CLAUDE.md"]
+exclude = ["/.github", "/.claude", "/CLAUDE.md", "/python"]
 
 [features]
 # Use the plain-array V8 backend whatever the target features, e.g. to compare it with the SIMD ones.

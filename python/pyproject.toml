@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "multidouble"
+version = "0.1.0"
+description = "Double-double arithmetic on numpy arrays (hi, lo pairs), backed by the Rust crate multidouble"
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+test = ["pytest", "mpmath"]
+
+[project.urls]
+Repository = "https://github.com/nmoinvaz/multidouble"
+
+[tool.maturin]
+python-source = "pysrc"
+module-name = "multidouble._multidouble"
