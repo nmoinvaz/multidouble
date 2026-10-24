@@ -114,6 +114,12 @@ The cargo feature `f128` adds conversions between `f128` and the scalar types. I
 unstable. `QD::from_f128` is exact, `DD::from_f128` rounds to the nearest parts, and both `to_f128` are correctly
 rounded.
 
+## Python
+
+[`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double
+add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, a double-double LU solve,
+and numpy versions of the error-free transformations (`pip install ./python`, which builds it with maturin).
+
 ## Accuracy
 
 The tests compare against exact arithmetic (`exact`), which shares no code with the algorithms under test. Errors are

@@ -1,0 +1,25 @@
+[package]
+name = "multidouble-python"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Python bindings of multidouble: double-double arithmetic on numpy arrays and a double-double LU solve"
+license = "BSD-3-Clause"
+repository = "https://github.com/nmoinvaz/multidouble"
+publish = false
+
+# Its own workspace, so that PyO3 and numpy stay out of the library's build and lock file.
+[workspace]
+
+[lib]
+name = "_multidouble"
+crate-type = ["cdylib"]
+
+[dependencies]
+multidouble = { path = ".." }
+numpy = "0.30"
+pyo3 = { version = "0.30", features = ["extension-module"] }
+
+[profile.release]
+opt-level = 3
+codegen-units = 1

@@ -1,2 +1,8 @@
 target/
 .DS_Store
+
+# the Python package
+python/target/
+python/pysrc/multidouble/*.so
+python/pysrc/multidouble/*.pyd
+__pycache__/
