@@ -52,6 +52,21 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn not(m: Self::M) -> Self::M;
     /// per lane: t where set, f elsewhere
     fn sel(m: Self::M, t: Self::R, f: Self::R) -> Self::R;
+    /// per lane: a + b where m is set, a elsewhere (one masked add on AVX-512)
+    #[inline(always)]
+    fn add_where(m: Self::M, a: Self::R, b: Self::R) -> Self::R {
+        Self::sel(m, Self::add(a, b), a)
+    }
+    /// m and a == b (one masked compare on AVX-512)
+    #[inline(always)]
+    fn and_eq(m: Self::M, a: Self::R, b: Self::R) -> Self::M {
+        Self::and(m, Self::eq(a, b))
+    }
+    /// m and a != b
+    #[inline(always)]
+    fn and_ne(m: Self::M, a: Self::R, b: Self::R) -> Self::M {
+        Self::and(m, Self::ne(a, b))
+    }
     /// bit j = lane j
     fn bits(m: Self::M) -> u8;
     /// f run with this instruction set enabled. f should be an `#[inline(always)]` closure, so that its body is

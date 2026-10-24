@@ -119,6 +119,11 @@ mod avx512 {
         pub fn ge(self, o: Self) -> M8 {
             unsafe { M8(_mm512_cmp_pd_mask::<_CMP_GE_OQ>(self.0, o.0)) }
         }
+        /// self + o where m is set, self elsewhere
+        #[inline(always)]
+        pub fn add_where(self, m: M8, o: Self) -> Self {
+            unsafe { V8(_mm512_mask_add_pd(self.0, m.0, self.0, o.0)) }
+        }
     }
 
     /// 8-lane mask (one bit per lane).
@@ -126,6 +131,16 @@ mod avx512 {
     pub struct M8(pub __mmask8);
 
     impl M8 {
+        /// self and a == b
+        #[inline(always)]
+        pub fn and_eq(self, a: V8, b: V8) -> Self {
+            unsafe { M8(_mm512_mask_cmp_pd_mask::<_CMP_EQ_OQ>(self.0, a.0, b.0)) }
+        }
+        /// self and a != b
+        #[inline(always)]
+        pub fn and_ne(self, a: V8, b: V8) -> Self {
+            unsafe { M8(_mm512_mask_cmp_pd_mask::<_CMP_NEQ_UQ>(self.0, a.0, b.0)) }
+        }
         #[inline(always)]
         pub fn and(self, o: Self) -> Self {
             M8(self.0 & o.0)
@@ -728,9 +743,13 @@ mod portable {
 }
 
 /// `Simd` for a backend type from its module's `V8` and `M8`: whether `hot` forces inlining (`always` or `hint`),
-/// and the target features its `vectorize` enables.
+/// the target features its `vectorize` enables, and optionally in braces its overrides of the trait's default
+/// operations.
 macro_rules! simd {
     ($b:ty, $m:ident, $hot:ident $(, $feat:literal)?) => {
+        simd!($b, $m, $hot $(, $feat)? {});
+    };
+    ($b:ty, $m:ident, $hot:ident $(, $feat:literal)? { $($extra:item)* }) => {
         impl crate::simd::sealed::Sealed for $b {}
         impl Simd for $b {
             const NAME: &'static str = $m::V8::ISA;
@@ -832,6 +851,7 @@ macro_rules! simd {
             fn bits(m: $m::M8) -> u8 {
                 m.bits()
             }
+            $($extra)*
             simd!(@vectorize $($feat)?);
             simd!(@hot $hot);
         }
@@ -869,7 +889,20 @@ macro_rules! simd {
 }
 
 #[cfg(target_arch = "x86_64")]
-simd!(backend::Avx512, avx512, always, "avx512f,avx2,fma");
+simd!(backend::Avx512, avx512, always, "avx512f,avx2,fma" {
+    #[inline(always)]
+    fn add_where(m: avx512::M8, a: avx512::V8, b: avx512::V8) -> avx512::V8 {
+        a.add_where(m, b)
+    }
+    #[inline(always)]
+    fn and_eq(m: avx512::M8, a: avx512::V8, b: avx512::V8) -> avx512::M8 {
+        m.and_eq(a, b)
+    }
+    #[inline(always)]
+    fn and_ne(m: avx512::M8, a: avx512::V8, b: avx512::V8) -> avx512::M8 {
+        m.and_ne(a, b)
+    }
+});
 #[cfg(target_arch = "x86_64")]
 simd!(backend::Avx2, avx2, always, "avx2,fma");
 #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
@@ -931,6 +964,11 @@ impl<S: Simd> V8<S> {
     #[inline(always)]
     pub fn fms(self, b: Self, c: Self) -> Self {
         V8(S::fms(self.0, b.0, c.0))
+    }
+    /// self + o where m is set, self elsewhere
+    #[inline(always)]
+    pub fn add_where(self, m: M8<S>, o: Self) -> Self {
+        V8(S::add_where(m.0, self.0, o.0))
     }
     #[inline(always)]
     pub fn abs(self) -> Self {
@@ -1002,6 +1040,16 @@ impl<S: Simd> M8<S> {
     #[inline(always)]
     pub fn not(self) -> Self {
         M8(S::not(self.0))
+    }
+    /// self and a == b
+    #[inline(always)]
+    pub fn and_eq(self, a: V8<S>, b: V8<S>) -> Self {
+        M8(S::and_eq(self.0, a.0, b.0))
+    }
+    /// self and a != b
+    #[inline(always)]
+    pub fn and_ne(self, a: V8<S>, b: V8<S>) -> Self {
+        M8(S::and_ne(self.0, a.0, b.0))
     }
     /// per lane: t where set, f elsewhere
     #[inline(always)]
