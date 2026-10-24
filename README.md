@@ -87,6 +87,10 @@ assert_eq!(simd::dispatch(SumSq(&hi, &lo)).to_f64(), 144.0);
 println!("ran on {}", simd::isa());
 ```
 
+Inside `run`, loop over lanes with plain `for` loops. An adapter such as `fold` runs the loop body inside a std
+function, which the compiler may keep out of line and compile without the backend's instructions, so that every lane
+operation becomes a call.
+
 The aliases in `native` (`native::DV`, `native::QV`, ...) are the lane types on the backend the build's target
 features select at compile time, for code that does not dispatch (`RUSTFLAGS="-C target-cpu=native"` makes that the
 best one too). Results are the same on every backend; only the speed changes.
