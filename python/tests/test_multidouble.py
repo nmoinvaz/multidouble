@@ -128,3 +128,24 @@ def test_errors():
     with pytest.raises(ValueError):
         md.dd_solve(np.zeros((3, 3)), np.zeros((3, 3)), np.ones(3), np.zeros(3))  # singular
     assert md.isa() in ("avx512", "avx2", "sse2", "neon", "portable")
+
+
+def test_two_prod_large_operands():
+    """operands above 2^996, where Dekker's _SPLIT * a overflows: the scaled split keeps the product exact, and below
+    2^996 the split is bitwise the plain one"""
+    a, b = np.array([2e300, -1.7e308, 3.0]), np.array([1e-300, 1e-308, 1e300])
+    p, e = md.two_prod(a, b)
+    assert np.all(np.isfinite(p)) and np.all(np.isfinite(e))
+    assert all(Fraction(x) * Fraction(y) == Fraction(u) + Fraction(v) for x, y, u, v in zip(a, b, p, e))
+
+    def plain_split(x):
+        t = md._SPLIT * x
+        hi = t - (t - x)
+        return hi, x - hi
+
+    # control: the plain split fails on the same operands
+    with np.errstate(all="ignore"):
+        assert np.isnan(plain_split(a[:2])[0]).all()
+    rng = np.random.default_rng(3)
+    x = rand_dd(rng, 2000, emax=900)[0]
+    assert all(np.array_equal(u, v) for u, v in zip(md._split(x), plain_split(x)))
