@@ -19,6 +19,7 @@ speed, with no allocation and no arbitrary-precision library.
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, and f64 versions, behind the `dual::Lane` trait |
 | `linalg::DDLu` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, Gram matrices |
+| `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
 
 Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for

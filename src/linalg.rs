@@ -34,8 +34,11 @@ fn axpy8<S: Simd>(a: DV<S>, l: DV<S>, nt: DV<S>) -> DV<S> {
     DV { hi: h, lo }
 }
 
+/// a + l t in double-double, as the LU's updates and solves form it: one double-double product (the hi x hi product
+/// exact, the cross terms by FMA, lo x lo dropped) added to a with an error-free sum. Public for code that works on
+/// these factors itself (a block LU's solves) and must round as the solves here do.
 #[inline(always)]
-fn dd_axpy(a: DD, l: DD, nt: DD) -> DD {
+pub fn dd_axpy(a: DD, l: DD, nt: DD) -> DD {
     let (p, pe) = two_prod(l.hi, nt.hi);
     let pe = l.hi.mul_add(nt.lo, pe);
     let pe = l.lo.mul_add(nt.hi, pe);
@@ -1189,6 +1192,156 @@ impl DDLu {
     }
 }
 
+/// Partial-pivoting LU, in place, of the first `np` columns of an `nr` x `ncol` f64 matrix: the step of a block
+/// (staircase) LU that factors one group of columns and passes the Schur complement on to the next, where the square
+/// [`DDLu::factor_f64`] does not apply.
+///
+/// `a` is column-major with leading dimension `ld` (a multiple of 8, at least `nr`), with rows `nr..ld` zero.
+/// Afterwards rows `0..np` of the first `np` columns hold U11 and the rows below them the multipliers L21 (unit lower
+/// triangular L11 above them); rows `0..np` of the columns `np..ncol` hold U12, and rows `np..nr` of those columns the
+/// Schur complement A22 - L21 U12. `perm[k]` (`k < np`) is the row swapped with row `k` at step `k`, and every swap is
+/// applied to all `ncol` columns. The panels, row swaps, skipped zero blocks, register tiles and parallel column
+/// chunks are those of `factor_f64`, on the backend [`simd::dispatch`] picks, bitwise the same on every backend. The
+/// triangular update inside a panel runs row by row from the pivot down, where `factor_f64` uses aligned 8-row
+/// blocks, which can turn a -0 above the pivot into +0: with `nr = ncol = np` the factors equal `factor_f64`'s except
+/// possibly in the sign of zero entries.
+pub fn lu_rect_f64(
+    nr: usize,
+    ncol: usize,
+    np: usize,
+    ld: usize,
+    a: &mut [f64],
+    perm: &mut [usize],
+    par: bool,
+) -> Result<(), String> {
+    simd::dispatch(LuRectF64 {
+        nr,
+        ncol,
+        np,
+        ld,
+        a,
+        perm,
+        par,
+    })
+}
+
+fn lu_rect_f64_on<S: Simd>(
+    nr: usize,
+    ncol: usize,
+    np: usize,
+    ld: usize,
+    a: &mut [f64],
+    perm: &mut [usize],
+    par: bool,
+) -> Result<(), String> {
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            assert!(
+                ld.is_multiple_of(8) && ld >= nr && np <= nr && np <= ncol && a.len() >= ld * ncol && perm.len() >= np
+            );
+            let mut j0 = 0;
+            while j0 < np {
+                let jb = NB.min(np - j0);
+                let je = j0 + jb;
+                let (left, rest) = a.split_at_mut(j0 * ld);
+                let (pan, right) = rest.split_at_mut(jb * ld);
+                panel_getf2_f64::<S>(nr, ld, j0, jb, pan, perm)?;
+                let pv = &perm[j0..je];
+                for ch in left.chunks_mut(ld) {
+                    for (c, &p) in pv.iter().enumerate() {
+                        if p != j0 + c {
+                            ch.swap(j0 + c, p);
+                        }
+                    }
+                }
+                if je == ncol {
+                    break;
+                }
+                let pan: &[f64] = pan;
+                // multipliers for the triangular update of rows j0..je, and packed by 8-row blocks from the aligned
+                // row r0 below je for the tiles (zero for rows < je, which the triangular update handles, and for
+                // rows >= nr)
+                let mut tri = vec![0.0f64; jb * jb];
+                for c in 0..jb {
+                    for i in j0 + c + 1..je {
+                        tri[c * jb + i - j0] = pan[c * ld + i];
+                    }
+                }
+                let r0 = 8 * (je / 8);
+                let nrb = (ld - r0) / 8;
+                let mut pk = vec![0.0f64; nrb * jb * 8];
+                let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
+                for rb in 0..nrb {
+                    let mut nz = false;
+                    for c in 0..jb {
+                        for r in 0..8 {
+                            let i = r0 + rb * 8 + r;
+                            if i >= je && i < nr {
+                                let x = pan[c * ld + i];
+                                pk[(rb * jb + c) * 8 + r] = x;
+                                nz |= x != 0.0;
+                            }
+                        }
+                    }
+                    if nz {
+                        rows.push((r0 + rb * 8, rb * jb * 8));
+                    }
+                }
+                let task = |ch: &mut [f64]| {
+                    S::vectorize(
+                        #[inline(always)]
+                        || {
+                            let w = ch.len() / ld;
+                            let mut nt = vec![0.0f64; w * jb];
+                            let mut cols: Vec<usize> = Vec::with_capacity(w);
+                            let mut nto: Vec<usize> = Vec::with_capacity(w);
+                            for j in 0..w {
+                                let h = &mut ch[j * ld..(j + 1) * ld];
+                                for (c, &p) in pv.iter().enumerate() {
+                                    if p != j0 + c {
+                                        h.swap(j0 + c, p);
+                                    }
+                                }
+                                if h[j0..je].iter().all(|&x| x == 0.0) {
+                                    continue;
+                                }
+                                for c in 0..jb {
+                                    let k = j0 + c;
+                                    let t = -h[k];
+                                    nt[j * jb + c] = t;
+                                    if t == 0.0 {
+                                        continue;
+                                    }
+                                    for i in k + 1..je {
+                                        h[i] = tri[c * jb + i - j0].mul_add(t, h[i]);
+                                    }
+                                }
+                                if nt[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0) {
+                                    cols.push(j * ld);
+                                    nto.push(j * jb);
+                                }
+                            }
+                            if !rows.is_empty() {
+                                gemm_f64::<S>(jb, ch, &cols, &nto, &nt, &rows, &pk);
+                            }
+                        },
+                    )
+                };
+                let ncr = ncol - je;
+                let r = &mut right[..ncr * ld];
+                if par && ncr * (ld - j0) > 16384 {
+                    r.par_chunks_mut(CW * ld).for_each(task);
+                } else {
+                    r.chunks_mut(CW * ld).for_each(task);
+                }
+                j0 = je;
+            }
+            Ok(())
+        },
+    )
+}
+
 /// Gram matrix G = J^T J and g = J^T b for a column-major J (n x n, leading dimension ld): G column-major with
 /// leading dimension ld (only what LU needs; G is symmetric and filled completely).
 pub fn gram(n: usize, ld: usize, jh: &[f64], jl: &[f64], bh: &[f64], bl: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<DD>) {
@@ -1298,6 +1451,24 @@ impl Kernel for FactorF64 {
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
         DDLu::factor_f64_on::<S>(self.n, self.ld, self.a, self.par)
+    }
+}
+
+struct LuRectF64<'a> {
+    nr: usize,
+    ncol: usize,
+    np: usize,
+    ld: usize,
+    a: &'a mut [f64],
+    perm: &'a mut [usize],
+    par: bool,
+}
+
+impl Kernel for LuRectF64<'_> {
+    type Output = Result<(), String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        lu_rect_f64_on::<S>(self.nr, self.ncol, self.np, self.ld, self.a, self.perm, self.par)
     }
 }
 
@@ -1496,6 +1667,101 @@ mod tests {
         }
     }
 
+    /// lu_rect_f64 with every column pivoted (nr = ncol = np) is factor_f64: the same pivots, and the same factors
+    /// except possibly in the sign of zero entries (see lu_rect_f64)
+    #[test]
+    fn rect_lu_square_is_factor_f64() {
+        for (n, sp) in [(37, false), (96, false), (157, true), (300, true)] {
+            let (ld, h, _) = if sp { sparse(n, 20, 21) } else { mat(n, 22) };
+            let f = DDLu::factor_f64(n, ld, h.clone(), false).unwrap();
+            for par in [false, true] {
+                let mut a = h.clone();
+                let mut perm = vec![0usize; n];
+                lu_rect_f64(n, n, n, ld, &mut a, &mut perm, par).unwrap();
+                assert_eq!(perm, f.perm, "perm n={n}");
+                let d = same(&f.hi, &a, "factors");
+                eprintln!("n {n} sparse {sp} par {par}: equal to factor_f64; {d} zero entries differ in sign");
+            }
+        }
+    }
+
+    /// max |P A - L U| / max |A| over the nr x ncol matrix, with L U for the rectangular factorization: L = (unit L11;
+    /// L21) on the first np columns, U = (U11 U12) on the first np rows, and the Schur complement S added in rows
+    /// np..nr of the columns np.. (the products in double-double, so the check measures the factorization's error only)
+    #[allow(clippy::too_many_arguments)]
+    fn rect_residual(nr: usize, ncol: usize, np: usize, ld: usize, a0: &[f64], f: &[f64], perm: &[usize]) -> f64 {
+        let mut pa = a0.to_vec();
+        for k in 0..np {
+            if perm[k] != k {
+                for j in 0..ncol {
+                    pa.swap(j * ld + k, j * ld + perm[k]);
+                }
+            }
+        }
+        let (mut err, mut amax) = (0.0f64, 0.0f64);
+        for j in 0..ncol {
+            for i in 0..nr {
+                let mut s = DD::ZERO;
+                for k in 0..np.min(i + 1).min(if j < np { j + 1 } else { np }) {
+                    let l = if k == i { 1.0 } else { f[k * ld + i] };
+                    s = dd_axpy(s, DD::from_f64(l), DD::from_f64(f[j * ld + k]));
+                }
+                if i >= np && j >= np {
+                    s = s + DD::from_f64(f[j * ld + i]);
+                }
+                err = err.max((s - DD::from_f64(pa[j * ld + i])).to_f64().abs());
+                amax = amax.max(pa[j * ld + i].abs());
+            }
+        }
+        err / amax
+    }
+
+    /// lu_rect_f64 on rectangular matrices (np below, at and off multiples of 8 and of the panel width; tall without
+    /// trailing columns; dense and block sparse): P A = L U + S to f64 rounding. Control: one multiplier off by a
+    /// relative 1e-6 must fail the check.
+    #[test]
+    fn rect_lu_factors() {
+        for (nr, ncol, np, bs) in [
+            (40, 60, 24, 0),
+            (100, 130, 37, 0),
+            (77, 77, 50, 0),
+            (64, 64, 64, 0),
+            (90, 40, 40, 0),
+            (161, 200, 70, 20),
+            (200, 233, 96, 30),
+        ] {
+            let ld = ld_for(nr);
+            let n = nr.max(ncol);
+            let (sld, h, _) = if bs > 0 { sparse(n, bs, 31) } else { mat(n, 32) };
+            let mut a0 = vec![0.0; ld * ncol];
+            for j in 0..ncol {
+                for i in 0..nr {
+                    a0[j * ld + i] = h[j * sld + i];
+                }
+            }
+            for par in [false, true] {
+                let mut f = a0.clone();
+                let mut perm = vec![0usize; np];
+                lu_rect_f64(nr, ncol, np, ld, &mut f, &mut perm, par).unwrap();
+                let e = rect_residual(nr, ncol, np, ld, &a0, &f, &perm);
+                let mut g = f.clone();
+                // the largest multiplier (below the diagonal of the pivoted columns; sparse ones are mostly zero)
+                let m = (0..np)
+                    .flat_map(|c| (c + 1..nr).map(move |i| c * ld + i))
+                    .max_by(|&x, &y| f[x].abs().total_cmp(&f[y].abs()))
+                    .unwrap();
+                g[m] *= 1.0 + 1e-6;
+                let em = rect_residual(nr, ncol, np, ld, &a0, &g, &perm);
+                eprintln!(
+                    "nr {nr} ncol {ncol} np {np} sparse {} par {par}: residual {e:.1e}; control {em:.1e}",
+                    bs > 0
+                );
+                assert!(e < 1e-13, "P A - L U - S = {e:e}");
+                assert!(em > 1e-12, "the perturbed multiplier is not detected ({em:e})");
+            }
+        }
+    }
+
     /// everything `linalg` dispatches, on one backend, its results flattened
     #[derive(Clone)]
     struct OnBackend {
@@ -1517,7 +1783,11 @@ mod tests {
             b.solve_many_on::<S>(&mut xh, &mut xl, k, false, true);
             let (gh, gl, g) = gram_on::<S>(n, ld, &self.h, &self.l, &self.h[..ld], &self.l[..ld]);
             let g: Vec<f64> = g.iter().flat_map(|d| [d.hi, d.lo]).collect();
-            [u.hi, u.lo, b.hi, b.lo, f.hi, xh, xl, gh, gl, g].concat()
+            // rectangular: the first 70 columns pivoted (not a multiple of 8), the rest updated
+            let (mut r, mut perm) = (self.h.clone(), vec![0usize; 70]);
+            lu_rect_f64_on::<S>(n, n, 70, ld, &mut r, &mut perm, true).unwrap();
+            let perm: Vec<f64> = perm.iter().map(|&p| p as f64).collect();
+            [u.hi, u.lo, b.hi, b.lo, f.hi, xh, xl, gh, gl, g, r, perm].concat()
         }
     }
 
