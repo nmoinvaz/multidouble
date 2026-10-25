@@ -995,12 +995,29 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
 // counting lanes
 // ---------------------------------------------------------------------------------------------------------------
 
-/// The kinds of lane operation `Counted` counts; `take_counts()[i]` is the count of `COUNTED_OPS[i]`. "x f64" covers
-/// `mulf` and `mul_pwr2`, "x const" `mulc` (and `muls`), "+ const" `addc`; `cst`, `splat`, `bcast`, `val`, `tan`,
-/// `from_vt` and the f64 tangent accessors move data and are not counted.
+/// The kinds of lane operation `Counted` counts; `take_counts()[i]` is the count of `COUNTED_OPS[i]` (`op` names the
+/// indices). "x f64" covers `mulf` and `mul_pwr2`, "x const" `mulc` (and `muls`), "+ const" `addc`; `cst`, `splat`,
+/// `bcast`, `val`, `tan`, `from_vt` and the f64 tangent accessors move data and are not counted.
 pub const COUNTED_OPS: [&str; 11] = [
     "add/sub", "mul", "div", "neg", "x const", "x f64", "+ const", "acc a b", "acc a c", "acc a", "finish",
 ];
+
+/// The index of each kind of operation in `take_counts()` and `COUNTED_OPS`.
+pub mod op {
+    pub const ADD_SUB: usize = 0;
+    pub const MUL: usize = 1;
+    pub const DIV: usize = 2;
+    pub const NEG: usize = 3;
+    /// `mulc`, `muls`
+    pub const MULC: usize = 4;
+    /// `mulf`, `mul_pwr2`
+    pub const MULF: usize = 5;
+    pub const ADDC: usize = 6;
+    pub const ACC: usize = 7;
+    pub const ACCC: usize = 8;
+    pub const ACC1: usize = 9;
+    pub const FIN: usize = 10;
+}
 
 std::thread_local!(static COUNTS: std::cell::RefCell<[u64; 11]> = const { std::cell::RefCell::new([0; 11]) });
 
@@ -1039,16 +1056,16 @@ macro_rules! counted_binop {
         }
     };
 }
-counted_binop!(Add, add, 0);
-counted_binop!(Sub, sub, 0);
-counted_binop!(Mul, mul, 1);
-counted_binop!(Div, div, 2);
+counted_binop!(Add, add, op::ADD_SUB);
+counted_binop!(Sub, sub, op::ADD_SUB);
+counted_binop!(Mul, mul, op::MUL);
+counted_binop!(Div, div, op::DIV);
 
 impl<L: Lane> Neg for Counted<L> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        count(3);
+        count(op::NEG);
         Counted(-self.0)
     }
 }
@@ -1074,27 +1091,27 @@ impl<L: Lane> Lane for Counted<L> {
     }
     #[inline(always)]
     fn mulc(self, c: DV<Self::S>) -> Self {
-        count(4);
+        count(op::MULC);
         Counted(self.0.mulc(c))
     }
     #[inline(always)]
     fn muls(self, s: DD) -> Self {
-        count(4);
+        count(op::MULC);
         Counted(self.0.muls(s))
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
-        count(5);
+        count(op::MULF);
         Counted(self.0.mulf(s))
     }
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
-        count(5);
+        count(op::MULF);
         Counted(self.0.mul_pwr2(s))
     }
     #[inline(always)]
     fn addc(self, c: DV<Self::S>) -> Self {
-        count(6);
+        count(op::ADDC);
         Counted(self.0.addc(c))
     }
     #[inline(always)]
@@ -1119,22 +1136,22 @@ impl<L: Lane> Lane for Counted<L> {
     }
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
-        count(7);
+        count(op::ACC);
         L::acc(a, x.0, y.0)
     }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<Self::S>) -> Self::Acc {
-        count(8);
+        count(op::ACCC);
         L::accc(a, x.0, c)
     }
     #[inline(always)]
     fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
-        count(9);
+        count(op::ACC1);
         L::acc1(a, x.0)
     }
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
-        count(10);
+        count(op::FIN);
         Counted(L::fin(a))
     }
     #[inline(always)]

@@ -6,7 +6,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{take_counts, Counted, Lane};
+use multidouble::dual::{op, take_counts, Counted, Lane};
 use multidouble::field::{cs, cs_range, cs_w, horner, DMat, FieldSolve, Fl, MatLane};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::native::{Dtn, Fu, Fun, F8, QV};
@@ -246,8 +246,23 @@ fn matrix_products() {
             "Counted i {i}"
         );
     }
-    assert_eq!(n[8], (8 * B * B) as u64);
-    assert_eq!(n[10], B as u64);
+    // the default product (apply_dd) run through Counted's own per-operation counts must count the same
+    take_counts();
+    let dd = d.apply_dd(&fc);
+    let nd = take_counts();
+    assert_eq!(
+        n, nd,
+        "Counted::dmat_apply against the default product on counting lanes"
+    );
+    for i in 0..M {
+        let (x, y) = (dd.0[i / 8].0.lane(i % 8), dv.get(i));
+        assert!(
+            x.hi.to_bits() == y.hi.to_bits() && x.lo.to_bits() == y.lo.to_bits(),
+            "apply_dd i {i}"
+        );
+    }
+    assert_eq!(n[op::ACCC], (8 * B * B) as u64);
+    assert_eq!(n[op::FIN], B as u64);
     assert_eq!(n.iter().sum::<u64>(), (8 * B * B + B) as u64);
     let _ = <Counted<DV> as MatLane>::dmat_apply::<B>;
 }
@@ -284,4 +299,29 @@ fn field_solves_are_the_lu_solves() {
             "solve_lanes_hi i {i}"
         );
     }
+}
+
+/// A DDLu whose order is not 8 B is refused by both field solves (smaller: the rest of the field would pass through
+/// unsolved; larger: an index past the end)
+fn lu_of_order(n: usize) -> DDLu {
+    let ld = ld_for(n);
+    let mut h = vec![0.0; ld * n];
+    for i in 0..n {
+        h[i * ld + i] = 2.0;
+    }
+    DDLu::factor(n, ld, h, vec![0.0; ld * n], false).unwrap()
+}
+
+#[test]
+#[should_panic(expected = "FieldSolve: a DDLu of order 8 for a field of 16 values")]
+fn field_solve_refuses_a_smaller_lu() {
+    let (f, _) = field(&mut Rng(3), 1.0);
+    lu_of_order(M - 8).solve_lanes(&f);
+}
+
+#[test]
+#[should_panic(expected = "FieldSolve: a DDLu of order 24 for a field of 16 values")]
+fn field_solve_hi_refuses_a_larger_lu() {
+    let (f, _) = field(&mut Rng(3), 1.0);
+    lu_of_order(M + 8).solve_lanes_hi(&f);
 }

@@ -432,14 +432,14 @@ impl<S: Simd, const N: usize> MatLane for Fun<S, N> {
 impl<L: MatLane> MatLane for Counted<L> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<Self::S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
-        crate::dual::count_n(8, (8 * B * B) as u64);
-        crate::dual::count_n(10, B as u64);
+        crate::dual::count_n(crate::dual::op::ACCC, (8 * B * B) as u64);
+        crate::dual::count_n(crate::dual::op::FIN, B as u64);
         Fl(L::dmat_apply(d, &Fl(f.0.map(|x| x.0))).0.map(Counted))
     }
 }
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
-/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero).
+/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero). Both panic if the order is not 8 B.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
@@ -448,6 +448,11 @@ pub trait FieldSolve {
 impl FieldSolve for DDLu {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B> {
         let m = 8 * B;
+        assert_eq!(
+            self.n, m,
+            "FieldSolve: a DDLu of order {} for a field of {m} values",
+            self.n
+        );
         let mut h = vec![0.0; m];
         let mut l = vec![0.0; m];
         f.store(&mut h, &mut l);
@@ -462,6 +467,11 @@ impl FieldSolve for DDLu {
 
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B> {
         let m = 8 * B;
+        assert_eq!(
+            self.n, m,
+            "FieldSolve: a DDLu of order {} for a field of {m} values",
+            self.n
+        );
         let mut h = vec![0.0; m];
         let mut l = vec![0.0; m];
         f.store(&mut h, &mut l);
