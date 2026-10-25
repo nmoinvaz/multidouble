@@ -169,13 +169,14 @@ def test_qd_add_dd_exact_to_quad_double():
     dh, dl = dh * scale, dl * scale
 
     def worst(parts):
+        """largest error of qd_add_dd(parts, d) against the exact sum of z (the true parts) and d"""
         r = md.qd_add_dd(*parts, dh, dl)
         out = 0
         for i in range(N):
-            want = sum(Fraction(p[i]) for p in parts[:4]) + Fraction(dh[i]) + Fraction(dl[i])
+            zi = sum(Fraction(p[i]) for p in z)
+            want = zi + Fraction(dh[i]) + Fraction(dl[i])
             got = sum(Fraction(p[i]) for p in r)
-            size = max(abs(sum(Fraction(p[i]) for p in parts[:4])), abs(Fraction(dh[i]) + Fraction(dl[i])))
-            out = max(out, abs(got - want) / size)
+            out = max(out, abs(got - want) / max(abs(zi), abs(Fraction(dh[i]) + Fraction(dl[i]))))
         return out, r
 
     w, r = worst(z)
@@ -183,5 +184,5 @@ def test_qd_add_dd_exact_to_quad_double():
     for i in (0, 7, 8, 500, N - 1):
         one = md.qd_add_dd(*[np.array([p[i]]) for p in z], np.array([dh[i]]), np.array([dl[i]]))
         assert all(np.array_equal(a, b[i:i + 1]) for a, b in zip(one, r)), i
-    wc, _ = worst(z[:3] + [np.zeros(N)])
+    wc, _ = worst(z[:3] + [np.zeros(N)])        # control: a wrong input, graded against the true sum
     assert wc > Fraction(1, 2**205), float(wc)
