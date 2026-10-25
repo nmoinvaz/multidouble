@@ -95,6 +95,10 @@ impl V8 {
         }
     }
     #[inline(always)]
+    pub fn neg(self) -> Self {
+        four!(vnegq_f64, self)
+    }
+    #[inline(always)]
     pub fn abs(self) -> Self {
         four!(vabsq_f64, self)
     }

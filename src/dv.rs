@@ -136,10 +136,9 @@ impl<S: Simd> Neg for DV<S> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        let z = V8::zero();
         DV {
-            hi: z.sub(self.hi),
-            lo: z.sub(self.lo),
+            hi: self.hi.neg(),
+            lo: self.lo.neg(),
         }
     }
 }

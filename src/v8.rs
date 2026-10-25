@@ -72,6 +72,16 @@ mod avx512 {
         pub fn fms(self, b: Self, c: Self) -> Self {
             unsafe { V8(_mm512_fmsub_pd(self.0, b.0, c.0)) }
         }
+        /// -self: the sign bit flipped (AVX-512F has no f64 xor; the integer one)
+        #[inline(always)]
+        pub fn neg(self) -> Self {
+            unsafe {
+                V8(_mm512_castsi512_pd(_mm512_xor_si512(
+                    _mm512_castpd_si512(self.0),
+                    _mm512_set1_epi64(i64::MIN),
+                )))
+            }
+        }
         #[inline(always)]
         pub fn abs(self) -> Self {
             unsafe { V8(_mm512_abs_pd(self.0)) }
@@ -308,6 +318,14 @@ mod avx2 {
                 ])
             }
         }
+        /// -self: the sign bit flipped
+        #[inline(always)]
+        pub fn neg(self) -> Self {
+            unsafe {
+                let m = _mm256_set1_pd(-0.0);
+                V8([_mm256_xor_pd(m, self.0[0]), _mm256_xor_pd(m, self.0[1])])
+            }
+        }
         #[inline(always)]
         pub fn abs(self) -> Self {
             unsafe {
@@ -537,6 +555,19 @@ mod sse2 {
             let (x, y, z) = (self.to_array(), b.to_array(), c.to_array());
             Self::from_array(std::array::from_fn(|i| x[i].mul_add(y[i], -z[i])))
         }
+        /// -self: the sign bit flipped
+        #[inline(always)]
+        pub fn neg(self) -> Self {
+            unsafe {
+                let m = _mm_set1_pd(-0.0);
+                V8([
+                    _mm_xor_pd(m, self.0[0]),
+                    _mm_xor_pd(m, self.0[1]),
+                    _mm_xor_pd(m, self.0[2]),
+                    _mm_xor_pd(m, self.0[3]),
+                ])
+            }
+        }
         #[inline(always)]
         pub fn abs(self) -> Self {
             unsafe {
@@ -724,6 +755,10 @@ mod portable {
             V8(r)
         }
         #[inline(always)]
+        pub fn neg(self) -> Self {
+            V8(self.0.map(|x| -x))
+        }
+        #[inline(always)]
         pub fn abs(self) -> Self {
             V8(self.0.map(f64::abs))
         }
@@ -875,6 +910,10 @@ macro_rules! simd {
             #[inline(always)]
             fn fms(a: $m::V8, b: $m::V8, c: $m::V8) -> $m::V8 {
                 a.fms(b, c)
+            }
+            #[inline(always)]
+            fn neg(a: $m::V8) -> $m::V8 {
+                a.neg()
             }
             #[inline(always)]
             fn abs(a: $m::V8) -> $m::V8 {
@@ -1074,6 +1113,10 @@ impl<S: Simd> V8<S> {
     #[inline(always)]
     pub fn add_where(self, m: M8<S>, o: Self) -> Self {
         V8(S::add_where(m.0, self.0, o.0))
+    }
+    #[inline(always)]
+    pub fn neg(self) -> Self {
+        V8(S::neg(self.0))
     }
     #[inline(always)]
     pub fn abs(self) -> Self {
@@ -1319,13 +1362,15 @@ mod neon_check {
             let c: [f64; 8] = std::array::from_fn(|_| next());
             let (va, vb, vc) = (V8::load(&a), V8::load(&b), V8::load(&c));
             let mut out = [0.0; 8];
-            let checks: [(V8, &dyn Fn(usize) -> f64); 10] = [
+            let checks: [(V8, &dyn Fn(usize) -> f64); 12] = [
                 (va.add(vb), &|j| a[j] + b[j]),
                 (va.sub(vb), &|j| a[j] - b[j]),
                 (va.mul(vb), &|j| a[j] * b[j]),
                 (va.div(vb), &|j| a[j] / b[j]),
                 (va.fma(vb, vc), &|j| a[j].mul_add(b[j], c[j])),
                 (va.fms(vb, vc), &|j| a[j].mul_add(b[j], -c[j])),
+                (va.neg(), &|j| -a[j]),
+                (V8::zero().neg(), &|_| -0.0),
                 (va.abs(), &|j| a[j].abs()),
                 (va.abs().sqrt(), &|j| a[j].abs().sqrt()),
                 (va.max(vb), &|j| a[j].max(b[j])),

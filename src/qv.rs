@@ -748,9 +748,8 @@ impl<S: Simd> Neg for QV<S> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        let z = V8::zero();
         QV {
-            c: self.c.map(|v| z.sub(v)),
+            c: self.c.map(|v| v.neg()),
         }
     }
 }
