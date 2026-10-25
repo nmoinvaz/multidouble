@@ -1633,7 +1633,8 @@ impl StaircaseLu {
     /// block s into rows r0..r0 + rlen of the step's ld x (np + nrc) column-major array w (columns: g_s, then
     /// g_{s+1}, each with its parameter copy first if it has one; the parameter's column of row block s is g_{s+1}'s
     /// copy), and for s = 0 also row0 at row r0 - 1; the array is zero elsewhere. The link rows are written here.
-    /// Steps are factored in order, each in parallel over column chunks when par.
+    /// Steps are factored in order, each in parallel over column chunks when par. A layout whose column groups with
+    /// the parameter, or row blocks with row0, do not cover 0..n exactly once is an error.
     pub fn factor<F>(
         n: usize,
         groups: Vec<ColumnGroup>,
@@ -1672,6 +1673,27 @@ impl StaircaseLu {
             .iter()
             .position(|g| g.param)
             .ok_or("staircase LU: no parameter copy")?;
+        // the column groups with the parameter, and the row blocks with row0, must each cover 0..n exactly once
+        let cols = groups.iter().map(|g| (g.zoff, g.zlen)).chain([(iparam, 1)]);
+        let rows = rblocks.iter().copied().chain([(irow0, 1)]);
+        for (what, parts) in [
+            ("column groups and the parameter", cols.collect::<Vec<_>>()),
+            ("row blocks and row0", rows.collect()),
+        ] {
+            let mut seen = vec![false; n];
+            for (off, len) in parts {
+                if off.checked_add(len).is_none_or(|e| e > n) {
+                    return Err(format!("staircase LU: {what}: [{off}, {off} + {len}) outside 0..{n}"));
+                }
+                if seen[off..off + len].iter().any(|&x| x) {
+                    return Err(format!("staircase LU: {what} overlap in [{off}, {off} + {len})"));
+                }
+                seen[off..off + len].fill(true);
+            }
+            if let Some(i) = seen.iter().position(|&x| !x) {
+                return Err(format!("staircase LU: {what} leave index {i} uncovered"));
+            }
+        }
         let mut steps: Vec<Step> = Vec::with_capacity(ns);
         // carried rows: (count, column-major nc x np of the coming step, leading dimension nc)
         let mut carry: Vec<f64> = Vec::new();
