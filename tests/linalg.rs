@@ -485,3 +485,43 @@ fn staircase_solve_many_is_solve() {
     bad[0].param = true;
     assert!(StaircaseLu::factor(n, bad, &rblocks, n - 1, n - 1, |_, _, _, _| Ok(()), false).is_err());
 }
+
+/// factor checks that the column groups with the parameter, and the row blocks with row0, each cover 0..n exactly once:
+/// each malformed layout below is reported. The fill writes random entries into every step's rows whatever the layout,
+/// so that only this check can catch them; with the true layout the same fill factors.
+#[test]
+fn staircase_rejects_bad_partitions() {
+    let (_, n, _, groups, rblocks) = staircase_system(6, 12, 3, 2, 5);
+    let try_factor = |g: Vec<ColumnGroup>, rb: &[(usize, usize)], irow0: usize, iparam: usize| {
+        let mut r = Rng(1);
+        let rows: Vec<usize> = rb.iter().map(|b| b.1).collect();
+        StaircaseLu::factor(
+            n,
+            g,
+            rb,
+            irow0,
+            iparam,
+            |s, w: &mut [f64], wld, r0| {
+                let start = if s == 0 { r0 - 1 } else { r0 };
+                for c in 0..w.len() / wld {
+                    for i in start..r0 + rows[s] {
+                        w[c * wld + i] = r.sym();
+                    }
+                }
+                Ok(())
+            },
+            false,
+        )
+    };
+    assert!(try_factor(groups.clone(), &rblocks, n - 1, n - 1).is_ok());
+    let mut g = groups.clone();
+    g[1].zoff -= 1; // overlaps group 0, and leaves a gap at the end of group 1
+    assert!(try_factor(g, &rblocks, n - 1, n - 1).is_err());
+    assert!(try_factor(groups.clone(), &rblocks, n - 1, n).is_err()); // the parameter out of range
+    assert!(try_factor(groups.clone(), &rblocks, n - 1, 0).is_err()); // the parameter inside group 0
+    let mut rb = rblocks.clone();
+    rb.last_mut().unwrap().0 += 1; // overlaps row0, and leaves a row uncovered
+    assert!(try_factor(groups.clone(), &rb, n - 1, n - 1).is_err());
+    assert!(try_factor(groups.clone(), &rblocks, 0, n - 1).is_err()); // row0 inside row block 0
+    assert!(try_factor(groups.clone(), &rblocks, n, n - 1).is_err()); // row0 out of range
+}
