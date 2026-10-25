@@ -7,7 +7,7 @@ use crate::dd::{two_prod, two_sum, DD};
 use crate::dv::{self, DV};
 use crate::qd::QD;
 use crate::simd::{self, Kernel, Simd};
-use crate::v8::V8;
+use crate::v8::{M8, V8};
 use rayon::prelude::*;
 
 #[derive(Clone)]
@@ -48,6 +48,103 @@ pub fn dd_axpy(a: DD, l: DD, nt: DD) -> DD {
     let e = a.lo + (t + pe);
     let (h, lo) = two_sum(s, e);
     DD { hi: h, lo }
+}
+
+/// the lanes of rows i0..i0 + 8 that lie in lo..hi
+#[inline(always)]
+fn rows_in<S: Simd>(i0: usize, lo: usize, hi: usize) -> M8<S> {
+    let idx = V8::<S>::from_array(std::array::from_fn(|r| (i0 + r) as f64));
+    idx.ge(V8::splat(lo as f64)).and(V8::splat(hi as f64).gt(idx))
+}
+
+/// u where m is set, a elsewhere
+#[inline(always)]
+fn sel_dv<S: Simd>(m: M8<S>, u: DV<S>, a: DV<S>) -> DV<S> {
+    DV {
+        hi: m.sel(u.hi, a.hi),
+        lo: m.sel(u.lo, a.lo),
+    }
+}
+
+/// b[i] = dd_axpy(b[i], l[i], nt) for i in lo..hi, on the 8-row blocks that meet lo..hi; rows outside keep their value
+/// (bitwise the scalar loop). l's low parts are ll, or zero when None. Every slice holds hi rounded up to 8 rows.
+#[inline(always)]
+fn axpy_rows<S: Simd>(bh: &mut [f64], bl: &mut [f64], lh: &[f64], ll: Option<&[f64]>, lo: usize, hi: usize, nt: DD) {
+    let t = DV::<S>::splat(nt);
+    let mut i = 8 * (lo / 8);
+    while i < hi {
+        let a = DV::load(&bh[i..i + 8], &bl[i..i + 8]);
+        let l = DV {
+            hi: V8::load(&lh[i..i + 8]),
+            lo: ll.map_or(V8::zero(), |x| V8::load(&x[i..i + 8])),
+        };
+        let u = axpy8(a, l, t);
+        let u = if i >= lo && i + 8 <= hi {
+            u
+        } else {
+            sel_dv(rows_in::<S>(i, lo, hi), u, a)
+        };
+        u.store(&mut bh[i..i + 8], &mut bl[i..i + 8]);
+        i += 8;
+    }
+}
+
+/// b[i] = l[i] t + b[i] (one rounding, as `f64::mul_add`) for i in lo..hi, as `axpy_rows` in f64
+#[inline(always)]
+fn fma_rows<S: Simd>(b: &mut [f64], l: &[f64], lo: usize, hi: usize, t: f64) {
+    let tv = V8::<S>::splat(t);
+    let mut i = 8 * (lo / 8);
+    while i < hi {
+        let a = V8::load(&b[i..i + 8]);
+        let u = V8::load(&l[i..i + 8]).fma(tv, a);
+        let u = if i >= lo && i + 8 <= hi {
+            u
+        } else {
+            rows_in::<S>(i, lo, hi).sel(u, a)
+        };
+        u.store(&mut b[i..i + 8]);
+        i += 8;
+    }
+}
+
+/// The pivot of column col (rows k..n, col holding n rounded up to 8): the first row with the largest |col[i]| and
+/// that value, as the scalar search `if |col[i]| > best` from best = |col[k]| finds them: a NaN never wins, and a NaN
+/// at row k leaves k with best NaN. 8 rows at a time, each lane keeping its first maximum; then the largest value
+/// over the lanes, at the smallest row.
+#[inline(always)]
+fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
+    let a = col[k].abs();
+    if a.is_nan() {
+        return (k, a);
+    }
+    let none = V8::<S>::splat(-1.0);
+    let (mut best, mut at) = (none, V8::<S>::splat(k as f64));
+    let mut i = 8 * (k / 8);
+    // the row numbers of the block, as f64 (exact), stepped by 8
+    let mut idx = V8::<S>::from_array(std::array::from_fn(|r| (i + r) as f64));
+    let (step, kv, nv) = (V8::<S>::splat(8.0), V8::<S>::splat(k as f64), V8::<S>::splat(n as f64));
+    while i < n {
+        let x = V8::load(&col[i..i + 8]).abs();
+        let v = if i >= k && i + 8 <= n {
+            x
+        } else {
+            idx.ge(kv).and(nv.gt(idx)).sel(x, none)
+        };
+        let up = v.gt(best);
+        best = up.sel(v, best);
+        at = up.sel(idx, at);
+        idx = idx.add(step);
+        i += 8;
+    }
+    let (b, x) = (best.to_array(), at.to_array());
+    let (mut p, mut m) = (usize::MAX, -1.0f64);
+    for r in 0..8 {
+        if b[r] > m || (b[r] == m && (x[r] as usize) < p) {
+            m = b[r];
+            p = x[r] as usize;
+        }
+    }
+    (p, m)
 }
 
 /// Blocked LU: matrices at least this large take `factor_blocked`; NB: panel width; CW: columns per parallel task;
@@ -114,15 +211,7 @@ fn panel_getf2<S: Simd>(
             for c in 0..jb {
                 let k = j0 + c;
                 let ck = c * ld;
-                let mut p = k;
-                let mut best = ph[ck + k].abs();
-                for i in k + 1..n {
-                    let v = ph[ck + i].abs();
-                    if v > best {
-                        best = v;
-                        p = i;
-                    }
-                }
+                let (p, best) = pivot_search::<S>(&ph[ck..ck + ld], k, n);
                 if best == 0.0 || !best.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                 }
@@ -138,16 +227,16 @@ fn panel_getf2<S: Simd>(
                         hi: ph[ck + k],
                         lo: pl[ck + k],
                     };
-                for i in k + 1..n {
-                    if ph[ck + i] == 0.0 && pl[ck + i] == 0.0 {
-                        continue;
-                    }
-                    let v = DD {
-                        hi: ph[ck + i],
-                        lo: pl[ck + i],
-                    } * inv;
-                    ph[ck + i] = v.hi;
-                    pl[ck + i] = v.lo;
+                // the multipliers, 8 rows at a time; zero entries are left as they are
+                let iv = DV::<S>::splat(inv);
+                let z = V8::<S>::zero();
+                let mut i = 8 * ((k + 1) / 8);
+                while i < n {
+                    let (h, l) = (&mut ph[ck + i..ck + i + 8], &mut pl[ck + i..ck + i + 8]);
+                    let x = DV::load(h, l);
+                    let m = rows_in::<S>(i, k + 1, n).and(x.hi.eq(z).and(x.lo.eq(z)).not());
+                    sel_dv(m, x * iv, x).store(h, l);
+                    i += 8;
                 }
                 if k + 1 == n || c + 1 == jb {
                     continue;
@@ -353,15 +442,7 @@ impl DDLu {
                 let mut ml = vec![0.0f64; ld];
                 for k in 0..n {
                     let ck = k * ld;
-                    let mut p = k;
-                    let mut best = hi[ck + k].abs();
-                    for i in k + 1..n {
-                        let v = hi[ck + i].abs();
-                        if v > best {
-                            best = v;
-                            p = i;
-                        }
-                    }
+                    let (p, best) = pivot_search::<S>(&hi[ck..ck + ld], k, n);
                     if best == 0.0 || !best.is_finite() {
                         return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                     }
@@ -377,13 +458,13 @@ impl DDLu {
                             hi: hi[ck + k],
                             lo: lo[ck + k],
                         };
-                    for i in k + 1..n {
-                        let v = DD {
-                            hi: hi[ck + i],
-                            lo: lo[ck + i],
-                        } * inv;
-                        hi[ck + i] = v.hi;
-                        lo[ck + i] = v.lo;
+                    let iv = DV::<S>::splat(inv);
+                    let mut i = 8 * ((k + 1) / 8);
+                    while i < n {
+                        let (h, l) = (&mut hi[ck + i..ck + i + 8], &mut lo[ck + i..ck + i + 8]);
+                        let x = DV::load(h, l);
+                        sel_dv(rows_in::<S>(i, k + 1, n), x * iv, x).store(h, l);
+                        i += 8;
                     }
                     if k + 1 == n {
                         break;
@@ -786,31 +867,57 @@ impl DDLu {
         }
     }
 
-    /// Solve A x = b in place (b: n values).
+    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
+    /// zero), then U x = y, each column's update of the rows below (or above) 8 rows at a time on the backend
+    /// `simd::dispatch` picks, every entry with the operations and order of the scalar loops.
     pub fn solve(&self, b: &mut [DD]) {
-        let n = self.n;
-        for k in 0..n {
-            let p = self.perm[k];
-            if p != k {
-                b.swap(k, p);
-            }
-        }
-        for k in 0..n {
-            let nt = -b[k];
-            if nt.hi == 0.0 {
-                continue;
-            }
-            for i in k + 1..n {
-                b[i] = dd_axpy(b[i], self.at(i, k), nt);
-            }
-        }
-        for k in (0..n).rev() {
-            b[k] = b[k] / self.at(k, k);
-            let nt = -b[k];
-            for i in 0..k {
-                b[i] = dd_axpy(b[i], self.at(i, k), nt);
-            }
-        }
+        simd::dispatch(Solve { lu: self, b })
+    }
+
+    fn solve_on<S: Simd>(&self, b: &mut [DD]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let (n, ld) = (self.n, self.ld);
+                assert!(b.len() >= n);
+                for k in 0..n {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+                let (mut bh, mut bl) = (vec![0.0f64; ld], vec![0.0f64; ld]);
+                for i in 0..n {
+                    bh[i] = b[i].hi;
+                    bl[i] = b[i].lo;
+                }
+                for k in 0..n {
+                    let nt = -DD { hi: bh[k], lo: bl[k] };
+                    if nt.hi == 0.0 {
+                        continue;
+                    }
+                    let col = k * ld..(k + 1) * ld;
+                    axpy_rows::<S>(
+                        &mut bh,
+                        &mut bl,
+                        &self.hi[col.clone()],
+                        Some(&self.lo[col]),
+                        k + 1,
+                        n,
+                        nt,
+                    );
+                }
+                for k in (0..n).rev() {
+                    let q = DD { hi: bh[k], lo: bl[k] } / self.at(k, k);
+                    (bh[k], bl[k]) = (q.hi, q.lo);
+                    let col = k * ld..(k + 1) * ld;
+                    axpy_rows::<S>(&mut bh, &mut bl, &self.hi[col.clone()], Some(&self.lo[col]), 0, k, -q);
+                }
+                for i in 0..n {
+                    b[i] = DD { hi: bh[i], lo: bl[i] };
+                }
+            },
+        )
     }
 
     /// x with A x = b to quad-double accuracy, by iterative refinement with the residual in quad-double (Moler, J.
@@ -869,31 +976,38 @@ impl DDLu {
     /// Solve A x = b in plain f64 with the hi parts of the factors (an f64 LU of A, accurate to about one ulp of its
     /// entries), for the f64 lanes of the mixed-precision Jacobian.
     pub fn solve_hi(&self, b: &mut [f64]) {
-        let (n, ld) = (self.n, self.ld);
-        for k in 0..n {
-            let p = self.perm[k];
-            if p != k {
-                b.swap(k, p);
-            }
-        }
-        for k in 0..n {
-            let nt = -b[k];
-            if nt == 0.0 {
-                continue;
-            }
-            let col = &self.hi[k * ld..k * ld + n];
-            for i in k + 1..n {
-                b[i] = col[i].mul_add(nt, b[i]);
-            }
-        }
-        for k in (0..n).rev() {
-            b[k] /= self.hi[k * ld + k];
-            let nt = -b[k];
-            let col = &self.hi[k * ld..k * ld + k];
-            for i in 0..k {
-                b[i] = col[i].mul_add(nt, b[i]);
-            }
-        }
+        simd::dispatch(SolveHi { lu: self, b })
+    }
+
+    fn solve_hi_on<S: Simd>(&self, b: &mut [f64]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let (n, ld) = (self.n, self.ld);
+                assert!(b.len() >= n);
+                for k in 0..n {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+                let mut v = vec![0.0f64; ld];
+                v[..n].copy_from_slice(&b[..n]);
+                for k in 0..n {
+                    let nt = -v[k];
+                    if nt == 0.0 {
+                        continue;
+                    }
+                    fma_rows::<S>(&mut v, &self.hi[k * ld..(k + 1) * ld], k + 1, n, nt);
+                }
+                for k in (0..n).rev() {
+                    v[k] /= self.hi[k * ld + k];
+                    let nt = -v[k];
+                    fma_rows::<S>(&mut v, &self.hi[k * ld..(k + 1) * ld], 0, k, nt);
+                }
+                b[..n].copy_from_slice(&v[..n]);
+            },
+        )
     }
 
     /// (sign, ln|det|) of the factored matrix: product of the pivots u_kk, sign flipped per row interchange.
@@ -948,15 +1062,7 @@ fn panel_getf2_f64<S: Simd>(
             for c in 0..jb {
                 let k = j0 + c;
                 let ck = c * ld;
-                let mut p = k;
-                let mut best = pa[ck + k].abs();
-                for i in k + 1..n {
-                    let v = pa[ck + i].abs();
-                    if v > best {
-                        best = v;
-                        p = i;
-                    }
-                }
+                let (p, best) = pivot_search::<S>(&pa[ck..ck + ld], k, n);
                 if best == 0.0 || !best.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                 }
@@ -966,9 +1072,14 @@ fn panel_getf2_f64<S: Simd>(
                         pa.swap(j * ld + k, j * ld + p);
                     }
                 }
-                let inv = 1.0 / pa[ck + k];
-                for i in k + 1..n {
-                    pa[ck + i] *= inv;
+                let inv = V8::<S>::splat(1.0 / pa[ck + k]);
+                let mut i = 8 * ((k + 1) / 8);
+                while i < n {
+                    let x = V8::load(&pa[ck + i..ck + i + 8]);
+                    rows_in::<S>(i, k + 1, n)
+                        .sel(x.mul(inv), x)
+                        .store(&mut pa[ck + i..ck + i + 8]);
+                    i += 8;
                 }
                 if k + 1 == n || c + 1 == jb {
                     continue;
@@ -1279,15 +1390,8 @@ fn lu_rect_f64_on<S: Simd>(
                     break;
                 }
                 let pan: &[f64] = pan;
-                // multipliers for the triangular update of rows j0..je, and packed by 8-row blocks from the aligned
-                // row r0 below je for the tiles (zero for rows < je, which the triangular update handles, and for
-                // rows >= nr)
-                let mut tri = vec![0.0f64; jb * jb];
-                for c in 0..jb {
-                    for i in j0 + c + 1..je {
-                        tri[c * jb + i - j0] = pan[c * ld + i];
-                    }
-                }
+                // the multipliers packed by 8-row blocks from the aligned row r0 below je for the tiles (zero for rows
+                // < je, which the triangular update takes from the panel, and for rows >= nr)
                 let r0 = 8 * (je / 8);
                 let nrb = (ld - r0) / 8;
                 let mut pk = vec![0.0f64; nrb * jb * 8];
@@ -1333,9 +1437,7 @@ fn lu_rect_f64_on<S: Simd>(
                                     if t == 0.0 {
                                         continue;
                                     }
-                                    for i in k + 1..je {
-                                        h[i] = tri[c * jb + i - j0].mul_add(t, h[i]);
-                                    }
+                                    fma_rows::<S>(h, &pan[c * ld..(c + 1) * ld], k + 1, je, t);
                                 }
                                 if nt[j * jb..(j + 1) * jb].iter().any(|&x| x != 0.0) {
                                     cols.push(j * ld);
@@ -1510,6 +1612,63 @@ impl Kernel for SolveMany<'_> {
     }
 }
 
+struct Solve<'a> {
+    lu: &'a DDLu,
+    b: &'a mut [DD],
+}
+
+impl Kernel for Solve<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu.solve_on::<S>(self.b)
+    }
+}
+
+struct SolveHi<'a> {
+    lu: &'a DDLu,
+    b: &'a mut [f64],
+}
+
+impl Kernel for SolveHi<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu.solve_hi_on::<S>(self.b)
+    }
+}
+
+struct StairSolve<'a> {
+    lu: &'a StaircaseLu,
+    b: &'a mut [DD],
+}
+
+impl Kernel for StairSolve<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu.solve_on::<S>(self.b)
+    }
+}
+
+struct StairSolveMany<'a> {
+    lu: &'a StaircaseLu,
+    bh: &'a mut [f64],
+    bl: &'a mut [f64],
+    nrhs: usize,
+    transpose: bool,
+    par: bool,
+}
+
+impl Kernel for StairSolveMany<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu
+            .solve_many_on::<S>(self.bh, self.bl, self.nrhs, self.transpose, self.par)
+    }
+}
+
 struct Gram<'a> {
     n: usize,
     ld: usize,
@@ -1579,8 +1738,9 @@ struct Step {
     ld: usize,
     /// ld x np, column-major: U11 on and above the diagonal, the multipliers of L below (rows up to nr)
     l: Vec<f64>,
-    /// np x nrc, column-major (leading dimension np): U12
+    /// np x nrc, column-major with leading dimension ldu = ld_for(np) (zero below row np): U12
     u12: Vec<f64>,
+    ldu: usize,
     perm: Vec<usize>,
     roff: usize,
     rlen: usize,
@@ -1731,12 +1891,13 @@ impl StaircaseLu {
                 w[k * ld + k] *= 1.0 + 1e-6;
             }
             // U12 (rows 0..np of the right columns) and the next carry (rows np..nr of the right columns)
-            let mut u12 = vec![0.0f64; np * nrc];
+            let ldu = ld_for(np);
+            let mut u12 = vec![0.0f64; ldu * nrc];
             let nc2 = nr - np;
             let mut carry2 = vec![0.0f64; nc2 * nrc];
             for c in 0..nrc {
                 let col = &w[(np + c) * ld..(np + c) * ld + nr];
-                u12[c * np..(c + 1) * np].copy_from_slice(&col[..np]);
+                u12[c * ldu..c * ldu + np].copy_from_slice(&col[..np]);
                 carry2[c * nc2..(c + 1) * nc2].copy_from_slice(&col[np..nr]);
             }
             w.truncate(ld * np);
@@ -1749,6 +1910,7 @@ impl StaircaseLu {
                 ld,
                 l: w,
                 u12,
+                ldu,
                 perm,
                 roff,
                 rlen,
@@ -1795,71 +1957,80 @@ impl StaircaseLu {
         (lo, hi)
     }
 
-    /// Solve J x = b in place (b: n values in the original row order in, the unknowns z out).
+    /// Solve J x = b in place (b: n values in the original row order in, the unknowns z out). Each column's update
+    /// runs 8 rows at a time on the backend `simd::dispatch` picks, every entry with the operations and order of the
+    /// scalar loops.
     pub fn solve(&self, b: &mut [DD]) {
-        assert_eq!(b.len(), self.n);
-        let ns = self.steps.len();
-        let mut carry: Vec<DD> = Vec::new();
-        let mut ys: Vec<Vec<DD>> = Vec::with_capacity(ns);
-        for (s, st) in self.steps.iter().enumerate() {
-            let mut v = carry;
-            if s + 1 < ns {
-                v.push(if s == 0 { b[self.irow0] } else { DD::ZERO });
-                v.extend_from_slice(&b[st.roff..st.roff + st.rlen]);
-            }
-            debug_assert_eq!(v.len(), st.nr);
-            for k in 0..st.np {
-                let p = st.perm[k];
-                if p != k {
-                    v.swap(k, p);
+        simd::dispatch(StairSolve { lu: self, b })
+    }
+
+    fn solve_on<S: Simd>(&self, b: &mut [DD]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert_eq!(b.len(), self.n);
+                let ns = self.steps.len();
+                let mut carry: Vec<DD> = Vec::new();
+                let mut ys: Vec<Vec<DD>> = Vec::with_capacity(ns);
+                for (s, st) in self.steps.iter().enumerate() {
+                    let mut v = carry;
+                    if s + 1 < ns {
+                        v.push(if s == 0 { b[self.irow0] } else { DD::ZERO });
+                        v.extend_from_slice(&b[st.roff..st.roff + st.rlen]);
+                    }
+                    debug_assert_eq!(v.len(), st.nr);
+                    for k in 0..st.np {
+                        let p = st.perm[k];
+                        if p != k {
+                            v.swap(k, p);
+                        }
+                    }
+                    let (mut vh, mut vl) = split(&v, st.ld);
+                    for k in 0..st.np {
+                        let nt = -DD { hi: vh[k], lo: vl[k] };
+                        if nt.hi == 0.0 {
+                            continue;
+                        }
+                        let col = &st.l[k * st.ld..(k + 1) * st.ld];
+                        axpy_rows::<S>(&mut vh, &mut vl, col, None, k + 1, st.nr, nt);
+                    }
+                    join(&mut v, &vh, &vl);
+                    carry = v.split_off(st.np);
+                    ys.push(v);
                 }
-            }
-            for k in 0..st.np {
-                let nt = -v[k];
-                if nt.hi == 0.0 {
-                    continue;
+                let mut xr: Vec<DD> = Vec::new();
+                let mut xs: Vec<Vec<DD>> = vec![Vec::new(); ns];
+                for s in (0..ns).rev() {
+                    let st = &self.steps[s];
+                    let mut y = std::mem::take(&mut ys[s]);
+                    let (mut yh, mut yl) = split(&y, st.ldu);
+                    for j in (0..st.nrc).rev() {
+                        let nt = -xr[j];
+                        if nt.hi == 0.0 {
+                            continue;
+                        }
+                        let col = &st.u12[j * st.ldu..(j + 1) * st.ldu];
+                        axpy_rows::<S>(&mut yh, &mut yl, col, None, 0, st.np, nt);
+                    }
+                    for k in (0..st.np).rev() {
+                        let q = DD { hi: yh[k], lo: yl[k] } / f64dd(Self::lu(st, k, k));
+                        (yh[k], yl[k]) = (q.hi, q.lo);
+                        let col = &st.l[k * st.ld..(k + 1) * st.ld];
+                        axpy_rows::<S>(&mut yh, &mut yl, col, None, 0, k, -q);
+                    }
+                    join(&mut y, &yh, &yl);
+                    xr = y.clone();
+                    xs[s] = y;
                 }
-                let col = &st.l[k * st.ld..k * st.ld + st.nr];
-                for i in k + 1..st.nr {
-                    v[i] = dd_axpy(v[i], f64dd(col[i]), nt);
+                for (s, g) in self.groups.iter().enumerate() {
+                    let o = g.param as usize;
+                    b[g.zoff..g.zoff + g.zlen].copy_from_slice(&xs[s][o..o + g.zlen]);
+                    if s == self.gparam {
+                        b[self.iparam] = xs[s][0];
+                    }
                 }
-            }
-            carry = v.split_off(st.np);
-            ys.push(v);
-        }
-        let mut xr: Vec<DD> = Vec::new();
-        let mut xs: Vec<Vec<DD>> = vec![Vec::new(); ns];
-        for s in (0..ns).rev() {
-            let st = &self.steps[s];
-            let mut y = std::mem::take(&mut ys[s]);
-            for j in (0..st.nrc).rev() {
-                let nt = -xr[j];
-                if nt.hi == 0.0 {
-                    continue;
-                }
-                let col = &st.u12[j * st.np..(j + 1) * st.np];
-                for i in 0..st.np {
-                    y[i] = dd_axpy(y[i], f64dd(col[i]), nt);
-                }
-            }
-            for k in (0..st.np).rev() {
-                y[k] = y[k] / f64dd(Self::lu(st, k, k));
-                let nt = -y[k];
-                let col = &st.l[k * st.ld..k * st.ld + k];
-                for i in 0..k {
-                    y[i] = dd_axpy(y[i], f64dd(col[i]), nt);
-                }
-            }
-            xr = y.clone();
-            xs[s] = y;
-        }
-        for (s, g) in self.groups.iter().enumerate() {
-            let o = g.param as usize;
-            b[g.zoff..g.zoff + g.zlen].copy_from_slice(&xs[s][o..o + g.zlen]);
-            if s == self.gparam {
-                b[self.iparam] = xs[s][0];
-            }
-        }
+            },
+        )
     }
 
     /// Solve J^T y = b in place (b: n values indexed by the unknowns in, by the residual rows out).
@@ -1880,7 +2051,7 @@ impl StaircaseLu {
                 let wp = &ws[s - 1];
                 for c in 0..st.np {
                     let mut acc = v[c];
-                    let col = &sp.u12[c * sp.np..(c + 1) * sp.np];
+                    let col = &sp.u12[c * sp.ldu..c * sp.ldu + sp.np];
                     for i in 0..sp.np {
                         acc = dd_axpy(acc, f64dd(col[i]), -wp[i]);
                     }
@@ -1931,27 +2102,244 @@ impl StaircaseLu {
         b.copy_from_slice(&out);
     }
 
-    /// Several right-hand sides, row-major (nrhs, n) as (hi, lo), in place; each row as solve / solve_t gives it.
+    /// Several right-hand sides, row-major (nrhs, n) as (hi, lo), in place; each row bitwise as solve / solve_t
+    /// gives it. Eight right-hand sides share each lane vector (`solve_dv`, `solve_t_dv`), and the groups of eight run
+    /// in parallel when par.
     pub fn solve_many(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
-        let n = self.n;
-        let one = |(h, l): (&mut [f64], &mut [f64])| {
-            let mut b: Vec<DD> = h.iter().zip(l.iter()).map(|(&a, &c)| DD { hi: a, lo: c }).collect();
-            if transpose {
-                self.solve_t(&mut b);
-            } else {
-                self.solve(&mut b);
-            }
-            for i in 0..n {
-                h[i] = b[i].hi;
-                l[i] = b[i].lo;
-            }
-        };
-        let (bh, bl) = (&mut bh[..nrhs * n], &mut bl[..nrhs * n]);
-        if par {
-            bh.par_chunks_mut(n).zip(bl.par_chunks_mut(n)).for_each(one);
-        } else {
-            bh.chunks_mut(n).zip(bl.chunks_mut(n)).for_each(one);
-        }
+        simd::dispatch(StairSolveMany {
+            lu: self,
+            bh,
+            bl,
+            nrhs,
+            transpose,
+            par,
+        })
+    }
+
+    fn solve_many_on<S: Simd>(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let n = self.n;
+                assert!(bh.len() >= nrhs * n && bl.len() >= nrhs * n);
+                let ng = nrhs.div_ceil(8);
+                let (bh0, bl0): (&[f64], &[f64]) = (bh, bl);
+                let group = |g: usize| -> Vec<DV<S>> {
+                    S::vectorize(
+                        #[inline(always)]
+                        || {
+                            let live = (nrhs - 8 * g).min(8);
+                            let mut v = vec![DV::<S>::zero(); n];
+                            let mut h = [0.0f64; 8];
+                            let mut l = [0.0f64; 8];
+                            for (i, vi) in v.iter_mut().enumerate() {
+                                for r in 0..live {
+                                    h[r] = bh0[(8 * g + r) * n + i];
+                                    l[r] = bl0[(8 * g + r) * n + i];
+                                }
+                                *vi = DV {
+                                    hi: V8::from_array(h),
+                                    lo: V8::from_array(l),
+                                };
+                            }
+                            if transpose {
+                                self.solve_t_dv(&mut v);
+                            } else {
+                                self.solve_dv(&mut v);
+                            }
+                            v
+                        },
+                    )
+                };
+                let out: Vec<Vec<DV<S>>> = if par && ng > 1 {
+                    (0..ng).into_par_iter().map(group).collect()
+                } else {
+                    (0..ng).map(group).collect()
+                };
+                for (g, v) in out.iter().enumerate() {
+                    let live = (nrhs - 8 * g).min(8);
+                    for (i, vi) in v.iter().enumerate() {
+                        let (h, l) = (vi.hi.to_array(), vi.lo.to_array());
+                        for r in 0..live {
+                            bh[(8 * g + r) * n + i] = h[r];
+                            bl[(8 * g + r) * n + i] = l[r];
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    /// `solve` lane by lane: each lane a right-hand side (padding lanes hold zeros and stay zero). The scalar solve
+    /// skips a column whose -y_k has a zero leading part; here those lanes keep their values.
+    fn solve_dv<S: Simd>(&self, b: &mut [DV<S>]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let ns = self.steps.len();
+                let z = V8::<S>::zero();
+                let l8 = |x: f64| DV::<S> {
+                    hi: V8::splat(x),
+                    lo: z,
+                };
+                let mut carry: Vec<DV<S>> = Vec::new();
+                let mut ys: Vec<Vec<DV<S>>> = Vec::with_capacity(ns);
+                for (s, st) in self.steps.iter().enumerate() {
+                    let mut v = carry;
+                    if s + 1 < ns {
+                        v.push(if s == 0 { b[self.irow0] } else { DV::zero() });
+                        v.extend_from_slice(&b[st.roff..st.roff + st.rlen]);
+                    }
+                    for k in 0..st.np {
+                        let p = st.perm[k];
+                        if p != k {
+                            v.swap(k, p);
+                        }
+                    }
+                    for k in 0..st.np {
+                        let nt = -v[k];
+                        let m = nt.hi.eq(z).not();
+                        if m.bits() == 0 {
+                            continue;
+                        }
+                        let col = &st.l[k * st.ld..k * st.ld + st.nr];
+                        for i in k + 1..st.nr {
+                            v[i] = sel_dv(m, axpy8(v[i], l8(col[i]), nt), v[i]);
+                        }
+                    }
+                    carry = v.split_off(st.np);
+                    ys.push(v);
+                }
+                let mut xr: Vec<DV<S>> = Vec::new();
+                let mut xs: Vec<Vec<DV<S>>> = vec![Vec::new(); ns];
+                for s in (0..ns).rev() {
+                    let st = &self.steps[s];
+                    let mut y = std::mem::take(&mut ys[s]);
+                    for j in (0..st.nrc).rev() {
+                        let nt = -xr[j];
+                        let m = nt.hi.eq(z).not();
+                        if m.bits() == 0 {
+                            continue;
+                        }
+                        let col = &st.u12[j * st.ldu..j * st.ldu + st.np];
+                        for i in 0..st.np {
+                            y[i] = sel_dv(m, axpy8(y[i], l8(col[i]), nt), y[i]);
+                        }
+                    }
+                    for k in (0..st.np).rev() {
+                        y[k] = y[k] / l8(Self::lu(st, k, k));
+                        let nt = -y[k];
+                        let col = &st.l[k * st.ld..k * st.ld + k];
+                        for i in 0..k {
+                            y[i] = axpy8(y[i], l8(col[i]), nt);
+                        }
+                    }
+                    xr = y.clone();
+                    xs[s] = y;
+                }
+                for (s, g) in self.groups.iter().enumerate() {
+                    let o = g.param as usize;
+                    b[g.zoff..g.zoff + g.zlen].copy_from_slice(&xs[s][o..o + g.zlen]);
+                    if s == self.gparam {
+                        b[self.iparam] = xs[s][0];
+                    }
+                }
+            },
+        )
+    }
+
+    /// `solve_t` lane by lane.
+    fn solve_t_dv<S: Simd>(&self, b: &mut [DV<S>]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let ns = self.steps.len();
+                let z = V8::<S>::zero();
+                let l8 = |x: f64| DV::<S> {
+                    hi: V8::splat(x),
+                    lo: z,
+                };
+                let mut ws: Vec<Vec<DV<S>>> = Vec::with_capacity(ns);
+                for (s, g) in self.groups.iter().enumerate() {
+                    let st = &self.steps[s];
+                    let mut v: Vec<DV<S>> = Vec::with_capacity(st.np);
+                    if g.param {
+                        v.push(if s == self.gparam { b[self.iparam] } else { DV::zero() });
+                    }
+                    v.extend_from_slice(&b[g.zoff..g.zoff + g.zlen]);
+                    if s > 0 {
+                        let sp = &self.steps[s - 1];
+                        let nw: Vec<DV<S>> = ws[s - 1].iter().map(|&w| -w).collect();
+                        for c in 0..st.np {
+                            let mut acc = v[c];
+                            let col = &sp.u12[c * sp.ldu..c * sp.ldu + sp.np];
+                            for i in 0..sp.np {
+                                acc = axpy8(acc, l8(col[i]), nw[i]);
+                            }
+                            v[c] = acc;
+                        }
+                    }
+                    for k in 0..st.np {
+                        let mut acc = v[k];
+                        let col = &st.l[k * st.ld..k * st.ld + k];
+                        for i in 0..k {
+                            acc = axpy8(acc, l8(col[i]), -v[i]);
+                        }
+                        v[k] = acc / l8(Self::lu(st, k, k));
+                    }
+                    ws.push(v);
+                }
+                let mut adj: Vec<DV<S>> = Vec::new();
+                let mut out = vec![DV::<S>::zero(); self.n];
+                for s in (0..ns).rev() {
+                    let st = &self.steps[s];
+                    let mut v = std::mem::take(&mut ws[s]);
+                    v.extend_from_slice(&adj);
+                    for k in (0..st.np).rev() {
+                        let mut acc = v[k];
+                        let col = &st.l[k * st.ld..k * st.ld + st.nr];
+                        for i in k + 1..st.nr {
+                            acc = axpy8(acc, l8(col[i]), -v[i]);
+                        }
+                        v[k] = acc;
+                    }
+                    for k in (0..st.np).rev() {
+                        let p = st.perm[k];
+                        if p != k {
+                            v.swap(k, p);
+                        }
+                    }
+                    if s + 1 < ns {
+                        if s == 0 {
+                            out[self.irow0] = v[st.nc];
+                        }
+                        out[st.roff..st.roff + st.rlen].copy_from_slice(&v[st.nc + 1..st.nr]);
+                    }
+                    v.truncate(st.nc);
+                    adj = v;
+                }
+                b.copy_from_slice(&out);
+            },
+        )
+    }
+}
+
+/// x's parts as two arrays of len (at least x.len(), zero after)
+#[inline(always)]
+fn split(x: &[DD], len: usize) -> (Vec<f64>, Vec<f64>) {
+    let (mut h, mut l) = (vec![0.0f64; len], vec![0.0f64; len]);
+    for (i, v) in x.iter().enumerate() {
+        h[i] = v.hi;
+        l[i] = v.lo;
+    }
+    (h, l)
+}
+
+/// x from the arrays h and l
+#[inline(always)]
+fn join(x: &mut [DD], h: &[f64], l: &[f64]) {
+    for (i, v) in x.iter_mut().enumerate() {
+        *v = DD { hi: h[i], lo: l[i] };
     }
 }
 
@@ -2235,8 +2623,411 @@ mod tests {
             let (mut r, mut perm) = (self.h.clone(), vec![0usize; 70]);
             lu_rect_f64_on::<S>(n, n, 70, ld, &mut r, &mut perm, true).unwrap();
             let perm: Vec<f64> = perm.iter().map(|&p| p as f64).collect();
-            [u.hi, u.lo, b.hi, b.lo, f.hi, xh, xl, gh, gl, g, r, perm].concat()
+            // the single right-hand-side solves, with zeros and negative zeros in b
+            let rhs = |n: usize| -> Vec<DD> {
+                (0..n)
+                    .map(|i| match i % 5 {
+                        0 => DD::ZERO,
+                        3 => DD { hi: -0.0, lo: 0.0 },
+                        _ => DD {
+                            hi: self.h[i * 3 % self.h.len()],
+                            lo: self.l[i * 7 % self.l.len()],
+                        },
+                    })
+                    .collect()
+            };
+            let parts = |x: &[DD]| -> Vec<f64> { x.iter().flat_map(|d| [d.hi, d.lo]).collect() };
+            let mut x1 = rhs(n);
+            u.solve_on::<S>(&mut x1);
+            let mut x2 = rhs(n);
+            f.solve_on::<S>(&mut x2);
+            let mut x3: Vec<f64> = rhs(n).iter().map(|d| d.hi).collect();
+            f.solve_hi_on::<S>(&mut x3);
+            // the staircase solves, single and 8 lanes at a time
+            let st = stair(4, 3);
+            let sn = st.n;
+            let mut y1 = rhs(sn);
+            st.solve_on::<S>(&mut y1);
+            let kk = 11;
+            let bb: Vec<DD> = (0..kk).flat_map(|_| rhs(sn)).collect();
+            let mut ys = Vec::new();
+            for t in [false, true] {
+                let mut bh: Vec<f64> = bb.iter().map(|d| d.hi).collect();
+                let mut bl: Vec<f64> = bb.iter().map(|d| d.lo).collect();
+                st.solve_many_on::<S>(&mut bh, &mut bl, kk, t, true);
+                ys.push(bh);
+                ys.push(bl);
+            }
+            [
+                u.hi,
+                u.lo,
+                b.hi,
+                b.lo,
+                f.hi,
+                xh,
+                xl,
+                gh,
+                gl,
+                g,
+                r,
+                perm,
+                parts(&x1),
+                parts(&x2),
+                x3,
+                parts(&y1),
+                ys.concat(),
+            ]
+            .concat()
         }
+    }
+
+    /// a staircase LU with column groups a, b (k of them), a (b = 2 a), each row block filled with deterministic
+    /// pseudo-random entries
+    fn stair(a: usize, k: usize) -> StaircaseLu {
+        let b = 2 * a;
+        let n = 2 * a + k * b + 1;
+        let mut groups = vec![ColumnGroup {
+            param: false,
+            zoff: 0,
+            zlen: a,
+        }];
+        for t in 1..=k + 1 {
+            groups.push(ColumnGroup {
+                param: true,
+                zoff: a + (t - 1) * b,
+                zlen: if t == k + 1 { a } else { b },
+            });
+        }
+        let rblocks: Vec<(usize, usize)> = (0..=k).map(|blk| (blk * b, b)).collect();
+        let gs = groups.clone();
+        let fill = |s: usize, w: &mut [f64], wld: usize, r0: usize| -> Result<(), String> {
+            let ncol = gs[s].len() + gs[s + 1].len();
+            let x = |i: usize, c: usize| (((s * 131 + i * 31 + c * 17) % 97) as f64 - 48.0) / 48.0;
+            for c in 0..ncol {
+                for i in 0..b {
+                    w[c * wld + r0 + i] = x(i, c);
+                }
+                if s == 0 && c < gs[0].len() {
+                    w[c * wld + r0 - 1] = x(99, c) + 0.7;
+                }
+            }
+            Ok(())
+        };
+        StaircaseLu::factor(n, groups, &rblocks, n - 1, n - 1, fill, false).unwrap()
+    }
+
+    // The scalar loops the lane code replaced, as references: each lane version must give their bits.
+
+    fn pivot_ref(col: &[f64], k: usize, n: usize) -> (usize, f64) {
+        let (mut p, mut best) = (k, col[k].abs());
+        for i in k + 1..n {
+            let v = col[i].abs();
+            if v > best {
+                best = v;
+                p = i;
+            }
+        }
+        (p, best)
+    }
+
+    fn solve_ref(lu: &DDLu, b: &mut [DD]) {
+        let n = lu.n;
+        for k in 0..n {
+            let p = lu.perm[k];
+            if p != k {
+                b.swap(k, p);
+            }
+        }
+        for k in 0..n {
+            let nt = -b[k];
+            if nt.hi == 0.0 {
+                continue;
+            }
+            for i in k + 1..n {
+                b[i] = dd_axpy(b[i], lu.at(i, k), nt);
+            }
+        }
+        for k in (0..n).rev() {
+            b[k] = b[k] / lu.at(k, k);
+            let nt = -b[k];
+            for i in 0..k {
+                b[i] = dd_axpy(b[i], lu.at(i, k), nt);
+            }
+        }
+    }
+
+    fn solve_hi_ref(lu: &DDLu, b: &mut [f64]) {
+        let (n, ld) = (lu.n, lu.ld);
+        for k in 0..n {
+            let p = lu.perm[k];
+            if p != k {
+                b.swap(k, p);
+            }
+        }
+        for k in 0..n {
+            let nt = -b[k];
+            if nt == 0.0 {
+                continue;
+            }
+            for i in k + 1..n {
+                b[i] = lu.hi[k * ld + i].mul_add(nt, b[i]);
+            }
+        }
+        for k in (0..n).rev() {
+            b[k] /= lu.hi[k * ld + k];
+            let nt = -b[k];
+            for i in 0..k {
+                b[i] = lu.hi[k * ld + i].mul_add(nt, b[i]);
+            }
+        }
+    }
+
+    fn stair_solve_ref(lu: &StaircaseLu, b: &mut [DD]) {
+        let ns = lu.steps.len();
+        let mut carry: Vec<DD> = Vec::new();
+        let mut ys: Vec<Vec<DD>> = Vec::new();
+        for (s, st) in lu.steps.iter().enumerate() {
+            let mut v = carry;
+            if s + 1 < ns {
+                v.push(if s == 0 { b[lu.irow0] } else { DD::ZERO });
+                v.extend_from_slice(&b[st.roff..st.roff + st.rlen]);
+            }
+            for k in 0..st.np {
+                let p = st.perm[k];
+                if p != k {
+                    v.swap(k, p);
+                }
+            }
+            for k in 0..st.np {
+                let nt = -v[k];
+                if nt.hi == 0.0 {
+                    continue;
+                }
+                for i in k + 1..st.nr {
+                    v[i] = dd_axpy(v[i], f64dd(StaircaseLu::lu(st, i, k)), nt);
+                }
+            }
+            carry = v.split_off(st.np);
+            ys.push(v);
+        }
+        let mut xr: Vec<DD> = Vec::new();
+        let mut xs: Vec<Vec<DD>> = vec![Vec::new(); ns];
+        for s in (0..ns).rev() {
+            let st = &lu.steps[s];
+            let mut y = std::mem::take(&mut ys[s]);
+            for j in (0..st.nrc).rev() {
+                let nt = -xr[j];
+                if nt.hi == 0.0 {
+                    continue;
+                }
+                for i in 0..st.np {
+                    y[i] = dd_axpy(y[i], f64dd(st.u12[j * st.ldu + i]), nt);
+                }
+            }
+            for k in (0..st.np).rev() {
+                y[k] = y[k] / f64dd(StaircaseLu::lu(st, k, k));
+                let nt = -y[k];
+                for i in 0..k {
+                    y[i] = dd_axpy(y[i], f64dd(StaircaseLu::lu(st, i, k)), nt);
+                }
+            }
+            xr = y.clone();
+            xs[s] = y;
+        }
+        for (s, g) in lu.groups.iter().enumerate() {
+            let o = g.param as usize;
+            b[g.zoff..g.zoff + g.zlen].copy_from_slice(&xs[s][o..o + g.zlen]);
+            if s == lu.gparam {
+                b[lu.iparam] = xs[s][0];
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct LanesMatchScalar;
+
+    impl Kernel for LanesMatchScalar {
+        type Output = ();
+        #[inline(always)]
+        fn run<S: Simd>(self) {
+            let mut r = 0x9e37_79b9_7f4a_7c15u64;
+            let mut next = move || {
+                r ^= r << 13;
+                r ^= r >> 7;
+                r ^= r << 17;
+                r
+            };
+            // pivot search: random magnitudes with ties, signed zeros, infinities and NaNs, every k and n
+            let pick = |x: u64| match x % 9 {
+                0 => 0.0,
+                1 => -0.0,
+                2 => 1.0,
+                3 => -1.0,
+                4 => f64::NAN,
+                5 => f64::INFINITY,
+                _ => ((x >> 8) % 1000) as f64 / 100.0 - 5.0,
+            };
+            let mut ties = 0;
+            for _ in 0..3000 {
+                let n = 1 + (next() % 40) as usize;
+                let k = (next() % n as u64) as usize;
+                let col: Vec<f64> = (0..ld_for(n)).map(|_| pick(next())).collect();
+                let (p, b) = pivot_search::<S>(&col, k, n);
+                let (q, c) = pivot_ref(&col, k, n);
+                assert!(
+                    p == q && b.to_bits() == c.to_bits(),
+                    "{}: pivot {p} {b} vs {q} {c}",
+                    S::NAME
+                );
+                // the last row with the largest value, which the lanes must not pick
+                ties += (k..n).rev().find(|&i| col[i].abs() == c).is_some_and(|i| i != q) as usize;
+            }
+            assert!(
+                ties > 100,
+                "control: too few ties ({ties}) to tell the first maximum from the last"
+            );
+            // axpy_rows and fma_rows against the scalar loops, every range in 0..40
+            for _ in 0..2000 {
+                let len = 40;
+                let (lo, hi) = {
+                    let a = (next() % 41) as usize;
+                    let b = (next() % 41) as usize;
+                    (a.min(b), a.max(b))
+                };
+                // finite values, with negative zeros
+                let v = |x: u64| {
+                    let y = if x.is_multiple_of(7) { -0.0 } else { pick(x) };
+                    if y.is_finite() {
+                        y
+                    } else {
+                        2.5
+                    }
+                };
+                let bh: Vec<f64> = (0..len).map(|_| v(next())).collect();
+                let bl: Vec<f64> = bh.iter().map(|x| x * 1e-17).collect();
+                let lh: Vec<f64> = (0..len).map(|_| v(next())).collect();
+                let ll: Vec<f64> = lh.iter().map(|x| x * -1e-17).collect();
+                let nt = DD::new(v(next()), 0.0);
+                let (mut gh, mut gl) = (bh.clone(), bl.clone());
+                axpy_rows::<S>(&mut gh, &mut gl, &lh, Some(&ll), lo, hi, nt);
+                let mut g1 = bh.clone();
+                fma_rows::<S>(&mut g1, &lh, lo, hi, nt.hi);
+                for i in 0..len {
+                    let (w, w1) = if i >= lo && i < hi {
+                        (
+                            dd_axpy(DD { hi: bh[i], lo: bl[i] }, DD { hi: lh[i], lo: ll[i] }, nt),
+                            lh[i].mul_add(nt.hi, bh[i]),
+                        )
+                    } else {
+                        (DD { hi: bh[i], lo: bl[i] }, bh[i])
+                    };
+                    assert!(
+                        gh[i].to_bits() == w.hi.to_bits() && gl[i].to_bits() == w.lo.to_bits(),
+                        "{}: axpy_rows {lo}..{hi} row {i}",
+                        S::NAME
+                    );
+                    assert_eq!(
+                        g1[i].to_bits(),
+                        w1.to_bits(),
+                        "{}: fma_rows {lo}..{hi} row {i}",
+                        S::NAME
+                    );
+                }
+            }
+            // the solves
+            for (n, seed) in [(1usize, 1u64), (7, 2), (8, 3), (9, 4), (33, 5), (100, 6)] {
+                let (ld, mut h, mut l) = mat(n, seed);
+                for i in (0..ld * n).step_by(5) {
+                    (h[i], l[i]) = if i % 2 == 0 { (0.0, 0.0) } else { (-0.0, 0.0) };
+                }
+                for j in 0..n {
+                    h[j * ld + j] += 4.0;
+                }
+                let lu = DDLu::factor_unblocked_on::<S>(n, ld, h, l, false).unwrap();
+                let b: Vec<DD> = (0..n)
+                    .map(|i| match i % 4 {
+                        0 => DD::ZERO,
+                        1 => DD { hi: -0.0, lo: 0.0 },
+                        _ => DD::new(lu.hi[i] + 0.5, 1e-18),
+                    })
+                    .collect();
+                let (mut x, mut y) = (b.clone(), b.clone());
+                lu.solve_on::<S>(&mut x);
+                solve_ref(&lu, &mut y);
+                for i in 0..n {
+                    assert!(
+                        x[i].hi.to_bits() == y[i].hi.to_bits() && x[i].lo.to_bits() == y[i].lo.to_bits(),
+                        "{}: solve n {n} row {i}",
+                        S::NAME
+                    );
+                }
+                let mut x: Vec<f64> = b.iter().map(|d| d.hi).collect();
+                let mut y = x.clone();
+                lu.solve_hi_on::<S>(&mut x);
+                solve_hi_ref(&lu, &mut y);
+                assert_eq!(bits_differ(&x, &y), 0, "{}: solve_hi n {n}", S::NAME);
+            }
+            for (a, k) in [(2usize, 1usize), (4, 3), (5, 6)] {
+                let st = stair(a, k);
+                let n = st.n;
+                let b: Vec<DD> = (0..n)
+                    .map(|i| match i % 4 {
+                        0 => DD::ZERO,
+                        1 => DD { hi: -0.0, lo: 0.0 },
+                        _ => DD::new((i % 13) as f64 - 6.0, 1e-18),
+                    })
+                    .collect();
+                let (mut x, mut y) = (b.clone(), b.clone());
+                st.solve_on::<S>(&mut x);
+                stair_solve_ref(&st, &mut y);
+                for i in 0..n {
+                    assert!(
+                        x[i].hi.to_bits() == y[i].hi.to_bits() && x[i].lo.to_bits() == y[i].lo.to_bits(),
+                        "{}: staircase solve a {a} k {k} row {i}",
+                        S::NAME
+                    );
+                }
+            }
+        }
+    }
+
+    /// The lane code (pivot search, row updates, the single solves) gives the scalar loops' bits on every backend.
+    /// Control: the pivot inputs have ties, so a search that took the last maximum would fail.
+    #[test]
+    fn lane_code_matches_the_scalar_loops() {
+        simd::for_each_available(LanesMatchScalar);
+    }
+
+    /// Control for the solve references: a solve whose update rounds the product to f64 first differs from them.
+    #[test]
+    fn control_rounded_update_differs() {
+        let (n, seed) = (20, 9);
+        let (ld, h, l) = mat(n, seed);
+        let lu = DDLu::factor(n, ld, h, l, false).unwrap();
+        let b: Vec<DD> = (0..n).map(|i| DD::new(i as f64 - 9.5, 1e-18)).collect();
+        let mut y = b.clone();
+        solve_ref(&lu, &mut y);
+        let mut z = b.clone();
+        for k in 0..n {
+            let p = lu.perm[k];
+            if p != k {
+                z.swap(k, p);
+            }
+        }
+        for k in 0..n {
+            let nt = -z[k];
+            for i in k + 1..n {
+                z[i] = z[i] + DD::from_f64(lu.at(i, k).hi * nt.hi);
+            }
+        }
+        for k in (0..n).rev() {
+            z[k] = z[k] / lu.at(k, k);
+            let nt = -z[k];
+            for i in 0..k {
+                z[i] = z[i] + DD::from_f64(lu.at(i, k).hi * nt.hi);
+            }
+        }
+        assert!((0..n).any(|i| z[i].hi.to_bits() != y[i].hi.to_bits() || z[i].lo.to_bits() != y[i].lo.to_bits()));
     }
 
     fn bits_differ(a: &[f64], b: &[f64]) -> usize {
@@ -2244,7 +3035,8 @@ mod tests {
         a.iter().zip(b).filter(|(x, y)| x.to_bits() != y.to_bits()).count()
     }
 
-    /// The factors, the solutions and the Gram matrix are bitwise the same on every backend this CPU runs.
+    /// The factors, the solutions (dense and staircase, one and many right-hand sides) and the Gram matrix are bitwise
+    /// the same on every backend this CPU runs.
     #[test]
     fn every_backend_gives_the_same_bits() {
         let n = 157;
