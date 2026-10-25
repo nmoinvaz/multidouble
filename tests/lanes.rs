@@ -351,3 +351,98 @@ impl Kernel for QvMatchesQd {
 fn qv_matches_qd() {
     on_every_backend(QvMatchesQd);
 }
+
+/// Values with signed zeros in every part: the lanes must give the same zero signs as the scalar types. Negation
+/// is the case that differed (the lanes formed 0 - x, which turns -(+0) into +0); the other operations run here too.
+#[derive(Clone)]
+struct SignedZerosMatchScalar;
+
+/// double-doubles with a zero or signed-zero part: hi in {+0, -0, 1, -1, 2^-60}, lo in {+0, -0}
+fn zero_dds() -> Vec<DD> {
+    let mut v = Vec::new();
+    for hi in [0.0, -0.0, 1.0, -1.0, 2f64.powi(-60)] {
+        for lo in [0.0, -0.0] {
+            v.push(DD { hi, lo });
+        }
+    }
+    v
+}
+
+impl Kernel for SignedZerosMatchScalar {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let zs = zero_dds();
+        let qs: Vec<QD> = zs
+            .iter()
+            .flat_map(|d| {
+                [
+                    QD {
+                        x: [d.hi, d.lo, 0.0, -0.0],
+                    },
+                    QD {
+                        x: [d.hi, d.lo, -0.0, 0.0],
+                    },
+                ]
+            })
+            .collect();
+        let dd_same = |g: DD, w: DD| same(g.hi, w.hi) && same(g.lo, w.lo);
+        let qd_same = |g: QD, w: QD| g.x.iter().zip(w.x.iter()).all(|(a, b)| same(*a, *b));
+        for &a in &zs {
+            let x = V8::<S>::splat(a.hi);
+            assert!(same(x.neg().to_array()[0], -a.hi), "{}: V8 neg {:e}", S::NAME, a.hi);
+            for &b in &zs {
+                let (va, vb) = (DV::<S>::splat(a), DV::<S>::splat(b));
+                let mut ops = vec![("neg", -va, -a), ("add", va + vb, a + b), ("sub", va - vb, a - b)];
+                ops.push(("mul", va * vb, a * b));
+                if b.hi != 0.0 {
+                    ops.push(("div", va / vb, a / b));
+                }
+                for (name, g, w) in ops {
+                    for j in 0..8 {
+                        assert!(
+                            dd_same(g.lane(j), w),
+                            "{}: DV {name} {a:?} {b:?}: {:?} vs {w:?}",
+                            S::NAME,
+                            g.lane(j)
+                        );
+                    }
+                }
+            }
+        }
+        for &a in &qs {
+            for &b in &qs {
+                let (va, vb) = (QV::<S>::from_lanes(&[a; 8]), QV::<S>::from_lanes(&[b; 8]));
+                let mut ops = vec![("neg", -va, -a), ("add", va + vb, a + b), ("sub", va - vb, a - b)];
+                ops.push(("ieee_add", va.ieee_add(vb), a.ieee_add(b)));
+                ops.push(("mul", va * vb, a * b));
+                for (name, g, w) in ops {
+                    for j in 0..8 {
+                        assert!(
+                            qd_same(g.lane(j), w),
+                            "{}: QV {name} {a:?} {b:?}: {:?} vs {w:?}",
+                            S::NAME,
+                            g.lane(j)
+                        );
+                    }
+                }
+            }
+        }
+        // control: negation as 0 - x, which the lanes used, misses the sign of -(+0)
+        let z = DD::ZERO;
+        let old = DV::<S> {
+            hi: V8::zero().sub(V8::splat(z.hi)),
+            lo: V8::zero().sub(V8::splat(z.lo)),
+        };
+        assert!(
+            !dd_same(old.lane(0), -z),
+            "{}: control: 0 - x matches -x on +0",
+            S::NAME
+        );
+    }
+}
+
+#[test]
+fn signed_zeros_match_the_scalar_types() {
+    on_every_backend(SignedZerosMatchScalar);
+}

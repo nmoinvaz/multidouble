@@ -321,7 +321,7 @@ impl<S: Simd> Neg for F8<S> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> F8<S> {
-        F8(V8::zero().sub(self.0))
+        F8(self.0.neg())
     }
 }
 impl<S: Simd> Mul for F8<S> {
@@ -449,10 +449,9 @@ impl<S: Simd> Neg for Fu<S> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Fu<S> {
-        let z = V8::zero();
         Fu {
-            v: z.sub(self.v),
-            d: z.sub(self.d),
+            v: self.v.neg(),
+            d: self.d.neg(),
         }
     }
 }
@@ -636,7 +635,7 @@ impl<S: Simd, const N: usize> Neg for Dtn<S, N> {
     fn neg(self) -> Self {
         let mut d = self.d;
         for i in 0..N {
-            d[i] = V8::zero().sub(self.d[i]);
+            d[i] = self.d[i].neg();
         }
         Dtn { v: -self.v, d }
     }
@@ -820,10 +819,9 @@ impl<S: Simd, const N: usize> Neg for Fun<S, N> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        let z = V8::zero();
         Fun {
-            v: z.sub(self.v),
-            d: self.d.map(|x| z.sub(x)),
+            v: self.v.neg(),
+            d: self.d.map(|x| x.neg()),
         }
     }
 }

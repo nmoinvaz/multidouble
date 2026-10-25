@@ -42,6 +42,8 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn fma(a: Self::R, b: Self::R, c: Self::R) -> Self::R;
     /// a b - c with one rounding
     fn fms(a: Self::R, b: Self::R, c: Self::R) -> Self::R;
+    /// -a: the sign bit flipped, so -(+0) = -0 as for f64 (0 - a would give +0)
+    fn neg(a: Self::R) -> Self::R;
     fn abs(a: Self::R) -> Self::R;
     fn max(a: Self::R, b: Self::R) -> Self::R;
     /// all lanes = lane j

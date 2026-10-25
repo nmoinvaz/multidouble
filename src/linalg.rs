@@ -58,16 +58,6 @@ const CW: usize = 8;
 const NC: usize = 4;
 const TR: usize = 2;
 
-/// Scalar negation of every lane (-x, as DD's Neg: keeps signed zeros as the scalar solve has them).
-#[inline(always)]
-fn neg_lanes<S: Simd>(v: DV<S>) -> DV<S> {
-    let (h, l) = (v.hi.to_array(), v.lo.to_array());
-    DV {
-        hi: V8::from_array(h.map(|x| -x)),
-        lo: V8::from_array(l.map(|x| -x)),
-    }
-}
-
 /// Scalar DD division of every lane by d.
 #[inline(always)]
 fn div_lanes<S: Simd>(v: DV<S>, d: DD) -> DV<S> {
@@ -700,7 +690,7 @@ impl DDLu {
                     }
                 }
                 for k in 0..n {
-                    let nt = neg_lanes(b[k]);
+                    let nt = -b[k];
                     let z = nt.hi.to_array();
                     let nz = z.iter().filter(|&&x| x == 0.0).count();
                     if nz == 8 {
@@ -722,7 +712,7 @@ impl DDLu {
                 for k in (0..n).rev() {
                     let q = div_lanes(b[k], self.at(k, k));
                     b[k] = q;
-                    let nt = neg_lanes(q);
+                    let nt = -q;
                     let col = k * self.ld;
                     for i in rg[k].0.min(k)..rg[k].1.min(k) {
                         b[i] = axpy8(
@@ -760,7 +750,7 @@ impl DDLu {
                         );
                     }
                     b[k] = div_lanes(acc, self.at(k, k));
-                    nb[k] = neg_lanes(b[k]);
+                    nb[k] = -b[k];
                 }
                 for k in (0..n).rev() {
                     let col = k * self.ld;
@@ -776,7 +766,7 @@ impl DDLu {
                         );
                     }
                     b[k] = acc;
-                    nb[k] = neg_lanes(acc);
+                    nb[k] = -acc;
                 }
                 for k in (0..n).rev() {
                     let p = self.perm[k];
