@@ -9,6 +9,9 @@
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
 //!   trajectory computed once (and to double-double accuracy) for all of them.
 //!
+//! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
+//! generic code.
+//!
 //! Each lane type is generic over the backend (`crate::simd`), which `Lane::S` names, so that code generic over
 //! `Lane` runs on the instruction set [`crate::simd::dispatch`] picks.
 use crate::dd::DD;
@@ -985,5 +988,155 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
     #[inline(always)]
     fn set_tan64(&mut self, k: usize, t: V8<S>) {
         self.d[k] = t;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// counting lanes
+// ---------------------------------------------------------------------------------------------------------------
+
+/// The kinds of lane operation `Counted` counts; `take_counts()[i]` is the count of `COUNTED_OPS[i]`. "x f64" covers
+/// `mulf` and `mul_pwr2`, "x const" `mulc` (and `muls`), "+ const" `addc`; `cst`, `splat`, `bcast`, `val`, `tan`,
+/// `from_vt` and the f64 tangent accessors move data and are not counted.
+pub const COUNTED_OPS: [&str; 11] = [
+    "add/sub", "mul", "div", "neg", "x const", "x f64", "+ const", "acc a b", "acc a c", "acc a", "finish",
+];
+
+std::thread_local!(static COUNTS: std::cell::RefCell<[u64; 11]> = const { std::cell::RefCell::new([0; 11]) });
+
+#[inline(always)]
+fn count(i: usize) {
+    COUNTS.with(|c| c.borrow_mut()[i] += 1);
+}
+
+/// This thread's operation counts since the last call (in the order of `COUNTED_OPS`), and reset them. The counts
+/// are per thread: run the computation to be counted on one thread.
+pub fn take_counts() -> [u64; 11] {
+    COUNTS.with(|c| std::mem::take(&mut *c.borrow_mut()))
+}
+
+/// A lane type L with every arithmetic operation counted (one count per 8-lane operation, by kind: `COUNTED_OPS`),
+/// for operation counts of code generic over `Lane`: what a computation would cost in another lane type is the
+/// counts times that type's cost per operation. The results are bitwise L's.
+#[derive(Clone, Copy, Debug)]
+pub struct Counted<L: Lane>(pub L);
+
+macro_rules! counted_binop {
+    ($tr:ident, $f:ident, $i:expr) => {
+        impl<L: Lane> $tr for Counted<L> {
+            type Output = Self;
+            #[inline(always)]
+            fn $f(self, o: Self) -> Self {
+                count($i);
+                Counted($tr::$f(self.0, o.0))
+            }
+        }
+    };
+}
+counted_binop!(Add, add, 0);
+counted_binop!(Sub, sub, 0);
+counted_binop!(Mul, mul, 1);
+counted_binop!(Div, div, 2);
+
+impl<L: Lane> Neg for Counted<L> {
+    type Output = Self;
+    #[inline(always)]
+    fn neg(self) -> Self {
+        count(3);
+        Counted(-self.0)
+    }
+}
+
+impl<L: Lane> Lane for Counted<L> {
+    type S = L::S;
+    type Acc = L::Acc;
+    const TANGENT: bool = L::TANGENT;
+    const VAL_F64: bool = L::VAL_F64;
+    const TAN_F64: bool = L::TAN_F64;
+    const NT: usize = L::NT;
+    #[inline(always)]
+    fn zero() -> Self {
+        Counted(L::zero())
+    }
+    #[inline(always)]
+    fn cst(c: DV<Self::S>) -> Self {
+        Counted(L::cst(c))
+    }
+    #[inline(always)]
+    fn splat(x: DD) -> Self {
+        Counted(L::splat(x))
+    }
+    #[inline(always)]
+    fn mulc(self, c: DV<Self::S>) -> Self {
+        count(4);
+        Counted(self.0.mulc(c))
+    }
+    #[inline(always)]
+    fn muls(self, s: DD) -> Self {
+        count(4);
+        Counted(self.0.muls(s))
+    }
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        count(5);
+        Counted(self.0.mulf(s))
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        count(5);
+        Counted(self.0.mul_pwr2(s))
+    }
+    #[inline(always)]
+    fn addc(self, c: DV<Self::S>) -> Self {
+        count(6);
+        Counted(self.0.addc(c))
+    }
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        Counted(self.0.bcast(j))
+    }
+    #[inline(always)]
+    fn val(self) -> DV<Self::S> {
+        self.0.val()
+    }
+    #[inline(always)]
+    fn tan(self) -> DV<Self::S> {
+        self.0.tan()
+    }
+    #[inline(always)]
+    fn from_vt(v: DV<Self::S>, t: DV<Self::S>) -> Self {
+        Counted(L::from_vt(v, t))
+    }
+    #[inline(always)]
+    fn acc0() -> Self::Acc {
+        L::acc0()
+    }
+    #[inline(always)]
+    fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
+        count(7);
+        L::acc(a, x.0, y.0)
+    }
+    #[inline(always)]
+    fn accc(a: Self::Acc, x: Self, c: DV<Self::S>) -> Self::Acc {
+        count(8);
+        L::accc(a, x.0, c)
+    }
+    #[inline(always)]
+    fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
+        count(9);
+        L::acc1(a, x.0)
+    }
+    #[inline(always)]
+    fn fin(a: Self::Acc) -> Self {
+        count(10);
+        Counted(L::fin(a))
+    }
+    #[inline(always)]
+    fn tan64(self, k: usize) -> V8<Self::S> {
+        self.0.tan64(k)
+    }
+    #[inline(always)]
+    fn set_tan64(&mut self, k: usize, t: V8<Self::S>) {
+        self.0.set_tan64(k, t)
     }
 }

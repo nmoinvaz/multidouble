@@ -1,9 +1,11 @@
 //! Dense double-double LU with partial pivoting (LAPACK getf2 order), column-major with the leading dimension
 //! padded to a multiple of 8 so the trailing update runs on 8-row lane vectors, columns updated in parallel (rayon)
 //! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
-//! mixed-precision use, solves and transpose solves in double-double with either set of factors, and Gram matrices.
+//! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
+//! quad-double (`DDLu::solve_refine_qd`), and Gram matrices.
 use crate::dd::{two_prod, two_sum, DD};
 use crate::dv::{self, DV};
+use crate::qd::QD;
 use crate::simd::{self, Kernel, Simd};
 use crate::v8::V8;
 use rayon::prelude::*;
@@ -819,6 +821,34 @@ impl DDLu {
                 b[i] = dd_axpy(b[i], self.at(i, k), nt);
             }
         }
+    }
+
+    /// x with A x = b to quad-double accuracy, by iterative refinement with the residual in quad-double (Moler, J.
+    /// ACM 14 (1967) 316, doi:10.1145/321386.321394). This is the LU of A or of a double-double approximation of
+    /// it (A rounded, or A at a nearby point); `resid(x, r)` writes r = b - A x in quad-double for the caller's own
+    /// A and b. x starts as the solve of b rounded to double-double, and each of the `steps` steps adds the solve of
+    /// r rounded to double-double, the sum in quad-double: with the LU of A to double-double each step multiplies
+    /// the error by about cond(A) 2^-104, so two steps reach quad-double where cond(A) is below about 10^10.
+    /// Every operation is a scalar one, so the result is bitwise that of the same steps on `QV` lanes
+    /// (`QV::to_dv`, the double-double solve, `QV + QV`).
+    pub fn solve_refine_qd(&self, b: &[QD], steps: usize, mut resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
+        let n = self.n;
+        assert_eq!(b.len(), n, "solve_refine_qd: b must have n entries");
+        let mut d: Vec<DD> = b.iter().map(|v| v.to_dd()).collect();
+        self.solve(&mut d);
+        let mut x: Vec<QD> = d.iter().map(|&v| QD::from_dd(v)).collect();
+        let mut r = vec![QD::ZERO; n];
+        for _ in 0..steps {
+            resid(&x, &mut r);
+            for (di, ri) in d.iter_mut().zip(&r) {
+                *di = ri.to_dd();
+            }
+            self.solve(&mut d);
+            for (xi, di) in x.iter_mut().zip(&d) {
+                *xi = *xi + QD::from_dd(*di);
+            }
+        }
+        x
     }
 
     /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.

@@ -5,7 +5,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::Lane;
+use multidouble::dual::{take_counts, Counted, Lane, COUNTED_OPS};
 use multidouble::dv::DV;
 use multidouble::native::{Dtn, Du, Fu, Fun, F8};
 use multidouble::simd::{Native, Simd};
@@ -421,4 +421,54 @@ fn is_pwr2_accepts_normal_powers_of_two_only() {
 #[should_panic(expected = "not a power of two")]
 fn mul_pwr2_refuses_other_scales_in_debug() {
     let _ = Du::from_vt(DV::splat_f(1.0), DV::splat_f(1.0)).mul_pwr2(3.0);
+}
+
+/// f plus a sum of products through the accumulator, written once over `Lane`
+fn f_acc<T: Lane>(x: T, y: T) -> T {
+    let c = DV::splat_f(0.5);
+    let a = T::acc1(T::accc(T::acc(T::acc(T::acc0(), x, y), y, y), x, c), x);
+    -(T::fin(a) - f(x, y)).mulf(3.0).addc(c).mul_pwr2(0.25).mulc(c)
+}
+
+/// `Counted` gives its lane type's results bit for bit and counts every operation by kind: f has 2 adds, 4 multiplies
+/// and a divide; g adds 4 accumulations and a finish, a subtraction, a negation and one each of x f64 (twice:
+/// `mulf`, `mul_pwr2`), + const and x const. Control: the counts of g are not those of f (an operation is seen).
+#[test]
+fn counted_lanes_count_and_change_nothing() {
+    fn run<T: Lane>(x: T, y: T) -> (T, [u64; 11]) {
+        take_counts();
+        let v = f_acc(x, y);
+        (v, take_counts())
+    }
+    let mut r = Rng(31);
+    let (x, y) = inputs(&mut r);
+    let (xd, yd) = (dv::<Native>(&x), dv::<Native>(&y));
+    let want = [3, 4, 1, 1, 1, 2, 1, 2, 1, 1, 1];
+    let (plain, n0) = run(xd, yd);
+    let (cv, n1) = run(Counted(xd), Counted(yd));
+    assert_eq!(n0, [0; 11], "plain lanes are not counted");
+    assert_eq!(n1, want, "counts of g on Counted<DV> ({COUNTED_OPS:?})");
+    for j in 0..8 {
+        let (a, b) = (plain.lane(j), cv.0.lane(j));
+        assert!(
+            a.hi.to_bits() == b.hi.to_bits() && a.lo.to_bits() == b.lo.to_bits(),
+            "lane {j}"
+        );
+    }
+    let (xu, yu) = (Du::from_vt(xd, DV::splat_f(1.0)), Du::from_vt(yd, DV::zero()));
+    let (pu, _) = run(xu, yu);
+    let (cu, nu) = run(Counted(xu), Counted(yu));
+    assert_eq!(nu, want, "counts of g on Counted<Du>");
+    for (a, b) in [(pu.val(), cu.val()), (pu.tan(), cu.tan())] {
+        for j in 0..8 {
+            assert!(
+                a.lane(j).hi.to_bits() == b.lane(j).hi.to_bits() && a.lane(j).lo.to_bits() == b.lane(j).lo.to_bits()
+            );
+        }
+    }
+    take_counts();
+    let _ = f(Counted(xd), Counted(yd));
+    let nf = take_counts();
+    assert_eq!(nf, [2, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0], "counts of f");
+    assert_ne!(nf, want, "control: f and g counted alike");
 }

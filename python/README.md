@@ -19,6 +19,8 @@ print(md.isa())                           # the SIMD backend in use, detected at
   CPU has (AVX-512, AVX2, SSE2, NEON or plain), bitwise the same results on every backend; `dd_op(op, ...)` with op 0
   add, 1 mul, 2 div, 3 sub.
 - `dd_solve(Ah, Al, bh, bl)`: x with A x = b by LU with partial pivoting, A as (n, n) row-major hi and lo arrays.
+- `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, renormalized first) plus a
+  double-double one, elementwise in quad-double; returns the four parts of the sum.
 - In numpy (plain float64 expressions): `two_sum`, `two_prod` (Dekker), `dd_add`, `dd_scale` (times an f64),
   `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath).
 

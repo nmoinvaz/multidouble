@@ -6,6 +6,7 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::linalg::{gram, ld_for, DDLu};
+use multidouble::qd::QD;
 
 /// a random n x n matrix, column-major with leading dimension ld, made well conditioned by a diagonal shift
 fn matrix(n: usize, r: &mut Rng) -> (usize, Vec<f64>, Vec<f64>) {
@@ -181,4 +182,79 @@ fn control_perturbed_factor_is_caught() {
     let mut b = apply(n, ld, &hi, &lo, &x, false);
     lu.solve(&mut b);
     assert!(max_rel_err(&b, &x) > 1e-29);
+}
+
+/// A x = b solved to quad-double by `solve_refine_qd`: A a random quad-double matrix (each entry with four parts,
+/// diagonally shifted), the LU of A rounded to double-double, b = A x formed in quad-double for a random quad-double x.
+/// Two steps give x back to 1e-58 (relative to max |x|), and four steps to the same; control: without refinement the
+/// solve misses by more than 1e-40 (A's rounding to double-double alone moves x by about 1e-32).
+#[test]
+fn refined_solve_reaches_quad_double() {
+    let mut r = Rng(41);
+    for n in [1usize, 7, 8, 33, 64] {
+        let qd = |r: &mut Rng, scale: f64| {
+            let h = r.sym() * scale;
+            QD::new(
+                h,
+                h * 2f64.powi(-53) * r.sym(),
+                h * 2f64.powi(-106) * r.sym(),
+                h * 2f64.powi(-159) * r.sym(),
+            )
+        };
+        let a: Vec<QD> = (0..n * n)
+            .map(|k| {
+                let v = qd(&mut r, 1.0);
+                if k % (n + 1) == 0 {
+                    v + QD::from_f64(2.0 + (n as f64).sqrt())
+                } else {
+                    v
+                }
+            })
+            .collect();
+        let x: Vec<QD> = (0..n).map(|_| qd(&mut r, 1.0)).collect();
+        let apply = |v: &[QD]| -> Vec<QD> {
+            (0..n)
+                .map(|i| (0..n).fold(QD::ZERO, |s, j| s + a[i * n + j] * v[j]))
+                .collect()
+        };
+        let b = apply(&x);
+        let ld = ld_for(n);
+        let (mut hi, mut lo) = (vec![0.0; ld * n], vec![0.0; ld * n]);
+        for i in 0..n {
+            for j in 0..n {
+                let d = a[i * n + j].to_dd();
+                hi[j * ld + i] = d.hi;
+                lo[j * ld + i] = d.lo;
+            }
+        }
+        let lu = DDLu::factor(n, ld, hi, lo, false).unwrap();
+        let resid = |v: &[QD], out: &mut [QD]| {
+            let av = apply(v);
+            for i in 0..n {
+                out[i] = b[i] - av[i];
+            }
+        };
+        let xmax = x.iter().map(|v| v.to_f64().abs()).fold(0.0, f64::max);
+        let err = |got: &[QD]| {
+            got.iter()
+                .zip(&x)
+                .map(|(g, w)| (*g - *w).to_f64().abs())
+                .fold(0.0, f64::max)
+                / xmax
+        };
+        let (e0, e2, e4) = (
+            err(&lu.solve_refine_qd(&b, 0, resid)),
+            err(&lu.solve_refine_qd(&b, 2, resid)),
+            err(&lu.solve_refine_qd(&b, 4, resid)),
+        );
+        println!("n = {n}: error {e0:.1e} unrefined, {e2:.1e} after two steps, {e4:.1e} after four");
+        assert!(
+            e2 < 1e-58 && e4 < 1e-58,
+            "n = {n}: refined error {e2:e} (two steps), {e4:e} (four)"
+        );
+        assert!(
+            e0 > 1e-40,
+            "control, n = {n}: the unrefined solve is already quad-double ({e0:e})"
+        );
+    }
 }

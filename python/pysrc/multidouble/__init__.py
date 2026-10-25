@@ -5,7 +5,8 @@ A double-double array is a pair of float64 arrays (hi, lo) with value hi + lo el
 Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``isa()``):
 
 - ``add``, ``sub``, ``mul``, ``div``: elementwise operations; ``dd_op(op, ...)`` with op 0 add, 1 mul, 2 div, 3 sub;
-- ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double.
+- ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
+- ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double.
 
 In numpy, for code that composes them with other numpy operations (these are plain numpy expressions, so the same
 inputs give the same bits on every machine with IEEE float64 arithmetic):
@@ -16,10 +17,10 @@ inputs give the same bits on every machine with IEEE float64 arithmetic):
 """
 import numpy as np
 
-from ._multidouble import add, dd_op, dd_solve, div, isa, mul, sub
+from ._multidouble import add, dd_op, dd_solve, div, isa, mul, qd_add_dd, sub
 
-__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_solve", "isa", "two_sum", "two_prod", "dd_add", "dd_scale",
-           "dd_axpy", "dd_norm", "dd_from_mp"]
+__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_solve", "qd_add_dd", "isa", "two_sum", "two_prod", "dd_add",
+           "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp"]
 
 
 def two_sum(a, b):
