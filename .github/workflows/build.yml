@@ -1,10 +1,15 @@
 name: Build
-on: pull_request
+# Coverage also runs on pushes to main, so that Codecov has a report of main to compare each pull request with.
+on:
+  pull_request:
+  push:
+    branches: [main]
 env:
   CARGO_TERM_COLOR: always
 jobs:
   build:
     name: ${{ matrix.name }}
+    if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:
