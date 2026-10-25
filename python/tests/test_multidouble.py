@@ -186,3 +186,62 @@ def test_qd_add_dd_exact_to_quad_double():
         assert all(np.array_equal(a, b[i:i + 1]) for a, b in zip(one, r)), i
     wc, _ = worst(z[:3] + [np.zeros(N)])        # control: a wrong input, graded against the true sum
     assert wc > Fraction(1, 2**205), float(wc)
+
+
+def test_gcr_refines_an_f64_solve_to_double_double():
+    """A x = b with A of order 40 (float64 entries, a diagonal shift) and x a random double-double vector, b = A x and
+    every product A u exact (mpmath at 60 digits, rounded to double-double), the preconditioner the f64 solve: gcr gives
+    x back to 1e-29 relative and reports convergence, also with an inexact preconditioner. Controls: its first iterate,
+    the plain preconditioned solve, is only f64-accurate; with every product off by 1e-20 relative the error stays
+    above 1e-27; with f64 coefficients (coef="f64") above 1e-20."""
+    import mpmath as mp
+
+    mp.mp.dps = 60
+    rng = np.random.default_rng(9)
+    n = 40
+    A = rng.standard_normal((n, n)) + 8 * np.eye(n)
+    Am = [[mp.mpf(v) for v in row] for row in A]
+    xh, xl = rand_dd(rng, n, emax=2)
+
+    def mat(v, eps=0):
+        return [mp.fsum(Am[i][j] * v[j] for j in range(n)) * (1 + eps) for i in range(n)]
+
+    def to_mp(h, l):
+        return [mp.mpf(a) + mp.mpf(b) for a, b in zip(h, l)]
+
+    bh, bl = md.dd_from_mp(mat(to_mp(xh, xl)))
+
+    def precond(rh, rl):
+        return np.linalg.solve(A, rh + rl), np.zeros(n)
+
+    _, _, info = md.gcr(lambda uh, ul: md.dd_from_mp(mat(to_mp(uh, ul))), precond, bh, bl, ref=(xh, xl))
+    err = info["errors"][-1]
+    assert info["converged"] and err <= 1e-29, (err, info["products"])
+    assert info["errors"][0] > 1e-20, info["errors"][0]
+    # an inexact preconditioner (A perturbed by 1e-3): more products, the same accuracy
+    Ap = A + 1e-3 * rng.standard_normal((n, n))
+    _, _, slow = md.gcr(lambda uh, ul: md.dd_from_mp(mat(to_mp(uh, ul))),
+                        lambda rh, rl: (np.linalg.solve(Ap, rh + rl), np.zeros(n)), bh, bl, ref=(xh, xl))
+    assert slow["converged"] and slow["products"] > info["products"] and slow["errors"][-1] <= 1e-29, \
+        (slow["errors"][-1], slow["products"])
+    _, _, bad = md.gcr(lambda uh, ul: md.dd_from_mp(mat(to_mp(uh, ul), eps=mp.mpf("1e-20"))), precond, bh, bl,
+                       ref=(xh, xl))
+    assert bad["errors"][-1] > 1e-27, bad["errors"][-1]
+    # f64 coefficients (the original form) stall near f64 accuracy relative to b
+    _, _, f64c = md.gcr(lambda uh, ul: md.dd_from_mp(mat(to_mp(uh, ul))), precond, bh, bl, ref=(xh, xl), coef="f64",
+                        max_products=10)
+    assert f64c["errors"][-1] > 1e-20, f64c["errors"][-1]
+
+
+def test_dd_dot_against_exact():
+    """dd_dot within 2^-100 of sum |x_i y_i| of the exact sum (fractions); control: the f64 dot product misses that"""
+    rng = np.random.default_rng(11)
+    xh, xl = rand_dd(rng, N)
+    yh, yl = rand_dd(rng, N)
+    s, e = md.dd_dot(xh, xl, yh, yl)
+    xs, ys = exact(xh, xl), exact(yh, yl)
+    want = sum(a * b for a, b in zip(xs, ys))
+    size = sum(abs(a * b) for a, b in zip(xs, ys))
+    assert abs(Fraction(s) + Fraction(e) - want) / size <= Fraction(1, 2**100)
+    f = float((xh + xl) @ (yh + yl))
+    assert abs(Fraction(f) - want) / size > Fraction(1, 2**100)

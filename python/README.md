@@ -22,7 +22,12 @@ print(md.isa())                           # the SIMD backend in use, detected at
 - `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, renormalized first) plus a
   double-double one, elementwise in quad-double; returns the four parts of the sum.
 - In numpy (plain float64 expressions): `two_sum`, `two_prod` (Dekker), `dd_add`, `dd_scale` (times an f64),
-  `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath).
+  `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath), `dd_dot` (a dot
+  product in double-double).
+- `gcr(apply, precond, bh, bl)`: x with A x = b in double-double by right-preconditioned GMRES in its GCR form, given
+  `apply(uh, ul)`, the product A u in double-double, and `precond(rh, rl)`, an approximate solve such as an f64 LU of
+  A: the refinement of a mixed-precision solve to double-double accuracy (`coef="f64"` keeps the coefficients in
+  float64, which is cheaper and stalls near float64 accuracy, enough inside a Newton iteration).
 
 ## Build and test
 
