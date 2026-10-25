@@ -127,6 +127,8 @@ def test_errors():
         md.add(z, z, np.zeros(5), np.zeros(5))
     with pytest.raises(ValueError):
         md.dd_solve(np.zeros((3, 3)), np.zeros((3, 3)), np.ones(3), np.zeros(3))  # singular
+    with pytest.raises(ValueError):
+        md.qd_add_dd(z, z, z, z, z, np.zeros(5))
     assert md.isa() in ("avx512", "avx2", "sse2", "neon", "portable")
 
 
@@ -149,3 +151,37 @@ def test_two_prod_large_operands():
     rng = np.random.default_rng(3)
     x = rand_dd(rng, 2000, emax=900)[0]
     assert all(np.array_equal(u, v) for u, v in zip(md._split(x), plain_split(x)))
+
+
+def rand_qd(rng, n):
+    """quad-doubles as four float64 arrays: random signs and exponents, each part below the previous one's last bit"""
+    z0 = (1 + rng.random(n)) * np.exp2(rng.integers(-20, 21, n)) * rng.choice([-1.0, 1.0], n)
+    return [z0] + [rng.uniform(-1, 1, n) * np.abs(z0) * 2.0 ** (-53 * k) for k in (1, 2, 3)]
+
+
+def test_qd_add_dd_exact_to_quad_double():
+    """(z0 + z1 + z2 + z3) + (dh + dl) against exact arithmetic, within 2^-205 of the larger operand (a few quad-double
+    units), its lanes bitwise its scalar tail (each element alone); control: z3 dropped must miss the bound"""
+    rng = np.random.default_rng(5)
+    z = rand_qd(rng, N)
+    dh, dl = rand_dd(rng, N)
+    scale = np.exp2(rng.integers(-60, 1, N))    # steps from the operand's size down to far below it (exact scaling)
+    dh, dl = dh * scale, dl * scale
+
+    def worst(parts):
+        r = md.qd_add_dd(*parts, dh, dl)
+        out = 0
+        for i in range(N):
+            want = sum(Fraction(p[i]) for p in parts[:4]) + Fraction(dh[i]) + Fraction(dl[i])
+            got = sum(Fraction(p[i]) for p in r)
+            size = max(abs(sum(Fraction(p[i]) for p in parts[:4])), abs(Fraction(dh[i]) + Fraction(dl[i])))
+            out = max(out, abs(got - want) / size)
+        return out, r
+
+    w, r = worst(z)
+    assert w <= Fraction(1, 2**205), float(w)
+    for i in (0, 7, 8, 500, N - 1):
+        one = md.qd_add_dd(*[np.array([p[i]]) for p in z], np.array([dh[i]]), np.array([dl[i]]))
+        assert all(np.array_equal(a, b[i:i + 1]) for a, b in zip(one, r)), i
+    wc, _ = worst(z[:3] + [np.zeros(N)])
+    assert wc > Fraction(1, 2**205), float(wc)

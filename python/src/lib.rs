@@ -1,8 +1,11 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
-//! arithmetic on them on the best SIMD backend the CPU has, and a dense double-double LU solve.
+//! arithmetic on them on the best SIMD backend the CPU has, a quad-double plus double-double sum, and a dense
+//! double-double LU solve.
 use multidouble::dd::DD;
 use multidouble::dv::DV;
 use multidouble::linalg::{ld_for, DDLu};
+use multidouble::qd::QD;
+use multidouble::qv::{renorm4, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
@@ -166,6 +169,96 @@ fn div<'py>(
     elementwise(py, DIV, ah, al, bh, bl)
 }
 
+/// z + d elementwise for a quad-double z (four parts, renormalized first as `QD::new` does) and a double-double d
+/// (`QD::add_dd`): 8 lanes at a time on the backend S, the remainder in scalar quad-double (bitwise the same per
+/// element)
+struct QdAddDd<'a> {
+    z: [&'a [f64]; 4],
+    d: (&'a [f64], &'a [f64]),
+    out: [&'a mut [f64]; 4],
+}
+
+impl Kernel for QdAddDd<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let n = self.d.0.len();
+        let full = n / 8 * 8;
+        let z = self.z;
+        let [o0, o1, o2, o3] = self.out;
+        for i in (0..full).step_by(8) {
+            let q = QV::<S>::load(&z[0][i..i + 8], &z[1][i..i + 8], &z[2][i..i + 8], &z[3][i..i + 8]);
+            let q = QV {
+                c: renorm4(q.c[0], q.c[1], q.c[2], q.c[3]),
+            };
+            let r = q.add_dv(DV::<S>::load(&self.d.0[i..i + 8], &self.d.1[i..i + 8]));
+            r.store(
+                &mut o0[i..i + 8],
+                &mut o1[i..i + 8],
+                &mut o2[i..i + 8],
+                &mut o3[i..i + 8],
+            );
+        }
+        for i in full..n {
+            let r = QD::new(z[0][i], z[1][i], z[2][i], z[3][i]).add_dd(DD {
+                hi: self.d.0[i],
+                lo: self.d.1[i],
+            });
+            o0[i] = r.x[0];
+            o1[i] = r.x[1];
+            o2[i] = r.x[2];
+            o3[i] = r.x[3];
+        }
+    }
+}
+
+/// (z0 + z1 + z2 + z3) + (dh + dl) elementwise in quad-double: a quad-double array (four float64 arrays, renormalized
+/// first, so any four parts summing to the value will do) plus a double-double one, e.g. a Newton step applied to a
+/// state kept in quad-double. Returns the four parts of the result, renormalized.
+#[pyfunction]
+#[allow(clippy::type_complexity)]
+fn qd_add_dd<'py>(
+    py: Python<'py>,
+    z0: PyReadonlyArray1<'py, f64>,
+    z1: PyReadonlyArray1<'py, f64>,
+    z2: PyReadonlyArray1<'py, f64>,
+    z3: PyReadonlyArray1<'py, f64>,
+    dh: PyReadonlyArray1<'py, f64>,
+    dl: PyReadonlyArray1<'py, f64>,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+)> {
+    let z = [
+        slice(&z0, "z0")?,
+        slice(&z1, "z1")?,
+        slice(&z2, "z2")?,
+        slice(&z3, "z3")?,
+    ];
+    let d = (slice(&dh, "dh")?, slice(&dl, "dl")?);
+    let n = d.0.len();
+    if d.1.len() != n || z.iter().any(|p| p.len() != n) {
+        return Err(PyValueError::new_err(
+            "z0, z1, z2, z3, dh and dl must have the same length",
+        ));
+    }
+    let (mut o0, mut o1, mut o2, mut o3) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    // with the GIL held, as in elementwise
+    simd::dispatch(QdAddDd {
+        z,
+        d,
+        out: [&mut o0, &mut o1, &mut o2, &mut o3],
+    });
+    Ok((
+        o0.into_pyarray(py),
+        o1.into_pyarray(py),
+        o2.into_pyarray(py),
+        o3.into_pyarray(py),
+    ))
+}
+
 /// x with A x = b in double-double, by LU with partial pivoting: A as (n, n) row-major hi and lo arrays, b as hi
 /// and lo arrays of length n. Returns the (hi, lo) arrays of x. Raises ValueError if A is singular.
 #[pyfunction]
@@ -226,6 +319,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mul, m)?)?;
     m.add_function(wrap_pyfunction!(div, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
+    m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
     Ok(())
 }

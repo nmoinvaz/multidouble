@@ -16,10 +16,10 @@
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, and f64 variants), behind the [`dual::Lane`] trait, so
-//!   one generic code gives values and exact derivatives.
+//!   one generic code gives values and exact derivatives; [`dual::Counted`] counts the operations of such code.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves,
-//!   transpose solves and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the first columns of a rectangular
-//!   block (the step of a block LU).
+//!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
+//!   first columns of a rectangular block (the step of a block LU).
 //!
 //! All operations are IEEE round-to-nearest with no reassociation, which the error-free transformations need.
 //!
