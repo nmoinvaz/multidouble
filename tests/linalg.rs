@@ -5,7 +5,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::linalg::{gram, ld_for, DDLu};
+use multidouble::linalg::{gram, ld_for, ColumnGroup, DDLu, StaircaseControl, StaircaseLu};
 use multidouble::qd::QD;
 
 /// a random n x n matrix, column-major with leading dimension ld, made well conditioned by a diagonal shift
@@ -257,4 +257,231 @@ fn refined_solve_reaches_quad_double() {
             "control, n = {n}: the unrefined solve is already quad-double ({e0:e})"
         );
     }
+}
+
+/// A random staircase system with the multiple-shooting structure: column groups of sizes a (first), b (k middle
+/// ones), a (last); row blocks of b rows, block blk coupling an input group and a target group (target -I, segments
+/// run outward up to inward_from and inward after); a parameter column in every row block and row0 on the first a/2
+/// unknowns. Returns the dense column-major matrix (ld_for(n)), its size and leading dimension, and the layout.
+#[allow(clippy::type_complexity)]
+fn staircase_system(
+    a: usize,
+    b: usize,
+    k: usize,
+    inward_from: usize,
+    seed: u64,
+) -> (Vec<f64>, usize, usize, Vec<ColumnGroup>, Vec<(usize, usize)>) {
+    let n = 2 * a + k * b + 1;
+    let ld = ld_for(n);
+    let mut r = Rng(seed);
+    let mut m = vec![0.0f64; ld * n];
+    let goff: Vec<usize> = (0..k + 2).map(|t| if t == 0 { 0 } else { a + (t - 1) * b }).collect();
+    let glen: Vec<usize> = (0..k + 2).map(|t| if t == 0 || t == k + 1 { a } else { b }).collect();
+    for blk in 0..k + 1 {
+        let (inp, tgt) = if blk == 0 {
+            (0, 1)
+        } else if blk == k {
+            (k + 1, k)
+        } else if blk >= inward_from {
+            (blk + 1, blk)
+        } else {
+            (blk, blk + 1)
+        };
+        // near-identity propagators (as for short segments), so a long chain stays well conditioned
+        let sc = 1.0 / (glen[inp] as f64).sqrt();
+        for i in 0..b {
+            let row = blk * b + i;
+            for c in 0..glen[inp] {
+                m[(goff[inp] + c) * ld + row] = 0.5 * r.sym() * sc + if c == i % glen[inp] { 1.0 } else { 0.0 };
+            }
+            m[(goff[tgt] + i) * ld + row] -= 1.0;
+            m[(n - 1) * ld + row] = 5.0 * r.sym();
+        }
+    }
+    for c in 0..a / 2 {
+        m[c * ld + n - 1] = 0.5 * r.sym() + 0.7;
+    }
+    let mut groups = vec![ColumnGroup {
+        param: false,
+        zoff: 0,
+        zlen: a,
+    }];
+    for t in 1..=k {
+        groups.push(ColumnGroup {
+            param: true,
+            zoff: goff[t],
+            zlen: b,
+        });
+    }
+    groups.push(ColumnGroup {
+        param: true,
+        zoff: goff[k + 1],
+        zlen: a,
+    });
+    let rblocks = (0..k + 1).map(|blk| (blk * b, b)).collect();
+    (m, n, ld, groups, rblocks)
+}
+
+/// the staircase LU of the dense matrix m (row0 and the parameter at index n - 1), filled from it
+fn staircase(
+    m: &[f64],
+    n: usize,
+    ld: usize,
+    groups: &[ColumnGroup],
+    rblocks: &[(usize, usize)],
+    control: StaircaseControl,
+) -> StaircaseLu {
+    let gs = groups.to_vec();
+    let fill = |s: usize, w: &mut [f64], wld: usize, r0: usize| -> Result<(), String> {
+        let (p, q) = (gs[s], gs[s + 1]);
+        let np = p.len();
+        let (roff, rlen) = rblocks[s];
+        // the column of z index zi in this step: group p, then group q; the parameter -> q's copy
+        let pos = |zi: usize| -> Option<usize> {
+            if zi == n - 1 {
+                Some(np)
+            } else if zi >= p.zoff && zi < p.zoff + p.zlen {
+                Some(p.param as usize + zi - p.zoff)
+            } else if zi >= q.zoff && zi < q.zoff + q.zlen {
+                Some(np + q.param as usize + zi - q.zoff)
+            } else {
+                None
+            }
+        };
+        for zi in 0..n {
+            for i in 0..rlen {
+                let v = m[zi * ld + roff + i];
+                if v != 0.0 {
+                    let c = pos(zi).ok_or(format!("entry outside the step's groups: row {} col {zi}", roff + i))?;
+                    w[c * wld + r0 + i] = v;
+                }
+            }
+            if s == 0 {
+                let v = m[zi * ld + n - 1];
+                if v != 0.0 {
+                    w[pos(zi).unwrap() * wld + r0 - 1] = v;
+                }
+            }
+        }
+        Ok(())
+    };
+    StaircaseLu::factor_control(n, groups.to_vec(), rblocks, n - 1, n - 1, fill, true, control).unwrap()
+}
+
+fn rel_dd(x: &[DD], y: &[DD]) -> f64 {
+    let ym = y.iter().map(|v| v.hi.abs()).fold(0.0, f64::max);
+    x.iter()
+        .zip(y)
+        .map(|(a, b)| ((a.hi - b.hi) + (a.lo - b.lo)).abs())
+        .fold(0.0, f64::max)
+        / ym
+}
+
+/// The staircase LU's solves (f64 factors, double-double solves) agree with the double-double LU of the same f64
+/// matrix (the reference, exact to about cond x 1e-32) as well as the dense f64 LU's solves do (DDLu::factor_f64):
+/// error <= 100 x the dense f64 error + 1e-15, plain and transposed, with outward and inward segments. The controls
+/// (a pivot scaled by 1 + 1e-6; the parameter copies untied) must fail the check.
+#[test]
+fn staircase_lu_matches_dense() {
+    for (a, b, k, inward, seed) in [
+        (10, 20, 4, 9, 1),
+        (16, 32, 6, 4, 2),
+        (40, 80, 12, 99, 3),
+        (24, 48, 13, 8, 4),
+    ] {
+        let (m, n, ld, groups, rblocks) = staircase_system(a, b, k, inward, seed);
+        let dense = DDLu::factor(n, ld, m.clone(), vec![0.0; m.len()], false).unwrap();
+        let dense64 = DDLu::factor_f64(n, ld, m.clone(), false).unwrap();
+        let rhs: Vec<DD> = (0..n)
+            .map(|i| DD::from_f64(((i * 37) % 11) as f64 - 5.0 + 0.1 * (i % 3) as f64))
+            .collect();
+        let mut res = [[0.0f64; 2]; 3];
+        let mut d64 = [0.0f64; 2];
+        for (ti, t) in [false, true].into_iter().enumerate() {
+            let (mut x, mut y) = (rhs.clone(), rhs.clone());
+            if t {
+                dense64.solve_t(&mut x);
+                dense.solve_t(&mut y);
+            } else {
+                dense64.solve(&mut x);
+                dense.solve(&mut y);
+            }
+            d64[ti] = rel_dd(&x, &y);
+        }
+        for (ci, control) in [StaircaseControl::None, StaircaseControl::Pivot, StaircaseControl::Link]
+            .into_iter()
+            .enumerate()
+        {
+            let lu = staircase(&m, n, ld, &groups, &rblocks, control);
+            for (ti, t) in [false, true].into_iter().enumerate() {
+                let (mut x, mut y) = (rhs.clone(), rhs.clone());
+                if t {
+                    lu.solve_t(&mut x);
+                    dense.solve_t(&mut y);
+                } else {
+                    lu.solve(&mut x);
+                    dense.solve(&mut y);
+                }
+                res[ci][ti] = rel_dd(&x, &y);
+            }
+        }
+        println!(
+            "a {a} b {b} k {k} (n {n}): error against the dd LU: staircase {:.1e} (transposed {:.1e}), dense f64 LU {:.1e} \
+             ({:.1e}); pivot control {:.1e} / {:.1e}; link control {:.1e} / {:.1e}",
+            res[0][0], res[0][1], d64[0], d64[1], res[1][0], res[1][1], res[2][0], res[2][1]
+        );
+        let lim = [100.0 * d64[0] + 1e-15, 100.0 * d64[1] + 1e-15];
+        assert!(
+            res[0][0] <= lim[0] && res[0][1] <= lim[1],
+            "staircase LU less accurate than the dense f64 LU: {:?} vs {d64:?}",
+            res[0]
+        );
+        assert!(
+            res[1][0] > lim[0] && res[1][1] > lim[1],
+            "the pivot control does not fire: {:?}",
+            res[1]
+        );
+        assert!(
+            res[2][0] > lim[0] && res[2][1] > lim[1],
+            "the link control does not fire: {:?}",
+            res[2]
+        );
+    }
+}
+
+/// solve_many gives each right-hand side bitwise as solve / solve_t; a bad layout is reported
+#[test]
+fn staircase_solve_many_is_solve() {
+    let (m, n, ld, groups, rblocks) = staircase_system(12, 24, 5, 3, 7);
+    let lu = staircase(&m, n, ld, &groups, &rblocks, StaircaseControl::None);
+    let k = 5;
+    let mut r = Rng(3);
+    let bh: Vec<f64> = (0..k * n).map(|_| 0.5 * r.sym()).collect();
+    let bl = vec![0.0; k * n];
+    for t in [false, true] {
+        let (mut xh, mut xl) = (bh.clone(), bl.clone());
+        lu.solve_many(&mut xh, &mut xl, k, t, true);
+        for row in 0..k {
+            let mut v: Vec<DD> = (0..n)
+                .map(|i| DD {
+                    hi: bh[row * n + i],
+                    lo: 0.0,
+                })
+                .collect();
+            if t {
+                lu.solve_t(&mut v);
+            } else {
+                lu.solve(&mut v);
+            }
+            for i in 0..n {
+                assert_eq!(v[i].hi.to_bits(), xh[row * n + i].to_bits());
+                assert_eq!(v[i].lo.to_bits(), xl[row * n + i].to_bits());
+            }
+        }
+    }
+    let (lo, hi) = lu.pivot_range();
+    assert!(lo > 0.0 && hi >= lo && lu.bytes() > 0);
+    let mut bad = groups.clone();
+    bad[0].param = true;
+    assert!(StaircaseLu::factor(n, bad, &rblocks, n - 1, n - 1, |_, _, _, _| Ok(()), false).is_err());
 }

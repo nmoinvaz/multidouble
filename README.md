@@ -21,6 +21,7 @@ speed, with no allocation and no arbitrary-precision library.
 | `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`), the results bitwise L's: operation counts of code written over `dual::Lane` |
 | `linalg::DDLu` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices |
 | `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
+| `linalg::StaircaseLu` | the f64 LU with partial pivoting of a staircase (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without the dense matrix; solves and transpose solves in double-double |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
 
 Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for

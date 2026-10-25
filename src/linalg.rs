@@ -1537,6 +1537,412 @@ impl Kernel for Gram<'_> {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// staircase (almost block diagonal) systems with one global parameter
+// ---------------------------------------------------------------------------------------------------------------
+//
+// The Newton system of multiple shooting (or collocation) for a boundary-value problem with one unknown parameter,
+// factored without forming the dense matrix. The unknowns z (n of them) are column groups g_0..g_S, contiguous ranges
+// of z, and one parameter z[iparam]; the rows are row blocks r_0..r_{S-1}, contiguous ranges of rows, and one more row
+// row0. Row block s depends on g_s, g_{s+1} and the parameter; row0 on g_0 only (a normalization or phase condition).
+// The parameter enters every row block, so the factorization works on an augmented system with one copy p_s of it in
+// each group from g_1 on (ColumnGroup::param) and link rows p_{s-1} - p_s = 0. Row block s then touches g_s and g_{s+1}
+// only, and Gaussian elimination with partial pivoting runs in steps: step s factors the columns of g_s, its pivot
+// candidates being the rows left over from step s - 1 (zero outside g_s), the extra row (row0 at s = 0, the link row
+// after) and row block s, and passes the rows it does not pivot on, now holding the Schur complement on g_{s+1}, to
+// step s + 1; the last step is a square LU on g_S. This is partial pivoting on the augmented matrix in this row and
+// column order (rows below a step never hold the step's columns), so it has that algorithm's stability, and the fill
+// stays inside the steps (the almost-block-diagonal solvers of de Boor and Weiss, ACM TOMS 6 (1980) 80,
+// doi:10.1145/355873.355880, and Diaz, Fairweather and Keast, ACM TOMS 9 (1983) 358, doi:10.1145/356044.356053, factor
+// the same structure with alternate row and column pivoting). Stored per step: L and U11 (rows x pivot columns) and U12
+// (pivot rows x next group), f64; each step is `lu_rect_f64`.
+//
+// The solves are in double-double with the f64 factors, as DDLu's solves with an f64 factorization. With E the copy of
+// the parameter into every p_s and S the selection of the non-link rows, J = S J_aug E, so J^-1 = P J_aug^-1 S^T and
+// J^-T = S J_aug^-T P^T for any P with P E = I; P reads the parameter from its first copy.
+
+/// A column group of a `StaircaseLu`'s augmented system: a copy of the parameter first if `param`, then the unknowns
+/// z[zoff..zoff + zlen].
+#[derive(Clone, Copy, Debug)]
+pub struct ColumnGroup {
+    pub param: bool,
+    pub zoff: usize,
+    pub zlen: usize,
+}
+
+impl ColumnGroup {
+    pub fn len(&self) -> usize {
+        self.zlen + self.param as usize
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// One elimination step: rows 0..nc carried from the previous step, row nc the extra row (row0 or a link row), rows
+/// nc + 1..nr the residual rows roff..roff + rlen; np pivot columns (this step's group), nrc right columns (the next).
+struct Step {
+    nc: usize,
+    nr: usize,
+    np: usize,
+    nrc: usize,
+    ld: usize,
+    /// ld x np, column-major: U11 on and above the diagonal, the multipliers of L below (rows up to nr)
+    l: Vec<f64>,
+    /// np x nrc, column-major (leading dimension np): U12
+    u12: Vec<f64>,
+    perm: Vec<usize>,
+    roff: usize,
+    rlen: usize,
+}
+
+/// The factors of a staircase system (see `StaircaseLu::factor`).
+pub struct StaircaseLu {
+    /// size of the original system (z)
+    pub n: usize,
+    groups: Vec<ColumnGroup>,
+    steps: Vec<Step>,
+    /// index of the group whose parameter copy is read as the parameter, and the parameter's index in z
+    gparam: usize,
+    iparam: usize,
+    /// row0's index in the original rows
+    irow0: usize,
+    /// seconds spent in fill (building the blocks) and in the factorization
+    pub t_fill: f64,
+    pub t_factor: f64,
+}
+
+/// Deliberate breakage of `StaircaseLu::factor_control`, for checks that must be able to fail: `Pivot` scales one
+/// pivot of the middle step by 1 + 1e-6; `Link` replaces the link rows by p_s = 0 (the copies are no longer tied to
+/// the parameter).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StaircaseControl {
+    None,
+    Pivot,
+    Link,
+}
+
+#[inline(always)]
+fn f64dd(x: f64) -> DD {
+    DD { hi: x, lo: 0.0 }
+}
+
+impl StaircaseLu {
+    /// Build and factor. groups: g_0..g_S (g_0 without a parameter copy); `rblocks[s]` (s < S): the rows (offset,
+    /// count) of row block s; irow0: row0's index; iparam: the parameter's index in z. fill(s, w, ld, r0) writes row
+    /// block s into rows r0..r0 + rlen of the step's ld x (np + nrc) column-major array w (columns: g_s, then
+    /// g_{s+1}, each with its parameter copy first if it has one; the parameter's column of row block s is g_{s+1}'s
+    /// copy), and for s = 0 also row0 at row r0 - 1; the array is zero elsewhere. The link rows are written here.
+    /// Steps are factored in order, each in parallel over column chunks when par.
+    pub fn factor<F>(
+        n: usize,
+        groups: Vec<ColumnGroup>,
+        rblocks: &[(usize, usize)],
+        irow0: usize,
+        iparam: usize,
+        fill: F,
+        par: bool,
+    ) -> Result<StaircaseLu, String>
+    where
+        F: FnMut(usize, &mut [f64], usize, usize) -> Result<(), String>,
+    {
+        Self::factor_control(n, groups, rblocks, irow0, iparam, fill, par, StaircaseControl::None)
+    }
+
+    /// `factor` with a deliberate breakage (`StaircaseControl`), for checks that must be able to fail.
+    #[allow(clippy::too_many_arguments)]
+    pub fn factor_control<F>(
+        n: usize,
+        groups: Vec<ColumnGroup>,
+        rblocks: &[(usize, usize)],
+        irow0: usize,
+        iparam: usize,
+        mut fill: F,
+        par: bool,
+        control: StaircaseControl,
+    ) -> Result<StaircaseLu, String>
+    where
+        F: FnMut(usize, &mut [f64], usize, usize) -> Result<(), String>,
+    {
+        let ns = groups.len();
+        if ns < 2 || rblocks.len() != ns - 1 || groups[0].param {
+            return Err("staircase LU: bad layout".into());
+        }
+        let gparam = groups
+            .iter()
+            .position(|g| g.param)
+            .ok_or("staircase LU: no parameter copy")?;
+        let mut steps: Vec<Step> = Vec::with_capacity(ns);
+        // carried rows: (count, column-major nc x np of the coming step, leading dimension nc)
+        let mut carry: Vec<f64> = Vec::new();
+        let mut nc = 0usize;
+        let (mut t_fill, mut t_factor) = (0.0f64, 0.0f64);
+        for s in 0..ns {
+            let np = groups[s].len();
+            let nrc = if s + 1 < ns { groups[s + 1].len() } else { 0 };
+            let (roff, rlen) = if s + 1 < ns { rblocks[s] } else { (0, 0) };
+            let nnew = if s + 1 < ns { 1 + rlen } else { 0 };
+            let nr = nc + nnew;
+            if nr < np {
+                return Err(format!("staircase LU: step {s} has {nr} rows for {np} pivots"));
+            }
+            if s + 1 == ns && nr != np {
+                return Err(format!("staircase LU: last step not square ({nr} x {np})"));
+            }
+            let ld = ld_for(nr);
+            let ncol = np + nrc;
+            let mut w = vec![0.0f64; ld * ncol];
+            for c in 0..np {
+                w[c * ld..c * ld + nc].copy_from_slice(&carry[c * nc..(c + 1) * nc]);
+            }
+            if s + 1 < ns {
+                if s > 0 {
+                    // link row p_{s-1} - p_s = 0 (both groups start with their parameter copy)
+                    if !(groups[s].param && groups[s + 1].param) {
+                        return Err("staircase LU: a link row needs parameter copies on both sides".into());
+                    }
+                    if control != StaircaseControl::Link {
+                        w[nc] = 1.0;
+                    }
+                    w[np * ld + nc] = -1.0;
+                }
+                let t = std::time::Instant::now();
+                fill(s, &mut w, ld, nc + 1)?;
+                t_fill += t.elapsed().as_secs_f64();
+            }
+            let mut perm = vec![0usize; np];
+            let t = std::time::Instant::now();
+            lu_rect_f64(nr, ncol, np, ld, &mut w, &mut perm, par)?;
+            t_factor += t.elapsed().as_secs_f64();
+            if control == StaircaseControl::Pivot && s == ns / 2 {
+                let k = np / 2;
+                w[k * ld + k] *= 1.0 + 1e-6;
+            }
+            // U12 (rows 0..np of the right columns) and the next carry (rows np..nr of the right columns)
+            let mut u12 = vec![0.0f64; np * nrc];
+            let nc2 = nr - np;
+            let mut carry2 = vec![0.0f64; nc2 * nrc];
+            for c in 0..nrc {
+                let col = &w[(np + c) * ld..(np + c) * ld + nr];
+                u12[c * np..(c + 1) * np].copy_from_slice(&col[..np]);
+                carry2[c * nc2..(c + 1) * nc2].copy_from_slice(&col[np..nr]);
+            }
+            w.truncate(ld * np);
+            w.shrink_to_fit();
+            steps.push(Step {
+                nc,
+                nr,
+                np,
+                nrc,
+                ld,
+                l: w,
+                u12,
+                perm,
+                roff,
+                rlen,
+            });
+            carry = carry2;
+            nc = nc2;
+        }
+        Ok(StaircaseLu {
+            n,
+            groups,
+            steps,
+            gparam,
+            iparam,
+            irow0,
+            t_fill,
+            t_factor,
+        })
+    }
+
+    /// bytes held by the factors
+    pub fn bytes(&self) -> usize {
+        self.steps
+            .iter()
+            .map(|s| 8 * (s.l.len() + s.u12.len()) + 8 * s.perm.len())
+            .sum()
+    }
+
+    #[inline(always)]
+    fn lu(st: &Step, i: usize, k: usize) -> f64 {
+        st.l[k * st.ld + i]
+    }
+
+    /// min and max |u_kk| over all steps
+    pub fn pivot_range(&self) -> (f64, f64) {
+        let mut lo = f64::INFINITY;
+        let mut hi = 0.0f64;
+        for st in &self.steps {
+            for k in 0..st.np {
+                let v = Self::lu(st, k, k).abs();
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+        }
+        (lo, hi)
+    }
+
+    /// Solve J x = b in place (b: n values in the original row order in, the unknowns z out).
+    pub fn solve(&self, b: &mut [DD]) {
+        assert_eq!(b.len(), self.n);
+        let ns = self.steps.len();
+        let mut carry: Vec<DD> = Vec::new();
+        let mut ys: Vec<Vec<DD>> = Vec::with_capacity(ns);
+        for (s, st) in self.steps.iter().enumerate() {
+            let mut v = carry;
+            if s + 1 < ns {
+                v.push(if s == 0 { b[self.irow0] } else { DD::ZERO });
+                v.extend_from_slice(&b[st.roff..st.roff + st.rlen]);
+            }
+            debug_assert_eq!(v.len(), st.nr);
+            for k in 0..st.np {
+                let p = st.perm[k];
+                if p != k {
+                    v.swap(k, p);
+                }
+            }
+            for k in 0..st.np {
+                let nt = -v[k];
+                if nt.hi == 0.0 {
+                    continue;
+                }
+                let col = &st.l[k * st.ld..k * st.ld + st.nr];
+                for i in k + 1..st.nr {
+                    v[i] = dd_axpy(v[i], f64dd(col[i]), nt);
+                }
+            }
+            carry = v.split_off(st.np);
+            ys.push(v);
+        }
+        let mut xr: Vec<DD> = Vec::new();
+        let mut xs: Vec<Vec<DD>> = vec![Vec::new(); ns];
+        for s in (0..ns).rev() {
+            let st = &self.steps[s];
+            let mut y = std::mem::take(&mut ys[s]);
+            for j in (0..st.nrc).rev() {
+                let nt = -xr[j];
+                if nt.hi == 0.0 {
+                    continue;
+                }
+                let col = &st.u12[j * st.np..(j + 1) * st.np];
+                for i in 0..st.np {
+                    y[i] = dd_axpy(y[i], f64dd(col[i]), nt);
+                }
+            }
+            for k in (0..st.np).rev() {
+                y[k] = y[k] / f64dd(Self::lu(st, k, k));
+                let nt = -y[k];
+                let col = &st.l[k * st.ld..k * st.ld + k];
+                for i in 0..k {
+                    y[i] = dd_axpy(y[i], f64dd(col[i]), nt);
+                }
+            }
+            xr = y.clone();
+            xs[s] = y;
+        }
+        for (s, g) in self.groups.iter().enumerate() {
+            let o = g.param as usize;
+            b[g.zoff..g.zoff + g.zlen].copy_from_slice(&xs[s][o..o + g.zlen]);
+            if s == self.gparam {
+                b[self.iparam] = xs[s][0];
+            }
+        }
+    }
+
+    /// Solve J^T y = b in place (b: n values indexed by the unknowns in, by the residual rows out).
+    pub fn solve_t(&self, b: &mut [DD]) {
+        assert_eq!(b.len(), self.n);
+        let ns = self.steps.len();
+        // U^T w = P^T-placed b, forward over the groups
+        let mut ws: Vec<Vec<DD>> = Vec::with_capacity(ns);
+        for (s, g) in self.groups.iter().enumerate() {
+            let st = &self.steps[s];
+            let mut v: Vec<DD> = Vec::with_capacity(st.np);
+            if g.param {
+                v.push(if s == self.gparam { b[self.iparam] } else { DD::ZERO });
+            }
+            v.extend_from_slice(&b[g.zoff..g.zoff + g.zlen]);
+            if s > 0 {
+                let sp = &self.steps[s - 1];
+                let wp = &ws[s - 1];
+                for c in 0..st.np {
+                    let mut acc = v[c];
+                    let col = &sp.u12[c * sp.np..(c + 1) * sp.np];
+                    for i in 0..sp.np {
+                        acc = dd_axpy(acc, f64dd(col[i]), -wp[i]);
+                    }
+                    v[c] = acc;
+                }
+            }
+            for k in 0..st.np {
+                let mut acc = v[k];
+                let col = &st.l[k * st.ld..k * st.ld + k];
+                for i in 0..k {
+                    acc = dd_axpy(acc, f64dd(col[i]), -v[i]);
+                }
+                v[k] = acc / f64dd(Self::lu(st, k, k));
+            }
+            ws.push(v);
+        }
+        // L^T and P^T, backward over the steps; each step's leading entries are the adjoint of the rows it carried in
+        let mut adj: Vec<DD> = Vec::new();
+        let mut out = vec![DD::ZERO; self.n];
+        for s in (0..ns).rev() {
+            let st = &self.steps[s];
+            let mut v = std::mem::take(&mut ws[s]);
+            v.extend_from_slice(&adj);
+            debug_assert_eq!(v.len(), st.nr);
+            for k in (0..st.np).rev() {
+                let mut acc = v[k];
+                let col = &st.l[k * st.ld..k * st.ld + st.nr];
+                for i in k + 1..st.nr {
+                    acc = dd_axpy(acc, f64dd(col[i]), -v[i]);
+                }
+                v[k] = acc;
+            }
+            for k in (0..st.np).rev() {
+                let p = st.perm[k];
+                if p != k {
+                    v.swap(k, p);
+                }
+            }
+            if s + 1 < ns {
+                if s == 0 {
+                    out[self.irow0] = v[st.nc];
+                }
+                out[st.roff..st.roff + st.rlen].copy_from_slice(&v[st.nc + 1..st.nr]);
+            }
+            v.truncate(st.nc);
+            adj = v;
+        }
+        b.copy_from_slice(&out);
+    }
+
+    /// Several right-hand sides, row-major (nrhs, n) as (hi, lo), in place; each row as solve / solve_t gives it.
+    pub fn solve_many(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
+        let n = self.n;
+        let one = |(h, l): (&mut [f64], &mut [f64])| {
+            let mut b: Vec<DD> = h.iter().zip(l.iter()).map(|(&a, &c)| DD { hi: a, lo: c }).collect();
+            if transpose {
+                self.solve_t(&mut b);
+            } else {
+                self.solve(&mut b);
+            }
+            for i in 0..n {
+                h[i] = b[i].hi;
+                l[i] = b[i].lo;
+            }
+        };
+        let (bh, bl) = (&mut bh[..nrhs * n], &mut bl[..nrhs * n]);
+        if par {
+            bh.par_chunks_mut(n).zip(bl.par_chunks_mut(n)).for_each(one);
+        } else {
+            bh.chunks_mut(n).zip(bl.chunks_mut(n)).for_each(one);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
