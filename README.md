@@ -19,6 +19,7 @@ speed, with no allocation and no arbitrary-precision library.
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, and f64 versions, behind the `dual::Lane` trait |
 | `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`), the results bitwise L's: operation counts of code written over `dual::Lane` |
+| `field::Fl<T, B>`, `field::DMat` | 8 B values of a lane type as B lane vectors, with Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation and a constant double-double matrix applied to them (`MatLane::dmat_apply`): the arithmetic of power-series methods, for every lane type |
 | `linalg::DDLu` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices |
 | `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
 | `linalg::StaircaseLu` | the f64 LU with partial pivoting of a staircase (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without the dense matrix; solves and transpose solves in double-double |

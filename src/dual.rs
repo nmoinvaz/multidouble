@@ -1009,6 +1009,12 @@ fn count(i: usize) {
     COUNTS.with(|c| c.borrow_mut()[i] += 1);
 }
 
+/// add n to count i (for operations counted as a whole, as `field::MatLane::dmat_apply` on `Counted`)
+#[inline(always)]
+pub(crate) fn count_n(i: usize, n: u64) {
+    COUNTS.with(|c| c.borrow_mut()[i] += n);
+}
+
 /// This thread's operation counts since the last call (in the order of `COUNTED_OPS`), and reset them. The counts
 /// are per thread: run the computation to be counted on one thread.
 pub fn take_counts() -> [u64; 11] {

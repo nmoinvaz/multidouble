@@ -17,6 +17,8 @@
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, and f64 variants), behind the [`dual::Lane`] trait, so
 //!   one generic code gives values and exact derivatives; [`dual::Counted`] counts the operations of such code.
+//! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
+//!   and a constant double-double matrix applied to them ([`field::DMat`]): the arithmetic of power-series methods.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves,
 //!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
@@ -46,6 +48,7 @@ pub mod dd;
 pub mod dual;
 pub mod dv;
 pub mod exact;
+pub mod field;
 pub mod linalg;
 pub mod qd;
 pub mod qv;
@@ -66,6 +69,7 @@ pub mod native {
     pub type Fu = crate::dual::Fu<Native>;
     pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;
     pub type Fun<const N: usize> = crate::dual::Fun<Native, N>;
+    pub type DMat<const B: usize> = crate::field::DMat<Native, B>;
 }
 
 #[cfg(test)]
