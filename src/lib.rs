@@ -19,7 +19,8 @@
 //!   one generic code gives values and exact derivatives; [`dual::Counted`] counts the operations of such code.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves,
 //!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
-//!   first columns of a rectangular block (the step of a block LU).
+//!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
+//!   system with one global parameter (the Newton system of multiple shooting) built from those steps.
 //!
 //! All operations are IEEE round-to-nearest with no reassociation, which the error-free transformations need.
 //!
