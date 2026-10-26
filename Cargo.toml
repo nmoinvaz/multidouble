@@ -1,6 +1,6 @@
 [package]
 name = "multidouble"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
 rust-version = "1.89"
 description = "Double-double and quad-double arithmetic, scalar and 8-lane SIMD (AVX-512, AVX2, SSE2, NEON, portable) with bitwise identical results, dual numbers and double-double LU"
