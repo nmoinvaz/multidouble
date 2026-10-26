@@ -245,3 +245,35 @@ def test_dd_dot_against_exact():
     assert abs(Fraction(s) + Fraction(e) - want) / size <= Fraction(1, 2**100)
     f = float((xh + xl) @ (yh + yl))
     assert abs(Fraction(f) - want) / size > Fraction(1, 2**100)
+
+
+def test_dd_dot_lengths_and_cancellation():
+    """dd_dot within its documented (n / 8 + 12) u^2 of sum |x_i y_i| for every length 0..40 (the last block padded)
+    and for a sum whose second half cancels the first to about 2^-30 per pair; lists are accepted and mismatched
+    lengths are an error. Control: the products of the high parts alone miss the bound."""
+    rng = np.random.default_rng(12)
+    for n in list(range(41)) + [517]:
+        xh, xl = rand_dd(rng, n)
+        yh, yl = rand_dd(rng, n)
+        if n >= 4 and n % 2 == 0:
+            # x_{k + n/2} y_{k + n/2} = -x_k y_k (1 + d), |d| ~ 2^-30, with y repeated
+            h = n // 2
+            d = 1 + rng.uniform(-1, 1, h) * 2.0**-30
+            xh[h:], xl[h:] = -xh[:h] * d, -xl[:h] * d
+            yh[h:], yl[h:] = yh[:h], yl[:h]
+        xs, ys = exact(xh, xl), exact(yh, yl)
+        want = sum((a * b for a, b in zip(xs, ys)), Fraction(0))
+        size = sum((abs(a * b) for a, b in zip(xs, ys)), Fraction(0))
+        bound = (Fraction(n, 8) + 12) * U2
+        s, e = md.dd_dot(list(xh), xl, yh, yl)
+        assert s + e == s
+        if size == 0:
+            assert (s, e) == (0.0, 0.0)
+            continue
+        err = abs(Fraction(s) + Fraction(e) - want) / size
+        assert err <= bound, (n, float(err / U2))
+        if n >= 2:
+            c, _ = md.dd_dot(xh, np.zeros(n), yh, np.zeros(n))
+            assert abs(Fraction(c) - want) / size > bound, n
+    with pytest.raises(ValueError):
+        md.dd_dot(np.ones(3), np.ones(3), np.ones(4), np.ones(4))
