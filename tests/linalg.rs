@@ -76,7 +76,14 @@ fn solve_many_is_bitwise_the_single_solves() {
     let (ld, hi, lo) = matrix(n, &mut r);
     let lu = DDLu::factor(n, ld, hi, lo, false).unwrap();
     let nrhs = 11;
-    let b: Vec<DD> = (0..n * nrhs).map(|_| DD::new(r.sym(), r.sym() * 1e-17)).collect();
+    // zeros and negative zeros in some entries, so that columns are skipped in some lanes and not in others
+    let b: Vec<DD> = (0..n * nrhs)
+        .map(|j| match j % 7 {
+            0 => DD::ZERO,
+            3 => DD { hi: -0.0, lo: 0.0 },
+            _ => DD::new(r.sym(), r.sym() * 1e-17),
+        })
+        .collect();
     for transpose in [false, true] {
         let mut bh: Vec<f64> = b.iter().map(|d| d.hi).collect();
         let mut bl: Vec<f64> = b.iter().map(|d| d.lo).collect();
