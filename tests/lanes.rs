@@ -476,7 +476,10 @@ impl Kernel for NegationLowerZerosArePositive {
             assert!(nq.x[1..].iter().all(|&x| pos(x)), "QD neg {q:?}: {nq:?}");
             assert!(same(nq.to_f64(), -a.hi), "QD neg {q:?}: to_f64 {:e}", nq.to_f64());
             let vq = -QV::<S>::from_lanes(&[q; 8]);
+            let (f, nf) = (QV::<S>::from_lanes(&[q; 8]).to_v8().to_array(), vq.to_v8().to_array());
             for j in 0..8 {
+                assert!(same(f[j], q.to_f64()), "{}: QV to_v8 {q:?}: {:e}", S::NAME, f[j]);
+                assert!(same(nf[j], nq.to_f64()), "{}: QV to_v8 of -{q:?}: {:e}", S::NAME, nf[j]);
                 let l = vq.lane(j);
                 assert!(
                     l.x.iter().zip(nq.x.iter()).all(|(x, y)| same(*x, *y)),

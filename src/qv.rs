@@ -204,10 +204,11 @@ impl<S: Simd> QV<S> {
         let (h, l) = quick_two_sum(self.c[0], self.c[1].add(self.c[2].add(self.c[3])));
         DV { hi: h, lo: l }
     }
-    /// nearest f64 (as QD::to_f64)
+    /// nearest f64 (as QD::to_f64: a zero tail leaves the leading part as it is, so a zero keeps its sign)
     #[inline(always)]
     pub fn to_v8(self) -> V8<S> {
-        self.c[0].add(self.c[1].add(self.c[2].add(self.c[3])))
+        let t = self.c[1].add(self.c[2].add(self.c[3]));
+        t.eq(V8::zero()).sel(self.c[0], self.c[0].add(t))
     }
     /// from the four parts' arrays (8 values each)
     #[inline(always)]
