@@ -155,40 +155,6 @@ const CW: usize = 8;
 const NC: usize = 4;
 const TR: usize = 2;
 
-/// Scalar DD division of every lane by d.
-#[inline(always)]
-fn div_lanes<S: Simd>(v: DV<S>, d: DD) -> DV<S> {
-    let (h, l) = (v.hi.to_array(), v.lo.to_array());
-    let mut qh = [0.0f64; 8];
-    let mut ql = [0.0f64; 8];
-    for r in 0..8 {
-        let q = DD { hi: h[r], lo: l[r] } / d;
-        qh[r] = q.hi;
-        ql[r] = q.lo;
-    }
-    DV {
-        hi: V8::from_array(qh),
-        lo: V8::from_array(ql),
-    }
-}
-
-/// u, except the lanes r with z[r] == 0, which keep old (the scalar solve skips those updates).
-#[inline(always)]
-fn keep_lanes<S: Simd>(u: DV<S>, old: DV<S>, z: &[f64; 8]) -> DV<S> {
-    let (mut uh, mut ul) = (u.hi.to_array(), u.lo.to_array());
-    let (oh, ol) = (old.hi.to_array(), old.lo.to_array());
-    for r in 0..8 {
-        if z[r] == 0.0 {
-            uh[r] = oh[r];
-            ul[r] = ol[r];
-        }
-    }
-    DV {
-        hi: V8::from_array(uh),
-        lo: V8::from_array(ul),
-    }
-}
-
 /// getf2 on the panel columns j0..j0+jb (slices ph / pl hold just those columns, leading dimension ld): pivot search,
 /// row swaps within the panel, scaling, and updates of the later panel columns, as `factor_unblocked` does them,
 /// except that updates which cannot change a value are skipped: 8-row blocks whose multipliers are all exactly zero,
@@ -772,11 +738,12 @@ impl DDLu {
                 }
                 for k in 0..n {
                     let nt = -b[k];
-                    let z = nt.hi.to_array();
-                    let nz = z.iter().filter(|&&x| x == 0.0).count();
-                    if nz == 8 {
+                    // the lanes whose -y_k has a nonzero leading part; the scalar solve skips the others
+                    let live = nt.hi.ne(V8::zero());
+                    if live.bits() == 0 {
                         continue;
                     }
+                    let all = live.bits() == 0xff;
                     let col = k * self.ld;
                     for i in (k + 1).max(rg[k].0)..rg[k].1.max(k + 1) {
                         let u = axpy8(
@@ -787,11 +754,11 @@ impl DDLu {
                             }),
                             nt,
                         );
-                        b[i] = if nz == 0 { u } else { keep_lanes(u, b[i], &z) };
+                        b[i] = if all { u } else { sel_dv(live, u, b[i]) };
                     }
                 }
                 for k in (0..n).rev() {
-                    let q = div_lanes(b[k], self.at(k, k));
+                    let q = b[k] / DV::splat(self.at(k, k));
                     b[k] = q;
                     let nt = -q;
                     let col = k * self.ld;
@@ -830,7 +797,7 @@ impl DDLu {
                             nb[i],
                         );
                     }
-                    b[k] = div_lanes(acc, self.at(k, k));
+                    b[k] = acc / DV::splat(self.at(k, k));
                     nb[k] = -b[k];
                 }
                 for k in (0..n).rev() {
