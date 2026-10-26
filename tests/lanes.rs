@@ -446,3 +446,61 @@ impl Kernel for SignedZerosMatchScalar {
 fn signed_zeros_match_the_scalar_types() {
     on_every_backend(SignedZerosMatchScalar);
 }
+
+/// Negation leaves no negative zero in a lower part: -(hi, +-0) has lo = +0 in DD and on DV's lanes, and every zero
+/// lower part of a negated QD or QV is +0; the leading part's sign is flipped as for f64. to_f64 then keeps a zero's
+/// sign (the leading part's). The control is the plain sign flip of every part, which leaves -0 in a lower part.
+#[derive(Clone)]
+struct NegationLowerZerosArePositive;
+
+impl Kernel for NegationLowerZerosArePositive {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let pos = |x: f64| same(x, 0.0);
+        for a in zero_dds() {
+            let n = -a;
+            assert!(same(n.hi, -a.hi), "DD neg {a:?}: hi {:e}", n.hi);
+            assert!(pos(n.lo), "DD neg {a:?}: lo {:e}", n.lo);
+            assert!(same(n.to_f64(), -a.hi), "DD neg {a:?}: to_f64 {:e}", n.to_f64());
+            let v = -DV::<S>::splat(a);
+            for j in 0..8 {
+                let l = v.lane(j);
+                assert!(same(l.hi, n.hi) && same(l.lo, n.lo), "{}: DV neg {a:?}: {l:?}", S::NAME);
+            }
+            let q = QD {
+                x: [a.hi, a.lo, 0.0, -0.0],
+            };
+            let nq = -q;
+            assert!(same(nq.x[0], -a.hi), "QD neg {q:?}: {nq:?}");
+            assert!(nq.x[1..].iter().all(|&x| pos(x)), "QD neg {q:?}: {nq:?}");
+            assert!(same(nq.to_f64(), -a.hi), "QD neg {q:?}: to_f64 {:e}", nq.to_f64());
+            let vq = -QV::<S>::from_lanes(&[q; 8]);
+            for j in 0..8 {
+                let l = vq.lane(j);
+                assert!(
+                    l.x.iter().zip(nq.x.iter()).all(|(x, y)| same(*x, *y)),
+                    "{}: QV neg {q:?}: {l:?}",
+                    S::NAME
+                );
+            }
+            // control: flipping every part's sign leaves -0 in the lower part of -(x, +0)
+            if same(a.lo, 0.0) {
+                let flip = DV::<S> {
+                    hi: V8::splat(a.hi).neg(),
+                    lo: V8::splat(a.lo).neg(),
+                };
+                assert!(
+                    !pos(flip.lane(0).lo),
+                    "{}: control: a plain sign flip gives lo +0 for {a:?}",
+                    S::NAME
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn negation_lower_zeros_are_positive() {
+    on_every_backend(NegationLowerZerosArePositive);
+}

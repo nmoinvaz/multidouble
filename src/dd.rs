@@ -52,9 +52,14 @@ impl DD {
     pub fn from_f64(x: f64) -> DD {
         DD { hi: x, lo: 0.0 }
     }
+    /// hi + lo; a zero lo leaves hi as it is, so a zero keeps its sign (-0 + +0 would round to +0)
     #[inline(always)]
     pub fn to_f64(self) -> f64 {
-        self.hi + self.lo
+        if self.lo == 0.0 {
+            self.hi
+        } else {
+            self.hi + self.lo
+        }
     }
     #[inline(always)]
     pub fn abs(self) -> DD {
@@ -125,10 +130,12 @@ impl Add for DD {
 impl Neg for DD {
     type Output = DD;
     #[inline(always)]
+    /// -hi, and -lo + 0, which is -lo except that a zero lo is +0: the low part of a negation never carries a
+    /// negative zero (the canonical form; the value's sign of zero is hi's)
     fn neg(self) -> DD {
         DD {
             hi: -self.hi,
-            lo: -self.lo,
+            lo: -self.lo + 0.0,
         }
     }
 }

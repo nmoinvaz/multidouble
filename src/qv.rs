@@ -747,9 +747,12 @@ impl<S: Simd> QV<S> {
 impl<S: Simd> Neg for QV<S> {
     type Output = Self;
     #[inline(always)]
+    /// as QD's: the leading part's sign bit flipped, the lower three as -x + 0 (a zero lower part is +0)
     fn neg(self) -> Self {
+        let z = V8::zero();
+        let c = self.c;
         QV {
-            c: self.c.map(|v| v.neg()),
+            c: [c[0].neg(), c[1].neg().add(z), c[2].neg().add(z), c[3].neg().add(z)],
         }
     }
 }
