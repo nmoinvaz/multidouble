@@ -1,8 +1,8 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
-//! arithmetic on them on the best SIMD backend the CPU has, a quad-double plus double-double sum, and a dense
-//! double-double LU solve.
+//! arithmetic and dot products on them on the best SIMD backend the CPU has, a quad-double plus double-double sum,
+//! and a dense double-double LU solve.
 use multidouble::dd::DD;
-use multidouble::dv::DV;
+use multidouble::dv::{DotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::qd::QD;
 use multidouble::qv::{renorm4, QV};
@@ -259,6 +259,70 @@ fn qd_add_dd<'py>(
     ))
 }
 
+/// sum_i x_i y_i in double-double: 8 lanes at a time with `DotAcc` on the backend S (the last block padded with
+/// zeros, whose products add nothing), then the 8 lane sums added in double-double in lane order, so the result is
+/// bitwise the same on every backend
+struct Dot<'a> {
+    x: (&'a [f64], &'a [f64]),
+    y: (&'a [f64], &'a [f64]),
+}
+
+impl Kernel for Dot<'_> {
+    type Output = DD;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> DD {
+        let n = self.x.0.len();
+        let full = n / 8 * 8;
+        let mut acc = DotAcc::<S>::zero();
+        for i in (0..full).step_by(8) {
+            let x = DV::<S>::load(&self.x.0[i..i + 8], &self.x.1[i..i + 8]);
+            let y = DV::<S>::load(&self.y.0[i..i + 8], &self.y.1[i..i + 8]);
+            acc = acc.add_prod(x, y);
+        }
+        if full < n {
+            let pad = |a: &[f64]| -> [f64; 8] { std::array::from_fn(|r| a.get(full + r).copied().unwrap_or(0.0)) };
+            let x = DV::<S>::load(&pad(self.x.0), &pad(self.x.1));
+            let y = DV::<S>::load(&pad(self.y.0), &pad(self.y.1));
+            acc = acc.add_prod(x, y);
+        }
+        let v = acc.finish();
+        let mut sum = DD::ZERO;
+        for j in 0..8 {
+            sum = sum + v.lane(j);
+        }
+        sum
+    }
+}
+
+/// sum_i (xh + xl)_i (yh + yl)_i in double-double, 8 lanes at a time on the best SIMD backend: each lane sums its
+/// products with an error-free sum of their leading parts and the rest in float64, then the 8 lane sums are added
+/// in double-double. Within about (n / 8 + 12) u^2 of sum |x_i y_i|, u^2 = 2^-106, and bitwise the same on every
+/// backend. Returns (hi, lo) as floats.
+#[pyfunction]
+fn dd_dot(
+    xh: PyReadonlyArray1<'_, f64>,
+    xl: PyReadonlyArray1<'_, f64>,
+    yh: PyReadonlyArray1<'_, f64>,
+    yl: PyReadonlyArray1<'_, f64>,
+) -> PyResult<(f64, f64)> {
+    let (x0, x1, y0, y1) = (
+        slice(&xh, "xh")?,
+        slice(&xl, "xl")?,
+        slice(&yh, "yh")?,
+        slice(&yl, "yl")?,
+    );
+    let n = x0.len();
+    if x1.len() != n || y0.len() != n || y1.len() != n {
+        return Err(PyValueError::new_err("xh, xl, yh and yl must have the same length"));
+    }
+    // with the GIL held, as the elementwise functions: the slices borrow the input arrays
+    let d = simd::dispatch(Dot {
+        x: (x0, x1),
+        y: (y0, y1),
+    });
+    Ok((d.hi, d.lo))
+}
+
 /// x with A x = b in double-double, by LU with partial pivoting: A as (n, n) row-major hi and lo arrays, b as hi
 /// and lo arrays of length n. Returns the (hi, lo) arrays of x. Raises ValueError if A is singular.
 #[pyfunction]
@@ -318,6 +382,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sub, m)?)?;
     m.add_function(wrap_pyfunction!(mul, m)?)?;
     m.add_function(wrap_pyfunction!(div, m)?)?;
+    m.add_function(wrap_pyfunction!(dd_dot, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;

@@ -5,6 +5,8 @@ A double-double array is a pair of float64 arrays (hi, lo) with value hi + lo el
 Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``isa()``):
 
 - ``add``, ``sub``, ``mul``, ``div``: elementwise operations; ``dd_op(op, ...)`` with op 0 add, 1 mul, 2 div, 3 sub;
+- ``dd_dot``: a dot product in double-double (8 lanes at a time, then the lane sums), to about (n / 8 + 12) 2^-106 of
+  sum |x_i y_i|;
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double.
 
@@ -14,16 +16,15 @@ inputs give the same bits on every machine with IEEE float64 arithmetic):
 - ``two_sum``, ``two_prod``: the error-free transformations (``two_prod`` by Dekker's splitting, no FMA needed);
 - ``dd_add`` (the accurate double-double sum), ``dd_scale`` (times an f64 scalar), ``dd_axpy`` (y + a x);
 - ``dd_norm`` (max |hi + lo|) and ``dd_from_mp`` (from mpmath numbers; needs mpmath);
-- ``dd_dot`` (a dot product in double-double) and ``gcr``: x with A x = b in double-double by preconditioned GMRES
-  (its GCR form), given the products A u in double-double and a preconditioner, typically an f64 LU of A: the
-  refinement of a mixed-precision solve.
+- ``gcr``: x with A x = b in double-double by preconditioned GMRES (its GCR form), given the products A u in
+  double-double and a preconditioner, typically an f64 LU of A: the refinement of a mixed-precision solve.
 """
-import math
 import time
 
 import numpy as np
 
 from ._multidouble import add, dd_op, dd_solve, div, isa, mul, qd_add_dd, sub
+from ._multidouble import dd_dot as _dd_dot
 
 __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_solve", "qd_add_dd", "isa", "two_sum", "two_prod", "dd_add",
            "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
@@ -106,12 +107,11 @@ def dd_from_mp(v):
 
 
 def dd_dot(xh, xl, yh, yl):
-    """sum_i (xh + xl)_i (yh + yl)_i in double-double: the products' exact parts (two_prod) and the cross terms, summed
-    exactly rounded (math.fsum), the remainder likewise; to about 2^-104 of sum |x_i y_i|. Returns (hi, lo)."""
-    p, e = two_prod(np.asarray(xh, dtype=float), np.asarray(yh, dtype=float))
-    terms = np.concatenate([p, e, np.asarray(xh) * np.asarray(yl) + np.asarray(xl) * np.asarray(yh)])
-    s = math.fsum(terms)
-    return s, math.fsum(np.append(terms, -s))
+    """sum_i (xh + xl)_i (yh + yl)_i in double-double, as (hi, lo) floats: the Rust dot product (8 lanes at a time on
+    the best SIMD backend, bitwise the same on every backend), to about (n / 8 + 12) 2^-106 of sum |x_i y_i|. Any
+    sequences of numbers of one length."""
+    a = [np.ascontiguousarray(v, dtype=np.float64) for v in (xh, xl, yh, yl)]
+    return _dd_dot(*a)
 
 
 def _dd_div(a, b):
