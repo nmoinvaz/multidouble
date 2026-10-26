@@ -6,6 +6,7 @@
 use crate::dd::{two_prod, two_sum, DD};
 use crate::dv::{self, DV};
 use crate::qd::QD;
+use crate::qv::QV;
 use crate::simd::{self, Kernel, Simd};
 use crate::v8::{M8, V8};
 use rayon::prelude::*;
@@ -145,6 +146,39 @@ fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
         }
     }
     (p, m)
+}
+
+/// d[i] = q[i].to_dd(), 8 entries at a time (`QV::to_dv`), the remainder scalar
+#[inline(always)]
+fn to_dd_lanes<S: Simd>(q: &[QD], d: &mut [DD]) {
+    let full = q.len() / 8 * 8;
+    for i in (0..full).step_by(8) {
+        let v = QV::<S>::from_lanes(q[i..i + 8].try_into().unwrap()).to_dv();
+        let (h, l) = (v.hi.to_array(), v.lo.to_array());
+        for r in 0..8 {
+            d[i + r] = DD { hi: h[r], lo: l[r] };
+        }
+    }
+    for i in full..q.len() {
+        d[i] = q[i].to_dd();
+    }
+}
+
+/// x[i] = x[i] + QD::from_dd(d[i]), 8 entries at a time (`QV + QV`), the remainder scalar
+#[inline(always)]
+fn add_dd_lanes<S: Simd>(x: &mut [QD], d: &[DD]) {
+    let full = x.len() / 8 * 8;
+    for i in (0..full).step_by(8) {
+        let dv = DV::<S> {
+            hi: V8::from_array(std::array::from_fn(|r| d[i + r].hi)),
+            lo: V8::from_array(std::array::from_fn(|r| d[i + r].lo)),
+        };
+        let s = QV::<S>::from_lanes(x[i..i + 8].try_into().unwrap()) + QV::from_dv(dv);
+        x[i..i + 8].copy_from_slice(&s.lanes());
+    }
+    for i in full..x.len() {
+        x[i] = x[i] + QD::from_dd(d[i]);
+    }
 }
 
 /// Blocked LU: matrices at least this large take `factor_blocked`; NB: panel width; CW: columns per parallel task;
@@ -893,26 +927,37 @@ impl DDLu {
     /// A and b. x starts as the solve of b rounded to double-double, and each of the `steps` steps adds the solve of
     /// r rounded to double-double, the sum in quad-double: with the LU of A to double-double each step multiplies
     /// the error by about cond(A) 2^-104, so two steps reach quad-double where cond(A) is below about 10^10.
-    /// Every operation is a scalar one, so the result is bitwise that of the same steps on `QV` lanes
-    /// (`QV::to_dv`, the double-double solve, `QV + QV`).
-    pub fn solve_refine_qd(&self, b: &[QD], steps: usize, mut resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
-        let n = self.n;
-        assert_eq!(b.len(), n, "solve_refine_qd: b must have n entries");
-        let mut d: Vec<DD> = b.iter().map(|v| v.to_dd()).collect();
-        self.solve(&mut d);
-        let mut x: Vec<QD> = d.iter().map(|&v| QD::from_dd(v)).collect();
-        let mut r = vec![QD::ZERO; n];
-        for _ in 0..steps {
-            resid(&x, &mut r);
-            for (di, ri) in d.iter_mut().zip(&r) {
-                *di = ri.to_dd();
-            }
-            self.solve(&mut d);
-            for (xi, di) in x.iter_mut().zip(&d) {
-                *xi = *xi + QD::from_dd(*di);
-            }
-        }
-        x
+    /// The conversions and sums run 8 entries at a time on `QV` lanes (`QV::to_dv`, `QV + QV`), bitwise the scalar
+    /// `QD::to_dd` and `QD + QD`.
+    pub fn solve_refine_qd(&self, b: &[QD], steps: usize, resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
+        simd::dispatch(RefineQd {
+            lu: self,
+            b,
+            steps,
+            resid,
+        })
+    }
+
+    fn solve_refine_qd_on<S: Simd>(&self, b: &[QD], steps: usize, mut resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let n = self.n;
+                assert_eq!(b.len(), n, "solve_refine_qd: b must have n entries");
+                let mut d = vec![DD::ZERO; n];
+                to_dd_lanes::<S>(b, &mut d);
+                self.solve_on::<S>(&mut d);
+                let mut x: Vec<QD> = d.iter().map(|&v| QD::from_dd(v)).collect();
+                let mut r = vec![QD::ZERO; n];
+                for _ in 0..steps {
+                    resid(&x, &mut r);
+                    to_dd_lanes::<S>(&r, &mut d);
+                    self.solve_on::<S>(&mut d);
+                    add_dd_lanes::<S>(&mut x, &d);
+                }
+                x
+            },
+        )
     }
 
     /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
@@ -1589,6 +1634,21 @@ impl Kernel for Solve<'_> {
     #[inline(always)]
     fn run<S: Simd>(self) {
         self.lu.solve_on::<S>(self.b)
+    }
+}
+
+struct RefineQd<'a, F> {
+    lu: &'a DDLu,
+    b: &'a [QD],
+    steps: usize,
+    resid: F,
+}
+
+impl<F: FnMut(&[QD], &mut [QD])> Kernel for RefineQd<'_, F> {
+    type Output = Vec<QD>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Vec<QD> {
+        self.lu.solve_refine_qd_on::<S>(self.b, self.steps, self.resid)
     }
 }
 
@@ -2723,6 +2783,24 @@ mod tests {
         }
     }
 
+    fn refine_ref(lu: &DDLu, b: &[QD], steps: usize, mut resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
+        let mut d: Vec<DD> = b.iter().map(|v| v.to_dd()).collect();
+        solve_ref(lu, &mut d);
+        let mut x: Vec<QD> = d.iter().map(|&v| QD::from_dd(v)).collect();
+        let mut r = vec![QD::ZERO; lu.n];
+        for _ in 0..steps {
+            resid(&x, &mut r);
+            for (di, ri) in d.iter_mut().zip(&r) {
+                *di = ri.to_dd();
+            }
+            solve_ref(lu, &mut d);
+            for (xi, di) in x.iter_mut().zip(&d) {
+                *xi = *xi + QD::from_dd(*di);
+            }
+        }
+        x
+    }
+
     fn solve_hi_ref(lu: &DDLu, b: &mut [f64]) {
         let (n, ld) = (lu.n, lu.ld);
         for k in 0..n {
@@ -2928,6 +3006,25 @@ mod tests {
                         S::NAME
                     );
                 }
+                // the refinement to quad-double, with a residual that is not the true one (any function will do)
+                let bq: Vec<QD> = b.iter().map(|&v| QD::from_dd(v).add_f(1e-20)).collect();
+                let resid = |x: &[QD], r: &mut [QD]| {
+                    for i in 0..x.len() {
+                        r[i] = bq[i] - x[i].mul_f(0.75);
+                    }
+                };
+                let x = lu.solve_refine_qd_on::<S>(&bq, 3, resid);
+                let y = refine_ref(&lu, &bq, 3, resid);
+                for i in 0..n {
+                    assert!(
+                        x[i].x
+                            .iter()
+                            .zip(y[i].x.iter())
+                            .all(|(p, q)| p.to_bits() == q.to_bits()),
+                        "{}: solve_refine_qd n {n} row {i}",
+                        S::NAME
+                    );
+                }
                 let mut x: Vec<f64> = b.iter().map(|d| d.hi).collect();
                 let mut y = x.clone();
                 lu.solve_hi_on::<S>(&mut x);
@@ -2958,7 +3055,8 @@ mod tests {
         }
     }
 
-    /// The lane code (pivot search, row updates, the single solves) gives the scalar loops' bits on every backend.
+    /// The lane code (pivot search, row updates, the single solves, the quad-double refinement) gives the scalar loops'
+    /// bits on every backend.
     /// Control: the pivot inputs have ties, so a search that took the last maximum would fail.
     #[test]
     fn lane_code_matches_the_scalar_loops() {
