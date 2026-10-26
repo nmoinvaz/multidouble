@@ -279,7 +279,13 @@ impl QD {
     /// nearest f64 (to within the rounding of the three lower parts' sum)
     #[inline(always)]
     pub fn to_f64(self) -> f64 {
-        self.x[0] + (self.x[1] + (self.x[2] + self.x[3]))
+        let t = self.x[1] + (self.x[2] + self.x[3]);
+        // a zero tail leaves the leading part as it is, so a zero keeps its sign
+        if t == 0.0 {
+            self.x[0]
+        } else {
+            self.x[0] + t
+        }
     }
     /// double-double, to about 2^-106 relative
     #[inline(always)]
@@ -989,8 +995,12 @@ impl std::str::FromStr for QD {
 impl Neg for QD {
     type Output = QD;
     #[inline(always)]
+    /// every part negated, the lower three as -x + 0, so that a zero lower part is +0 (as DD's lo)
     fn neg(self) -> QD {
-        QD { x: self.x.map(|v| -v) }
+        let x = self.x;
+        QD {
+            x: [-x[0], -x[1] + 0.0, -x[2] + 0.0, -x[3] + 0.0],
+        }
     }
 }
 

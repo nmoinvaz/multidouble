@@ -135,10 +135,11 @@ impl<S: Simd> Add for DV<S> {
 impl<S: Simd> Neg for DV<S> {
     type Output = Self;
     #[inline(always)]
+    /// as DD's: the sign bit of hi flipped, lo as -lo + 0 (a zero lo is +0)
     fn neg(self) -> Self {
         DV {
             hi: self.hi.neg(),
-            lo: self.lo.neg(),
+            lo: self.lo.neg().add(V8::zero()),
         }
     }
 }
