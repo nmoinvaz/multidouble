@@ -532,3 +532,203 @@ fn staircase_rejects_bad_partitions() {
     assert!(try_factor(groups.clone(), &rblocks, 0, n - 1).is_err()); // row0 inside row block 0
     assert!(try_factor(groups.clone(), &rblocks, n, n - 1).is_err()); // row0 out of range
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// quad-double LU
+// ---------------------------------------------------------------------------------------------------------------
+
+use multidouble::linalg::{QDLu, QdLuControl};
+use multidouble::qd::QdAcc;
+
+fn rand_qd(r: &mut Rng) -> QD {
+    QD::new(r.sym(), r.sym() * 1e-17, r.sym() * 1e-34, r.sym() * 1e-51)
+}
+
+/// a random n x n quad-double matrix in four parts, column-major with leading dimension ld_for(n), made well
+/// conditioned by a diagonal shift
+fn matrix_qd(n: usize, r: &mut Rng) -> (usize, [Vec<f64>; 4]) {
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..n {
+            let mut v = rand_qd(r);
+            if i == j {
+                v = v + QD::from_f64(2.0 + (n as f64).sqrt());
+            }
+            for q in 0..4 {
+                c[q][j * ld + i] = v.x[q];
+            }
+        }
+    }
+    (ld, c)
+}
+
+fn entry(c: &[Vec<f64>; 4], k: usize) -> QD {
+    QD {
+        x: std::array::from_fn(|q| c[q][k]),
+    }
+}
+
+/// A x (or A^T x) in quad-double
+fn apply_qd(n: usize, ld: usize, c: &[Vec<f64>; 4], x: &[QD], transpose: bool) -> Vec<QD> {
+    (0..n)
+        .map(|i| {
+            let mut s = QdAcc::zero();
+            for j in 0..n {
+                let k = if transpose { i * ld + j } else { j * ld + i };
+                s = s.add_prod(entry(c, k), x[j]);
+            }
+            s.finish()
+        })
+        .collect()
+}
+
+fn max_rel_err_qd(got: &[QD], want: &[QD]) -> f64 {
+    let scale = want.iter().map(|w| w.x[0].abs()).fold(0.0, f64::max);
+    got.iter()
+        .zip(want)
+        .map(|(g, w)| (*g - *w).to_f64().abs() / scale)
+        .fold(0.0, f64::max)
+}
+
+/// the error of QDLu's solve and transpose solve of a random well-conditioned system of order n
+fn qd_solve_errors(n: usize, seed: u64, par: bool, ctl: QdLuControl) -> f64 {
+    let mut r = Rng(seed);
+    let (ld, c) = matrix_qd(n, &mut r);
+    let x: Vec<QD> = (0..n).map(|_| rand_qd(&mut r)).collect();
+    let lu = QDLu::factor_control(n, ld, c.clone(), par, ctl).expect("factor");
+    let mut worst = 0.0f64;
+    for transpose in [false, true] {
+        let mut b = apply_qd(n, ld, &c, &x, transpose);
+        if transpose {
+            lu.solve_t(&mut b);
+        } else {
+            lu.solve(&mut b);
+        }
+        worst = worst.max(max_rel_err_qd(&b, &x));
+    }
+    worst
+}
+
+#[test]
+fn qd_lu_solves_to_quad_double() {
+    for &n in &[1usize, 5, 8, 37, 64, 130] {
+        for &par in &[false, true] {
+            let e = qd_solve_errors(n, 61 + n as u64, par, QdLuControl::None);
+            println!("QDLu n = {n}, par {par}: worst relative error {e:.1e}");
+            assert!(e < 1e-57, "n = {n}: {e:e}");
+        }
+    }
+}
+
+/// Control: the trailing update rounded to double-double leaves the solve at double-double accuracy, which the same
+/// check rejects.
+#[test]
+fn control_qd_lu_update_in_dd_is_caught() {
+    let e = qd_solve_errors(64, 125, false, QdLuControl::UpdateDd);
+    println!("QDLu with the update in double-double: worst relative error {e:.1e}");
+    assert!(e > 1e-40, "{e:e}");
+}
+
+#[test]
+fn qd_lu_parallel_is_bitwise_serial() {
+    let mut r = Rng(62);
+    let n = 200;
+    let (ld, c) = matrix_qd(n, &mut r);
+    let a = QDLu::factor(n, ld, c.clone(), false).unwrap();
+    let b = QDLu::factor(n, ld, c, true).unwrap();
+    assert_eq!(a.perm, b.perm);
+    for q in 0..4 {
+        assert!(
+            a.c[q].iter().zip(&b.c[q]).all(|(u, v)| u.to_bits() == v.to_bits()),
+            "part {q}"
+        );
+    }
+}
+
+/// A = H1 D H2 with Householder reflectors H1, H2 and D = diag(10^(-40 i / (n - 1))): condition number 1e40, beyond
+/// double-double. The quad-double LU solves it to about 1e40 2^-209; the double-double LU of A rounded to double-double
+/// has no correct digit.
+#[test]
+fn qd_lu_solves_what_dd_cannot() {
+    let mut r = Rng(63);
+    let n = 40;
+    let ld = ld_for(n);
+    let refl = |r: &mut Rng| -> Vec<Vec<QD>> {
+        let v: Vec<QD> = (0..n).map(|_| rand_qd(r)).collect();
+        let vv = v.iter().fold(QdAcc::zero(), |a, &x| a.add_prod(x, x)).finish();
+        (0..n)
+            .map(|i| {
+                (0..n)
+                    .map(|j| {
+                        let e = if i == j { QD::ONE } else { QD::ZERO };
+                        e - (v[i] * v[j]).mul_f(2.0) / vv
+                    })
+                    .collect()
+            })
+            .collect()
+    };
+    let (h1, h2) = (refl(&mut r), refl(&mut r));
+    let d: Vec<QD> = (0..n)
+        .map(|k| QD::from_f64(10f64.powf(-40.0 * k as f64 / (n - 1) as f64)))
+        .collect();
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for i in 0..n {
+        for j in 0..n {
+            let s = (0..n)
+                .fold(QdAcc::zero(), |a, k| a.add_prod(h1[i][k] * d[k], h2[k][j]))
+                .finish();
+            for q in 0..4 {
+                c[q][j * ld + i] = s.x[q];
+            }
+        }
+    }
+    let x: Vec<QD> = (0..n).map(|_| rand_qd(&mut r)).collect();
+    let b = apply_qd(n, ld, &c, &x, false);
+    let mut bq = b.clone();
+    QDLu::factor(n, ld, c.clone(), false).unwrap().solve(&mut bq);
+    let eq = max_rel_err_qd(&bq, &x);
+    let (hi, lo): (Vec<f64>, Vec<f64>) = (0..ld * n).map(|k| entry(&c, k).to_dd()).map(|v| (v.hi, v.lo)).unzip();
+    let mut bd: Vec<DD> = b.iter().map(|v| v.to_dd()).collect();
+    DDLu::factor(n, ld, hi, lo, false).unwrap().solve(&mut bd);
+    let ed = max_rel_err_qd(&bd.iter().map(|&v| QD::from_dd(v)).collect::<Vec<_>>(), &x);
+    println!("cond 1e40: quad-double LU error {eq:.1e}, double-double LU error {ed:.1e}");
+    assert!(eq < 1e-16, "quad-double: {eq:e}");
+    assert!(ed > 1e-3, "double-double: {ed:e}");
+}
+
+/// a block-bidiagonal matrix (8 x 8 blocks, zero elsewhere): the skipped zero updates leave the solve exact to
+/// quad-double, and an exactly zero column is reported as singular
+#[test]
+fn qd_lu_sparse_and_singular() {
+    let mut r = Rng(64);
+    let n = 48;
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..n {
+            let (bi, bj) = (i / 8, j / 8);
+            if bi == bj || bi == bj + 1 {
+                let mut v = rand_qd(&mut r);
+                if i == j {
+                    v = v + QD::from_f64(4.0);
+                }
+                for q in 0..4 {
+                    c[q][j * ld + i] = v.x[q];
+                }
+            }
+        }
+    }
+    let x: Vec<QD> = (0..n).map(|_| rand_qd(&mut r)).collect();
+    let mut b = apply_qd(n, ld, &c, &x, false);
+    QDLu::factor(n, ld, c.clone(), true).unwrap().solve(&mut b);
+    let e = max_rel_err_qd(&b, &x);
+    println!("block-bidiagonal QDLu: worst relative error {e:.1e}");
+    assert!(e < 1e-58, "{e:e}");
+    for q in 0..4 {
+        for i in 0..n {
+            c[q][5 * ld + i] = 0.0;
+        }
+    }
+    assert!(QDLu::factor(n, ld, c, false).is_err());
+}

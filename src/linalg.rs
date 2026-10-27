@@ -2,7 +2,8 @@
 //! padded to a multiple of 8 so the trailing update runs on 8-row lane vectors, columns updated in parallel (rayon)
 //! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
-//! quad-double (`DDLu::solve_refine_qd`), and Gram matrices.
+//! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) for systems
+//! too ill-conditioned for double-double.
 use crate::dd::{two_prod, two_sum, DD};
 use crate::dv::{self, DV};
 use crate::qd::QD;
@@ -2367,6 +2368,317 @@ fn split(x: &[DD], len: usize) -> (Vec<f64>, Vec<f64>) {
 fn join(x: &mut [DD], h: &[f64], l: &[f64]) {
     for (i, v) in x.iter_mut().enumerate() {
         *v = DD { hi: h[i], lo: l[i] };
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Dense quad-double LU
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Deliberate breakage of `QDLu::factor_control`, for the controls of its accuracy tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QdLuControl {
+    None,
+    /// every trailing update rounded to double-double (its two lower parts dropped)
+    UpdateDd,
+}
+
+/// Dense quad-double LU with partial pivoting (LAPACK getf2 order, as `DDLu::factor_unblocked`), column-major with
+/// the leading dimension a multiple of 8 and each entry's four parts in four arrays, so that the multipliers and the
+/// trailing update run on 8-row `QV` lanes; the trailing columns are updated in parallel (rayon) for large matrices.
+/// For systems whose condition number nears 2^104, where a double-double solve has no correct digit: a solve's error
+/// is about cond(A) 2^-209 (backward stability of partial pivoting; Higham, Accuracy and Stability of Numerical
+/// Algorithms, 2nd ed., SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an exactly zero
+/// pivot-row entry is skipped (it cannot change a value), so the zero blocks of a sparse matrix cost nothing.
+#[derive(Clone)]
+pub struct QDLu {
+    pub n: usize,
+    pub ld: usize,
+    /// part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it) at c[q][j * ld + i]
+    pub c: [Vec<f64>; 4],
+    pub perm: Vec<usize>,
+}
+
+/// one column's four parts, as the parallel update zips them
+type Cols4<'a> = (((&'a mut [f64], &'a mut [f64]), &'a mut [f64]), &'a mut [f64]);
+
+#[inline(always)]
+fn load_qv<S: Simd>(c: [&[f64]; 4], i: usize) -> QV<S> {
+    QV::load(&c[0][i..i + 8], &c[1][i..i + 8], &c[2][i..i + 8], &c[3][i..i + 8])
+}
+
+#[inline(always)]
+fn sel_qv<S: Simd>(m: M8<S>, u: QV<S>, a: QV<S>) -> QV<S> {
+    QV {
+        c: std::array::from_fn(|q| m.sel(u.c[q], a.c[q])),
+    }
+}
+
+/// b[i] += l[i] t for i in lo..hi, on the 8-row blocks that meet lo..hi; rows outside keep their value. Blocks of l
+/// that are exactly zero are skipped. Every slice holds hi rounded up to 8 rows.
+#[inline(always)]
+fn qd_axpy_rows<S: Simd>(b: [&mut [f64]; 4], l: [&[f64]; 4], lo: usize, hi: usize, t: QD, ctl: QdLuControl) {
+    let tv = QV::<S>::splat(t);
+    let [b0, b1, b2, b3] = b;
+    let mut i = 8 * (lo / 8);
+    while i < hi {
+        if l[0][i..i + 8].iter().any(|&v| v != 0.0) {
+            let a = QV::<S>::load(&b0[i..i + 8], &b1[i..i + 8], &b2[i..i + 8], &b3[i..i + 8]);
+            let mut r = a + load_qv::<S>(l, i) * tv;
+            if ctl == QdLuControl::UpdateDd {
+                r = QV::from_dv(r.to_dv());
+            }
+            let r = sel_qv(rows_in::<S>(i, lo, hi), r, a);
+            r.store(
+                &mut b0[i..i + 8],
+                &mut b1[i..i + 8],
+                &mut b2[i..i + 8],
+                &mut b3[i..i + 8],
+            );
+        }
+        i += 8;
+    }
+}
+
+impl QDLu {
+    /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero), part q
+    /// of entry (i, j) at c[q][j * ld + i]. par: update the trailing columns in parallel (rayon's current pool).
+    pub fn factor(n: usize, ld: usize, c: [Vec<f64>; 4], par: bool) -> Result<QDLu, String> {
+        Self::factor_control(n, ld, c, par, QdLuControl::None)
+    }
+
+    /// `factor` with a control (`QdLuControl`; None is `factor`)
+    pub fn factor_control(n: usize, ld: usize, c: [Vec<f64>; 4], par: bool, ctl: QdLuControl) -> Result<QDLu, String> {
+        simd::dispatch(FactorQd { n, ld, c, par, ctl })
+    }
+
+    fn factor_on<S: Simd>(
+        n: usize,
+        ld: usize,
+        mut c: [Vec<f64>; 4],
+        par: bool,
+        ctl: QdLuControl,
+    ) -> Result<QDLu, String> {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert!(ld.is_multiple_of(8) && ld >= n && c.iter().all(|p| p.len() >= ld * n));
+                let mut perm = vec![0usize; n];
+                let mut m: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0f64; ld]);
+                for k in 0..n {
+                    let ck = k * ld;
+                    let (p, best) = pivot_search::<S>(&c[0][ck..ck + ld], k, n);
+                    if best == 0.0 || !best.is_finite() {
+                        return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                    }
+                    perm[k] = p;
+                    if p != k {
+                        for j in 0..n {
+                            for part in c.iter_mut() {
+                                part.swap(j * ld + k, j * ld + p);
+                            }
+                        }
+                    }
+                    let piv = QV::<S>::splat(QD {
+                        x: std::array::from_fn(|q| c[q][ck + k]),
+                    });
+                    // the multipliers l_ik = a_ik / a_kk, rows k + 1..n
+                    let mut i = 8 * ((k + 1) / 8);
+                    while i < n {
+                        let x = load_qv::<S>([&c[0], &c[1], &c[2], &c[3]], ck + i);
+                        let y = sel_qv(rows_in::<S>(i, k + 1, n), x / piv, x);
+                        let [c0, c1, c2, c3] = &mut c;
+                        let o = ck + i;
+                        y.store(
+                            &mut c0[o..o + 8],
+                            &mut c1[o..o + 8],
+                            &mut c2[o..o + 8],
+                            &mut c3[o..o + 8],
+                        );
+                        i += 8;
+                    }
+                    if k + 1 == n {
+                        break;
+                    }
+                    let r0 = 8 * ((k + 1) / 8);
+                    for q in 0..4 {
+                        for i in r0..ld {
+                            m[q][i] = if i > k && i < n { c[q][ck + i] } else { 0.0 };
+                        }
+                    }
+                    let ncols = n - k - 1;
+                    let [c0, c1, c2, c3] = &mut c;
+                    let (r0s, r1s, r2s, r3s) = (
+                        &mut c0[(k + 1) * ld..(k + 1 + ncols) * ld],
+                        &mut c1[(k + 1) * ld..(k + 1 + ncols) * ld],
+                        &mut c2[(k + 1) * ld..(k + 1 + ncols) * ld],
+                        &mut c3[(k + 1) * ld..(k + 1 + ncols) * ld],
+                    );
+                    let ml = [&m[0][..], &m[1][..], &m[2][..], &m[3][..]];
+                    let upd = |(((a0, a1), a2), a3): Cols4| {
+                        S::vectorize(
+                            #[inline(always)]
+                            || {
+                                if a0[k] == 0.0 {
+                                    return;
+                                }
+                                let nt = -QD {
+                                    x: [a0[k], a1[k], a2[k], a3[k]],
+                                };
+                                qd_axpy_rows::<S>([a0, a1, a2, a3], ml, k + 1, n, nt, ctl);
+                            },
+                        )
+                    };
+                    if par && ncols * (ld - r0) > 4096 {
+                        r0s.par_chunks_mut(ld)
+                            .zip(r1s.par_chunks_mut(ld))
+                            .zip(r2s.par_chunks_mut(ld))
+                            .zip(r3s.par_chunks_mut(ld))
+                            .for_each(upd);
+                    } else {
+                        r0s.chunks_mut(ld)
+                            .zip(r1s.chunks_mut(ld))
+                            .zip(r2s.chunks_mut(ld))
+                            .zip(r3s.chunks_mut(ld))
+                            .for_each(upd);
+                    }
+                }
+                Ok(QDLu { n, ld, c, perm })
+            },
+        )
+    }
+
+    /// entry (i, j) of the factors
+    #[inline(always)]
+    pub fn at(&self, i: usize, j: usize) -> QD {
+        let o = j * self.ld + i;
+        QD {
+            x: std::array::from_fn(|q| self.c[q][o]),
+        }
+    }
+
+    fn col(&self, k: usize) -> [&[f64]; 4] {
+        let r = k * self.ld..(k + 1) * self.ld;
+        std::array::from_fn(|q| &self.c[q][r.clone()])
+    }
+
+    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
+    /// zero), then U x = y, each column's update 8 rows at a time on the backend `simd::dispatch` picks.
+    pub fn solve(&self, b: &mut [QD]) {
+        simd::dispatch(SolveQd { lu: self, b })
+    }
+
+    fn solve_on<S: Simd>(&self, b: &mut [QD]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let (n, ld) = (self.n, self.ld);
+                assert!(b.len() >= n);
+                for k in 0..n {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+                let mut v: [Vec<f64>; 4] = std::array::from_fn(|q| {
+                    let mut a = vec![0.0f64; ld];
+                    for i in 0..n {
+                        a[i] = b[i].x[q];
+                    }
+                    a
+                });
+                let get = |v: &[Vec<f64>; 4], i: usize| QD {
+                    x: std::array::from_fn(|q| v[q][i]),
+                };
+                for k in 0..n {
+                    let t = -get(&v, k);
+                    if t.x[0] == 0.0 {
+                        continue;
+                    }
+                    let [v0, v1, v2, v3] = &mut v;
+                    qd_axpy_rows::<S>([v0, v1, v2, v3], self.col(k), k + 1, n, t, QdLuControl::None);
+                }
+                for k in (0..n).rev() {
+                    let q = get(&v, k) / self.at(k, k);
+                    for p in 0..4 {
+                        v[p][k] = q.x[p];
+                    }
+                    if q.x[0] != 0.0 {
+                        let [v0, v1, v2, v3] = &mut v;
+                        qd_axpy_rows::<S>([v0, v1, v2, v3], self.col(k), 0, k, -q, QdLuControl::None);
+                    }
+                }
+                for i in 0..n {
+                    b[i] = get(&v, i);
+                }
+            },
+        )
+    }
+
+    /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
+    pub fn solve_t(&self, b: &mut [QD]) {
+        let n = self.n;
+        for k in 0..n {
+            let mut acc = b[k];
+            for i in 0..k {
+                acc = acc - self.at(i, k) * b[i];
+            }
+            b[k] = acc / self.at(k, k);
+        }
+        for k in (0..n).rev() {
+            let mut acc = b[k];
+            for i in k + 1..n {
+                acc = acc - self.at(i, k) * b[i];
+            }
+            b[k] = acc;
+        }
+        for k in (0..n).rev() {
+            let p = self.perm[k];
+            if p != k {
+                b.swap(k, p);
+            }
+        }
+    }
+
+    /// min and max |u_kk| (leading parts)
+    pub fn pivot_range(&self) -> (f64, f64) {
+        let mut lo = f64::INFINITY;
+        let mut hi = 0.0f64;
+        for k in 0..self.n {
+            let v = self.c[0][k * self.ld + k].abs();
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        (lo, hi)
+    }
+}
+
+struct FactorQd {
+    n: usize,
+    ld: usize,
+    c: [Vec<f64>; 4],
+    par: bool,
+    ctl: QdLuControl,
+}
+
+impl Kernel for FactorQd {
+    type Output = Result<QDLu, String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        QDLu::factor_on::<S>(self.n, self.ld, self.c, self.par, self.ctl)
+    }
+}
+
+struct SolveQd<'a> {
+    lu: &'a QDLu,
+    b: &'a mut [QD],
+}
+
+impl Kernel for SolveQd<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu.solve_on::<S>(self.b)
     }
 }
 
