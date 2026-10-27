@@ -1,13 +1,15 @@
 //! Forward-mode dual lanes: one generic function evaluated with value lanes, with a double-double tangent (`Du`), with
 //! N f64 tangents (`Dtn<N>`) and in plain f64 (`Fu`), against derivatives written out by hand in scalar double-double.
-//! A second function goes through every method of `Lane` on all six lane types, and `mul_pwr2` is checked bit for bit.
+//! A second function goes through every method of `Lane` on all seven lane types, and `mul_pwr2` is checked bit for bit.
+//! `Qu` (quad-double value and tangent) is checked against derivatives by hand in scalar quad-double.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{take_counts, Counted, Lane, COUNTED_OPS};
 use multidouble::dv::DV;
-use multidouble::native::{Dtn, Du, Fu, Fun, F8};
+use multidouble::native::{Dtn, Du, Fu, Fun, Qu, F8, QV};
+use multidouble::qd::QD;
 use multidouble::simd::{Native, Simd};
 use multidouble::v8::V8;
 
@@ -252,6 +254,7 @@ fn every_lane_method_on_every_lane_type() {
     run::<Fu>("Fu");
     run::<Dtn<2>>("Dtn<2>");
     run::<Fun<2>>("Fun<2>");
+    run::<Qu>("Qu");
 }
 
 /// Controls: hand references that get `bcast` wrong are caught. A value with each lane's own x in place of lane 0's,
@@ -272,6 +275,7 @@ fn controls_on_bcast_are_caught() {
     assert!(!within::<Fu>(errors::<Fu>(no_bcast_tangent)));
     assert!(!within::<Dtn<2>>(errors::<Dtn<2>>(no_bcast_tangent)));
     assert!(!within::<Fun<2>>(errors::<Fun<2>>(no_bcast_tangent)));
+    assert!(!within::<Qu>(errors::<Qu>(no_bcast_tangent)));
 }
 
 /// every part of a lane, value and tangents, as bits
@@ -335,6 +339,7 @@ fn mul_pwr2_is_exact_on_every_lane_type() {
     assert!(scales_exactly::<Fu>(|x, s| x.mul_pwr2(s)), "Fu");
     assert!(scales_exactly::<Dtn<2>>(|x, s| x.mul_pwr2(s)), "Dtn<2>");
     assert!(scales_exactly::<Fun<2>>(|x, s| x.mul_pwr2(s)), "Fun<2>");
+    assert!(scales_exactly::<Qu>(|x, s| x.mul_pwr2(s)), "Qu");
     // the scalar double-double, through lane 0 of DV
     let mut r = Rng(54);
     for _ in 0..2000 {
@@ -362,6 +367,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Fu>(wrong_power));
     assert!(!scales_exactly::<Dtn<2>>(wrong_power));
     assert!(!scales_exactly::<Fun<2>>(wrong_power));
+    assert!(!scales_exactly::<Qu>(wrong_power));
     fn lo_unscaled<T: Lane>(x: T, s: f64) -> T {
         let y = x.mul_pwr2(s);
         let v = DV {
@@ -379,6 +385,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<DV<Native>>(lo_unscaled));
     assert!(!scales_exactly::<Du>(lo_unscaled));
     assert!(!scales_exactly::<Dtn<2>>(lo_unscaled));
+    assert!(!scales_exactly::<Qu>(lo_unscaled));
     fn tangent_unscaled<T: Lane>(x: T, s: f64) -> T {
         let mut y = x.mul_pwr2(s);
         if T::TAN_F64 {
@@ -392,6 +399,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Fu>(tangent_unscaled));
     assert!(!scales_exactly::<Dtn<2>>(tangent_unscaled));
     assert!(!scales_exactly::<Fun<2>>(tangent_unscaled));
+    assert!(!scales_exactly::<Qu>(tangent_unscaled));
 }
 
 /// the scales `mul_pwr2` accepts: normal powers of two of either sign, nothing else
@@ -471,4 +479,118 @@ fn counted_lanes_count_and_change_nothing() {
     let nf = take_counts();
     assert_eq!(nf, [2, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0], "counts of f");
     assert_ne!(nf, want, "control: f and g counted alike");
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Qu: quad-double value and tangent
+// ---------------------------------------------------------------------------------------------------------------
+
+/// f and its partial derivatives in scalar quad-double, by hand
+fn f_qd(x: QD, y: QD) -> (QD, QD, QD) {
+    let two = QD::from_f64(2.0);
+    let three = QD::from_f64(3.0);
+    let num = x * x * x + two * x * y;
+    let den = x + three;
+    let fx = ((three * x * x + two * y) * den - num) / (den * den);
+    let fy = (two * x) / den;
+    (num / den, fx, fy)
+}
+
+/// |a - b| / max(|b|, 1)
+fn err_qd(a: QD, b: QD) -> f64 {
+    (a - b).to_f64().abs() / b.to_f64().abs().max(1.0)
+}
+
+/// worst error of f's value and partials on Qu lanes with quad-double inputs, against f_qd; with dd_tangent the
+/// tangents come from Du lanes instead (inputs rounded to double-double, and the reference at those inputs)
+fn qu_errors(dd_tangent: bool) -> f64 {
+    let mut r = Rng(27);
+    let mut worst = 0.0f64;
+    for _ in 0..300 {
+        let mut x: [QD; 8] =
+            std::array::from_fn(|_| QD::new(1.0 + 4.0 * r.unit(), r.sym() * 1e-17, r.sym() * 1e-34, r.sym() * 1e-51));
+        let mut y: [QD; 8] =
+            std::array::from_fn(|_| QD::new(r.sym() * 5.0, r.sym() * 1e-16, r.sym() * 1e-33, r.sym() * 1e-50));
+        let got: [Vec<QD>; 3] = if dd_tangent {
+            x = x.map(|v| QD::from_dd(v.to_dd()));
+            y = y.map(|v| QD::from_dd(v.to_dd()));
+            let d = |v: &[QD; 8]| dv::<Native>(&v.map(|q| q.to_dd()));
+            let one = DV::splat_f(1.0);
+            let gx = f(Du::from_vt(d(&x), one), Du::from_vt(d(&y), DV::zero()));
+            let gy = f(Du::from_vt(d(&x), DV::zero()), Du::from_vt(d(&y), one));
+            let l = |v: DV<Native>| (0..8).map(|j| QD::from_dd(v.lane(j))).collect::<Vec<_>>();
+            [l(gx.v), l(gx.d), l(gy.d)]
+        } else {
+            let (one, zero) = (QV::splat(QD::ONE), QV::zero());
+            let gx = f(
+                Qu {
+                    v: QV::from_lanes(&x),
+                    d: one,
+                },
+                Qu {
+                    v: QV::from_lanes(&y),
+                    d: zero,
+                },
+            );
+            let gy = f(
+                Qu {
+                    v: QV::from_lanes(&x),
+                    d: zero,
+                },
+                Qu {
+                    v: QV::from_lanes(&y),
+                    d: one,
+                },
+            );
+            [gx.v.lanes().to_vec(), gx.d.lanes().to_vec(), gy.d.lanes().to_vec()]
+        };
+        for j in 0..8 {
+            let (val, fx, fy) = f_qd(x[j], y[j]);
+            for (g, want) in [(got[0][j], val), (got[1][j], fx), (got[2][j], fy)] {
+                worst = worst.max(err_qd(g, want));
+            }
+        }
+    }
+    worst
+}
+
+#[test]
+fn qu_gives_quad_double_partial_derivatives() {
+    let e = qu_errors(false);
+    println!("Qu: worst error {e:.1e}");
+    assert!(e < 1e-58, "{e:e}");
+}
+
+/// Control: the same check on Du's double-double tangents fails, so it measures quad-double accuracy.
+#[test]
+fn control_du_tangents_fail_the_quad_double_check() {
+    let e = qu_errors(true);
+    println!("Du against the quad-double reference: worst error {e:.1e}");
+    assert!(e > 1e-40, "{e:e}");
+}
+
+/// Qu's value is bitwise QV's: g through every Lane method on both, with the same inputs and constants
+#[test]
+fn qu_value_is_qv_bitwise() {
+    let mut r = Rng(28);
+    let s = DD::ONE / DD::from_f64(3.0);
+    for _ in 0..200 {
+        let x: [DD; 8] = std::array::from_fn(|_| DD::new(2.0 + r.unit(), r.sym() * 1e-16));
+        let y: [DD; 8] = std::array::from_fn(|_| DD::new(1.0 + r.unit(), r.sym() * 1e-16));
+        let c: [DD; 8] = std::array::from_fn(|_| DD::new(1.0 + r.unit(), r.sym() * 1e-16));
+        let gq = g(QV::from_dv(dv(&x)), QV::from_dv(dv(&y)), dv(&c), s);
+        let gu = g(
+            Qu::from_vt(dv(&x), DV::splat_f(1.0)),
+            Qu::from_vt(dv(&y), DV::zero()),
+            dv(&c),
+            s,
+        );
+        for q in 0..4 {
+            let (a, b) = (gq.c[q].to_array(), gu.v.c[q].to_array());
+            assert!(
+                a.iter().zip(&b).all(|(u, v)| u.to_bits() == v.to_bits()),
+                "part {q}: {a:?} vs {b:?}"
+            );
+        }
+    }
 }
