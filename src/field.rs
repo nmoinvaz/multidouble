@@ -481,6 +481,35 @@ pub trait FieldSolve {
     /// double-double, each step multiplies the error by about cond(A) 2^-104, so for quad-double lanes (`QV`) two
     /// steps reach quad-double where cond(A) is below about 10^10. For `QV` this is `DDLu::solve_refine_qd` on the
     /// field's values, bitwise.
+    ///
+    /// Values only: the solves and corrections carry no tangent, so a lane type with tangents (`Lane::TANGENT`: `Du`,
+    /// `Fu`, `Dtn`, `Fun`) panics rather than being given a zero derivative.
+    ///
+    /// ```
+    /// use multidouble::dd::DD;
+    /// use multidouble::field::{FieldSolve, Fl};
+    /// use multidouble::linalg::DDLu;
+    /// use multidouble::native::QV;
+    /// let lu = DDLu::factor(8, 8, (0..64).map(|k| if k % 9 == 0 { 2.0 } else { 0.0 }).collect(), vec![0.0; 64], false)
+    ///     .unwrap();
+    /// let rhs = Fl::<QV, 1>([QV::splat_f(1.0)]);
+    /// let x = lu.solve_lanes_refine(&rhs, 2, |x| rhs - x.muls(DD::from_f64(2.0)));
+    /// assert_eq!(x.get(0).to_f64(), 0.5);
+    /// ```
+    ///
+    /// The same with `Du` lanes (a value and a tangent) panics:
+    ///
+    /// ```should_panic
+    /// use multidouble::dd::DD;
+    /// use multidouble::dual::Lane;
+    /// use multidouble::field::{FieldSolve, Fl};
+    /// use multidouble::linalg::DDLu;
+    /// use multidouble::native::Du;
+    /// let lu = DDLu::factor(8, 8, (0..64).map(|k| if k % 9 == 0 { 2.0 } else { 0.0 }).collect(), vec![0.0; 64], false)
+    ///     .unwrap();
+    /// let rhs = Fl::<Du, 1>([Du::splat(DD::from_f64(1.0))]);
+    /// let x = lu.solve_lanes_refine(&rhs, 2, |x| rhs - x.muls(DD::from_f64(2.0)));
+    /// ```
     fn solve_lanes_refine<T: Lane, const B: usize>(
         &self,
         rhs: &Fl<T, B>,
@@ -530,6 +559,12 @@ impl FieldSolve for DDLu {
         steps: usize,
         mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B> {
+        // a run-time check, not a const block: generic callers (a lane-generic solve that refines only for some
+        // lane types) instantiate this for every lane type, so a const assertion would fail their builds
+        assert!(
+            !T::TANGENT,
+            "FieldSolve::solve_lanes_refine refines values only: a lane type with tangents would lose them"
+        );
         let z = Fl::<Dv<T>, B>::zero();
         let mut x = Fl::<T, B>::from_vt(&self.solve_lanes(&rhs.val()), &z);
         for _ in 0..steps {

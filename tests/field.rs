@@ -497,3 +497,12 @@ fn qd_field_load_store_get() {
         "control: the parts do not overlap"
     );
 }
+
+/// The refinement is for values only: a lane type with tangents (Du here) is refused, not given a zero derivative
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_refine refines values only")]
+fn field_refine_refuses_tangent_lanes() {
+    let lu = lu_of_order(M);
+    let rhs = Fl::<multidouble::native::Du, B>([multidouble::native::Du::splat(DD::from_f64(1.0)); B]);
+    lu.solve_lanes_refine(&rhs, 1, |x| rhs - *x);
+}
