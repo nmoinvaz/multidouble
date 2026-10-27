@@ -12,6 +12,7 @@ use crate::dd::DD;
 use crate::dual::{Counted, Dtn, Du, Fu, Fun, Lane, F8};
 use crate::dv::{DotAcc, DV};
 use crate::linalg::DDLu;
+use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::Simd;
 use crate::v8::V8;
@@ -165,6 +166,34 @@ impl<S: Simd, const B: usize> Fl<DV<S>, B> {
             m = m.max(self.0[b].hi.abs().hmax());
         }
         m
+    }
+}
+
+impl<S: Simd, const B: usize> Fl<QV<S>, B> {
+    /// from 8 B quad-double values given as their four parts' arrays (c0 + c1 + c2 + c3 each, `QV::load` per lane
+    /// vector: the parts as they are, not renormalized)
+    pub fn load_parts(c0: &[f64], c1: &[f64], c2: &[f64], c3: &[f64]) -> Self {
+        let mut r = [QV::zero(); B];
+        for b in 0..B {
+            let o = 8 * b;
+            r[b] = QV::load(&c0[o..o + 8], &c1[o..o + 8], &c2[o..o + 8], &c3[o..o + 8]);
+        }
+        Fl(r)
+    }
+    /// the 8 B values' four parts into four arrays
+    pub fn store_parts(&self, c0: &mut [f64], c1: &mut [f64], c2: &mut [f64], c3: &mut [f64]) {
+        for b in 0..B {
+            let o = 8 * b;
+            self.0[b].store(
+                &mut c0[o..o + 8],
+                &mut c1[o..o + 8],
+                &mut c2[o..o + 8],
+                &mut c3[o..o + 8],
+            );
+        }
+    }
+    pub fn get(&self, j: usize) -> QD {
+        self.0[j / 8].lane(j % 8)
     }
 }
 
