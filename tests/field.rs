@@ -459,3 +459,41 @@ fn field_refine_refuses_a_smaller_lu() {
     let f = qfield(&[QD::from_f64(1.0); M]);
     lu_of_order(M - 8).solve_lanes_refine(&f, 2, |x| *x);
 }
+
+/// A quad-double field's four parts' arrays go in and out unchanged (`Fl::<QV, B>::load_parts` and `store_parts`: not
+/// renormalized, so parts that overlap stay as they are), value j at lane j % 8 of vector j / 8 as `QV::from_lanes`
+/// places them; `get` reads them back. Control: the test parts overlap, so a load that renormalized would move them.
+#[test]
+fn qd_field_load_store_get() {
+    let mut r = Rng(63);
+    // overlapping parts (each about 2^-20 of the one before, far above half its ulp)
+    let c: [Vec<f64>; 4] = std::array::from_fn(|k| (0..M).map(|_| r.sym() * 2f64.powi(-20 * k as i32)).collect());
+    let f = Fl::<QV, B>::load_parts(&c[0], &c[1], &c[2], &c[3]);
+    let mut out: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; M]);
+    let [o0, o1, o2, o3] = &mut out;
+    f.store_parts(o0, o1, o2, o3);
+    for k in 0..4 {
+        assert!(
+            c[k].iter().zip(&out[k]).all(|(a, b)| a.to_bits() == b.to_bits()),
+            "part {k}"
+        );
+    }
+    let lanes: Vec<QD> = (0..M)
+        .map(|j| QD {
+            x: std::array::from_fn(|k| c[k][j]),
+        })
+        .collect();
+    let g = qfield(&lanes);
+    for j in 0..M {
+        let (q, v) = (f.get(j), g.0[j / 8].lane(j % 8));
+        assert!(
+            (0..4).all(|k| q.x[k].to_bits() == c[k][j].to_bits() && v.x[k].to_bits() == c[k][j].to_bits()),
+            "value {j}"
+        );
+    }
+    let renorm = QD::new(c[0][0], c[1][0], c[2][0], c[3][0]);
+    assert!(
+        (0..4).any(|k| renorm.x[k].to_bits() != c[k][0].to_bits()),
+        "control: the parts do not overlap"
+    );
+}
