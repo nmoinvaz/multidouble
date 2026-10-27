@@ -8,6 +8,7 @@
 //!   Constants and inputs, which the trait passes as double-double, enter as their hi parts.
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
 //!   trajectory computed once (and to double-double accuracy) for all of them.
+//! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
 //!
 //! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
 //! generic code.
@@ -16,6 +17,7 @@
 //! `Lane` runs on the instruction set [`crate::simd::dispatch`] picks.
 use crate::dd::DD;
 use crate::dv::{DotAcc, DV};
+use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
 use crate::v8::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -289,6 +291,163 @@ impl<S: Simd> Lane for Du<S> {
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
         Du {
+            v: a.0.finish(),
+            d: a.1.finish(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// quad-double value and tangent
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Forward-mode dual number over quad-double lanes: value `v` and one tangent `d`, both `QV`. The value runs the
+/// operations of `QV` as a `Lane`, bitwise, and the tangent their derivatives in quad-double; one evaluation with a
+/// unit tangent on one unknown gives one Jacobian column to quad-double accuracy. As for `QV`, the trait passes
+/// constants and inputs as double-double (they enter exactly) and `val`, `tan` round back to double-double; a
+/// quad-double input is built from its parts, `Qu { v, d }`, and read back from `v` and `d`.
+#[derive(Clone, Copy, Debug)]
+pub struct Qu<S: Simd> {
+    pub v: QV<S>,
+    pub d: QV<S>,
+}
+
+impl<S: Simd> Add for Qu<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn add(self, o: Qu<S>) -> Qu<S> {
+        Qu {
+            v: self.v + o.v,
+            d: self.d + o.d,
+        }
+    }
+}
+impl<S: Simd> Sub for Qu<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn sub(self, o: Qu<S>) -> Qu<S> {
+        Qu {
+            v: self.v - o.v,
+            d: self.d - o.d,
+        }
+    }
+}
+impl<S: Simd> Neg for Qu<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn neg(self) -> Qu<S> {
+        Qu { v: -self.v, d: -self.d }
+    }
+}
+impl<S: Simd> Mul for Qu<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn mul(self, o: Qu<S>) -> Qu<S> {
+        let d = QDotAcc::zero().add_prod(self.v, o.d).add_prod(self.d, o.v).finish();
+        Qu { v: self.v * o.v, d }
+    }
+}
+impl<S: Simd> Div for Qu<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn div(self, o: Qu<S>) -> Qu<S> {
+        let q = self.v / o.v;
+        Qu {
+            v: q,
+            d: (self.d - q * o.d) / o.v,
+        }
+    }
+}
+
+impl<S: Simd> Lane for Qu<S> {
+    type S = S;
+    type Acc = (QDotAcc<S>, QDotAcc<S>);
+    const TANGENT: bool = true;
+    #[inline(always)]
+    fn zero() -> Self {
+        Qu {
+            v: QV::zero(),
+            d: QV::zero(),
+        }
+    }
+    #[inline(always)]
+    fn cst(c: DV<S>) -> Self {
+        Qu {
+            v: QV::from_dv(c),
+            d: QV::zero(),
+        }
+    }
+    #[inline(always)]
+    fn mulc(self, c: DV<S>) -> Self {
+        let c = QV::from_dv(c);
+        Qu {
+            v: self.v * c,
+            d: self.d * c,
+        }
+    }
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        Qu {
+            v: self.v.mul_f(s),
+            d: self.d.mul_f(s),
+        }
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        Qu {
+            v: self.v.mul_pwr2(s),
+            d: self.d.mul_pwr2(s),
+        }
+    }
+    #[inline(always)]
+    fn addc(self, c: DV<S>) -> Self {
+        Qu {
+            v: self.v + QV::from_dv(c),
+            d: self.d,
+        }
+    }
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        Qu {
+            v: self.v.bcast(j),
+            d: self.d.bcast(j),
+        }
+    }
+    #[inline(always)]
+    fn val(self) -> DV<S> {
+        self.v.to_dv()
+    }
+    #[inline(always)]
+    fn tan(self) -> DV<S> {
+        self.d.to_dv()
+    }
+    #[inline(always)]
+    fn from_vt(v: DV<S>, t: DV<S>) -> Self {
+        Qu {
+            v: QV::from_dv(v),
+            d: QV::from_dv(t),
+        }
+    }
+    #[inline(always)]
+    fn acc0() -> Self::Acc {
+        (QDotAcc::zero(), QDotAcc::zero())
+    }
+    #[inline(always)]
+    fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
+        (a.0.add_prod(x.v, y.v), a.1.add_prod(x.v, y.d).add_prod(x.d, y.v))
+    }
+    #[inline(always)]
+    fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
+        let c = QV::from_dv(c);
+        (a.0.add_prod(x.v, c), a.1.add_prod(x.d, c))
+    }
+    #[inline(always)]
+    fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
+        (a.0.add(x.v), a.1.add(x.d))
+    }
+    #[inline(always)]
+    fn fin(a: Self::Acc) -> Self {
+        Qu {
             v: a.0.finish(),
             d: a.1.finish(),
         }
