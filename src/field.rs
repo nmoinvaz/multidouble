@@ -439,10 +439,25 @@ impl<L: MatLane> MatLane for Counted<L> {
 }
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
-/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero). Both panic if the order is not 8 B.
+/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), and `solve_lanes_refine`, the double-double
+/// solve refined in the field's lane type. All panic if the order is not 8 B.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
+    /// x with A x = rhs to the precision of the lane type T, by iterative refinement with the residual in that
+    /// precision (Wilkinson; Moler, J. ACM 14 (1967) 316, doi:10.1145/321386.321394). This is the LU of A or of a
+    /// double-double approximation of it; `resid(x)` returns rhs - A x formed by the caller in T's arithmetic, with
+    /// its own A. x starts as the double-double solve of rhs's values (`Lane::val`), and each of the `steps` steps
+    /// adds the solve of the residual's values (`Lane::from_vt` with a zero tangent, then `+`). With the LU of A to
+    /// double-double, each step multiplies the error by about cond(A) 2^-104, so for quad-double lanes (`QV`) two
+    /// steps reach quad-double where cond(A) is below about 10^10. For `QV` this is `DDLu::solve_refine_qd` on the
+    /// field's values, bitwise.
+    fn solve_lanes_refine<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
+    ) -> Fl<T, B>;
 }
 
 impl FieldSolve for DDLu {
@@ -478,5 +493,20 @@ impl FieldSolve for DDLu {
         self.solve_hi(&mut h);
         l.iter_mut().for_each(|v| *v = 0.0);
         Fl::<DV<S>, B>::load(&h, &l)
+    }
+
+    fn solve_lanes_refine<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
+    ) -> Fl<T, B> {
+        let z = Fl::<Dv<T>, B>::zero();
+        let mut x = Fl::<T, B>::from_vt(&self.solve_lanes(&rhs.val()), &z);
+        for _ in 0..steps {
+            let r = resid(&x);
+            x = x + Fl::<T, B>::from_vt(&self.solve_lanes(&r.val()), &z);
+        }
+        x
     }
 }

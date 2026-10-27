@@ -18,7 +18,8 @@
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, and f64 variants), behind the [`dual::Lane`] trait, so
 //!   one generic code gives values and exact derivatives; [`dual::Counted`] counts the operations of such code.
 //! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
-//!   and a constant double-double matrix applied to them ([`field::DMat`]): the arithmetic of power-series methods.
+//!   a constant double-double matrix applied to them ([`field::DMat`]) and solves with a `DDLu`, refined in the lane
+//!   type ([`field::FieldSolve`]): the arithmetic of power-series methods.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves,
 //!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
