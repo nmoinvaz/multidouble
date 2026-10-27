@@ -1,12 +1,14 @@
 //! Fields (`field::Fl`): Cauchy products, Horner evaluation and constant-matrix products against scalar references,
 //! in double-double (to its rounding, against quad-double sums), in the f64 lanes (bitwise the scalar fused
-//! multiply-add chains in index order) and in quad-double; the counting lane's matrix product; and the field solves.
+//! multiply-add chains in index order) and in quad-double; the counting lane's matrix product; and the field solves,
+//! with the refinement of the double-double solve in the lane type (to quad-double for `QV`).
 //! Each accuracy check has a control fed a wrong result.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Lane};
+use multidouble::exact::Dy;
 use multidouble::field::{cs, cs_range, cs_w, horner, DMat, FieldSolve, Fl, MatLane};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::native::{Dtn, Fu, Fun, F8, QV};
@@ -324,4 +326,136 @@ fn field_solve_refuses_a_smaller_lu() {
 fn field_solve_hi_refuses_a_larger_lu() {
     let (f, _) = field(&mut Rng(3), 1.0);
     lu_of_order(M + 8).solve_lanes_hi(&f);
+}
+
+/// a quad-double field from 8 B values
+fn qfield(v: &[QD]) -> Fl<QV, B> {
+    Fl(std::array::from_fn(|b| {
+        QV::from_lanes(v[8 * b..8 * b + 8].try_into().unwrap())
+    }))
+}
+
+/// the 8 B values of a quad-double field
+fn qvalues(f: &Fl<QV, B>) -> Vec<QD> {
+    f.0.iter().flat_map(|v| v.lanes()).collect()
+}
+
+/// A x0 = b: A a diagonally dominant double-double matrix (as the constant matrix for the quad-double residual and
+/// as its LU for the solves), x0 a random quad-double field (four parts), b = A x0 formed exactly (dyadic arithmetic)
+/// and rounded to quad-double
+fn qd_system(r: &mut Rng) -> (DMat<Native, B>, DDLu, Vec<QD>, Vec<QD>) {
+    let a: Vec<DD> = (0..M * M)
+        .map(|k| DD::new(r.sym() + if k / M == k % M { 4.0 } else { 0.0 }, r.sym() * 1e-17))
+        .collect();
+    let (h, l): (Vec<f64>, Vec<f64>) = a.iter().map(|d| (d.hi, d.lo)).unzip();
+    let ld = ld_for(M);
+    let (mut ch, mut cl) = (vec![0.0; ld * M], vec![0.0; ld * M]);
+    for i in 0..M {
+        for j in 0..M {
+            ch[j * ld + i] = h[i * M + j];
+            cl[j * ld + i] = l[i * M + j];
+        }
+    }
+    let lu = DDLu::factor(M, ld, ch, cl, false).unwrap();
+    let x0: Vec<QD> = (0..M)
+        .map(|_| {
+            let v = r.sym();
+            QD::new(
+                v,
+                v * 2f64.powi(-53) * r.sym(),
+                v * 2f64.powi(-106) * r.sym(),
+                v * 2f64.powi(-159) * r.sym(),
+            )
+        })
+        .collect();
+    let b: Vec<QD> = (0..M)
+        .map(|i| {
+            let mut s = Dy::zero();
+            for j in 0..M {
+                let aij = Dy::from_f64(h[i * M + j]).add(&Dy::from_f64(l[i * M + j]));
+                s = s.add(&aij.mul(&x0[j].exact()));
+            }
+            QD { x: s.greedy4() }
+        })
+        .collect();
+    (DMat::from_rows(&h, &l), lu, x0, b)
+}
+
+/// max |x_i - y_i| / max |y_i|, in quad-double
+fn qd_err(x: &[QD], y: &[QD]) -> f64 {
+    let ym = y.iter().map(|v| v.x[0].abs()).fold(0.0, f64::max);
+    x.iter()
+        .zip(y)
+        .map(|(a, b)| (*a - *b).to_f64().abs())
+        .fold(0.0, f64::max)
+        / ym
+}
+
+/// The field refinement in quad-double lanes is DDLu::solve_refine_qd on the field's values, bitwise (both with the
+/// same residual function), for 0 to 3 steps; with no steps it is the double-double field solve of the values, in
+/// QV and in DV lanes alike.
+#[test]
+fn field_refine_is_solve_refine_qd() {
+    let mut r = Rng(61);
+    let (d, lu, _, b) = qd_system(&mut r);
+    let bq = qfield(&b);
+    let resid = |x: &Fl<QV, B>| bq - d.apply(x);
+    for steps in 0..4 {
+        let x = qvalues(&lu.solve_lanes_refine(&bq, steps, resid));
+        let y = lu.solve_refine_qd(&b, steps, |x, out| out.copy_from_slice(&qvalues(&resid(&qfield(x)))));
+        for i in 0..M {
+            assert!(
+                x[i].x
+                    .iter()
+                    .zip(y[i].x.iter())
+                    .all(|(p, q)| p.to_bits() == q.to_bits()),
+                "steps {steps} i {i}: {:?} vs {:?}",
+                x[i],
+                y[i]
+            );
+        }
+    }
+    let plain = lu.solve_lanes(&bq.val());
+    let x0 = lu.solve_lanes_refine(&bq, 0, |_| unreachable!());
+    let (f, _) = field(&mut r, 1.0);
+    let xd = lu.solve_lanes_refine(&f, 0, |_| unreachable!());
+    let fd = lu.solve_lanes(&f);
+    for i in 0..M {
+        let (p, q) = (x0.0[i / 8].lane(i % 8), plain.get(i));
+        assert!(p.x[0].to_bits() == q.hi.to_bits() && p.x[1].to_bits() == q.lo.to_bits() && p.x[2] == 0.0);
+        assert!(xd.get(i).hi.to_bits() == fd.get(i).hi.to_bits() && xd.get(i).lo.to_bits() == fd.get(i).lo.to_bits());
+    }
+}
+
+/// A x = b to quad-double by the field refinement: two steps give x0 back within 1e-60 of max |x0| (about 1e-64 seen;
+/// b's rounding to quad-double and A's condition number allow about 1e-62), and three the same. Controls: without
+/// refinement the solve misses by more than 1e-40 (double-double accuracy, about 1e-32 seen); with a residual off by
+/// 1e-40 relative (A scaled by 1 + 1e-40 in it) the refinement converges to the wrong system and misses 1e-60.
+#[test]
+fn field_refine_reaches_quad_double() {
+    let mut r = Rng(62);
+    for _ in 0..4 {
+        let (d, lu, x0, b) = qd_system(&mut r);
+        let bq = qfield(&b);
+        let resid = |x: &Fl<QV, B>| bq - d.apply(x);
+        let e2 = qd_err(&qvalues(&lu.solve_lanes_refine(&bq, 2, resid)), &x0);
+        let e3 = qd_err(&qvalues(&lu.solve_lanes_refine(&bq, 3, resid)), &x0);
+        assert!(
+            e2 <= 1e-60 && e3 <= 1e-60,
+            "refined: {e2:e} (2 steps), {e3:e} (3 steps)"
+        );
+        let e0 = qd_err(&qvalues(&lu.solve_lanes_refine(&bq, 0, resid)), &x0);
+        assert!(e0 > 1e-40, "control: the unrefined solve is within 1e-40 ({e0:e})");
+        let s = QV::splat(QD::from_f64(1.0).add_f(1e-40));
+        let wrong = |x: &Fl<QV, B>| bq - Fl(d.apply(x).0.map(|v| v * s));
+        let ew = qd_err(&qvalues(&lu.solve_lanes_refine(&bq, 3, wrong)), &x0);
+        assert!(ew > 1e-60, "control: a residual off by 1e-40 passes ({ew:e})");
+    }
+}
+
+#[test]
+#[should_panic(expected = "FieldSolve: a DDLu of order 8 for a field of 16 values")]
+fn field_refine_refuses_a_smaller_lu() {
+    let f = qfield(&[QD::from_f64(1.0); M]);
+    lu_of_order(M - 8).solve_lanes_refine(&f, 2, |x| *x);
 }
