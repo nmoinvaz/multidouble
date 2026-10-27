@@ -15,8 +15,9 @@
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
-//!   [`dual::Dtn`] a double-double value with N f64 tangents, and f64 variants), behind the [`dual::Lane`] trait, so
-//!   one generic code gives values and exact derivatives; [`dual::Counted`] counts the operations of such code.
+//!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent, and f64
+//!   variants), behind the [`dual::Lane`] trait, so one generic code gives values and exact derivatives;
+//!   [`dual::Counted`] counts the operations of such code.
 //! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
 //!   a constant double-double matrix applied to them ([`field::DMat`]) and solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]): the arithmetic of power-series methods.
@@ -66,6 +67,7 @@ pub mod native {
     pub type QV = crate::qv::QV<Native>;
     pub type QDotAcc = crate::qv::QDotAcc<Native>;
     pub type Du = crate::dual::Du<Native>;
+    pub type Qu = crate::dual::Qu<Native>;
     pub type F8 = crate::dual::F8<Native>;
     pub type Fu = crate::dual::Fu<Native>;
     pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;

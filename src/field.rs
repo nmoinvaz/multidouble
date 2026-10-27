@@ -9,7 +9,7 @@
 //! latency-bound, and each still sums its terms in index order. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
-use crate::dual::{Counted, Dtn, Du, Fu, Fun, Lane, F8};
+use crate::dual::{Counted, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
 use crate::linalg::DDLu;
 use crate::qd::QD;
@@ -359,6 +359,7 @@ pub trait MatLane: Lane {
 impl<S: Simd> MatLane for DV<S> {}
 impl<S: Simd> MatLane for Du<S> {}
 impl<S: Simd> MatLane for QV<S> {}
+impl<S: Simd> MatLane for Qu<S> {}
 
 impl<S: Simd> MatLane for F8<S> {
     #[inline(always)]
