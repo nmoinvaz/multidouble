@@ -21,7 +21,8 @@
 //! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
 //!   a constant double-double matrix applied to them ([`field::DMat`]) and solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]): the arithmetic of power-series methods.
-//! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves,
+//! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
+//!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double), solves,
 //!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
 //!   system with one global parameter (the Newton system of multiple shooting) built from those steps.
