@@ -898,3 +898,20 @@ fn complex_logdet_rotation_and_real_embedding() {
     )
     .is_err());
 }
+
+/// The parallel path of `clu_logdet` (par = true, taken above about 32768 updated entries per column step: n = 200
+/// here) gives the serial path's results bit for bit: every column's update is the same operations, whichever thread
+/// runs it. Control: the same matrix with one entry changed differs.
+#[test]
+fn complex_logdet_parallel_is_serial() {
+    let mut r = Rng(83);
+    let n = 200;
+    let (ld, c) = cmatrix(n, &mut r);
+    let serial = clogdet(n, ld, &c);
+    let par = clu_logdet(n, ld, c[0].clone(), c[1].clone(), c[2].clone(), c[3].clone(), true).unwrap();
+    let bits = |v: (f64, f64, f64, f64)| [v.0.to_bits(), v.1.to_bits(), v.2.to_bits(), v.3.to_bits()];
+    assert_eq!(bits(serial), bits(par));
+    let mut other = c.clone();
+    other[0][ld + 1] += 1e-3;
+    assert_ne!(bits(serial), bits(clogdet(n, ld, &other)), "control");
+}
