@@ -4,7 +4,7 @@
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::{Rng, U2};
-use multidouble::dd::{quick_two_sum, two_prod, two_sum, DD};
+use multidouble::dd::{is_pwr2, pow2_near, quick_two_sum, two_prod, two_sum, DD};
 use multidouble::exact::Dy;
 
 const N: usize = 20_000;
@@ -141,4 +141,22 @@ fn controls_fire() {
         mul_caught |= rel_err(broken_mul, &exact(a).mul(&exact(b))) > 5.0;
     }
     assert!(add_caught && mul_caught);
+}
+
+/// `pow2_near` returns a normal power of two within half an octave of x, x itself for a power of two, and the
+/// neighbour on the other side when x crosses the geometric midpoint (sqrt 2 times a power of two)
+#[test]
+fn pow2_near_is_the_nearest_power_of_two() {
+    let mut r = Rng(91);
+    for _ in 0..N {
+        let x = r.dd(300).hi.abs();
+        let p = pow2_near(x);
+        assert!(is_pwr2(p) && (x / p).log2().abs() <= 0.5, "{x} -> {p}");
+    }
+    assert_eq!(pow2_near(0.25), 0.25);
+    assert_eq!(pow2_near(1e-3), 2f64.powi(-10));
+    assert_eq!(pow2_near(3.0), 4.0);
+    assert_eq!(pow2_near(2.8), 2.0);
+    assert_eq!(pow2_near(1.5 * 2f64.powi(100)), 2f64.powi(101));
+    assert!(!is_pwr2(1.5 * pow2_near(2.8)), "control");
 }

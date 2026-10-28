@@ -9,7 +9,7 @@
 //! latency-bound, and each still sums its terms in index order. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
-use crate::dual::{Counted, Dtn, Du, Fu, Fun, Lane, Qu, F8};
+use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
 use crate::linalg::DDLu;
 use crate::qd::QD;
@@ -137,6 +137,45 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         let mut r = [T::zero(); B];
         for b in 0..B {
             r[b] = T::from_vt(v.0[b], t.0[b]);
+        }
+        Fl(r)
+    }
+    /// f64 tangent k of every value, as an `F8` field (the `TAN_F64` lane types)
+    pub fn tan64(&self, k: usize) -> Fl<F8<T::S>, B> {
+        let mut r = [F8(V8::zero()); B];
+        for b in 0..B {
+            r[b] = F8(self.0[b].tan64(k));
+        }
+        Fl(r)
+    }
+}
+
+impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
+    /// the real part of the tangent (`Lane::tan`)
+    pub fn tan_re(&self) -> Fl<DV<S>, B> {
+        let mut r = [DV::zero(); B];
+        for b in 0..B {
+            r[b] = self.0[b].r;
+        }
+        Fl(r)
+    }
+    /// the imaginary part of the tangent
+    pub fn tan_im(&self) -> Fl<DV<S>, B> {
+        let mut r = [DV::zero(); B];
+        for b in 0..B {
+            r[b] = self.0[b].i;
+        }
+        Fl(r)
+    }
+    /// a field from its values and the real and imaginary parts of its tangent
+    pub fn from_vri(v: &Fl<DV<S>, B>, re: &Fl<DV<S>, B>, im: &Fl<DV<S>, B>) -> Self {
+        let mut r = [Dc::zero(); B];
+        for b in 0..B {
+            r[b] = Dc {
+                v: v.0[b],
+                r: re.0[b],
+                i: im.0[b],
+            };
         }
         Fl(r)
     }
@@ -358,6 +397,7 @@ pub trait MatLane: Lane {
 
 impl<S: Simd> MatLane for DV<S> {}
 impl<S: Simd> MatLane for Du<S> {}
+impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
 
@@ -517,6 +557,23 @@ pub trait FieldSolve {
         steps: usize,
         resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B>;
+    /// `solve_lanes_refine` for a lane type with a tangent (`Du`, `Qu`): the value and the tangent are refined
+    /// together. The value solves use `self`, the tangent solves `lu_t`, the LU of the differentiated system's matrix
+    /// (`self` again where that is the value system's matrix), and `resid(x)` returns rhs - A x formed by the caller
+    /// in T's arithmetic for the value and for the tangent, so that the tangent's residual is that of the
+    /// differentiated system (rhs_d - A_d x_v - A x_d, with the caller's A_d). The first solve of a tangent ignores
+    /// A_d (its right-hand side is rhs's tangent), so a tangent takes one step more than a value to reach the same
+    /// precision. Without a tangent (`Lane::TANGENT` false) it is `solve_lanes_refine`, bitwise. A complex tangent
+    /// (`Dc`) is carried by its real part only (`Lane::tan`).
+    fn solve_lanes_refine_t<T: Lane, const B: usize>(
+        &self,
+        lu_t: &Self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
+    ) -> Fl<T, B>
+    where
+        Self: Sized;
 }
 
 impl FieldSolve for DDLu {
@@ -573,5 +630,78 @@ impl FieldSolve for DDLu {
             x = x + Fl::<T, B>::from_vt(&self.solve_lanes(&r.val()), &z);
         }
         x
+    }
+
+    fn solve_lanes_refine_t<T: Lane, const B: usize>(
+        &self,
+        lu_t: &Self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
+    ) -> Fl<T, B> {
+        let z = Fl::<Dv<T>, B>::zero();
+        let tsolve = |r: &Fl<T, B>| if T::TANGENT { lu_t.solve_lanes(&r.tan()) } else { z };
+        let mut x = Fl::<T, B>::from_vt(&self.solve_lanes(&rhs.val()), &tsolve(rhs));
+        for _ in 0..steps {
+            let r = resid(&x);
+            x = x + Fl::<T, B>::from_vt(&self.solve_lanes(&r.val()), &tsolve(&r));
+        }
+        x
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// early end of a series for the tangents
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Early end of a power series for the tangents of a dual lane type, when they are needed to less precision than the
+/// values whose accuracy sets the series' order (the f64 tangents of a Jacobian in f64, or double-double tangents
+/// that would otherwise run to the values' order). Call `done(k, &[c_k of each field])` for k = 0, 1, 2, ... in
+/// turn, with the coefficients of order k; it returns true once the tangent terms max |c_k| r^k (r the evaluation
+/// radius; the maximum over the fields, lanes and tangents given, f64 tangents through `Lane::tan64`, else the hi
+/// part of `Lane::tan`) of `run` consecutive orders are all below `tol` times the largest tangent term so far, and
+/// k >= kmin. The values are not looked at, so a value lane type never ends early.
+pub struct TangentTail {
+    rk: f64,
+    r: f64,
+    big: f64,
+    run: usize,
+    tol: f64,
+    run_len: usize,
+    kmin: usize,
+}
+
+impl TangentTail {
+    pub fn new(r: f64, tol: f64, run: usize, kmin: usize) -> Self {
+        TangentTail {
+            rk: 1.0,
+            r,
+            big: 0.0,
+            run: 0,
+            tol,
+            run_len: run,
+            kmin,
+        }
+    }
+
+    /// record the coefficients of order k; true when the series may end after it
+    pub fn done<T: Lane, const B: usize>(&mut self, k: usize, f: &[&Fl<T, B>]) -> bool {
+        let mut a = 0.0f64;
+        for x in f {
+            for b in 0..B {
+                if T::TAN_F64 {
+                    for t in 0..T::NT {
+                        a = a.max(x.0[b].tan64(t).abs().hmax());
+                    }
+                } else {
+                    a = a.max(x.0[b].tan().hi.abs().hmax());
+                }
+            }
+        }
+        let t = a * self.rk;
+        self.rk *= self.r;
+        self.big = self.big.max(t);
+        self.run = if t <= self.tol * self.big { self.run + 1 } else { 0 };
+        self.big > 0.0 && k >= self.kmin && self.run >= self.run_len
     }
 }

@@ -16,18 +16,19 @@ speed, with no allocation and no arbitrary-precision library.
 |---|---|
 | `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout; `divisor` and `div_by` for several divisions by one vector, on AVX-512 by its reciprocal (`rcp14`, Newton steps and one correction), bitwise the same as `div` |
 | `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `dv::DotAcc` accumulates sums of products |
-| `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators |
-| `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, and a quad-double value with a quad-double tangent, behind the `dual::Lane` trait |
+| `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators; `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays |
+| `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`, indexed by `dual::op`), the results bitwise L's: operation counts of code written over `dual::Lane` |
-| `field::Fl<T, B>`, `field::DMat` | 8 B values of a lane type as B lane vectors, with Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`) and solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`): the arithmetic of power-series methods, for every lane type |
-| `linalg::DDLu` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices |
+| `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together) and an early end of a series once its tangent terms are below a tolerance (`TangentTail`): the arithmetic of power-series methods, for every lane type |
+| `linalg::DDLu`, `linalg::clu_logdet` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices, the determinant; ln\|det\| and arg det of a complex double-double matrix by the same LU (`clu_logdet`) |
 | `linalg::QDLu` | dense LU with partial pivoting in quad-double (8-row `QV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in quad-double: for systems too ill-conditioned for double-double |
 | `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
 | `linalg::StaircaseLu` | the f64 LU with partial pivoting of a staircase (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without the dense matrix; solves and transpose solves in double-double |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
 
 Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for
-computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable.
+computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable;
+`dd::pow2_near` gives the power of two nearest to a scale.
 
 ## Installation
 

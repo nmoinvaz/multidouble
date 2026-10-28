@@ -24,7 +24,7 @@
 use crate::dd::DD;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
 use crate::qd::{mutate, QD};
-use crate::simd::Simd;
+use crate::simd::{self, Kernel, Simd};
 use crate::v8::{M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -895,6 +895,7 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     type S = S;
     type Acc = QDotAcc<S>;
     const TANGENT: bool = false;
+    const VAL_QD: bool = true;
     #[inline(always)]
     fn zero() -> Self {
         QV::zero()
@@ -955,4 +956,72 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     fn fin(a: QDotAcc<S>) -> Self {
         a.finish()
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// quad-double vectors as four part arrays
+// ---------------------------------------------------------------------------------------------------------------
+
+/// y + a x on four-part arrays: 8 elements at a time on the backend S, the rest in scalar quad-double (bitwise the
+/// same per element)
+struct AxpyParts<'a> {
+    a: f64,
+    x: [&'a [f64]; 4],
+    y: [&'a [f64]; 4],
+    out: [&'a mut [f64]; 4],
+}
+
+impl Kernel for AxpyParts<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let n = self.y[0].len();
+        let full = n / 8 * 8;
+        let (a, x, y) = (self.a, self.x, self.y);
+        let [o0, o1, o2, o3] = self.out;
+        for i in (0..full).step_by(8) {
+            let xv = QV::<S>::load(&x[0][i..i + 8], &x[1][i..i + 8], &x[2][i..i + 8], &x[3][i..i + 8]);
+            let yv = QV::<S>::load(&y[0][i..i + 8], &y[1][i..i + 8], &y[2][i..i + 8], &y[3][i..i + 8]);
+            (yv + xv.mul_f(a)).store(
+                &mut o0[i..i + 8],
+                &mut o1[i..i + 8],
+                &mut o2[i..i + 8],
+                &mut o3[i..i + 8],
+            );
+        }
+        for i in full..n {
+            let xi = QD {
+                x: [x[0][i], x[1][i], x[2][i], x[3][i]],
+            };
+            let yi = QD {
+                x: [y[0][i], y[1][i], y[2][i], y[3][i]],
+            };
+            let s = yi + xi.mul_f(a);
+            o0[i] = s.x[0];
+            o1[i] = s.x[1];
+            o2[i] = s.x[2];
+            o3[i] = s.x[3];
+        }
+    }
+}
+
+/// y + a x for quad-double vectors given as four part arrays (part q of element i at `x[q][i]`, as `QD::x`, the
+/// parts normalized as `QD` keeps them), a an f64: each element `QD::mul_f` then `+`, 8 at a time on the best
+/// backend the CPU has and the rest in scalar quad-double, bitwise the same per element. Returns the four parts of
+/// the result. Panics unless the eight arrays have one length.
+pub fn axpy_parts(a: f64, x: [&[f64]; 4], y: [&[f64]; 4]) -> [Vec<f64>; 4] {
+    let n = y[0].len();
+    assert!(
+        x.iter().chain(y.iter()).all(|p| p.len() == n),
+        "axpy_parts: the eight arrays must have one length"
+    );
+    let mut out: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; n]);
+    let [o0, o1, o2, o3] = &mut out;
+    simd::dispatch(AxpyParts {
+        a,
+        x,
+        y,
+        out: [&mut o0[..], &mut o1[..], &mut o2[..], &mut o3[..]],
+    });
+    out
 }

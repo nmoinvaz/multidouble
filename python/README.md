@@ -20,9 +20,13 @@ print(md.isa())                           # the SIMD backend in use, detected at
   add, 1 mul, 2 div, 3 sub.
 - `dd_dot(xh, xl, yh, yl)`: a dot product in double-double, 8 lanes at a time and then the lane sums, to about
   (n / 8 + 12) 2^-106 of sum |x_i y_i|; returns (hi, lo) as floats.
+- `dd_matvec(Ah, Al, vh, vl)`: A v in double-double, A as (n, m) row-major hi and lo arrays, each row of the result
+  a `dd_dot`.
 - `dd_solve(Ah, Al, bh, bl)`: x with A x = b by LU with partial pivoting, A as (n, n) row-major hi and lo arrays.
 - `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, renormalized first) plus a
   double-double one, elementwise in quad-double; returns the four parts of the sum.
+- `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a
+  float a, elementwise in quad-double; returns the four parts.
 - In numpy (plain float64 expressions): `two_sum`, `two_prod` (Dekker), `dd_add`, `dd_scale` (times an f64),
   `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath).
 - `gcr(apply, precond, bh, bl)`: x with A x = b in double-double by right-preconditioned GMRES in its GCR form, given

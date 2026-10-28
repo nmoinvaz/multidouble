@@ -1,6 +1,7 @@
 //! Forward-mode dual lanes: one generic function evaluated with value lanes, with a double-double tangent (`Du`), with
 //! N f64 tangents (`Dtn<N>`) and in plain f64 (`Fu`), against derivatives written out by hand in scalar double-double.
-//! A second function goes through every method of `Lane` on all seven lane types, and `mul_pwr2` is checked bit for bit.
+//! A second function goes through every method of `Lane` on all eight lane types, and `mul_pwr2` is checked bit for bit.
+//! `Dc` (a complex tangent) is `Du` on the real and on the imaginary part separately, bit for bit.
 //! `Qu` (quad-double value and tangent) is checked against derivatives by hand in scalar quad-double.
 #![allow(clippy::needless_range_loop)]
 mod common;
@@ -8,7 +9,7 @@ use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{take_counts, Counted, Lane, COUNTED_OPS};
 use multidouble::dv::DV;
-use multidouble::native::{Dtn, Du, Fu, Fun, Qu, F8, QV};
+use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Qu, F8, QV};
 use multidouble::qd::QD;
 use multidouble::simd::{Native, Simd};
 use multidouble::v8::V8;
@@ -255,6 +256,7 @@ fn every_lane_method_on_every_lane_type() {
     run::<Dtn<2>>("Dtn<2>");
     run::<Fun<2>>("Fun<2>");
     run::<Qu>("Qu");
+    run::<Dc>("Dc");
 }
 
 /// Controls: hand references that get `bcast` wrong are caught. A value with each lane's own x in place of lane 0's,
@@ -340,6 +342,7 @@ fn mul_pwr2_is_exact_on_every_lane_type() {
     assert!(scales_exactly::<Dtn<2>>(|x, s| x.mul_pwr2(s)), "Dtn<2>");
     assert!(scales_exactly::<Fun<2>>(|x, s| x.mul_pwr2(s)), "Fun<2>");
     assert!(scales_exactly::<Qu>(|x, s| x.mul_pwr2(s)), "Qu");
+    assert!(scales_exactly::<Dc>(|x, s| x.mul_pwr2(s)), "Dc");
     // the scalar double-double, through lane 0 of DV
     let mut r = Rng(54);
     for _ in 0..2000 {
@@ -368,6 +371,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Dtn<2>>(wrong_power));
     assert!(!scales_exactly::<Fun<2>>(wrong_power));
     assert!(!scales_exactly::<Qu>(wrong_power));
+    assert!(!scales_exactly::<Dc>(wrong_power));
     fn lo_unscaled<T: Lane>(x: T, s: f64) -> T {
         let y = x.mul_pwr2(s);
         let v = DV {
@@ -386,6 +390,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Du>(lo_unscaled));
     assert!(!scales_exactly::<Dtn<2>>(lo_unscaled));
     assert!(!scales_exactly::<Qu>(lo_unscaled));
+    assert!(!scales_exactly::<Dc>(lo_unscaled));
     fn tangent_unscaled<T: Lane>(x: T, s: f64) -> T {
         let mut y = x.mul_pwr2(s);
         if T::TAN_F64 {
@@ -400,6 +405,100 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Dtn<2>>(tangent_unscaled));
     assert!(!scales_exactly::<Fun<2>>(tangent_unscaled));
     assert!(!scales_exactly::<Qu>(tangent_unscaled));
+    assert!(!scales_exactly::<Dc>(tangent_unscaled));
+    // the imaginary part left unscaled is caught through the parts (`parts` reads the real tangent only)
+    let mut r = Rng(57);
+    for _ in 0..200 {
+        let x: Dc = random_lane(&mut r);
+        let x = Dc {
+            i: dv(&std::array::from_fn(|_| r.dd(8))),
+            ..x
+        };
+        let s = 2f64.powi((r.next_u64() % 401) as i32 - 200);
+        let y = x.mul_pwr2(s);
+        let wrong = Dc { i: x.i, ..y };
+        assert!(bits(y.i) == bits(x.i.mulf(s)) && (s == 1.0 || bits(wrong.i) != bits(y.i)));
+    }
+}
+
+fn bits(v: DV<Native>) -> [u64; 16] {
+    let (h, l) = (v.hi.to_array(), v.lo.to_array());
+    std::array::from_fn(|k| if k < 8 { h[k].to_bits() } else { l[k - 8].to_bits() })
+}
+
+/// `Dc` on g: with a real tangent its value and real part are `Du`'s bit for bit and its imaginary part is zero; with
+/// the d/dx seed on the imaginary part and the d/dy seed on the real part, the two parts are the two `Du` tangents
+/// bit for bit. Controls: the parts swapped, and a seed of 2 on the imaginary part, must differ.
+#[test]
+fn dc_is_du_on_the_real_and_the_imaginary_part() {
+    let mut r = Rng(58);
+    let s = DD::ONE / DD::from_f64(3.0);
+    let (one, zero) = (DV::splat_f(1.0), DV::zero());
+    for _ in 0..200 {
+        let x: [DD; 8] = std::array::from_fn(|_| DD::new(2.0 + r.unit(), r.sym() * 1e-16));
+        let y: [DD; 8] = std::array::from_fn(|_| DD::new(1.0 + r.unit(), r.sym() * 1e-16));
+        let c: [DD; 8] = std::array::from_fn(|_| DD::new(1.0 + r.unit(), r.sym() * 1e-16));
+        let gx = g(Du::from_vt(dv(&x), one), Du::from_vt(dv(&y), zero), dv(&c), s);
+        let gy = g(Du::from_vt(dv(&x), zero), Du::from_vt(dv(&y), one), dv(&c), s);
+        let real = g(Dc::from_vt(dv(&x), one), Dc::from_vt(dv(&y), zero), dv(&c), s);
+        assert!(bits(real.v) == bits(gx.v) && bits(real.r) == bits(gx.d) && bits(real.i) == bits(zero));
+        let both = g(
+            Dc {
+                v: dv(&x),
+                r: zero,
+                i: one,
+            },
+            Dc {
+                v: dv(&y),
+                r: one,
+                i: zero,
+            },
+            dv(&c),
+            s,
+        );
+        assert!(bits(both.v) == bits(gx.v) && bits(both.i) == bits(gx.d) && bits(both.r) == bits(gy.d));
+        assert!(bits(both.r) != bits(gx.d), "control: the parts swapped agree");
+        let two = g(
+            Dc {
+                v: dv(&x),
+                r: zero,
+                i: DV::splat_f(2.0),
+            },
+            Dc::from_vt(dv(&y), zero),
+            dv(&c),
+            s,
+        );
+        assert!(
+            bits(two.i) != bits(gx.d),
+            "control: a seed of 2 agrees with a seed of 1"
+        );
+    }
+}
+
+/// `VAL_QD` on every lane type: the quad-double lanes only, forwarded by `Counted`
+#[test]
+fn val_qd_marks_the_quad_double_lanes() {
+    fn val_qd<T: Lane>() -> bool {
+        T::VAL_QD
+    }
+    let quad = [
+        val_qd::<QV>(),
+        val_qd::<Qu>(),
+        val_qd::<Counted<Qu>>(),
+        val_qd::<Counted<QV>>(),
+    ];
+    let other = [
+        val_qd::<DV<Native>>(),
+        val_qd::<Du>(),
+        val_qd::<Dc>(),
+        val_qd::<F8>(),
+        val_qd::<Fu>(),
+        val_qd::<Dtn<2>>(),
+        val_qd::<Fun<2>>(),
+        val_qd::<Counted<Du>>(),
+    ];
+    assert!(quad.iter().all(|&q| q), "{quad:?}");
+    assert!(other.iter().all(|&q| !q), "{other:?}");
 }
 
 /// the scales `mul_pwr2` accepts: normal powers of two of either sign, nothing else

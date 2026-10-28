@@ -9,6 +9,8 @@
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
 //!   trajectory computed once (and to double-double accuracy) for all of them.
 //! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
+//! * `Dc`: a double-double value with a complex tangent (real and imaginary parts, each double-double): the
+//!   derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
 //!
 //! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
 //! generic code.
@@ -43,6 +45,9 @@ pub trait Lane:
     const TAN_F64: bool = false;
     /// number of f64 tangents (`tan64`; 0 unless TAN_F64)
     const NT: usize = 0;
+    /// values in quad-double (`QV`, `Qu`): a solve with a double-double LU is refined for such a lane with the
+    /// residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`)
+    const VAL_QD: bool = false;
     fn zero() -> Self;
     /// a constant (zero tangent)
     fn cst(c: DV<Self::S>) -> Self;
@@ -298,6 +303,182 @@ impl<S: Simd> Lane for Du<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// double-double value and complex tangent
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Forward-mode dual number over double-double lanes with a complex tangent: value `v`, tangent `r + i i`, all
+/// `DV`. A real function linearised about a real value is real-linear in the tangent, so the real and the imaginary
+/// part obey the real dual rule separately: every operation is `Du`'s applied to `r` and to `i`. It gives the
+/// derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
+/// `tan` is the real part and `from_vt` sets the imaginary part to zero, so code written for `Du` runs unchanged with
+/// a real tangent; the imaginary part is read and set through the fields (`crate::field::Fl::tan_im`, `from_vri`).
+#[derive(Clone, Copy, Debug)]
+pub struct Dc<S: Simd> {
+    pub v: DV<S>,
+    pub r: DV<S>,
+    pub i: DV<S>,
+}
+
+impl<S: Simd> Add for Dc<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn add(self, o: Dc<S>) -> Dc<S> {
+        Dc {
+            v: self.v + o.v,
+            r: self.r + o.r,
+            i: self.i + o.i,
+        }
+    }
+}
+impl<S: Simd> Sub for Dc<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn sub(self, o: Dc<S>) -> Dc<S> {
+        Dc {
+            v: self.v - o.v,
+            r: self.r - o.r,
+            i: self.i - o.i,
+        }
+    }
+}
+impl<S: Simd> Neg for Dc<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn neg(self) -> Dc<S> {
+        Dc {
+            v: -self.v,
+            r: -self.r,
+            i: -self.i,
+        }
+    }
+}
+impl<S: Simd> Mul for Dc<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn mul(self, o: Dc<S>) -> Dc<S> {
+        let r = DotAcc::zero().add_prod(self.v, o.r).add_prod(self.r, o.v).finish();
+        let i = DotAcc::zero().add_prod(self.v, o.i).add_prod(self.i, o.v).finish();
+        Dc { v: self.v * o.v, r, i }
+    }
+}
+impl<S: Simd> Div for Dc<S> {
+    type Output = Self;
+    #[inline(always)]
+    fn div(self, o: Dc<S>) -> Dc<S> {
+        let q = self.v / o.v;
+        Dc {
+            v: q,
+            r: (self.r - q * o.r) / o.v,
+            i: (self.i - q * o.i) / o.v,
+        }
+    }
+}
+
+impl<S: Simd> Lane for Dc<S> {
+    type S = S;
+    type Acc = (DotAcc<S>, DotAcc<S>, DotAcc<S>);
+    const TANGENT: bool = true;
+    #[inline(always)]
+    fn zero() -> Self {
+        Dc {
+            v: DV::zero(),
+            r: DV::zero(),
+            i: DV::zero(),
+        }
+    }
+    #[inline(always)]
+    fn cst(c: DV<S>) -> Self {
+        Dc {
+            v: c,
+            r: DV::zero(),
+            i: DV::zero(),
+        }
+    }
+    #[inline(always)]
+    fn mulc(self, c: DV<S>) -> Self {
+        Dc {
+            v: self.v * c,
+            r: self.r * c,
+            i: self.i * c,
+        }
+    }
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        Dc {
+            v: self.v.mul_f(s),
+            r: self.r.mul_f(s),
+            i: self.i.mul_f(s),
+        }
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        Dc {
+            v: self.v.mul_pwr2(s),
+            r: self.r.mul_pwr2(s),
+            i: self.i.mul_pwr2(s),
+        }
+    }
+    #[inline(always)]
+    fn addc(self, c: DV<S>) -> Self {
+        Dc {
+            v: self.v + c,
+            r: self.r,
+            i: self.i,
+        }
+    }
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        Dc {
+            v: self.v.bcast(j),
+            r: self.r.bcast(j),
+            i: self.i.bcast(j),
+        }
+    }
+    #[inline(always)]
+    fn val(self) -> DV<S> {
+        self.v
+    }
+    /// the real part of the tangent
+    #[inline(always)]
+    fn tan(self) -> DV<S> {
+        self.r
+    }
+    /// a real tangent (imaginary part zero)
+    #[inline(always)]
+    fn from_vt(v: DV<S>, t: DV<S>) -> Self {
+        Dc { v, r: t, i: DV::zero() }
+    }
+    #[inline(always)]
+    fn acc0() -> Self::Acc {
+        (DotAcc::zero(), DotAcc::zero(), DotAcc::zero())
+    }
+    #[inline(always)]
+    fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
+        (
+            a.0.add_prod(x.v, y.v),
+            a.1.add_prod(x.v, y.r).add_prod(x.r, y.v),
+            a.2.add_prod(x.v, y.i).add_prod(x.i, y.v),
+        )
+    }
+    #[inline(always)]
+    fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
+        (a.0.add_prod(x.v, c), a.1.add_prod(x.r, c), a.2.add_prod(x.i, c))
+    }
+    #[inline(always)]
+    fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
+        (a.0.add(x.v), a.1.add(x.r), a.2.add(x.i))
+    }
+    #[inline(always)]
+    fn fin(a: Self::Acc) -> Self {
+        Dc {
+            v: a.0.finish(),
+            r: a.1.finish(),
+            i: a.2.finish(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // quad-double value and tangent
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -363,6 +544,7 @@ impl<S: Simd> Lane for Qu<S> {
     type S = S;
     type Acc = (QDotAcc<S>, QDotAcc<S>);
     const TANGENT: bool = true;
+    const VAL_QD: bool = true;
     #[inline(always)]
     fn zero() -> Self {
         Qu {
@@ -1234,6 +1416,7 @@ impl<L: Lane> Lane for Counted<L> {
     const VAL_F64: bool = L::VAL_F64;
     const TAN_F64: bool = L::TAN_F64;
     const NT: usize = L::NT;
+    const VAL_QD: bool = L::VAL_QD;
     #[inline(always)]
     fn zero() -> Self {
         Counted(L::zero())

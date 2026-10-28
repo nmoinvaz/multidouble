@@ -7,8 +7,10 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``add``, ``sub``, ``mul``, ``div``: elementwise operations; ``dd_op(op, ...)`` with op 0 add, 1 mul, 2 div, 3 sub;
 - ``dd_dot``: a dot product in double-double (8 lanes at a time, then the lane sums), to about (n / 8 + 12) 2^-106 of
   sum |x_i y_i|;
+- ``dd_matvec``: A v in double-double, each row a ``dd_dot``;
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
-- ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double.
+- ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
+- ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double.
 
 In numpy, for code that composes them with other numpy operations (these are plain numpy expressions, so the same
 inputs give the same bits on every machine with IEEE float64 arithmetic):
@@ -23,11 +25,11 @@ import time
 
 import numpy as np
 
-from ._multidouble import add, dd_op, dd_solve, div, isa, mul, qd_add_dd, sub
+from ._multidouble import add, dd_matvec, dd_op, dd_solve, div, isa, mul, qd_add_dd, qd_axpy, sub
 from ._multidouble import dd_dot as _dd_dot
 
-__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_solve", "qd_add_dd", "isa", "two_sum", "two_prod", "dd_add",
-           "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
+__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_solve", "qd_add_dd", "qd_axpy", "isa", "two_sum",
+           "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
 
 
 def two_sum(a, b):

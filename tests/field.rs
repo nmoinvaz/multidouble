@@ -9,9 +9,9 @@ use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Lane};
 use multidouble::exact::Dy;
-use multidouble::field::{cs, cs_range, cs_w, horner, DMat, FieldSolve, Fl, MatLane};
+use multidouble::field::{cs, cs_range, cs_w, horner, DMat, FieldSolve, Fl, MatLane, TangentTail};
 use multidouble::linalg::{ld_for, DDLu};
-use multidouble::native::{Dtn, Fu, Fun, F8, QV};
+use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Qu, F8, QV};
 use multidouble::qd::QD;
 use multidouble::simd::Native;
 
@@ -505,4 +505,190 @@ fn field_refine_refuses_tangent_lanes() {
     let lu = lu_of_order(M);
     let rhs = Fl::<multidouble::native::Du, B>([multidouble::native::Du::splat(DD::from_f64(1.0)); B]);
     lu.solve_lanes_refine(&rhs, 1, |x| rhs - *x);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// tan64, the complex-tangent fields, the refinement with a tangent, and the early end of a series
+// ---------------------------------------------------------------------------------------------------------------
+
+/// `Fl::tan64(k)` is lane by lane the lanes' `tan64(k)`, bit for bit, as an `F8` field
+#[test]
+fn field_tan64_is_the_lanes_tangent() {
+    let mut r = Rng(71);
+    let (v, _) = field(&mut r, 1.0);
+    let mut f = Fl::<Fun<2>, B>::from_vt(&v, &Fl::zero());
+    for b in 0..B {
+        for k in 0..2 {
+            let a: [f64; 8] = std::array::from_fn(|_| r.sym());
+            f.0[b].set_tan64(k, multidouble::v8::V8::load(&a));
+        }
+    }
+    for k in 0..2 {
+        let t: Fl<F8, B> = f.tan64(k);
+        for b in 0..B {
+            assert_eq!(
+                t.0[b].0.to_array().map(f64::to_bits),
+                f.0[b].tan64(k).to_array().map(f64::to_bits)
+            );
+        }
+    }
+    assert_ne!(
+        f.tan64(0).0[0].0.to_array(),
+        f.tan64(1).0[0].0.to_array(),
+        "control: the two tangents agree"
+    );
+}
+
+/// a `Dc` field from its three parts gives them back bit for bit, and `from_vt` sets the imaginary part to zero
+#[test]
+fn dc_field_parts_round_trip() {
+    let mut r = Rng(72);
+    let (v, _) = field(&mut r, 1.0);
+    let (re, _) = field(&mut r, 1.0);
+    let (im, _) = field(&mut r, 1.0);
+    let f = Fl::<Dc, B>::from_vri(&v, &re, &im);
+    let same = |a: &Fl<DV, B>, b: &Fl<DV, B>| {
+        (0..M).all(|i| a.get(i).hi.to_bits() == b.get(i).hi.to_bits() && a.get(i).lo.to_bits() == b.get(i).lo.to_bits())
+    };
+    assert!(same(&f.val(), &v) && same(&f.tan_re(), &re) && same(&f.tan_im(), &im) && same(&f.tan(), &re));
+    assert!(!same(&f.tan_im(), &re), "control");
+    let g = Fl::<Dc, B>::from_vt(&v, &re);
+    assert!(same(&g.tan_re(), &re) && same(&g.tan_im(), &Fl::zero()));
+}
+
+fn qu_field(v: &Fl<QV, B>, d: &Fl<QV, B>) -> Fl<Qu, B> {
+    Fl(std::array::from_fn(|b| Qu { v: v.0[b], d: d.0[b] }))
+}
+
+fn qu_val(f: &Fl<Qu, B>) -> Vec<QD> {
+    qvalues(&Fl(f.0.map(|q| q.v)))
+}
+
+fn qu_tan(f: &Fl<Qu, B>) -> Vec<QD> {
+    qvalues(&Fl(f.0.map(|q| q.d)))
+}
+
+fn same_qd(x: &[QD], y: &[QD]) -> bool {
+    x.iter()
+        .zip(y)
+        .all(|(a, b)| a.x.iter().zip(b.x.iter()).all(|(p, q)| p.to_bits() == q.to_bits()))
+}
+
+/// With the tangent system the value system's (A_d = 0, lu_t the same LU), `solve_lanes_refine_t` on `Qu` is
+/// `solve_lanes_refine` on the value and on the tangent separately, bit for bit, for 0 to 3 steps; without a tangent
+/// (`QV`) it is `solve_lanes_refine` bit for bit. Control: the tangent against the value's refinement must differ.
+#[test]
+fn field_refine_t_is_refine_on_value_and_tangent() {
+    let mut r = Rng(73);
+    let (d, lu, x0, b) = qd_system(&mut r);
+    let (bq, tq) = (qfield(&b), qfield(&x0));
+    let rhs = qu_field(&bq, &tq);
+    for steps in 0..4 {
+        let x = lu.solve_lanes_refine_t(&lu, &rhs, steps, |x: &Fl<Qu, B>| rhs - d.apply(x));
+        let xv = lu.solve_lanes_refine(&bq, steps, |x: &Fl<QV, B>| bq - d.apply(x));
+        let xt = lu.solve_lanes_refine(&tq, steps, |x: &Fl<QV, B>| tq - d.apply(x));
+        assert!(same_qd(&qu_val(&x), &qvalues(&xv)), "value, {steps} steps");
+        assert!(same_qd(&qu_tan(&x), &qvalues(&xt)), "tangent, {steps} steps");
+        assert!(!same_qd(&qu_tan(&x), &qvalues(&xv)), "control, {steps} steps");
+        let y = lu.solve_lanes_refine_t(&lu, &bq, steps, |x: &Fl<QV, B>| bq - d.apply(x));
+        assert!(same_qd(&qvalues(&y), &qvalues(&xv)), "QV, {steps} steps");
+    }
+}
+
+/// A(t) x(t) = b with A(t) = A + t E: the tangent of x is -A^-1 E x. With `Qu` lanes whose residual carries E x_v
+/// on the tangent, three refinement steps give the tangent to 1e-58 of the reference (two quad-double refinements:
+/// x, then -A^-1 E x), the value to 1e-60 as `solve_lanes_refine` does. Controls: one step leaves the tangent above
+/// 1e-40 (the first tangent solve ignores E); a residual with E scaled by 1 + 1e-30 converges to the wrong tangent.
+#[test]
+fn field_refine_t_reaches_quad_double_with_a_matrix_tangent() {
+    let mut r = Rng(74);
+    let (d, lu, _, b) = qd_system(&mut r);
+    let (e, _) = matrix(&mut r);
+    let bq = qfield(&b);
+    let xv = lu.solve_lanes_refine(&bq, 3, |x: &Fl<QV, B>| bq - d.apply(x));
+    let ex = -e.apply(&xv);
+    let t_ref = lu.solve_lanes_refine(&ex, 3, |x: &Fl<QV, B>| ex - d.apply(x));
+    let rhs = qu_field(&bq, &Fl::<QV, B>::zero());
+    let resid = |scale: QD| {
+        let (e, d, rhs) = (&e, &d, &rhs);
+        move |x: &Fl<Qu, B>| {
+            let ev = e.apply(&Fl::<QV, B>(x.0.map(|q| q.v)));
+            let s = QV::splat(scale);
+            *rhs - d.apply(x)
+                - Fl(std::array::from_fn(|k| Qu {
+                    v: QV::zero(),
+                    d: ev.0[k] * s,
+                }))
+        }
+    };
+    let x3 = lu.solve_lanes_refine_t(&lu, &rhs, 3, resid(QD::ONE));
+    let (ev, et) = (
+        qd_err(&qu_val(&x3), &qvalues(&xv)),
+        qd_err(&qu_tan(&x3), &qvalues(&t_ref)),
+    );
+    assert!(ev <= 1e-60 && et <= 1e-58, "value {ev:e}, tangent {et:e}");
+    let x1 = lu.solve_lanes_refine_t(&lu, &rhs, 1, resid(QD::ONE));
+    let e1 = qd_err(&qu_tan(&x1), &qvalues(&t_ref));
+    assert!(e1 > 1e-40, "control: one step gives the tangent to {e1:e}");
+    let xw = lu.solve_lanes_refine_t(&lu, &rhs, 3, resid(QD::from_f64(1.0).add_f(1e-30)));
+    let ew = qd_err(&qu_tan(&xw), &qvalues(&t_ref));
+    assert!(ew > 1e-58, "control: E scaled by 1 + 1e-30 passes ({ew:e})");
+}
+
+/// the order after which `TangentTail` ends a series whose tangent terms are 0.75 (r s)^k (s = 2) on two fields: the
+/// first k with run orders in a row of (r s)^k <= tol, and at least kmin; None if never within 60 orders
+fn tail_order<T: Lane>(mk: impl Fn(f64) -> Fl<T, B>, r: f64, tol: f64, run: usize, kmin: usize) -> Option<usize> {
+    let mut tail = TangentTail::new(r, tol, run, kmin);
+    (0..60).find(|&k| {
+        let (f, g) = (mk(0.75 * 2f64.powi(k as i32)), mk(0.5 * 2f64.powi(k as i32)));
+        tail.done(k, &[&f, &g])
+    })
+}
+
+/// value 1, tangent t (every lane, the last f64 tangent where the lane has them)
+fn with_tangent<T: Lane>(t: f64) -> Fl<T, B> {
+    let mut f = Fl::<T, B>::from_vt(&Fl::splat(DD::ONE), &Fl::splat(DD::from_f64(t)));
+    if T::TAN_F64 {
+        for b in 0..B {
+            f.0[b].set_tan64(T::NT - 1, multidouble::v8::V8::splat(t));
+        }
+    }
+    f
+}
+
+/// Terms 0.75 2^-k (r = 1/4), tol 2^-10, run 3: the run starts at k = 10 and the series ends after k = 12, on the
+/// double-double tangents (`Du`), the f64 tangents (`Fu`, `Dtn<2>`, `Fun<2>`) and the quad-double ones (`Qu`); kmin 20
+/// moves the end to k = 20. Controls: a value lane type (`DV`) never ends; r = 1/2 (constant terms) never ends;
+/// tol 0 never ends; a tangent seeded 2^20 larger on the last order breaks the run (the series ends 3 orders later).
+#[test]
+fn tangent_tail_ends_after_the_predicted_order() {
+    let (r, tol) = (0.25, 2f64.powi(-10));
+    assert_eq!(tail_order(with_tangent::<Du>, r, tol, 3, 2), Some(12));
+    assert_eq!(tail_order(with_tangent::<Fu>, r, tol, 3, 2), Some(12));
+    assert_eq!(tail_order(with_tangent::<Dtn<2>>, r, tol, 3, 2), Some(12));
+    assert_eq!(tail_order(with_tangent::<Fun<2>>, r, tol, 3, 2), Some(12));
+    assert_eq!(tail_order(with_tangent::<Qu>, r, tol, 3, 2), Some(12));
+    assert_eq!(tail_order(with_tangent::<Du>, r, tol, 3, 20), Some(20));
+    assert_eq!(tail_order(with_tangent::<Du>, r, tol, 1, 2), Some(10));
+    assert_eq!(tail_order(with_tangent::<DV>, r, tol, 3, 2), None, "control: values");
+    assert_eq!(
+        tail_order(with_tangent::<Du>, 0.5, tol, 3, 2),
+        None,
+        "control: constant terms"
+    );
+    assert_eq!(tail_order(with_tangent::<Du>, r, 0.0, 3, 2), None, "control: tol 0");
+    let mut tail = TangentTail::new(r, tol, 3, 2);
+    let mut end = None;
+    for k in 0..60 {
+        let f = with_tangent::<Du>(0.75 * 2f64.powi(k as i32) * if k == 12 { 2f64.powi(20) } else { 1.0 });
+        if tail.done(k, &[&f]) {
+            end = Some(k);
+            break;
+        }
+    }
+    assert_eq!(
+        end,
+        Some(15),
+        "control: a large term at k = 12 does not restart the run"
+    );
 }
