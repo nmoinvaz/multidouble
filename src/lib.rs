@@ -15,15 +15,18 @@
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
-//!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent, and f64
-//!   variants), behind the [`dual::Lane`] trait, so one generic code gives values and exact derivatives;
+//!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent,
+//!   [`dual::Dc`] a double-double value with a complex tangent, and f64 variants), behind the [`dual::Lane`] trait,
+//!   so one generic code gives values and exact derivatives;
 //!   [`dual::Counted`] counts the operations of such code.
 //! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
-//!   a constant double-double matrix applied to them ([`field::DMat`]) and solves with a `DDLu`, refined in the lane
-//!   type ([`field::FieldSolve`]): the arithmetic of power-series methods.
+//!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
+//!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
+//!   arithmetic of power-series methods.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
 //!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double), solves,
-//!   transpose solves, solves refined to quad-double and Gram matrices; [`linalg::lu_rect_f64`], the f64 LU of the
+//!   transpose solves, solves refined to quad-double and Gram matrices, and the determinant of a complex matrix
+//!   ([`linalg::clu_logdet`]); [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
 //!   system with one global parameter (the Newton system of multiple shooting) built from those steps.
 //!
@@ -69,6 +72,7 @@ pub mod native {
     pub type QDotAcc = crate::qv::QDotAcc<Native>;
     pub type Du = crate::dual::Du<Native>;
     pub type Qu = crate::dual::Qu<Native>;
+    pub type Dc = crate::dual::Dc<Native>;
     pub type F8 = crate::dual::F8<Native>;
     pub type Fu = crate::dual::Fu<Native>;
     pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;

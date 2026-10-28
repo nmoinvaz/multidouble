@@ -6,7 +6,7 @@ use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dv::{DotAcc, DV};
 use multidouble::qd::QD;
-use multidouble::qv::QV;
+use multidouble::qv::{axpy_parts, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
 
@@ -506,4 +506,57 @@ impl Kernel for NegationLowerZerosArePositive {
 #[test]
 fn negation_lower_zeros_are_positive() {
     on_every_backend(NegationLowerZerosArePositive);
+}
+
+/// four-part arrays of n normalized quad-doubles
+fn qd_parts(r: &mut Rng, n: usize) -> [Vec<f64>; 4] {
+    let mut p: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; n]);
+    for i in 0..n {
+        let v = r.dd(10).hi;
+        let q = QD::new(
+            v,
+            v * 2f64.powi(-53) * r.sym(),
+            v * 2f64.powi(-106) * r.sym(),
+            v * 2f64.powi(-159) * r.sym(),
+        );
+        for k in 0..4 {
+            p[k][i] = q.x[k];
+        }
+    }
+    p
+}
+
+/// `axpy_parts` is element by element the scalar y + x.mul_f(a), bit for bit, on a length that is not a multiple of 8
+/// (lanes and the scalar tail); controls: x's second part dropped must change some element, and unequal lengths panic
+#[test]
+fn axpy_parts_matches_qd() {
+    let mut r = Rng(41);
+    let n = 21;
+    let (x, y) = (qd_parts(&mut r, n), qd_parts(&mut r, n));
+    let a = -0.37;
+    fn view(p: &[Vec<f64>; 4]) -> [&[f64]; 4] {
+        [&p[0][..], &p[1][..], &p[2][..], &p[3][..]]
+    }
+    let out = axpy_parts(a, view(&x), view(&y));
+    for i in 0..n {
+        let s = QD {
+            x: [y[0][i], y[1][i], y[2][i], y[3][i]],
+        } + QD {
+            x: [x[0][i], x[1][i], x[2][i], x[3][i]],
+        }
+        .mul_f(a);
+        assert!(
+            (0..4).all(|k| same(out[k][i], s.x[k])),
+            "element {i}: {:?} vs {s:?}",
+            (0..4).map(|k| out[k][i]).collect::<Vec<_>>()
+        );
+    }
+    let mut xw = x.clone();
+    xw[1].iter_mut().for_each(|v| *v = 0.0);
+    let wrong = axpy_parts(a, view(&xw), view(&y));
+    assert!((0..n).any(|i| (0..4).any(|k| !same(wrong[k][i], out[k][i]))), "control");
+    assert!(
+        std::panic::catch_unwind(|| axpy_parts(a, view(&x), [&y[0][..n - 1], &y[1][..], &y[2][..], &y[3][..]]))
+            .is_err()
+    );
 }

@@ -277,3 +277,64 @@ def test_dd_dot_lengths_and_cancellation():
             assert abs(Fraction(c) - want) / size > bound, n
     with pytest.raises(ValueError):
         md.dd_dot(np.ones(3), np.ones(3), np.ones(4), np.ones(4))
+
+
+def test_qd_axpy_exact_to_quad_double():
+    """y + a x against exact arithmetic, within 2^-205 of the larger of |y| and |a x| (a few quad-double units), its
+    lanes bitwise its scalar tail (each element alone); controls: x's second part dropped must miss the bound, and
+    unequal lengths raise"""
+    rng = np.random.default_rng(6)
+    x, y = rand_qd(rng, N), rand_qd(rng, N)
+    a = -0.37
+
+    def worst(xp):
+        r = md.qd_axpy(a, *xp, *y)
+        out = 0
+        for i in range(N):
+            xi = sum(Fraction(p[i]) for p in x)
+            yi = sum(Fraction(p[i]) for p in y)
+            want = yi + Fraction(a) * xi
+            got = sum(Fraction(p[i]) for p in r)
+            out = max(out, abs(got - want) / max(abs(yi), abs(Fraction(a) * xi)))
+        return out, r
+
+    w, r = worst(x)
+    assert w <= Fraction(1, 2**205), float(w)
+    for i in (0, 7, 8, 500, N - 1):
+        one = md.qd_axpy(a, *[np.array([p[i]]) for p in x], *[np.array([p[i]]) for p in y])
+        assert all(np.array_equal(u, v[i:i + 1]) for u, v in zip(one, r)), i
+    wc, _ = worst([x[0], np.zeros(N), x[2], x[3]])
+    assert wc > Fraction(1, 2**205), float(wc)
+    with pytest.raises(ValueError):
+        md.qd_axpy(a, *x, y[0][:-1], y[1], y[2], y[3])
+
+
+def test_dd_matvec_within_bound():
+    """A v (A 37 x 1003, so every row has a scalar tail) against exact arithmetic: each row within (m / 8 + 12) u^2 of
+    sum |a_ij v_j|; row i is bitwise dd_dot of that row; controls: one term dropped must miss the bound, and a wrong
+    shape raises"""
+    rng = np.random.default_rng(7)
+    n, m = 37, N
+    ah, al = rand_dd(rng, n * m)
+    ah, al = ah.reshape(n, m), al.reshape(n, m)
+    vh, vl = rand_dd(rng, m)
+    yh, yl = md.dd_matvec(ah, al, vh, vl)
+    v = exact(vh, vl)
+    bound = U2 * (m // 8 + 12)
+    for i in range(n):
+        row = exact(ah[i], al[i])
+        want = sum(r * x for r, x in zip(row, v))
+        scale = sum(abs(r * x) for r, x in zip(row, v))
+        assert abs(Fraction(yh[i]) + Fraction(yl[i]) - want) <= bound * scale, i
+        dh, dl = md.dd_dot(np.ascontiguousarray(ah[i]), np.ascontiguousarray(al[i]), vh, vl)
+        assert (dh, dl) == (yh[i], yl[i]), i
+    i, j = 3, 500
+    wrong = ah.copy()
+    wrong[i, j] = 0.0
+    wh, wl = md.dd_matvec(wrong, al, vh, vl)
+    row = exact(ah[i], al[i])
+    want = sum(r * x for r, x in zip(row, v))
+    scale = sum(abs(r * x) for r, x in zip(row, v))
+    assert abs(Fraction(wh[i]) + Fraction(wl[i]) - want) > bound * scale
+    with pytest.raises(ValueError):
+        md.dd_matvec(ah, al, vh[:-1], vl[:-1])

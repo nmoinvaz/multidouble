@@ -5,7 +5,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::linalg::{gram, ld_for, ColumnGroup, DDLu, StaircaseControl, StaircaseLu};
+use multidouble::linalg::{clu_logdet, gram, ld_for, ColumnGroup, DDLu, StaircaseControl, StaircaseLu};
 use multidouble::qd::QD;
 
 /// a random n x n matrix, column-major with leading dimension ld, made well conditioned by a diagonal shift
@@ -731,4 +731,170 @@ fn qd_lu_sparse_and_singular() {
         }
     }
     assert!(QDLu::factor(n, ld, c, false).is_err());
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the determinant of a complex matrix
+// ---------------------------------------------------------------------------------------------------------------
+
+/// a random complex n x n matrix (column-major, leading dimension ld), well conditioned by a diagonal shift: real
+/// parts (hi, lo), imaginary parts (hi, lo)
+fn cmatrix(n: usize, r: &mut Rng) -> (usize, [Vec<f64>; 4]) {
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..n {
+            let mut re = DD::new(r.sym(), r.sym() * 1e-17);
+            let im = DD::new(r.sym(), r.sym() * 1e-17);
+            if i == j {
+                re = re + DD::from_f64(2.0 + (n as f64).sqrt());
+            }
+            c[0][j * ld + i] = re.hi;
+            c[1][j * ld + i] = re.lo;
+            c[2][j * ld + i] = im.hi;
+            c[3][j * ld + i] = im.lo;
+        }
+    }
+    (ld, c)
+}
+
+fn clogdet(n: usize, ld: usize, c: &[Vec<f64>; 4]) -> (f64, f64, f64, f64) {
+    clu_logdet(n, ld, c[0].clone(), c[1].clone(), c[2].clone(), c[3].clone(), false).unwrap()
+}
+
+/// the difference of two angles, wrapped into (-pi, pi]
+fn dang(a: f64, b: f64) -> f64 {
+    let d = (a - b).rem_euclid(2.0 * std::f64::consts::PI);
+    if d > std::f64::consts::PI {
+        d - 2.0 * std::f64::consts::PI
+    } else {
+        d
+    }
+}
+
+/// A real matrix (imaginary parts zero) has the ln|det| and the pivot range of `DDLu::logdet` to 1e-12 (the same
+/// pivots, updated by a different accumulation), and arg det 0 or pi as its sign is. Control: a wrong sign is caught.
+#[test]
+fn complex_logdet_of_a_real_matrix_is_logdet() {
+    let mut r = Rng(81);
+    for n in [1, 7, 20, 33] {
+        let (ld, hi, lo) = matrix(n, &mut r);
+        let z = vec![0.0; ld * n];
+        let lu = DDLu::factor(n, ld, hi.clone(), lo.clone(), false).unwrap();
+        let (sign, ln) = lu.logdet();
+        let (pmin, pmax) = lu.pivot_range();
+        let (la, arg, cmin, cmax) = clu_logdet(n, ld, hi, lo, z.clone(), z, false).unwrap();
+        assert!((la - ln).abs() <= 1e-12 * ln.abs().max(1.0), "n {n}: {la} vs {ln}");
+        let want = if sign > 0.0 { 0.0 } else { std::f64::consts::PI };
+        assert!(dang(arg, want).abs() <= 1e-12, "n {n}: arg {arg} for sign {sign}");
+        assert!(dang(arg, want + 1.0).abs() > 0.5, "control");
+        assert!((cmin - pmin).abs() <= 1e-12 * pmin && (cmax - pmax).abs() <= 1e-12 * pmax);
+    }
+}
+
+/// An upper triangular matrix with diagonal (k + 1) e^{i 0.3 (k + 1)} needs no pivoting: ln|det| = sum ln (k + 1)
+/// and arg det = 0.3 sum (k + 1) wrapped, to 1e-13; the pivot range is 1 to n.
+#[test]
+fn complex_logdet_of_a_triangular_matrix() {
+    let n = 12;
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..=j {
+            if i == j {
+                let (rho, phi) = ((j + 1) as f64, 0.3 * (j + 1) as f64);
+                c[0][j * ld + i] = rho * phi.cos();
+                c[2][j * ld + i] = rho * phi.sin();
+            } else {
+                c[0][j * ld + i] = 0.5;
+                c[2][j * ld + i] = 0.25;
+            }
+        }
+    }
+    let (la, arg, pmin, pmax) = clogdet(n, ld, &c);
+    let want_ln: f64 = (1..=n).map(|k| (k as f64).ln()).sum();
+    let want_arg = 0.3 * (n * (n + 1) / 2) as f64;
+    assert!(
+        (la - want_ln).abs() <= 1e-13 && dang(arg, want_arg).abs() <= 1e-13,
+        "{la} {arg}"
+    );
+    assert!((pmin - 1.0).abs() <= 1e-13 && (pmax - n as f64).abs() <= 1e-12);
+}
+
+/// On random complex matrices: column 0 times e^{i theta} shifts arg det by theta and leaves ln|det| (to 1e-12); the
+/// real 2n x 2n embedding [[R, -I], [I, R]] has determinant |det|^2, so `DDLu::logdet` of it gives 2 ln|det| and a
+/// positive sign (to 1e-11). Controls: an entry's imaginary part scaled by 1 + 1e-3 breaks the embedding check; a
+/// singular matrix is reported.
+#[test]
+fn complex_logdet_rotation_and_real_embedding() {
+    let mut r = Rng(82);
+    for n in [5, 16, 29] {
+        let (ld, c) = cmatrix(n, &mut r);
+        let (la, arg, _, _) = clogdet(n, ld, &c);
+        let theta = 0.7f64;
+        let mut rot = c.clone();
+        for i in 0..n {
+            let (re, im) = (DD::new(c[0][i], c[1][i]), DD::new(c[2][i], c[3][i]));
+            let (cs, sn) = (DD::from_f64(theta.cos()), DD::from_f64(theta.sin()));
+            let (nr, ni) = (re * cs - im * sn, re * sn + im * cs);
+            rot[0][i] = nr.hi;
+            rot[1][i] = nr.lo;
+            rot[2][i] = ni.hi;
+            rot[3][i] = ni.lo;
+        }
+        let (lr, ar, _, _) = clogdet(n, ld, &rot);
+        assert!(
+            (lr - la).abs() <= 1e-12 * la.abs().max(1.0),
+            "n {n}: rotated ln {lr} vs {la}"
+        );
+        assert!(
+            dang(ar, arg + theta).abs() <= 1e-12,
+            "n {n}: rotated arg {ar} vs {arg} + {theta}"
+        );
+        let embed = |c: &[Vec<f64>; 4]| {
+            let m = 2 * n;
+            let ldm = ld_for(m);
+            let (mut hi, mut lo) = (vec![0.0; ldm * m], vec![0.0; ldm * m]);
+            for j in 0..n {
+                for i in 0..n {
+                    let (re, im) = (
+                        (c[0][j * ld + i], c[1][j * ld + i]),
+                        (c[2][j * ld + i], c[3][j * ld + i]),
+                    );
+                    hi[j * ldm + i] = re.0;
+                    lo[j * ldm + i] = re.1;
+                    hi[(j + n) * ldm + i + n] = re.0;
+                    lo[(j + n) * ldm + i + n] = re.1;
+                    hi[(j + n) * ldm + i] = -im.0;
+                    lo[(j + n) * ldm + i] = -im.1;
+                    hi[j * ldm + i + n] = im.0;
+                    lo[j * ldm + i + n] = im.1;
+                }
+            }
+            DDLu::factor(m, ldm, hi, lo, false).unwrap().logdet()
+        };
+        let (sign, ln2) = embed(&c);
+        assert!(
+            sign > 0.0 && (ln2 - 2.0 * la).abs() <= 1e-11 * la.abs().max(1.0),
+            "n {n}: embedding {ln2} vs 2 x {la}"
+        );
+        let mut wrong = c.clone();
+        wrong[2][0] *= 1.0 + 1e-3;
+        let (_, lw) = embed(&wrong);
+        assert!(
+            (lw - 2.0 * la).abs() > 1e-11 * la.abs().max(1.0),
+            "control: the perturbed embedding passes"
+        );
+    }
+    let ld = ld_for(4);
+    assert!(clu_logdet(
+        4,
+        ld,
+        vec![0.0; ld * 4],
+        vec![0.0; ld * 4],
+        vec![0.0; ld * 4],
+        vec![0.0; ld * 4],
+        false
+    )
+    .is_err());
 }

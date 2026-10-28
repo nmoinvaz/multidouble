@@ -1,13 +1,20 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
-//! arithmetic and dot products on them on the best SIMD backend the CPU has, a quad-double plus double-double sum,
-//! and a dense double-double LU solve.
+//! arithmetic, dot products and matrix-vector products on them on the best SIMD backend the CPU has, quad-double
+//! arrays (four parts) plus a double-double one or plus a multiple of another, and a dense double-double LU solve.
 use multidouble::dd::DD;
 use multidouble::dv::{DotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::qd::QD;
-use multidouble::qv::{renorm4, QV};
+use multidouble::qv::{axpy_parts, renorm4, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+
+type Parts<'py> = (
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+);
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -216,7 +223,6 @@ impl Kernel for QdAddDd<'_> {
 /// first, so any four parts summing to the value will do) plus a double-double one, e.g. a Newton step applied to a
 /// state kept in quad-double. Returns the four parts of the result, renormalized.
 #[pyfunction]
-#[allow(clippy::type_complexity)]
 fn qd_add_dd<'py>(
     py: Python<'py>,
     z0: PyReadonlyArray1<'py, f64>,
@@ -225,12 +231,7 @@ fn qd_add_dd<'py>(
     z3: PyReadonlyArray1<'py, f64>,
     dh: PyReadonlyArray1<'py, f64>,
     dl: PyReadonlyArray1<'py, f64>,
-) -> PyResult<(
-    Bound<'py, PyArray1<f64>>,
-    Bound<'py, PyArray1<f64>>,
-    Bound<'py, PyArray1<f64>>,
-    Bound<'py, PyArray1<f64>>,
-)> {
+) -> PyResult<Parts<'py>> {
     let z = [
         slice(&z0, "z0")?,
         slice(&z1, "z1")?,
@@ -267,30 +268,58 @@ struct Dot<'a> {
     y: (&'a [f64], &'a [f64]),
 }
 
+/// the dot product of `Dot` on the backend S
+#[inline(always)]
+fn dot_on<S: Simd>(x: (&[f64], &[f64]), y: (&[f64], &[f64])) -> DD {
+    let n = x.0.len();
+    let full = n / 8 * 8;
+    let mut acc = DotAcc::<S>::zero();
+    for i in (0..full).step_by(8) {
+        let xv = DV::<S>::load(&x.0[i..i + 8], &x.1[i..i + 8]);
+        let yv = DV::<S>::load(&y.0[i..i + 8], &y.1[i..i + 8]);
+        acc = acc.add_prod(xv, yv);
+    }
+    if full < n {
+        let pad = |a: &[f64]| -> [f64; 8] { std::array::from_fn(|r| a.get(full + r).copied().unwrap_or(0.0)) };
+        let xv = DV::<S>::load(&pad(x.0), &pad(x.1));
+        let yv = DV::<S>::load(&pad(y.0), &pad(y.1));
+        acc = acc.add_prod(xv, yv);
+    }
+    let v = acc.finish();
+    let mut sum = DD::ZERO;
+    for j in 0..8 {
+        sum = sum + v.lane(j);
+    }
+    sum
+}
+
 impl Kernel for Dot<'_> {
     type Output = DD;
     #[inline(always)]
     fn run<S: Simd>(self) -> DD {
-        let n = self.x.0.len();
-        let full = n / 8 * 8;
-        let mut acc = DotAcc::<S>::zero();
-        for i in (0..full).step_by(8) {
-            let x = DV::<S>::load(&self.x.0[i..i + 8], &self.x.1[i..i + 8]);
-            let y = DV::<S>::load(&self.y.0[i..i + 8], &self.y.1[i..i + 8]);
-            acc = acc.add_prod(x, y);
+        dot_on::<S>(self.x, self.y)
+    }
+}
+
+/// y_i = sum_j a_ij v_j, each row the dot product of `Dot` (A row-major, n rows of m)
+struct MatVec<'a> {
+    m: usize,
+    a: (&'a [f64], &'a [f64]),
+    v: (&'a [f64], &'a [f64]),
+    out: (&'a mut [f64], &'a mut [f64]),
+}
+
+impl Kernel for MatVec<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let m = self.m;
+        for i in 0..self.out.0.len() {
+            let row = (&self.a.0[i * m..(i + 1) * m], &self.a.1[i * m..(i + 1) * m]);
+            let d = dot_on::<S>(row, self.v);
+            self.out.0[i] = d.hi;
+            self.out.1[i] = d.lo;
         }
-        if full < n {
-            let pad = |a: &[f64]| -> [f64; 8] { std::array::from_fn(|r| a.get(full + r).copied().unwrap_or(0.0)) };
-            let x = DV::<S>::load(&pad(self.x.0), &pad(self.x.1));
-            let y = DV::<S>::load(&pad(self.y.0), &pad(self.y.1));
-            acc = acc.add_prod(x, y);
-        }
-        let v = acc.finish();
-        let mut sum = DD::ZERO;
-        for j in 0..8 {
-            sum = sum + v.lane(j);
-        }
-        sum
     }
 }
 
@@ -321,6 +350,91 @@ fn dd_dot(
         y: (y0, y1),
     });
     Ok((d.hi, d.lo))
+}
+
+/// A v in double-double: A as (n, m) row-major hi and lo arrays, v as hi and lo arrays of length m; each row of the
+/// result is the dot product of `dd_dot` (8 lanes at a time, then the lane sums), so within about (m / 8 + 12) u^2
+/// of sum_j |a_ij v_j|, u^2 = 2^-106, and bitwise the same on every backend. Returns the (hi, lo) arrays of A v.
+#[pyfunction]
+fn dd_matvec<'py>(
+    py: Python<'py>,
+    ah: PyReadonlyArray2<'py, f64>,
+    al: PyReadonlyArray2<'py, f64>,
+    vh: PyReadonlyArray1<'py, f64>,
+    vl: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Pair<'py>> {
+    let [n, m] = ah.shape() else {
+        return Err(PyValueError::new_err("A must be two-dimensional"));
+    };
+    let (n, m) = (*n, *m);
+    if al.shape() != [n, m] || vh.len() != m || vl.len() != m {
+        return Err(PyValueError::new_err(
+            "A must be (n, m) in both parts and v of length m in both parts",
+        ));
+    }
+    let ahs = ah
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("ah must be C-contiguous"))?;
+    let als = al
+        .as_slice()
+        .map_err(|_| PyValueError::new_err("al must be C-contiguous"))?;
+    let (v0, v1) = (slice(&vh, "vh")?, slice(&vl, "vl")?);
+    let mut oh = vec![0.0; n];
+    let mut ol = vec![0.0; n];
+    // with the GIL held, as the elementwise functions: the slices borrow the input arrays
+    simd::dispatch(MatVec {
+        m,
+        a: (ahs, als),
+        v: (v0, v1),
+        out: (&mut oh, &mut ol),
+    });
+    Ok((oh.into_pyarray(py), ol.into_pyarray(py)))
+}
+
+/// y + a x elementwise in quad-double for quad-double arrays x and y (four float64 arrays each, the parts
+/// normalized as a quad-double keeps them, e.g. the output of `qd_add_dd`) and a float a: each element times a and
+/// the sum in quad-double, 8 at a time on the best SIMD backend, bitwise the same on every backend. Returns the four
+/// parts of the result.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn qd_axpy<'py>(
+    py: Python<'py>,
+    a: f64,
+    x0: PyReadonlyArray1<'py, f64>,
+    x1: PyReadonlyArray1<'py, f64>,
+    x2: PyReadonlyArray1<'py, f64>,
+    x3: PyReadonlyArray1<'py, f64>,
+    y0: PyReadonlyArray1<'py, f64>,
+    y1: PyReadonlyArray1<'py, f64>,
+    y2: PyReadonlyArray1<'py, f64>,
+    y3: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Parts<'py>> {
+    let x = [
+        slice(&x0, "x0")?,
+        slice(&x1, "x1")?,
+        slice(&x2, "x2")?,
+        slice(&x3, "x3")?,
+    ];
+    let y = [
+        slice(&y0, "y0")?,
+        slice(&y1, "y1")?,
+        slice(&y2, "y2")?,
+        slice(&y3, "y3")?,
+    ];
+    let n = y[0].len();
+    if x.iter().chain(y.iter()).any(|p| p.len() != n) {
+        return Err(PyValueError::new_err(
+            "x0, x1, x2, x3, y0, y1, y2 and y3 must have the same length",
+        ));
+    }
+    // with the GIL held, as in elementwise
+    let [o0, o1, o2, o3] = axpy_parts(a, x, y);
+    Ok((
+        o0.into_pyarray(py),
+        o1.into_pyarray(py),
+        o2.into_pyarray(py),
+        o3.into_pyarray(py),
+    ))
 }
 
 /// x with A x = b in double-double, by LU with partial pivoting: A as (n, n) row-major hi and lo arrays, b as hi
@@ -383,8 +497,10 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mul, m)?)?;
     m.add_function(wrap_pyfunction!(div, m)?)?;
     m.add_function(wrap_pyfunction!(dd_dot, m)?)?;
+    m.add_function(wrap_pyfunction!(dd_matvec, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
+    m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
     Ok(())
 }

@@ -27,6 +27,15 @@ pub fn two_prod(a: f64, b: f64) -> (f64, f64) {
     (p, a.mul_add(b, -p))
 }
 
+/// The power of two nearest to x in the logarithm (x > 0, finite): the scale for computing in a variable rescaled by
+/// a power of two (`DD::mul_pwr2`, `crate::dual::Lane::mul_pwr2`), e.g. a power series in x / pow2_near(x0), whose
+/// coefficients then stay near the scale of the evaluation radius instead of growing like r^-k. The scaling is
+/// exact, so the values agree bit for bit with the unscaled recursion wherever that neither overflows nor underflows.
+pub fn pow2_near(x: f64) -> f64 {
+    debug_assert!(x > 0.0 && x.is_finite());
+    2f64.powi(x.log2().round() as i32)
+}
+
 /// b is a normal power of two (positive or negative): the scales `mul_pwr2` accepts
 #[inline(always)]
 pub fn is_pwr2(b: f64) -> bool {

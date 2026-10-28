@@ -5,7 +5,7 @@
 //! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) for systems
 //! too ill-conditioned for double-double.
 use crate::dd::{two_prod, two_sum, DD};
-use crate::dv::{self, DV};
+use crate::dv::{self, DotAcc, DV};
 use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::{self, Kernel, Simd};
@@ -2679,6 +2679,202 @@ impl Kernel for SolveQd<'_> {
     #[inline(always)]
     fn run<S: Simd>(self) {
         self.lu.solve_on::<S>(self.b)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The determinant of a complex double-double matrix
+// ---------------------------------------------------------------------------------------------------------------
+
+/// ln|det| and arg det (in (-pi, pi]) of the complex n x n matrix with real parts rh + rl and imaginary parts
+/// ih + il (column-major, leading dimension ld, ld % 8 == 0, padding rows zero), by LU with partial pivoting in
+/// getf2 order: the pivot of column k is its entry of largest modulus on or below the diagonal, the column below it
+/// is scaled by 1 / u_kk = conj(u_kk) / |u_kk|^2, and the trailing columns are updated on 8-row lane vectors (the
+/// real and the imaginary part of a - l t each through the dot accumulator; in parallel over the columns when par).
+/// ln|det| and arg det are the sums of ln|u_kk| and arg u_kk in f64, the pivots rounded to f64 first, plus pi per
+/// row interchange; the factors are not kept. Also returns min and max |u_kk|. For a real matrix `DDLu::logdet`
+/// gives the sign and ln|det|.
+#[allow(clippy::type_complexity)]
+pub fn clu_logdet(
+    n: usize,
+    ld: usize,
+    rh: Vec<f64>,
+    rl: Vec<f64>,
+    ih: Vec<f64>,
+    il: Vec<f64>,
+    par: bool,
+) -> Result<(f64, f64, f64, f64), String> {
+    simd::dispatch(CluLogdet {
+        n,
+        ld,
+        rh,
+        rl,
+        ih,
+        il,
+        par,
+    })
+}
+
+#[allow(clippy::type_complexity)]
+fn clu_logdet_on<S: Simd>(
+    n: usize,
+    ld: usize,
+    mut rh: Vec<f64>,
+    mut rl: Vec<f64>,
+    mut ih: Vec<f64>,
+    mut il: Vec<f64>,
+    par: bool,
+) -> Result<(f64, f64, f64, f64), String> {
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            assert!(ld.is_multiple_of(8) && ld >= n);
+            assert!(rh.len() >= ld * n && rl.len() >= ld * n && ih.len() >= ld * n && il.len() >= ld * n);
+            let at = |h: &[f64], l: &[f64], i: usize| DD { hi: h[i], lo: l[i] };
+            let mut la = 0.0f64;
+            let mut arg = 0.0f64;
+            let mut pmin = f64::INFINITY;
+            let mut pmax = 0.0f64;
+            let mut lrh = vec![0.0f64; ld];
+            let mut lrl = vec![0.0f64; ld];
+            let mut lih = vec![0.0f64; ld];
+            let mut lil = vec![0.0f64; ld];
+            for k in 0..n {
+                let ck = k * ld;
+                let mut p = k;
+                let mut best = -1.0f64;
+                for i in k..n {
+                    let v = rh[ck + i].hypot(ih[ck + i]);
+                    if v > best {
+                        best = v;
+                        p = i;
+                    }
+                }
+                if best == 0.0 || !best.is_finite() {
+                    return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                }
+                if p != k {
+                    for j in 0..n {
+                        rh.swap(j * ld + k, j * ld + p);
+                        rl.swap(j * ld + k, j * ld + p);
+                        ih.swap(j * ld + k, j * ld + p);
+                        il.swap(j * ld + k, j * ld + p);
+                    }
+                    arg += std::f64::consts::PI;
+                }
+                let ur = at(&rh, &rl, ck + k);
+                let ui = at(&ih, &il, ck + k);
+                let mag = (ur.hi + ur.lo).hypot(ui.hi + ui.lo);
+                // |u| and its phase to f64 are all ln|u| and arg u need
+                la += mag.ln();
+                arg += (ui.hi + ui.lo).atan2(ur.hi + ur.lo);
+                pmin = pmin.min(mag);
+                pmax = pmax.max(mag);
+                if k + 1 == n {
+                    break;
+                }
+                // 1/u = conj(u) / |u|^2
+                let den = ur * ur + ui * ui;
+                let vr = ur / den;
+                let vi = -(ui / den);
+                for i in k + 1..n {
+                    let ar = at(&rh, &rl, ck + i);
+                    let ai = at(&ih, &il, ck + i);
+                    let xr = ar * vr - ai * vi;
+                    let xi = ar * vi + ai * vr;
+                    rh[ck + i] = xr.hi;
+                    rl[ck + i] = xr.lo;
+                    ih[ck + i] = xi.hi;
+                    il[ck + i] = xi.lo;
+                }
+                let r0 = 8 * ((k + 1) / 8);
+                for i in r0..ld {
+                    if i > k && i < n {
+                        lrh[i] = rh[ck + i];
+                        lrl[i] = rl[ck + i];
+                        lih[i] = ih[ck + i];
+                        lil[i] = il[ck + i];
+                    } else {
+                        lrh[i] = 0.0;
+                        lrl[i] = 0.0;
+                        lih[i] = 0.0;
+                        lil[i] = 0.0;
+                    }
+                }
+                let ncols = n - k - 1;
+                let (_, arh) = rh.split_at_mut((k + 1) * ld);
+                let (_, arl) = rl.split_at_mut((k + 1) * ld);
+                let (_, aih) = ih.split_at_mut((k + 1) * ld);
+                let (_, ail) = il.split_at_mut((k + 1) * ld);
+                let upd = |(((ch, cl), dh), dl): (((&mut [f64], &mut [f64]), &mut [f64]), &mut [f64])| {
+                    S::vectorize(
+                        #[inline(always)]
+                        || {
+                            let tr = DD { hi: ch[k], lo: cl[k] };
+                            let ti = DD { hi: dh[k], lo: dl[k] };
+                            if tr.hi == 0.0 && ti.hi == 0.0 {
+                                return;
+                            }
+                            let ntr = DV::<S>::splat(-tr);
+                            let nti = DV::<S>::splat(-ti);
+                            let pti = DV::<S>::splat(ti);
+                            let mut i = r0;
+                            while i < ld {
+                                let ar = DV::<S>::load(&ch[i..i + 8], &cl[i..i + 8]);
+                                let ai = DV::<S>::load(&dh[i..i + 8], &dl[i..i + 8]);
+                                let lr = DV::<S>::load(&lrh[i..i + 8], &lrl[i..i + 8]);
+                                let li = DV::<S>::load(&lih[i..i + 8], &lil[i..i + 8]);
+                                // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
+                                let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
+                                let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
+                                nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
+                                ni.store(&mut dh[i..i + 8], &mut dl[i..i + 8]);
+                                i += 8;
+                            }
+                        },
+                    )
+                };
+                if par && ncols * (ld - r0) > 32768 {
+                    arh[..ncols * ld]
+                        .par_chunks_mut(ld)
+                        .zip(arl[..ncols * ld].par_chunks_mut(ld))
+                        .zip(aih[..ncols * ld].par_chunks_mut(ld))
+                        .zip(ail[..ncols * ld].par_chunks_mut(ld))
+                        .for_each(upd);
+                } else {
+                    arh[..ncols * ld]
+                        .chunks_mut(ld)
+                        .zip(arl[..ncols * ld].chunks_mut(ld))
+                        .zip(aih[..ncols * ld].chunks_mut(ld))
+                        .zip(ail[..ncols * ld].chunks_mut(ld))
+                        .for_each(upd);
+                }
+            }
+            let two_pi = 2.0 * std::f64::consts::PI;
+            let mut a = arg.rem_euclid(two_pi);
+            if a > std::f64::consts::PI {
+                a -= two_pi;
+            }
+            Ok((la, a, pmin, pmax))
+        },
+    )
+}
+
+struct CluLogdet {
+    n: usize,
+    ld: usize,
+    rh: Vec<f64>,
+    rl: Vec<f64>,
+    ih: Vec<f64>,
+    il: Vec<f64>,
+    par: bool,
+}
+
+impl Kernel for CluLogdet {
+    type Output = Result<(f64, f64, f64, f64), String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        clu_logdet_on::<S>(self.n, self.ld, self.rh, self.rl, self.ih, self.il, self.par)
     }
 }
 
