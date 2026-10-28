@@ -915,3 +915,71 @@ fn complex_logdet_parallel_is_serial() {
     other[0][ld + 1] += 1e-3;
     assert_ne!(bits(serial), bits(clogdet(n, ld, &other)), "control");
 }
+
+/// Pivots of any size: the matrix scaled by 2^-530 (moduli about 1e-160, whose squares underflow), by 2^530 (about
+/// 1e160, whose squares overflow) and by 2^-10 gives the same arg det, ln|det| shifted by n ln 2^e to 1e-9, and
+/// every pivot scaled bit for bit (the reciprocal's scaling is exact, so the factors are those of the unscaled
+/// matrix times 2^e). Control: the shift with n - 1 in place of n must miss.
+#[test]
+fn complex_logdet_pivots_of_any_size() {
+    let mut r = Rng(84);
+    let n = 12;
+    let (ld, c) = cmatrix(n, &mut r);
+    let (la, arg, pmin, pmax) = clogdet(n, ld, &c);
+    for e in [-530i32, 530, -10] {
+        let s = 2f64.powi(e);
+        let scaled: [Vec<f64>; 4] = std::array::from_fn(|q| c[q].iter().map(|v| v * s).collect());
+        let (ls, as_, smin, smax) = clogdet(n, ld, &scaled);
+        let shift = n as f64 * s.ln();
+        assert!(
+            (ls - la - shift).abs() <= 1e-9 * (la.abs() + shift.abs()),
+            "2^{e}: {ls} vs {la} + {shift}"
+        );
+        assert!(dang(as_, arg).abs() <= 1e-12, "2^{e}: arg {as_} vs {arg}");
+        assert_eq!(
+            (smin.to_bits(), smax.to_bits()),
+            ((pmin * s).to_bits(), (pmax * s).to_bits()),
+            "2^{e}: pivots"
+        );
+        assert!(
+            (ls - la - (n - 1) as f64 * s.ln()).abs() > 1e-9 * (la.abs() + shift.abs()),
+            "control"
+        );
+    }
+}
+
+/// NaN entries: a NaN on the diagonal of a column, or a column of NaN, is reported as a non-finite pivot (not
+/// skipped in favour of a finite entry below it, as the real LU's `pivot_search` does not either)
+#[test]
+fn complex_logdet_reports_nan_pivots() {
+    let mut r = Rng(85);
+    let n = 6;
+    let (ld, c) = cmatrix(n, &mut r);
+    assert!(clogdet(n, ld, &c).0.is_finite());
+    let mut diag = c.clone();
+    diag[2][2 * ld + 2] = f64::NAN;
+    assert!(clu_logdet(
+        n,
+        ld,
+        diag[0].clone(),
+        diag[1].clone(),
+        diag[2].clone(),
+        diag[3].clone(),
+        false
+    )
+    .is_err());
+    let mut col = c.clone();
+    for i in 0..n {
+        col[0][3 * ld + i] = f64::NAN;
+    }
+    assert!(clu_logdet(
+        n,
+        ld,
+        col[0].clone(),
+        col[1].clone(),
+        col[2].clone(),
+        col[3].clone(),
+        false
+    )
+    .is_err());
+}
