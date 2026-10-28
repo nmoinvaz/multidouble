@@ -159,4 +159,24 @@ fn pow2_near_is_the_nearest_power_of_two() {
     assert_eq!(pow2_near(2.8), 2.0);
     assert_eq!(pow2_near(1.5 * 2f64.powi(100)), 2f64.powi(101));
     assert!(!is_pwr2(1.5 * pow2_near(2.8)), "control");
+    // the ends of the range: the smallest and the largest normal powers of two
+    assert_eq!(pow2_near(f64::MIN_POSITIVE), f64::MIN_POSITIVE);
+    assert_eq!(pow2_near(1.4 * f64::MIN_POSITIVE), f64::MIN_POSITIVE);
+    assert_eq!(pow2_near(2f64.powi(1023)), 2f64.powi(1023));
+    assert_eq!(pow2_near(1.4 * 2f64.powi(1023)), 2f64.powi(1023));
+}
+
+/// in debug builds, an x whose nearest power of two is subnormal (or infinite) is refused
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "outside the normal range")]
+fn pow2_near_refuses_a_subnormal_result_in_debug() {
+    pow2_near(1e-320);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "outside the normal range")]
+fn pow2_near_refuses_an_infinite_result_in_debug() {
+    pow2_near(f64::MAX);
 }

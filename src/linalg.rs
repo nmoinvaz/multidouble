@@ -4,7 +4,7 @@
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
 //! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) for systems
 //! too ill-conditioned for double-double.
-use crate::dd::{two_prod, two_sum, DD};
+use crate::dd::{pow2_near, two_prod, two_sum, DD};
 use crate::dv::{self, DotAcc, DV};
 use crate::qd::QD;
 use crate::qv::QV;
@@ -2750,7 +2750,9 @@ fn clu_logdet_on<S: Simd>(
                         p = i;
                     }
                 }
-                if best == 0.0 || !best.is_finite() {
+                // a NaN diagonal entry is a non-finite pivot (as `pivot_search`); a column of NaN leaves best at -1
+                // (a NaN modulus never replaces it, so best is never NaN itself)
+                if rh[ck + k].hypot(ih[ck + k]).is_nan() || best <= 0.0 || !best.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                 }
                 if p != k {
@@ -2773,10 +2775,14 @@ fn clu_logdet_on<S: Simd>(
                 if k + 1 == n {
                     break;
                 }
-                // 1/u = conj(u) / |u|^2
-                let den = ur * ur + ui * ui;
-                let vr = ur / den;
-                let vi = -(ui / den);
+                // 1/u = conj(u) / |u|^2, u first scaled to order one by a power of two (exact), so that |u|^2
+                // neither overflows nor underflows for any pivot; the quotients' significands are those of the
+                // unscaled formula, so the factors are bitwise the same wherever that one stays in range
+                let sc = pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
+                let (us_r, us_i) = (ur.mul_pwr2(1.0 / sc), ui.mul_pwr2(1.0 / sc));
+                let den = us_r * us_r + us_i * us_i;
+                let vr = (us_r / den).mul_pwr2(1.0 / sc);
+                let vi = -(us_i / den).mul_pwr2(1.0 / sc);
                 for i in k + 1..n {
                     let ar = at(&rh, &rl, ck + i);
                     let ai = at(&ih, &il, ck + i);

@@ -659,8 +659,9 @@ impl FieldSolve for DDLu {
 /// that would otherwise run to the values' order). Call `done(k, &[c_k of each field])` for k = 0, 1, 2, ... in
 /// turn, with the coefficients of order k; it returns true once the tangent terms max |c_k| r^k (r the evaluation
 /// radius; the maximum over the fields, lanes and tangents given, f64 tangents through `Lane::tan64`, else the hi
-/// part of `Lane::tan`) of `run` consecutive orders are all below `tol` times the largest tangent term so far, and
-/// k >= kmin. The values are not looked at, so a value lane type never ends early.
+/// part of `Lane::tan`, so a complex tangent (`Dc`) by its real part) of `run` consecutive orders are all below
+/// `tol` times the largest tangent term so far, and k >= kmin. The values are not looked at, so a value lane type
+/// never ends early.
 pub struct TangentTail {
     rk: f64,
     r: f64,

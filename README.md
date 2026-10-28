@@ -19,7 +19,7 @@ speed, with no allocation and no arbitrary-precision library.
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators; `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`, indexed by `dual::op`), the results bitwise L's: operation counts of code written over `dual::Lane` |
-| `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together) and an early end of a series once its tangent terms are below a tolerance (`TangentTail`): the arithmetic of power-series methods, for every lane type |
+| `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together, a complex tangent by its real part) and an early end of a series once its tangent terms have stayed below a tolerance, relative to their largest so far, for a run of orders (`TangentTail`): the arithmetic of power-series methods, for every lane type |
 | `linalg::DDLu`, `linalg::clu_logdet` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices, the determinant; ln\|det\| and arg det of a complex double-double matrix by the same LU (`clu_logdet`) |
 | `linalg::QDLu` | dense LU with partial pivoting in quad-double (8-row `QV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in quad-double: for systems too ill-conditioned for double-double |
 | `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
@@ -28,7 +28,7 @@ speed, with no allocation and no arbitrary-precision library.
 
 Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for
 computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable;
-`dd::pow2_near` gives the power of two nearest to a scale.
+`dd::pow2_near` gives the power of two nearest to a scale in the logarithm (within a factor of √2).
 
 ## Installation
 
