@@ -948,8 +948,39 @@ fn complex_logdet_pivots_of_any_size() {
     }
 }
 
-/// NaN entries: a NaN on the diagonal of a column, or a column of NaN, is reported as a non-finite pivot (not
-/// skipped in favour of a finite entry below it, as the real LU's `pivot_search` does not either)
+/// A subnormal pivot under an entry of its own size: the real matrix [[1e-310, 1], [1e-310, 2]] has determinant
+/// 1e-310 (the multiplier is 1, the second pivot 1), so ln|det| = ln 1e-310, arg 0; the complex matrix with the first
+/// column times i has the same ln|det| and arg pi/2. Control: the second pivot taken as 2 (no elimination) misses.
+#[test]
+fn complex_logdet_subnormal_pivot_with_finite_multipliers() {
+    let ld = ld_for(2);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * 2]);
+    c[0][0] = 1e-310;
+    c[0][1] = 1e-310;
+    c[0][ld] = 1.0;
+    c[0][ld + 1] = 2.0;
+    let (la, arg, pmin, pmax) = clogdet(2, ld, &c);
+    let want = 1e-310f64.ln();
+    assert!(
+        (la - want).abs() <= 1e-12 * want.abs() && arg.abs() <= 1e-15,
+        "{la} vs {want}, arg {arg}"
+    );
+    assert!(
+        (pmin - 1e-310).abs() <= 1e-15 * 1e-310 && (pmax - 1.0).abs() <= 1e-15,
+        "pivots {pmin} {pmax}"
+    );
+    assert!((la - want - 2f64.ln()).abs() > 0.1, "control");
+    let mut ci = c.clone();
+    ci[2][0] = 1e-310;
+    ci[2][1] = 1e-310;
+    ci[0][0] = 0.0;
+    ci[0][1] = 0.0;
+    let (li, ai, _, _) = clogdet(2, ld, &ci);
+    assert!((li - want).abs() <= 1e-12 * want.abs() && dang(ai, std::f64::consts::FRAC_PI_2).abs() <= 1e-15);
+}
+
+/// NaN entries: a NaN on the diagonal of a column (in a hi or a lo part), or a column of NaN, is reported as a
+/// non-finite pivot (not skipped in favour of a finite entry below it, as the real LU's `pivot_search` does not either)
 #[test]
 fn complex_logdet_reports_nan_pivots() {
     let mut r = Rng(85);
@@ -968,6 +999,14 @@ fn complex_logdet_reports_nan_pivots() {
         false
     )
     .is_err());
+    for (q, i) in [(1usize, 2usize), (3, 4)] {
+        let mut lo = c.clone();
+        lo[q][i * ld + i] = f64::NAN;
+        assert!(
+            clu_logdet(n, ld, lo[0].clone(), lo[1].clone(), lo[2].clone(), lo[3].clone(), false).is_err(),
+            "lo part {q}"
+        );
+    }
     let mut col = c.clone();
     for i in 0..n {
         col[0][3 * ld + i] = f64::NAN;
