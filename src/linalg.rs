@@ -2767,6 +2767,10 @@ fn clu_logdet_on<S: Simd>(
                 let ur = at(&rh, &rl, ck + k);
                 let ui = at(&ih, &il, ck + k);
                 let mag = (ur.hi + ur.lo).hypot(ui.hi + ui.lo);
+                // the pivot's lo parts can be NaN with finite hi parts
+                if mag <= 0.0 || !mag.is_finite() {
+                    return Err(format!("singular or non-finite pivot at column {k} ({mag})"));
+                }
                 // |u| and its phase to f64 are all ln|u| and arg u need
                 la += mag.ln();
                 arg += (ui.hi + ui.lo).atan2(ur.hi + ur.lo);
@@ -2775,17 +2779,19 @@ fn clu_logdet_on<S: Simd>(
                 if k + 1 == n {
                     break;
                 }
-                // 1/u = conj(u) / |u|^2, u first scaled to order one by a power of two (exact), so that |u|^2
-                // neither overflows nor underflows for any pivot; the quotients' significands are those of the
-                // unscaled formula, so the factors are bitwise the same wherever that one stays in range
-                let sc = pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
-                let (us_r, us_i) = (ur.mul_pwr2(1.0 / sc), ui.mul_pwr2(1.0 / sc));
+                // The multipliers a_ik / u with u and every a_ik scaled by the same power of two (exact) to bring u
+                // to order one: 1/u_s = conj(u_s) / |u_s|^2 then neither overflows nor underflows for any pivot,
+                // and a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a
+                // subnormal pivot under an ordinary entry). The quotients' significands are those of the unscaled
+                // formula, so the factors are bitwise the same wherever that one stays in range.
+                let isc = 1.0 / pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
+                let (us_r, us_i) = (ur.mul_pwr2(isc), ui.mul_pwr2(isc));
                 let den = us_r * us_r + us_i * us_i;
-                let vr = (us_r / den).mul_pwr2(1.0 / sc);
-                let vi = -(us_i / den).mul_pwr2(1.0 / sc);
+                let vr = us_r / den;
+                let vi = -(us_i / den);
                 for i in k + 1..n {
-                    let ar = at(&rh, &rl, ck + i);
-                    let ai = at(&ih, &il, ck + i);
+                    let ar = at(&rh, &rl, ck + i).mul_pwr2(isc);
+                    let ai = at(&ih, &il, ck + i).mul_pwr2(isc);
                     let xr = ar * vr - ai * vi;
                     let xi = ar * vi + ai * vr;
                     rh[ck + i] = xr.hi;
