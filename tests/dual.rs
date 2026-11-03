@@ -9,7 +9,7 @@ use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{take_counts, Counted, Lane, COUNTED_OPS};
 use multidouble::dv::DV;
-use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Qu, F8, QV};
+use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Jet, Qu, F8, QV};
 use multidouble::qd::QD;
 use multidouble::simd::{Native, Simd};
 use multidouble::v8::V8;
@@ -257,6 +257,8 @@ fn every_lane_method_on_every_lane_type() {
     run::<Fun<2>>("Fun<2>");
     run::<Qu>("Qu");
     run::<Dc>("Dc");
+    run::<Jet<2>>("Jet<2>");
+    run::<Jet<5>>("Jet<5>");
 }
 
 /// Controls: hand references that get `bcast` wrong are caught. A value with each lane's own x in place of lane 0's,
@@ -278,6 +280,7 @@ fn controls_on_bcast_are_caught() {
     assert!(!within::<Dtn<2>>(errors::<Dtn<2>>(no_bcast_tangent)));
     assert!(!within::<Fun<2>>(errors::<Fun<2>>(no_bcast_tangent)));
     assert!(!within::<Qu>(errors::<Qu>(no_bcast_tangent)));
+    assert!(!within::<Jet<2>>(errors::<Jet<2>>(no_bcast_tangent)));
 }
 
 /// every part of a lane, value and tangents, as bits
@@ -343,6 +346,7 @@ fn mul_pwr2_is_exact_on_every_lane_type() {
     assert!(scales_exactly::<Fun<2>>(|x, s| x.mul_pwr2(s)), "Fun<2>");
     assert!(scales_exactly::<Qu>(|x, s| x.mul_pwr2(s)), "Qu");
     assert!(scales_exactly::<Dc>(|x, s| x.mul_pwr2(s)), "Dc");
+    assert!(scales_exactly::<Jet<3>>(|x, s| x.mul_pwr2(s)), "Jet<3>");
     // the scalar double-double, through lane 0 of DV
     let mut r = Rng(54);
     for _ in 0..2000 {
@@ -372,6 +376,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Fun<2>>(wrong_power));
     assert!(!scales_exactly::<Qu>(wrong_power));
     assert!(!scales_exactly::<Dc>(wrong_power));
+    assert!(!scales_exactly::<Jet<3>>(wrong_power));
     fn lo_unscaled<T: Lane>(x: T, s: f64) -> T {
         let y = x.mul_pwr2(s);
         let v = DV {
@@ -391,6 +396,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Dtn<2>>(lo_unscaled));
     assert!(!scales_exactly::<Qu>(lo_unscaled));
     assert!(!scales_exactly::<Dc>(lo_unscaled));
+    assert!(!scales_exactly::<Jet<3>>(lo_unscaled));
     fn tangent_unscaled<T: Lane>(x: T, s: f64) -> T {
         let mut y = x.mul_pwr2(s);
         if T::TAN_F64 {
@@ -406,6 +412,7 @@ fn controls_on_mul_pwr2_are_caught() {
     assert!(!scales_exactly::<Fun<2>>(tangent_unscaled));
     assert!(!scales_exactly::<Qu>(tangent_unscaled));
     assert!(!scales_exactly::<Dc>(tangent_unscaled));
+    assert!(!scales_exactly::<Jet<3>>(tangent_unscaled));
     // the imaginary part left unscaled is caught through the parts (`parts` reads the real tangent only)
     let mut r = Rng(57);
     for _ in 0..200 {
@@ -496,6 +503,7 @@ fn val_qd_marks_the_quad_double_lanes() {
         val_qd::<Dtn<2>>(),
         val_qd::<Fun<2>>(),
         val_qd::<Counted<Du>>(),
+        val_qd::<Jet<4>>(),
     ];
     assert!(quad.iter().all(|&q| q), "{quad:?}");
     assert!(other.iter().all(|&q| !q), "{other:?}");

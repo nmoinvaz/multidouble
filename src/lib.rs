@@ -55,6 +55,7 @@ pub mod dual;
 pub mod dv;
 pub mod exact;
 pub mod field;
+pub mod jet;
 pub mod linalg;
 pub mod qd;
 pub mod qv;
@@ -77,6 +78,7 @@ pub mod native {
     pub type Fu = crate::dual::Fu<Native>;
     pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;
     pub type Fun<const N: usize> = crate::dual::Fun<Native, N>;
+    pub type Jet<const N: usize> = crate::jet::Jet<Native, N>;
     pub type DMat<const B: usize> = crate::field::DMat<Native, B>;
 }
 
