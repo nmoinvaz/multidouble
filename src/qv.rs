@@ -22,6 +22,7 @@
 //! level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of `finish`.
 //! It costs about a third of a sloppy multiply plus a sloppy add.
 use crate::dd::DD;
+use crate::dual::dd_param;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
 use crate::qd::{mutate, QD};
 use crate::simd::{self, Kernel, Simd};
@@ -894,6 +895,7 @@ impl<S: Simd> QDotAcc<S> {
 impl<S: Simd> crate::dual::Lane for QV<S> {
     type S = S;
     type Acc = QDotAcc<S>;
+    dd_param!();
     const TANGENT: bool = false;
     const VAL_QD: bool = true;
     #[inline(always)]

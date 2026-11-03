@@ -11,6 +11,9 @@
 //! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
 //! * `Dc`: a double-double value with a complex tangent (real and imaginary parts, each double-double): the
 //!   derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
+//! * `jet::Jet<N>`: a truncated power series, N double-double coefficients in one variable: the computation's own
+//!   Taylor coefficients in a parameter entered as `Lane::var` or, for the constants formed from the parameter,
+//!   through [`Param`] (`Lane::P`: `DD` on every other lane, `jet::Series<N>` on a jet).
 //!
 //! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
 //! generic code.
@@ -23,6 +26,69 @@ use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
 use crate::v8::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+
+/// The arithmetic of a parameter a computation over [`Lane`] is continued in ([`Lane::P`]): the scalar double-double
+/// on every lane that is not a jet, where a constant formed from the parameter is bit for bit the scalar operations
+/// it was, and a scalar truncated power series (`crate::jet::Series<N>`) on a jet lane, whose constants then carry
+/// their own Taylor coefficients in the parameter.
+pub trait Param:
+    Copy
+    + Send
+    + Sync
+    + 'static
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+{
+    fn one() -> Self;
+    fn from_f64(x: f64) -> Self;
+    fn from_dd(x: DD) -> Self;
+    /// times an exact f64
+    fn mul_f(self, s: f64) -> Self;
+    /// the parameter itself: c, and c + h on a series
+    fn var(c: DD) -> Self;
+}
+
+impl Param for DD {
+    #[inline(always)]
+    fn one() -> Self {
+        DD::ONE
+    }
+    #[inline(always)]
+    fn from_f64(x: f64) -> Self {
+        DD::from_f64(x)
+    }
+    #[inline(always)]
+    fn from_dd(x: DD) -> Self {
+        x
+    }
+    #[inline(always)]
+    fn mul_f(self, s: f64) -> Self {
+        DD::mul_f(self, s)
+    }
+    #[inline(always)]
+    fn var(c: DD) -> Self {
+        c
+    }
+}
+
+/// the parameter arithmetic of a lane that is not a jet: double-double scalars, `mulp` the lane's own `muls`
+macro_rules! dd_param {
+    () => {
+        type P = DD;
+        #[inline(always)]
+        fn mulp(self, p: DD) -> Self {
+            self.muls(p)
+        }
+        #[inline(always)]
+        fn addp(self, p: DD) -> Self {
+            self.addc(DV::splat(p))
+        }
+    };
+}
+pub(crate) use dd_param;
 
 pub trait Lane:
     Copy
@@ -48,12 +114,40 @@ pub trait Lane:
     /// values in quad-double (`QV`, `Qu`): a solve with a double-double LU is refined for such a lane with the
     /// residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`)
     const VAL_QD: bool = false;
+    /// number of coefficients of a jet (`crate::jet::Jet<N>`), 0 for every other lane: code with a branch for jets,
+    /// such as an order-by-order solve, tests it
+    const NJ: usize = 0;
+    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>`
+    type P: Param;
+    /// times a parameter constant (`muls` on every lane that is not a jet)
+    fn mulp(self, p: Self::P) -> Self;
+    /// plus a parameter constant (`addc` of the splat constant on every lane that is not a jet)
+    fn addp(self, p: Self::P) -> Self;
+    /// coefficient k of a jet; on every other lane the value (k = 0), the tangent (k = 1, tangent lanes) and zero
+    #[inline(always)]
+    fn coef(self, k: usize) -> DV<Self::S> {
+        match k {
+            0 => self.val(),
+            1 if Self::TANGENT => self.tan(),
+            _ => DV::zero(),
+        }
+    }
+    /// set coefficient k of a jet
+    #[inline(always)]
+    fn set_coef(&mut self, _k: usize, _c: DV<Self::S>) {
+        unreachable!("no jet coefficients")
+    }
     fn zero() -> Self;
     /// a constant (zero tangent)
     fn cst(c: DV<Self::S>) -> Self;
     #[inline(always)]
     fn splat(x: DD) -> Self {
         Self::cst(DV::splat(x))
+    }
+    /// a parameter the computation is continued in: `splat(c)` on every lane, the series variable c + h on a jet
+    #[inline(always)]
+    fn var(c: DD) -> Self {
+        Self::splat(c)
     }
     /// times a constant lane vector
     fn mulc(self, c: DV<Self::S>) -> Self;
@@ -98,6 +192,7 @@ pub trait Lane:
 impl<S: Simd> Lane for DV<S> {
     type S = S;
     type Acc = DotAcc<S>;
+    dd_param!();
     const TANGENT: bool = false;
     #[inline(always)]
     fn zero() -> Self {
@@ -218,6 +313,7 @@ impl<S: Simd> Div for Du<S> {
 impl<S: Simd> Lane for Du<S> {
     type S = S;
     type Acc = (DotAcc<S>, DotAcc<S>);
+    dd_param!();
     const TANGENT: bool = true;
     #[inline(always)]
     fn zero() -> Self {
@@ -377,6 +473,7 @@ impl<S: Simd> Div for Dc<S> {
 impl<S: Simd> Lane for Dc<S> {
     type S = S;
     type Acc = (DotAcc<S>, DotAcc<S>, DotAcc<S>);
+    dd_param!();
     const TANGENT: bool = true;
     #[inline(always)]
     fn zero() -> Self {
@@ -543,6 +640,7 @@ impl<S: Simd> Div for Qu<S> {
 impl<S: Simd> Lane for Qu<S> {
     type S = S;
     type Acc = (QDotAcc<S>, QDotAcc<S>);
+    dd_param!();
     const TANGENT: bool = true;
     const VAL_QD: bool = true;
     #[inline(always)]
@@ -683,6 +781,7 @@ impl<S: Simd> Div for F8<S> {
 impl<S: Simd> Lane for F8<S> {
     type S = S;
     type Acc = V8<S>;
+    dd_param!();
     const TANGENT: bool = false;
     const VAL_F64: bool = true;
     #[inline(always)]
@@ -824,6 +923,7 @@ impl<S: Simd> Div for Fu<S> {
 impl<S: Simd> Lane for Fu<S> {
     type S = S;
     type Acc = (V8<S>, V8<S>);
+    dd_param!();
     const TANGENT: bool = true;
     const VAL_F64: bool = true;
     const TAN_F64: bool = true;
@@ -1009,6 +1109,7 @@ impl<S: Simd, const N: usize> Div for Dtn<S, N> {
 impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
     type S = S;
     type Acc = (DotAcc<S>, [V8<S>; N]);
+    dd_param!();
     const TANGENT: bool = true;
     const TAN_F64: bool = true;
     const NT: usize = N;
@@ -1195,6 +1296,7 @@ impl<S: Simd, const N: usize> Div for Fun<S, N> {
 impl<S: Simd, const N: usize> Lane for Fun<S, N> {
     type S = S;
     type Acc = (V8<S>, [V8<S>; N]);
+    dd_param!();
     const TANGENT: bool = true;
     const VAL_F64: bool = true;
     const TAN_F64: bool = true;
@@ -1417,6 +1519,30 @@ impl<L: Lane> Lane for Counted<L> {
     const TAN_F64: bool = L::TAN_F64;
     const NT: usize = L::NT;
     const VAL_QD: bool = L::VAL_QD;
+    const NJ: usize = L::NJ;
+    type P = L::P;
+    #[inline(always)]
+    fn var(c: DD) -> Self {
+        Counted(L::var(c))
+    }
+    #[inline(always)]
+    fn mulp(self, p: L::P) -> Self {
+        count(op::MULC);
+        Counted(self.0.mulp(p))
+    }
+    #[inline(always)]
+    fn addp(self, p: L::P) -> Self {
+        count(op::ADDC);
+        Counted(self.0.addp(p))
+    }
+    #[inline(always)]
+    fn coef(self, k: usize) -> DV<Self::S> {
+        self.0.coef(k)
+    }
+    #[inline(always)]
+    fn set_coef(&mut self, k: usize, c: DV<Self::S>) {
+        self.0.set_coef(k, c)
+    }
     #[inline(always)]
     fn zero() -> Self {
         Counted(L::zero())

@@ -11,6 +11,7 @@
 use crate::dd::DD;
 use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
+use crate::jet::Jet;
 use crate::linalg::DDLu;
 use crate::qd::QD;
 use crate::qv::QV;
@@ -125,6 +126,36 @@ impl<T: Lane, const B: usize> Fl<T, B> {
             r[b] = self.0[b].val();
         }
         Fl(r)
+    }
+    /// times a parameter constant (`Lane::mulp`)
+    pub fn mulp(self, p: T::P) -> Self {
+        let mut r = self.0;
+        for b in 0..B {
+            r[b] = self.0[b].mulp(p);
+        }
+        Fl(r)
+    }
+    /// plus a parameter constant (`Lane::addp`)
+    pub fn addp(self, p: T::P) -> Self {
+        let mut r = self.0;
+        for b in 0..B {
+            r[b] = self.0[b].addp(p);
+        }
+        Fl(r)
+    }
+    /// coefficient k of every lane (`Lane::coef`)
+    pub fn coef(&self, k: usize) -> Fl<Dv<T>, B> {
+        let mut r = [DV::zero(); B];
+        for b in 0..B {
+            r[b] = self.0[b].coef(k);
+        }
+        Fl(r)
+    }
+    /// set coefficient k of every lane (`Lane::set_coef`, jets)
+    pub fn set_coef(&mut self, k: usize, c: &Fl<Dv<T>, B>) {
+        for b in 0..B {
+            self.0[b].set_coef(k, c.0[b]);
+        }
     }
     pub fn tan(&self) -> Fl<Dv<T>, B> {
         let mut r = [DV::zero(); B];
@@ -400,6 +431,7 @@ impl<S: Simd> MatLane for Du<S> {}
 impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
+impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 
 impl<S: Simd> MatLane for F8<S> {
     #[inline(always)]
