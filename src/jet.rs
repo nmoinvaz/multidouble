@@ -123,7 +123,7 @@ impl<S: Simd, const N: usize> Jet<S, N> {
         const { assert!(N >= 1, "a jet has at least its value") }
         Jet { c }
     }
-    /// the series variable with lane j's value c[j]: coefficient 0 the values, coefficient 1 one
+    /// the series variable with lane j's value c\[j\]: coefficient 0 the values, coefficient 1 one
     pub fn var_lanes(c: &[DD; 8]) -> Self {
         let hi: [f64; 8] = std::array::from_fn(|j| c[j].hi);
         let lo: [f64; 8] = std::array::from_fn(|j| c[j].lo);
