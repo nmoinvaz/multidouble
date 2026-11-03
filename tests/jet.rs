@@ -211,7 +211,8 @@ fn var_is_the_series_variable_on_jets_and_a_constant_elsewhere() {
 }
 
 /// f(x, y) = (x^3 + 2 x y) / (x + 3) over `Lane`: `Jet<2>` with the seed on x gives `Du`'s value and tangent to
-/// rounding, and `Jet<4>`'s coefficients 2 and 3 are the second and third derivatives over 2! and 3! by hand
+/// rounding, and `Jet<4>`'s coefficients 2 and 3 are the second and third derivatives over 2! and 3! by hand.
+/// Control: the hand formula for f'' / 2 with the sign of its remainder term flipped is caught by the same comparison.
 #[test]
 fn jet_two_is_a_dual_and_the_higher_orders_are_the_derivatives() {
     fn f<T: Lane>(x: T, y: T) -> T {
@@ -221,6 +222,7 @@ fn jet_two_is_a_dual_and_the_higher_orders_are_the_derivatives() {
     }
     let mut r = Rng(64);
     let mut worst = 0.0f64;
+    let mut control = 0.0f64;
     for _ in 0..300 {
         let x: [DD; 8] = std::array::from_fn(|_| DD::new(1.0 + 4.0 * r.unit(), r.sym() * 1e-17));
         let y: [DD; 8] = std::array::from_fn(|_| DD::new(r.sym() * 5.0, r.sym() * 1e-17));
@@ -239,10 +241,13 @@ fn jet_two_is_a_dual_and_the_higher_orders_are_the_derivatives() {
             let c3 = rem / (d * d * d * d);
             worst = worst.max(err(j4.c[2].lane(l), c2, c2.to_f64().abs().max(1.0)));
             worst = worst.max(err(j4.c[3].lane(l), c3, c3.to_f64().abs().max(1.0)));
+            let c2_wrong = DD::ONE + rem / (d * d * d);
+            control = control.max(err(j4.c[2].lane(l), c2_wrong, c2_wrong.to_f64().abs().max(1.0)));
         }
     }
     println!("Jet against Du and the hand derivatives: worst error {worst:.1e}");
     assert!(worst < 1e-29, "{worst:e}");
+    assert!(control > 1e-3, "control: {control:e}");
 }
 
 /// `coef` past the truncation is zero, `from_vt` seeds coefficient 1, and the accumulator is the product
