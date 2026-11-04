@@ -137,6 +137,19 @@ pub trait Lane:
     fn set_coef(&mut self, _k: usize, _c: DV<Self::S>) {
         unreachable!("no jet coefficients")
     }
+    /// coefficient k in quad-double, for code generic over `Lane` that reads a quad-double jet's coefficients without
+    /// rounding them to double-double (`coef` does): the jet's own on `crate::jet::QJet<N>`, the quad-double value and
+    /// tangent on `QV` and `Qu`, and `coef(k)`, exactly, on every other lane
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<Self::S> {
+        QV::from_dv(self.coef(k))
+    }
+    /// set coefficient k of a jet from quad-double: exactly on `crate::jet::QJet<N>`, rounded to double-double
+    /// (`QV::to_dv`) on `crate::jet::Jet<N>`
+    #[inline(always)]
+    fn set_coef_qd(&mut self, k: usize, c: QV<Self::S>) {
+        self.set_coef(k, c.to_dv())
+    }
     fn zero() -> Self;
     /// a constant (zero tangent)
     fn cst(c: DV<Self::S>) -> Self;
@@ -730,6 +743,15 @@ impl<S: Simd> Lane for Qu<S> {
         Qu {
             v: a.0.finish(),
             d: a.1.finish(),
+        }
+    }
+    /// the quad-double value (k = 0) and tangent (k = 1), zero past them
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<S> {
+        match k {
+            0 => self.v,
+            1 => self.d,
+            _ => QV::zero(),
         }
     }
 }
@@ -1542,6 +1564,14 @@ impl<L: Lane> Lane for Counted<L> {
     #[inline(always)]
     fn set_coef(&mut self, k: usize, c: DV<Self::S>) {
         self.0.set_coef(k, c)
+    }
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<Self::S> {
+        self.0.coef_qd(k)
+    }
+    #[inline(always)]
+    fn set_coef_qd(&mut self, k: usize, c: QV<Self::S>) {
+        self.0.set_coef_qd(k, c)
     }
     #[inline(always)]
     fn zero() -> Self {
