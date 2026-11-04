@@ -13,6 +13,7 @@ use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
 use multidouble::dual::{Fu, Fun};
 use multidouble::dv::{DotAcc, DV};
+use multidouble::jet::Jet;
 use multidouble::qd::QD;
 use multidouble::qv::QV;
 use multidouble::simd::{self, Kernel, Simd};
@@ -189,6 +190,24 @@ impl Kernel for Lanes<'_, '_> {
                     || {
                         for (k, o) in out.iter_mut().enumerate() {
                             *o = fun[k] / fun[fun.len() - 1 - k];
+                        }
+                    },
+                );
+                black_box(&out);
+            })
+        });
+        // jets: each quotient a recurrence of 8 double-double divisions by the same o.c[0]
+        let jet: Vec<Jet<S, 8>> = (0..dv.len())
+            .map(|k| Jet::from_coeffs(std::array::from_fn(|j| dv[(k + j) % dv.len()])))
+            .collect();
+        g.bench_function("jet<8> div, independent", |bch| {
+            let mut out = jet.clone();
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        for (k, o) in out.iter_mut().enumerate() {
+                            *o = jet[k] / jet[jet.len() - 1 - k];
                         }
                     },
                 );
