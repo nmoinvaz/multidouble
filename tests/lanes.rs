@@ -261,9 +261,25 @@ impl Kernel for DvMatchesDd {
             let (x, vx) = dd8::<S>(&mut r);
             let (y, vy) = dd8::<S>(&mut r);
             let s = r.dd(5).hi;
-            let lanes = [vx + vy, vx - vy, vx * vy, vx / vy, -vx, vx.mul_f(s)];
+            let lanes = [
+                vx + vy,
+                vx - vy,
+                vx * vy,
+                vx / vy,
+                -vx,
+                vx.mul_f(s),
+                vx.div_by(vy, vy.hi.divisor()),
+            ];
             for j in 0..8 {
-                let want = [x[j] + y[j], x[j] - y[j], x[j] * y[j], x[j] / y[j], -x[j], x[j].mul_f(s)];
+                let want = [
+                    x[j] + y[j],
+                    x[j] - y[j],
+                    x[j] * y[j],
+                    x[j] / y[j],
+                    -x[j],
+                    x[j].mul_f(s),
+                    x[j] / y[j],
+                ];
                 for (k, w) in want.iter().enumerate() {
                     let g = lanes[k].lane(j);
                     assert!(
