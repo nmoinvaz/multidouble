@@ -14,6 +14,8 @@
 //! * `jet::Jet<N>`: a truncated power series, N double-double coefficients in one variable: the computation's own
 //!   Taylor coefficients in a parameter entered as `Lane::var` or, for the constants formed from the parameter,
 //!   through [`Param`] (`Lane::P`: `DD` on every other lane, `jet::Series<N>` on a jet).
+//! * `jet::QJet<N>`: the same with N quad-double coefficients (`Lane::P` is `jet::QSeries<N>`), read and set in
+//!   quad-double through `Lane::coef_qd` and `set_coef_qd`.
 //!
 //! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
 //! generic code.
@@ -29,8 +31,8 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// The arithmetic of a parameter a computation over [`Lane`] is continued in ([`Lane::P`]): the scalar double-double
 /// on every lane that is not a jet, where a constant formed from the parameter is bit for bit the scalar operations
-/// it was, and a scalar truncated power series (`crate::jet::Series<N>`) on a jet lane, whose constants then carry
-/// their own Taylor coefficients in the parameter.
+/// it was, and a scalar truncated power series (`crate::jet::Series<N>`, `crate::jet::QSeries<N>` in quad-double) on
+/// a jet lane, whose constants then carry their own Taylor coefficients in the parameter.
 pub trait Param:
     Copy
     + Send
@@ -111,13 +113,15 @@ pub trait Lane:
     const TAN_F64: bool = false;
     /// number of f64 tangents (`tan64`; 0 unless TAN_F64)
     const NT: usize = 0;
-    /// values in quad-double (`QV`, `Qu`): a solve with a double-double LU is refined for such a lane with the
-    /// residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`)
+    /// values in quad-double (`QV`, `Qu`, `crate::jet::QJet<N>`): a solve with a double-double LU is refined for such
+    /// a lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`; a jet's
+    /// solve goes order by order, `NJ`)
     const VAL_QD: bool = false;
-    /// number of coefficients of a jet (`crate::jet::Jet<N>`), 0 for every other lane: code with a branch for jets,
-    /// such as an order-by-order solve, tests it
+    /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`), 0 for every other lane: code
+    /// with a branch for jets, such as an order-by-order solve, tests it
     const NJ: usize = 0;
-    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>`
+    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>` and
+    /// `crate::jet::QSeries<N>` on `QJet<N>`
     type P: Param;
     /// times a parameter constant (`muls` on every lane that is not a jet)
     fn mulp(self, p: Self::P) -> Self;

@@ -11,7 +11,7 @@
 use crate::dd::DD;
 use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
-use crate::jet::Jet;
+use crate::jet::{Jet, QJet};
 use crate::linalg::DDLu;
 use crate::qd::QD;
 use crate::qv::QV;
@@ -446,6 +446,7 @@ impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
 impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
+impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}
 
 impl<S: Simd> MatLane for F8<S> {
     #[inline(always)]
