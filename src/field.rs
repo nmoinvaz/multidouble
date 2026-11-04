@@ -157,6 +157,20 @@ impl<T: Lane, const B: usize> Fl<T, B> {
             self.0[b].set_coef(k, c.0[b]);
         }
     }
+    /// coefficient k of every lane in quad-double (`Lane::coef_qd`)
+    pub fn coef_qd(&self, k: usize) -> Fl<QV<T::S>, B> {
+        let mut r = [QV::zero(); B];
+        for b in 0..B {
+            r[b] = self.0[b].coef_qd(k);
+        }
+        Fl(r)
+    }
+    /// set coefficient k of every lane from quad-double (`Lane::set_coef_qd`, jets)
+    pub fn set_coef_qd(&mut self, k: usize, c: &Fl<QV<T::S>, B>) {
+        for b in 0..B {
+            self.0[b].set_coef_qd(k, c.0[b]);
+        }
+    }
     pub fn tan(&self) -> Fl<Dv<T>, B> {
         let mut r = [DV::zero(); B];
         for b in 0..B {

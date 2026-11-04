@@ -1,7 +1,7 @@
 //! `Jet<N>`: a polynomial in the series variable against its binomial expansion in scalar double-double, quotients
 //! against 1/(c + h)'s coefficients and against the product that undoes them, truncation bit for bit, `var` on every
 //! lane type, `Jet<2>` against `Du`, and controls: the convolution's index shifted, and a quotient recurrence with the
-//! wrong sign.
+//! wrong sign. The double-double jet's outputs pinned bit for bit, and `coef_qd` on every lane type.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -496,4 +496,87 @@ fn double_double_jet_outputs_are_pinned() {
     for i in 0..6 {
         assert!(h[i] == want[i], "{}: {:#018x} pinned {:#018x}", names[i], h[i], want[i]);
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// quad-double coefficients: coef_qd, set_coef_qd
+// ---------------------------------------------------------------------------------------------------------------
+
+use multidouble::dual::Counted;
+use multidouble::field::Fl;
+use multidouble::qd::QD;
+
+fn qbits<S: multidouble::simd::Simd>(q: multidouble::qv::QV<S>) -> Vec<u64> {
+    q.lanes().iter().flat_map(|d| d.x.map(f64::to_bits)).collect()
+}
+
+/// a quad-double with all four parts in use
+fn qd4(r: &mut Rng) -> QD {
+    let (a, b) = (r.dd(4), r.dd(4));
+    QD::from_dd(a).add_dd(DD::new(b.hi * 2f64.powi(-106), b.lo * 2f64.powi(-106)))
+}
+
+/// `coef_qd` is `coef` exactly on every lane type whose coefficients are double-double or f64, and the quad-double
+/// value and tangent on `QV` and `Qu` (which `coef` rounds), forwarded by `Counted` and `Fl`; `set_coef_qd` on a
+/// double-double jet is `set_coef` of the rounded value
+#[test]
+fn quad_double_coefficients_on_every_lane_type() {
+    fn check<T: Lane>(name: &str) {
+        let mut r = Rng(71);
+        for _ in 0..100 {
+            let v: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+            let t: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+            let x = T::from_vt(dv_s::<T::S>(&v), dv_s::<T::S>(&t));
+            for k in 0..3 {
+                let want = multidouble::qv::QV::from_dv(x.coef(k));
+                assert_eq!(qbits(x.coef_qd(k)), qbits(want), "{name}: coef_qd {k}");
+            }
+        }
+    }
+    check::<Dv>("DV");
+    check::<Du>("Du");
+    check::<Dc>("Dc");
+    check::<F8>("F8");
+    check::<Fu>("Fu");
+    check::<Dtn<3>>("Dtn<3>");
+    check::<Fun<3>>("Fun<3>");
+    check::<Jet<4>>("Jet<4>");
+    check::<Counted<Du>>("Counted<Du>");
+    let mut r = Rng(72);
+    let (v, d) = (
+        QV::from_lanes(&std::array::from_fn(|_| qd4(&mut r))),
+        QV::from_lanes(&std::array::from_fn(|_| qd4(&mut r))),
+    );
+    let u = Qu { v, d };
+    let zero = qbits(QV::zero());
+    assert_eq!(qbits(v.coef_qd(0)), qbits(v), "QV: coef_qd 0");
+    assert_eq!(qbits(v.coef_qd(1)), zero, "QV: coef_qd 1");
+    for (name, x) in [("Qu", u.coef_qd(0)), ("Counted<Qu>", Counted(u).coef_qd(0))] {
+        assert_eq!(qbits(x), qbits(v), "{name}: coef_qd 0");
+    }
+    assert_eq!(qbits(u.coef_qd(1)), qbits(d), "Qu: coef_qd 1");
+    assert_eq!(qbits(Counted(u).coef_qd(1)), qbits(d), "Counted<Qu>: coef_qd 1");
+    assert_eq!(qbits(u.coef_qd(2)), zero, "Qu: coef_qd 2");
+    let f = Fl::<Qu, 2>([u, u.bcast(3)]);
+    assert_eq!(qbits(f.coef_qd(1).0[1]), qbits(d.bcast(3)), "Fl<Qu>: coef_qd 1");
+    // control: the rounded coefficient differs from the quad-double one on these inputs
+    assert_ne!(
+        qbits(QV::from_dv(u.coef(0))),
+        qbits(v),
+        "control: QV::from_dv(coef) is coef_qd"
+    );
+    let mut j = Jet::<4>::zero();
+    j.set_coef_qd(2, v);
+    assert_eq!(
+        qbits(j.coef_qd(2)),
+        qbits(QV::from_dv(v.to_dv())),
+        "Jet<4>: set_coef_qd"
+    );
+    let mut g = Fl::<Jet<4>, 1>::zero();
+    g.set_coef_qd(1, &Fl([v]));
+    assert_eq!(
+        qbits(g.0[0].coef_qd(1)),
+        qbits(QV::from_dv(v.to_dv())),
+        "Fl<Jet<4>>: set_coef_qd"
+    );
 }

@@ -979,6 +979,15 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     fn fin(a: QDotAcc<S>) -> Self {
         a.finish()
     }
+    /// the quad-double value (k = 0), zero past it
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<S> {
+        if k == 0 {
+            self
+        } else {
+            QV::zero()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
