@@ -425,3 +425,75 @@ fn dv_s<S: multidouble::simd::Simd>(v: &[DD; 8]) -> DV<S> {
     let lo: Vec<f64> = v.iter().map(|d| d.lo).collect();
     DV::load(&hi, &lo)
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// pinned outputs
+// ---------------------------------------------------------------------------------------------------------------
+
+/// FNV-1a over the bits of every coefficient of every lane, in order
+fn fold_bits(h: u64, j: &[Dv]) -> u64 {
+    let mut h = h;
+    for c in j {
+        for l in 0..8 {
+            let d = c.lane(l);
+            for w in [d.hi.to_bits(), d.lo.to_bits()] {
+                h = (h ^ w).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+    }
+    h
+}
+
+/// The double-double jet's outputs pinned bit for bit, on fixed inputs, against hashes recorded before the
+/// quad-double jet was added: products, quotients, `mulp`, `addp`, `Series` products and quotients, and a rational
+/// function of the series variable. Every backend gives these bits (the lanes are the scalar arithmetic's).
+#[test]
+fn double_double_jet_outputs_are_pinned() {
+    let mut r = Rng(70);
+    let fnv = 0xcbf2_9ce4_8422_2325u64;
+    let mut h = [fnv; 6];
+    for _ in 0..50 {
+        let a = Jet::<6>::from_coeffs(std::array::from_fn(|_| dv(&std::array::from_fn(|_| r.dd(4)))));
+        let mut b = Jet::<6>::from_coeffs(std::array::from_fn(|_| dv(&std::array::from_fn(|_| r.dd(4)))));
+        b.c[0] = dv(&std::array::from_fn(|_| DD::new(1.0 + r.unit(), r.sym() * 1e-17)));
+        let (s, t) = (series(&mut r), series(&mut r));
+        let s6 = Series::<6> {
+            c: std::array::from_fn(|k| s.c[k]),
+        };
+        let x = Jet::<6>::var_lanes(&std::array::from_fn(|_| DD::new(1.0 + 4.0 * r.unit(), r.sym() * 1e-17)));
+        let y = Jet::<6>::cst(dv(&std::array::from_fn(|_| r.dd(2))));
+        let f = (x * x * x + (x * y).mulf(2.0)) / x.addc(DV::splat_f(3.0));
+        h[0] = fold_bits(h[0], &(a * b).c);
+        h[1] = fold_bits(h[1], &(a / b).c);
+        h[2] = fold_bits(h[2], &[a.mulp(s6).c, a.addp(s6).c].concat());
+        h[3] = fold_bits(h[3], &[as_jet(s * t).c, as_jet(s / t).c].concat());
+        h[4] = fold_bits(h[4], &f.c);
+        h[5] = fold_bits(
+            h[5],
+            &Jet::<6>::fin(Jet::<6>::acc1(
+                Jet::<6>::accc(Jet::<6>::acc(Jet::<6>::acc0(), a, b), x, y.c[0]),
+                f,
+            ))
+            .c,
+        );
+    }
+    let want: [u64; 6] = [
+        0x1f21_5dfc_52e4_62f6,
+        0x2aff_9969_83fe_052b,
+        0x6874_4fd9_ea97_cf9c,
+        0x74e5_4d14_3ccd_0375,
+        0x7f61_37f5_1e60_151f,
+        0x014c_8abc_383e_53fe,
+    ];
+    let names = [
+        "product",
+        "quotient",
+        "mulp and addp",
+        "Series",
+        "rational function",
+        "accumulator",
+    ];
+    for i in 0..6 {
+        assert!(h[i] == want[i], "{}: {:#018x} pinned {:#018x}", names[i], h[i], want[i]);
+    }
+}
