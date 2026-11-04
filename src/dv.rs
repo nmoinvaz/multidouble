@@ -7,7 +7,7 @@
 //! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
 use crate::dd::DD;
 use crate::simd::Simd;
-use crate::v8::V8;
+use crate::v8::{Divisor, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug)]
@@ -115,6 +115,18 @@ impl<S: Simd> DV<S> {
     #[inline(always)]
     pub fn abs_hi(self) -> V8<S> {
         self.hi.abs()
+    }
+    /// self / b for r = b.hi.divisor(), bitwise the same as `/`. Its three quotients by b.hi go through r, so
+    /// several divisions by one b share it (on AVX-512 its reciprocal).
+    #[inline(always)]
+    pub fn div_by(self, b: Self, r: Divisor<S>) -> Self {
+        let q1 = self.hi.div_by(r);
+        let t = self - b.mul_v(q1);
+        let q2 = t.hi.div_by(r);
+        let t = t - b.mul_v(q2);
+        let q3 = t.hi.div_by(r);
+        let (q1, q2) = quick_two_sum(q1, q2);
+        DV { hi: q1, lo: q2 }.add_v(q3)
     }
 }
 

@@ -15,7 +15,7 @@ speed, with no allocation and no arbitrary-precision library.
 | Type | What it is |
 |---|---|
 | `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout; `divisor` and `div_by` for several divisions by one vector, on AVX-512 by its reciprocal (`rcp14`, Newton steps and one correction), bitwise the same as `div` |
-| `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `dv::DotAcc` accumulates sums of products |
+| `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `DV::div_by` for several divisions by one b through `b.hi.divisor()`, bitwise the same as `/`; `dv::DotAcc` accumulates sums of products |
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QdAcc`, `QDotAcc` accumulators; `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `jet::Jet<N>` | a truncated power series lane: N double-double coefficients in one variable, Cauchy products and series quotients, so a computation written over `dual::Lane` gives its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a high-order Taylor continuation of a branch); `jet::Series<N>` is its scalar parameter arithmetic (`Lane::P`, double-double on every other lane, so constants formed from the parameter stay bit for bit what they were) |
