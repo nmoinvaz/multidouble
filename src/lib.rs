@@ -79,6 +79,7 @@ pub mod native {
     pub type Dtn<const N: usize> = crate::dual::Dtn<Native, N>;
     pub type Fun<const N: usize> = crate::dual::Fun<Native, N>;
     pub type Jet<const N: usize> = crate::jet::Jet<Native, N>;
+    pub type QJet<const N: usize> = crate::jet::QJet<Native, N>;
     pub type DMat<const B: usize> = crate::field::DMat<Native, B>;
 }
 
