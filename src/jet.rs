@@ -198,14 +198,16 @@ impl<S: Simd, const N: usize> Div for Jet<S, N> {
     /// q = x / y by q_k = (x_k − Σ_{i=1..k} y_i q_{k−i}) / y_0
     #[inline(always)]
     fn div(self, o: Self) -> Self {
+        // the 3N quotients by o.c[0].hi share its divisor (on AVX-512 its reciprocal)
+        let r = o.c[0].hi.divisor();
         let mut q = self.c;
-        q[0] = self.c[0] / o.c[0];
+        q[0] = self.c[0].div_by(o.c[0], r);
         for k in 1..N {
             let mut a = DotAcc::zero();
             for i in 1..=k {
                 a = a.add_prod(o.c[i], q[k - i]);
             }
-            q[k] = (self.c[k] - a.finish()) / o.c[0];
+            q[k] = (self.c[k] - a.finish()).div_by(o.c[0], r);
         }
         Jet { c: q }
     }
