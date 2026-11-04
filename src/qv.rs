@@ -26,7 +26,7 @@ use crate::dual::dd_param;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
 use crate::qd::{mutate, QD};
 use crate::simd::{self, Kernel, Simd};
-use crate::v8::{M8, V8};
+use crate::v8::{Divisor, M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 // Inlining: the hot operations (renormalizations, sloppy add and multiply, times and plus f64, the accumulator) run
@@ -681,6 +681,27 @@ impl<S: Simd> QV<S> {
                 let q2 = r.c[0].div(b.c[0]);
                 let r = if mutate::on(mutate::DIV_R3) { r } else { r - b.mul_v(q2) };
                 let q3 = r.c[0].div(b.c[0]);
+                QV {
+                    c: renorm4(q0, q1, q2, q3),
+                }
+            },
+        )
+    }
+
+    /// self / b for r = b.c\[0\].divisor(), bitwise the same as `/` (the sloppy divide). Its four quotients by b.c\[0\]
+    /// go through r, so several divisions by one b share it (on AVX-512 its reciprocal).
+    #[inline]
+    pub fn div_by(self, b: Self, r: Divisor<S>) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let q0 = self.c[0].div_by(r);
+                let t = self - b.mul_v(q0);
+                let q1 = t.c[0].div_by(r);
+                let t = t - b.mul_v(q1);
+                let q2 = t.c[0].div_by(r);
+                let t = if mutate::on(mutate::DIV_R3) { t } else { t - b.mul_v(q2) };
+                let q3 = t.c[0].div_by(r);
                 QV {
                     c: renorm4(q0, q1, q2, q3),
                 }

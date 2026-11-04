@@ -337,6 +337,7 @@ impl Kernel for QvMatchesQd {
                 vx.accurate_div(vy),
                 vx.abs().sqrt(),
                 vx.sqr(),
+                vx.div_by(vy, vy.c[0].divisor()),
             ];
             for j in 0..8 {
                 let want = [
@@ -349,6 +350,7 @@ impl Kernel for QvMatchesQd {
                     x[j].accurate_div(y[j]),
                     x[j].abs().sqrt(),
                     x[j].sqr(),
+                    x[j] / y[j],
                 ];
                 for (k, w) in want.iter().enumerate() {
                     let g = lanes[k].lane(j);
