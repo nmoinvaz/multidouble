@@ -572,7 +572,8 @@ pub trait FieldSolve {
     /// field's values, bitwise.
     ///
     /// Values only: the solves and corrections carry no tangent, so a lane type with tangents (`Lane::TANGENT`: `Du`,
-    /// `Fu`, `Dtn`, `Fun`) panics rather than being given a zero derivative.
+    /// `Fu`, `Dtn`, `Fun`) panics rather than being given a zero derivative. A jet has tangents too and panics, and
+    /// `solve_lanes_jet_refine` refines its orders.
     ///
     /// ```
     /// use multidouble::dd::DD;
@@ -613,6 +614,9 @@ pub trait FieldSolve {
     /// A_d (its right-hand side is rhs's tangent), so a tangent takes one step more than a value to reach the same
     /// precision. Without a tangent (`Lane::TANGENT` false) it is `solve_lanes_refine`, bitwise. A complex tangent
     /// (`Dc`) is carried by its real part only (`Lane::tan`).
+    ///
+    /// A jet (`Lane::NJ` > 0) panics. `Lane::from_vt` sets only its orders 0 and 1, so the orders past 1 would come
+    /// back zero, and `solve_lanes_jet` and `solve_lanes_jet_refine` solve a jet order by order instead.
     fn solve_lanes_refine_t<T: Lane, const B: usize>(
         &self,
         lu_t: &Self,
@@ -745,6 +749,11 @@ impl FieldSolve for DDLu {
         steps: usize,
         mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B> {
+        // run-time, as in solve_lanes_refine
+        assert!(
+            T::NJ == 0,
+            "FieldSolve::solve_lanes_refine_t refines one tangent: a jet would lose its orders past 1 (solve_lanes_jet)"
+        );
         let z = Fl::<Dv<T>, B>::zero();
         let tsolve = |r: &Fl<T, B>| if T::TANGENT { lu_t.solve_lanes(&r.tan()) } else { z };
         let mut x = Fl::<T, B>::from_vt(&self.solve_lanes(&rhs.val()), &tsolve(rhs));
