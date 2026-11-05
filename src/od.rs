@@ -5,8 +5,8 @@
 //! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the
 //! scalar type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double
 //! algorithms of the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating
-//! point arithmetic", ARITH-15, 2001) from four parts to eight, with the error-free transformations two-sum and the
-//! FMA two-product (`dd`):
+//! point arithmetic", ARITH-15, 2001, 155-162, doi:10.1109/ARITH.2001.930115) from four parts to eight, with the
+//! error-free transformations two-sum and the FMA two-product (`dd`):
 //!
 //! * Renormalization (`renorm`): QD's two passes. The first runs from the smallest part up with two-sums, so it is
 //!   error-free whatever the order of the parts (VecSum: Ogita, Rump, Oishi, "Accurate sum and dot product", SIAM J.
