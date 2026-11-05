@@ -134,6 +134,9 @@ pub(crate) trait Limb: Copy {
     fn sel(m: Self::M, t: Self, f: Self) -> Self;
     /// the renormalization of N >= 8 parts to eight (the scalar one branches on zero errors, the lanes' masks them)
     fn renorm<const N: usize>(c: [Self; N]) -> [Self; 8];
+    /// f, an `#[inline(always)]` closure, run as a function of its own on the lane backends that need no target
+    /// features (`Simd::outline`) and inlined elsewhere: the steps of the operations below
+    fn outline<T>(f: impl FnOnce() -> T) -> T;
 }
 
 impl Limb for f64 {
@@ -197,6 +200,10 @@ impl Limb for f64 {
     #[inline(always)]
     fn renorm<const N: usize>(c: [f64; N]) -> [f64; 8] {
         renorm_scalar(c)
+    }
+    #[inline(always)]
+    fn outline<T>(f: impl FnOnce() -> T) -> T {
+        f()
     }
 }
 
@@ -293,102 +300,122 @@ pub(crate) mod alg {
     /// a + b (the default `+`): the parts pairwise by two-sums, the errors carried down nine levels, renormalized
     #[inline(always)]
     pub fn add<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
-        let mut s = [L::zero(); 9];
-        let mut t = [L::zero(); 8];
-        for i in 0..8 {
-            (s[i], t[i]) = two_sum(a[i], b[i]);
-        }
-        if mutate::on(mutate::ADD_T1) {
-            t[1] = L::zero();
-        }
-        s[8] = t[7];
-        dep(&mut s, 1, t[0]);
-        dep(&mut s, 2, t[1]);
-        dep(&mut s, 3, t[2]);
-        dep(&mut s, 4, t[3]);
-        dep(&mut s, 5, t[4]);
-        dep(&mut s, 6, t[5]);
-        dep(&mut s, 7, t[6]);
-        L::renorm(s)
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let mut t = [L::zero(); 8];
+                for i in 0..8 {
+                    (s[i], t[i]) = two_sum(a[i], b[i]);
+                }
+                if mutate::on(mutate::ADD_T1) {
+                    t[1] = L::zero();
+                }
+                s[8] = t[7];
+                dep(&mut s, 1, t[0]);
+                dep(&mut s, 2, t[1]);
+                dep(&mut s, 3, t[2]);
+                dep(&mut s, 4, t[3]);
+                dep(&mut s, 5, t[4]);
+                dep(&mut s, 6, t[5]);
+                dep(&mut s, 7, t[6]);
+                L::renorm(s)
+            },
+        )
     }
 
     /// a + b for an exact f64 b: b down the parts by two-sums, renormalized from nine parts
     #[inline(always)]
     pub fn add_f<L: Limb>(a: &[L; 8], b: L) -> [L; 8] {
-        let mut s = [L::zero(); 9];
-        let mut e = b;
-        for i in 0..8 {
-            (s[i], e) = two_sum(a[i], e);
-        }
-        s[8] = e;
-        L::renorm(s)
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let mut e = b;
+                for i in 0..8 {
+                    (s[i], e) = two_sum(a[i], e);
+                }
+                s[8] = e;
+                L::renorm(s)
+            },
+        )
     }
 
     /// a b for an exact f64 b: eight two-products, their errors carried down nine levels, renormalized
     #[inline(always)]
     pub fn mul_f<L: Limb>(a: &[L; 8], b: L) -> [L; 8] {
-        let mut s = [L::zero(); 9];
-        let mut e = [L::zero(); 8];
-        for i in 0..8 {
-            (s[i], e[i]) = two_prod(a[i], b);
-        }
-        if mutate::on(mutate::MUL_F_E3) {
-            e[3] = L::zero();
-        }
-        s[8] = e[7];
-        dep(&mut s, 1, e[0]);
-        dep(&mut s, 2, e[1]);
-        dep(&mut s, 3, e[2]);
-        dep(&mut s, 4, e[3]);
-        dep(&mut s, 5, e[4]);
-        dep(&mut s, 6, e[5]);
-        dep(&mut s, 7, e[6]);
-        L::renorm(s)
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let mut e = [L::zero(); 8];
+                for i in 0..8 {
+                    (s[i], e[i]) = two_prod(a[i], b);
+                }
+                if mutate::on(mutate::MUL_F_E3) {
+                    e[3] = L::zero();
+                }
+                s[8] = e[7];
+                dep(&mut s, 1, e[0]);
+                dep(&mut s, 2, e[1]);
+                dep(&mut s, 3, e[2]);
+                dep(&mut s, 4, e[3]);
+                dep(&mut s, 5, e[4]);
+                dep(&mut s, 6, e[5]);
+                dep(&mut s, 7, e[6]);
+                L::renorm(s)
+            },
+        )
     }
 
     /// a b by order: levels 0..7 hold the partial products of their order and the errors carried into them, all
     /// summed with two-sums, and level 8 the products of order 8 (by FMA) and everything below, in plain f64
     #[inline(always)]
     pub fn expand<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 9] {
-        let mut s = [L::zero(); 9];
-        let mut e = [L::zero(); 8];
-        for j in 0..8 {
-            (s[j], e[j]) = two_prod(a[0], b[j]);
-        }
-        s[8] = a[7].fma(
-            b[1],
-            a[6].fma(
-                b[2],
-                a[5].fma(b[3], a[4].fma(b[4], a[3].fma(b[5], a[2].fma(b[6], a[1].mul(b[7]))))),
-            ),
-        );
-        dep(&mut s, 1, e[0]);
-        dep(&mut s, 2, e[1]);
-        dep(&mut s, 3, e[2]);
-        dep(&mut s, 4, e[3]);
-        dep(&mut s, 5, e[4]);
-        dep(&mut s, 6, e[5]);
-        dep(&mut s, 7, e[6]);
-        dep(&mut s, 8, e[7]);
-        // rows 1..7: a_i b_j into level i + j, its error into level i + j + 1
-        macro_rules! pp {
-            ($(($i:literal, $j:literal)),*) => {
-                $({
-                    let (p, e) = two_prod(a[$i], b[$j]);
-                    let e = if $i == 2 && $j == 3 && mutate::on(mutate::MUL_E23) { L::zero() } else { e };
-                    dep(&mut s, $i + $j, p);
-                    dep(&mut s, $i + $j + 1, e);
-                })*
-            };
-        }
-        pp!((1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6));
-        pp!((2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5));
-        pp!((3, 0), (3, 1), (3, 2), (3, 3), (3, 4));
-        pp!((4, 0), (4, 1), (4, 2), (4, 3));
-        pp!((5, 0), (5, 1), (5, 2));
-        pp!((6, 0), (6, 1));
-        pp!((7, 0));
-        s
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let mut e = [L::zero(); 8];
+                for j in 0..8 {
+                    (s[j], e[j]) = two_prod(a[0], b[j]);
+                }
+                s[8] = a[7].fma(
+                    b[1],
+                    a[6].fma(
+                        b[2],
+                        a[5].fma(b[3], a[4].fma(b[4], a[3].fma(b[5], a[2].fma(b[6], a[1].mul(b[7]))))),
+                    ),
+                );
+                dep(&mut s, 1, e[0]);
+                dep(&mut s, 2, e[1]);
+                dep(&mut s, 3, e[2]);
+                dep(&mut s, 4, e[3]);
+                dep(&mut s, 5, e[4]);
+                dep(&mut s, 6, e[5]);
+                dep(&mut s, 7, e[6]);
+                dep(&mut s, 8, e[7]);
+                // rows 1..7: a_i b_j into level i + j, its error into level i + j + 1
+                macro_rules! pp {
+                ($(($i:literal, $j:literal)),*) => {
+                    $({
+                        let (p, e) = two_prod(a[$i], b[$j]);
+                        let e = if $i == 2 && $j == 3 && mutate::on(mutate::MUL_E23) { L::zero() } else { e };
+                        dep(&mut s, $i + $j, p);
+                        dep(&mut s, $i + $j + 1, e);
+                    })*
+                };
+            }
+                pp!((1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6));
+                pp!((2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5));
+                pp!((3, 0), (3, 1), (3, 2), (3, 3), (3, 4));
+                pp!((4, 0), (4, 1), (4, 2), (4, 3));
+                pp!((5, 0), (5, 1), (5, 2));
+                pp!((6, 0), (6, 1));
+                pp!((7, 0));
+                s
+            },
+        )
     }
 
     /// a b (the default `*`): the nine levels of `expand`, renormalized
@@ -401,25 +428,30 @@ pub(crate) mod alg {
     /// carried down nine levels, renormalized (the remainder of long division)
     #[inline(always)]
     pub fn sub_mul_f<L: Limb>(r: &[L; 8], b: &[L; 8], q: L) -> [L; 8] {
-        let mut s = [L::zero(); 9];
-        let mut t = [L::zero(); 8];
-        let mut e = [L::zero(); 8];
-        for i in 0..8 {
-            let (p, pe) = two_prod(b[i], q);
-            (s[i], t[i]) = two_sum(r[i], p.neg());
-            e[i] = pe.neg();
-        }
-        s[8] = t[7].add(e[7]);
-        macro_rules! carry {
-            ($($l:literal),*) => {
-                $(
-                    dep(&mut s, $l + 1, t[$l]);
-                    dep(&mut s, $l + 1, e[$l]);
-                )*
-            };
-        }
-        carry!(0, 1, 2, 3, 4, 5, 6);
-        L::renorm(s)
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let mut t = [L::zero(); 8];
+                let mut e = [L::zero(); 8];
+                for i in 0..8 {
+                    let (p, pe) = two_prod(b[i], q);
+                    (s[i], t[i]) = two_sum(r[i], p.neg());
+                    e[i] = pe.neg();
+                }
+                s[8] = t[7].add(e[7]);
+                macro_rules! carry {
+                ($($l:literal),*) => {
+                    $(
+                        dep(&mut s, $l + 1, t[$l]);
+                        dep(&mut s, $l + 1, e[$l]);
+                    )*
+                };
+            }
+                carry!(0, 1, 2, 3, 4, 5, 6);
+                L::renorm(s)
+            },
+        )
     }
 
     /// a / b by long division (QD's accurate divide with nine quotient terms), each quotient term q(r_0) = r_0 / b_0
@@ -453,9 +485,16 @@ pub(crate) mod alg {
 
     /// The square root: Newton's iteration on 1/sqrt(a), four steps from the f64 value (each about doubling the
     /// correct bits, 53 to 424 in three, the fourth for the rounding), then times a, applied to a scaled by an exact
-    /// power of four into [1, 4) and the result scaled back (as `QD::sqrt`). A zero gives zero.
+    /// power of four into [1, 4) and the result scaled back (as `QD::sqrt`). A zero gives zero. The products and sums
+    /// are the caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here sixteen
+    /// times over).
     #[inline(always)]
-    pub fn sqrt<L: Limb>(x: &[L; 8]) -> [L; 8] {
+    pub fn sqrt<L: Limb>(
+        x: &[L; 8],
+        mul: impl Fn(&[L; 8], &[L; 8]) -> [L; 8],
+        add: impl Fn(&[L; 8], &[L; 8]) -> [L; 8],
+        add_f: impl Fn(&[L; 8], L) -> [L; 8],
+    ) -> [L; 8] {
         let z = L::zero();
         let zero = x[0].is_zero();
         let s = x[0].sqrt().pow2_floor();
@@ -479,17 +518,22 @@ pub(crate) mod alg {
     /// each error carried down to level 8, which sums in plain f64
     #[inline(always)]
     pub fn acc_levels<L: Limb, const K: usize>(acc: &mut [L; 9], t: &[L; K]) {
-        for l in 0..K.min(8) {
-            if l == 3 && mutate::on(mutate::ACC_L3) {
-                let (x, _) = two_sum(acc[3], t[3]);
-                acc[3] = x;
-                continue;
-            }
-            dep(acc, l, t[l]);
-        }
-        if K > 8 {
-            acc[8] = acc[8].add(t[8]);
-        }
+        L::outline(
+            #[inline(always)]
+            || {
+                for l in 0..K.min(8) {
+                    if l == 3 && mutate::on(mutate::ACC_L3) {
+                        let (x, _) = two_sum(acc[3], t[3]);
+                        acc[3] = x;
+                        continue;
+                    }
+                    dep(acc, l, t[l]);
+                }
+                if K > 8 {
+                    acc[8] = acc[8].add(t[8]);
+                }
+            },
+        )
     }
 
     /// quick-two-sum of a0 and the sum of the lower parts (a's value to about 2^-106)
@@ -621,7 +665,15 @@ impl OD {
     /// the square root (Newton's iteration on 1/sqrt(a), see the module doc); a negative value gives NaN
     #[inline]
     pub fn sqrt(self) -> OD {
-        OD { x: alg::sqrt(&self.x) }
+        let w = |x: &[f64; 8]| OD { x: *x };
+        OD {
+            x: alg::sqrt(
+                &self.x,
+                |a, b| (w(a) * w(b)).x,
+                |a, b| (w(a) + w(b)).x,
+                |a, b| w(a).add_f(b).x,
+            ),
+        }
     }
     /// integer power: binary powering, 1/a^|n| for n < 0 (as `QD::powi`)
     pub fn powi(self, n: i32) -> OD {

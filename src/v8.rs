@@ -981,10 +981,18 @@ macro_rules! simd {
         fn hot<T>(f: impl FnOnce() -> T) -> T {
             f()
         }
+        #[inline(always)]
+        fn outline<T>(f: impl FnOnce() -> T) -> T {
+            f()
+        }
     };
     (@hot hint) => {
         #[inline]
         fn hot<T>(f: impl FnOnce() -> T) -> T {
+            f()
+        }
+        #[inline(never)]
+        fn outline<T>(f: impl FnOnce() -> T) -> T {
             f()
         }
     };
