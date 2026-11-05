@@ -810,7 +810,7 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         }
         lanes.push((x, d, q, f));
     }
-    for c in lanes.chunks_exact(8) {
+    for c in lanes.as_chunks::<8>().0 {
         let v = OV::from_lanes(&std::array::from_fn(|j| c[j].0));
         let (dv, qv, fv) = (v.to_dv(), v.to_qv(), v.to_v8().to_array());
         for j in 0..8 {
@@ -859,7 +859,7 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         }
         pairs.push((a, b));
     }
-    for c in pairs.chunks_exact(8) {
+    for c in pairs.as_chunks::<8>().0 {
         let va = OV::from_lanes(&std::array::from_fn(|j| c[j].0));
         let vb = OV::from_lanes(&std::array::from_fn(|j| c[j].1));
         let m = [va.lt(vb), va.le(vb), va.gt(vb), va.ge(vb), va.eq(vb)].map(|m| m.bits());
