@@ -36,6 +36,10 @@ print(md.isa())                           # the SIMD backend in use, detected at
   double-double one, elementwise in quad-double; returns the four parts of the sum.
 - `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a
   float a, elementwise in quad-double; returns the four parts.
+- `od_solve(a0, ..., a7, b0, ..., b7)`: x with A x = b by LU with partial pivoting in octo-double (eight parts,
+  about 126 digits), A as eight (n, n) part arrays and b as eight of shape (n,) or (n, k); returns the eight parts of
+  x, to about cond(A) 2^-418. `ODLu(a0, ..., a7)` keeps the factors for several solves, `solve(b0, ..., b7,
+  transpose=False)`.
 - The array arguments of the functions above may be any arrays or sequences of real numbers, strided, in Fortran order
   or of another numeric dtype. Each is converted to a C-contiguous float64 array (`np.ascontiguousarray`), and one that
   is already so is passed on without a copy. Complex, string, `None` and masked inputs raise `TypeError`.

@@ -14,7 +14,9 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``qd_solve``: x with A x = b by LU with partial pivoting in quad-double, A and b as four float64 part arrays each,
   to about cond(A) 2^-209; ``QDLu`` factors A once for several solves (and solves with A^T);
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
-- ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double.
+- ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double;
+- ``od_solve``: x with A x = b by LU with partial pivoting in octo-double, A and b as eight float64 part arrays each,
+  to about cond(A) 2^-418; ``ODLu`` factors A once for several solves (and solves with A^T).
 
 Their array arguments may be any arrays or sequences of real numbers, strided, in Fortran order or of another numeric
 dtype. Each is converted to a C-contiguous float64 array, and one that is already so is passed on without a copy.
@@ -179,6 +181,44 @@ def qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3):
     x = [_f64(v, n) for v, n in ((x0, "x0"), (x1, "x1"), (x2, "x2"), (x3, "x3"))]
     y = [_f64(v, n) for v, n in ((y0, "y0"), (y1, "y1"), (y2, "y2"), (y3, "y3"))]
     return _md.qd_axpy(a, *x, *y)
+
+
+def od_solve(a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7):
+    """x with A x = b in octo-double, by LU with partial pivoting (the Rust crate's ODLu, getf2 order, its updates
+    8 rows at a time on the best SIMD backend, bitwise the same on every backend): A as eight (n, n) part arrays (A =
+    a0 + ... + a7 entrywise), b as eight part arrays of shape (n,), or (n, k) for k right-hand sides, the columns of
+    b. Each entry is renormalized first, so any eight parts summing to the value will do. The error is about cond(A)
+    2^-418 relative (partial pivoting is backward stable). Returns the eight parts of x, of b's shape. Raises
+    ValueError if A is singular (an exactly zero pivot), if A or b has an entry that is not finite, or for mismatched
+    shapes. ODLu(a0, ..., a7).solve(b0, ..., b7) gives the same bits and keeps the factors."""
+    a = [_f64(v, f"a{q}") for q, v in enumerate((a0, a1, a2, a3, a4, a5, a6, a7))]
+    b = [_f64(v, f"b{q}") for q, v in enumerate((b0, b1, b2, b3, b4, b5, b6, b7))]
+    return _md.od_solve(*a, *b)
+
+
+class ODLu:
+    """The octo-double LU of A with partial pivoting, factored once for several solves: ODLu(a0, ..., a7) with A as
+    eight (n, n) part arrays, each entry renormalized first. The factorization costs about n^3 / 3 octo-double
+    multiply-adds and each solve about n^2. Raises ValueError if A is singular or has an entry that is not finite."""
+
+    def __init__(self, a0, a1, a2, a3, a4, a5, a6, a7):
+        self._lu = _md.ODLu(*[_f64(v, f"a{q}") for q, v in enumerate((a0, a1, a2, a3, a4, a5, a6, a7))])
+
+    @property
+    def n(self):
+        """the order of A"""
+        return self._lu.n
+
+    def solve(self, b0, b1, b2, b3, b4, b5, b6, b7, transpose=False):
+        """x with A x = b in octo-double, or A^T x = b when transpose: b as eight part arrays of shape (n,) or (n, k),
+        each entry renormalized first. Returns the eight parts of x, of b's shape. A x = b gives the bits of od_solve
+        (8 rows at a time on the SIMD lanes); A^T x = b runs in scalar octo-double. Raises ValueError if b has an
+        entry that is not finite or the wrong shape."""
+        b = [_f64(v, f"b{q}") for q, v in enumerate((b0, b1, b2, b3, b4, b5, b6, b7))]
+        return self._lu.solve(*b, bool(transpose))
+
+
+__all__ += ["od_solve", "ODLu"]
 
 
 def two_sum(a, b):
