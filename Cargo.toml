@@ -48,3 +48,7 @@ harness = false
 [[bench]]
 name = "field"
 harness = false
+
+[[bench]]
+name = "jet"
+harness = false
