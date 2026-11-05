@@ -11,7 +11,7 @@ use multidouble::dual::{op, take_counts, Counted, Lane};
 use multidouble::exact::Dy;
 use multidouble::field::{cs, cs_range, cs_w, horner, DMat, FieldSolve, Fl, MatLane, TangentTail};
 use multidouble::linalg::{ld_for, DDLu};
-use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Qu, F8, QV};
+use multidouble::native::{Dc, Dtn, Du, Fu, Fun, Jet, QJet, Qu, F8, QV};
 use multidouble::qd::QD;
 use multidouble::simd::Native;
 
@@ -505,6 +505,34 @@ fn field_refine_refuses_tangent_lanes() {
     let lu = lu_of_order(M);
     let rhs = Fl::<multidouble::native::Du, B>([multidouble::native::Du::splat(DD::from_f64(1.0)); B]);
     lu.solve_lanes_refine(&rhs, 1, |x| rhs - *x);
+}
+
+/// A jet is a lane type with tangents, so the refinement refuses it as well
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_refine refines values only")]
+fn field_refine_refuses_a_jet() {
+    let lu = lu_of_order(M);
+    let rhs = Fl::<QJet<3>, B>([QJet::<3>::splat(DD::ONE); B]);
+    lu.solve_lanes_refine(&rhs, 1, |x| rhs - *x);
+}
+
+/// The refinement with a tangent refuses a double-double jet, whose orders past 1 it would return as zero
+/// (`Lane::from_vt` sets orders 0 and 1 only)
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_refine_t refines one tangent: a jet would lose its orders past 1")]
+fn field_refine_t_refuses_a_jet() {
+    let lu = lu_of_order(M);
+    let rhs = Fl::<Jet<3>, B>([Jet::<3>::splat(DD::ONE); B]);
+    lu.solve_lanes_refine_t(&lu, &rhs, 1, |x| rhs - *x);
+}
+
+/// and a quad-double jet likewise
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_refine_t refines one tangent: a jet would lose its orders past 1")]
+fn field_refine_t_refuses_a_quad_double_jet() {
+    let lu = lu_of_order(M);
+    let rhs = Fl::<QJet<3>, B>([QJet::<3>::splat(DD::ONE); B]);
+    lu.solve_lanes_refine_t(&lu, &rhs, 2, |x| rhs - *x);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
