@@ -13,6 +13,7 @@
 use crate::dd::DD;
 use crate::dual::{Lane, Param};
 use crate::dv::{DotAcc, DV};
+use crate::ov::OV;
 use crate::qd::{QdAcc, QD};
 use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
@@ -253,6 +254,11 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     #[inline(always)]
     fn set_coef(&mut self, k: usize, c: DV<S>) {
         self.c[k] = c;
+    }
+    /// set coefficient k from octo-double, rounded to double-double once (`OV::to_dv`)
+    #[inline(always)]
+    fn set_coef_od(&mut self, k: usize, c: OV<S>) {
+        self.c[k] = c.to_dv();
     }
     #[inline(always)]
     fn zero() -> Self {
