@@ -40,13 +40,17 @@ __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_so
 def _f64(v, name):
     """v as a C-contiguous float64 array for the Rust functions: v itself if it is one (no copy), else a converted
     copy (np.ascontiguousarray). Any array or sequence of real numbers converts (float, integer, unsigned and bool
-    dtypes, and objects that float() converts). Complex, string and other dtypes, and None, raise TypeError naming
-    the argument, where numpy's conversion would drop an imaginary part, parse a string or give nan."""
+    dtypes, and objects that float() converts). Complex, string and other dtypes, None and masked values raise
+    TypeError naming the argument, where numpy's conversion would drop an imaginary part or a mask, parse a string or
+    give nan."""
+    # np.asarray drops the mask and passes the hidden values on
+    if np.ma.isMaskedArray(v) and np.ma.getmaskarray(v).any():
+        raise TypeError(f"{name} must not have masked values")
     a = np.asarray(v)
     if a.dtype.kind == "O":
-        # astype would turn None into nan
-        if any(x is None for x in a.flat):
-            raise TypeError(f"{name} must be real numbers, not None")
+        # astype would turn None into nan and parse strings
+        if any(x is None or isinstance(x, (str, bytes)) for x in a.flat):
+            raise TypeError(f"{name} must be real numbers, not None or strings")
         try:
             a = a.astype(np.float64)
         except (TypeError, ValueError) as e:

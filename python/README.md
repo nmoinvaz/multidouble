@@ -33,7 +33,7 @@ print(md.isa())                           # the SIMD backend in use, detected at
   float a, elementwise in quad-double; returns the four parts.
 - The array arguments of the functions above may be any arrays or sequences of real numbers, strided, in Fortran order
   or of another numeric dtype. Each is converted to a C-contiguous float64 array (`np.ascontiguousarray`), and one that
-  is already so is passed on without a copy. Complex, string and `None` inputs raise `TypeError`.
+  is already so is passed on without a copy. Complex, string, `None` and masked inputs raise `TypeError`.
 - In numpy (plain float64 expressions): `two_sum`, `two_prod` (Dekker), `dd_add`, `dd_scale` (times an f64),
   `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath).
 - `gcr(apply, precond, bh, bl)`: x with A x = b in double-double by right-preconditioned GMRES in its GCR form, given
