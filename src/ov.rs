@@ -89,7 +89,14 @@ impl<S: Simd> Limb for V8<S> {
     }
     #[inline(always)]
     fn renorm<const N: usize>(c: [Self; N]) -> [Self; 8] {
-        renorm_lanes(c)
+        S::outline(
+            #[inline(always)]
+            || renorm_lanes(c),
+        )
+    }
+    #[inline(always)]
+    fn outline<T>(f: impl FnOnce() -> T) -> T {
+        S::outline(f)
     }
 }
 
@@ -305,7 +312,17 @@ impl<S: Simd> OV<S> {
     pub fn sqrt(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || OV { c: alg::sqrt(&self.c) },
+            || {
+                let w = |c: &[V8<S>; 8]| OV { c: *c };
+                OV {
+                    c: alg::sqrt(
+                        &self.c,
+                        |a, b| (w(a) * w(b)).c,
+                        |a, b| (w(a) + w(b)).c,
+                        |a, b| w(a).add_v(b).c,
+                    ),
+                }
+            },
         )
     }
     /// per lane self < o, lexicographic on the parts (as `OD`'s `PartialOrd`)
