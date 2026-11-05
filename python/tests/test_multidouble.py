@@ -429,6 +429,298 @@ def test_dd_horner_edge_cases():
             md.dd_horner(ch, cl, 0.5)
 
 
+UQ = 2.0**-209  # QD::EPS, the quad-double unit
+MP_DPS = 150  # the reference arithmetic: a quad-double is exact in about 80 digits, a product of two in 160
+
+
+def qd_mp(parts):
+    """the exact values of a quad-double array (four part arrays of one shape), as an mpmath matrix (2-D) or list"""
+    import mpmath as mp
+
+    with mp.workdps(MP_DPS):
+        p = [np.asarray(x, dtype=np.float64) for x in parts]
+        if p[0].ndim == 2:
+            return mp.matrix([[mp.fsum(mp.mpf(float(x[i, j])) for x in p) for j in range(p[0].shape[1])]
+                              for i in range(p[0].shape[0])])
+        return [mp.fsum(mp.mpf(float(x[i])) for x in p) for i in range(len(p[0]))]
+
+
+def mp_parts(vals):
+    """mpmath numbers rounded to quad-double greedily (each part the nearest float64 to what is left): four arrays"""
+    import mpmath as mp
+
+    out = [np.zeros(len(vals)) for _ in range(4)]
+    with mp.workdps(MP_DPS):
+        for i, v in enumerate(vals):
+            r = v
+            for q in range(4):
+                out[q][i] = float(r)
+                r = r - mp.mpf(out[q][i])
+    return out
+
+
+def ill_conditioned(n, cond, seed):
+    """A = H1 D H2 rounded to quad-double, H1, H2 Householder reflectors and D = diag(cond^(-k / (n - 1))), so that the
+    2-norm condition number is cond (to the rounding of A): four (n, n) part arrays"""
+    import mpmath as mp
+
+    rng = np.random.default_rng(seed)
+    with mp.workdps(MP_DPS):
+        def refl():
+            v = [mp.mpf(float(x)) for x in rng.standard_normal(n)]
+            vv = mp.fsum(x * x for x in v)
+            return mp.matrix([[(1 if i == j else 0) - 2 * v[i] * v[j] / vv for j in range(n)] for i in range(n)])
+        d = [mp.mpf(cond) ** (-mp.mpf(k) / (n - 1)) for k in range(n)]
+        A = refl() * mp.diag(d) * refl()
+        flat = mp_parts([A[i, j] for i in range(n) for j in range(n)])
+    return [x.reshape(n, n) for x in flat]
+
+
+def planted_rhs(parts, rng, k=None):
+    """b = A x rounded to quad-double for a planted x of unit size (k columns, or a vector when k is None), formed in
+    mpmath from A's exact entries: four part arrays"""
+    import mpmath as mp
+
+    A, n = qd_mp(parts), parts[0].shape[0]
+    cols = []
+    with mp.workdps(MP_DPS):
+        for _ in range(1 if k is None else k):
+            x = [mp.mpf(float(v)) for v in rng.standard_normal(n)]
+            cols.append(mp_parts([mp.fsum(A[i, j] * x[j] for j in range(n)) for i in range(n)]))
+    if k is None:
+        return cols[0]
+    return [np.stack([c[q] for c in cols], axis=1) for q in range(4)]
+
+
+def qd_errors(parts, bparts, xparts, transpose=False):
+    """(forward, backward) error of x against A x = b (A^T x = b when transpose), in mpmath at MP_DPS digits, b of
+    shape (n,) or (n, k): forward max |x - x*| / max |x*| over each column (x* = mpmath's solve of the system as given,
+    to about cond 10^-MP_DPS), backward the componentwise max |b - A x| / (|A| |x| + |b|)"""
+    import mpmath as mp
+
+    A = qd_mp(parts)
+    if transpose:
+        A = A.T
+    n = A.rows
+    b2 = [np.asarray(p, dtype=np.float64).reshape(n, -1) for p in bparts]
+    x2 = [np.asarray(p, dtype=np.float64).reshape(n, -1) for p in xparts]
+    fwd = bwd = 0
+    with mp.workdps(MP_DPS):
+        for c in range(b2[0].shape[1]):
+            b = qd_mp([p[:, c] for p in b2])
+            x = qd_mp([p[:, c] for p in x2])
+            ref = mp.lu_solve(A, mp.matrix(b))
+            fwd = max(fwd, max(abs(x[i] - ref[i]) for i in range(n)) / max(abs(ref[i]) for i in range(n)))
+            for i in range(n):
+                r = b[i] - mp.fsum(A[i, j] * x[j] for j in range(n))
+                s = mp.fsum(abs(A[i, j] * x[j]) for j in range(n)) + abs(b[i])
+                bwd = max(bwd, abs(r) / s)
+    return float(fwd), float(bwd)
+
+
+@pytest.mark.parametrize("n", [24, 37])
+@pytest.mark.parametrize("cond", [1.0, 1e10, 1e20])
+def test_qd_solve_error_scales_with_the_condition(n, cond):
+    """x of qd_solve for A of condition 1, 1e10 and 1e20 (n = 24, and 37 with a partial last row block) and a planted
+    x of unit size: the backward error within n 2^-209 and the forward error within n cond 2^-209 (partial pivoting
+    is backward stable; the error is about cond(A) 2^-209), against mpmath at 150 digits. Control: the last part of
+    one entry of A dropped (2^-159 of it), x graded against the true system, misses the forward bound."""
+    parts = ill_conditioned(n, cond, seed=n + int(np.log10(cond)))
+    b = planted_rhs(parts, np.random.default_rng(n))
+    x = md.qd_solve(*parts, *b)
+    fwd, bwd = qd_errors(parts, b, x)
+    print(f"n {n} cond {cond:.0e}: forward {fwd:.2e} ({fwd / (cond * UQ):.2e} cond u), backward {bwd / UQ:.3f} u")
+    assert bwd <= n * UQ, bwd / UQ
+    assert fwd <= n * cond * UQ, fwd / (cond * UQ)
+    i, j = 3, n - 2
+    assert parts[3][i, j] != 0
+    wrong = [p.copy() for p in parts]
+    wrong[3][i, j] = 0.0
+    fc, _ = qd_errors(parts, b, md.qd_solve(*wrong, *b))
+    assert fc > n * cond * UQ, fc / (cond * UQ)
+
+
+def test_qd_solve_residual_control():
+    """control for the backward error check: a solution off by 2^-190 of its size in one entry misses n 2^-209"""
+    n = 24
+    parts = ill_conditioned(n, 1e5, seed=3)
+    b = planted_rhs(parts, np.random.default_rng(4))
+    x = [p.copy() for p in md.qd_solve(*parts, *b)]
+    assert qd_errors(parts, b, x)[1] <= n * UQ
+    x[3][7] += 2.0**-190 * x[0][7]
+    assert qd_errors(parts, b, x)[1] > n * UQ
+
+
+def test_qd_lu_solves_many_right_hand_sides_and_the_transpose():
+    """QDLu factored once: solve gives qd_solve's bits for one right-hand side and for k = 3 at once (each column the
+    bits of its own solve), and A x = b and A^T x = b at cond 1e20 to the bounds of the single solve. Controls: a solve
+    of a b with one bit changed gives other bits, and the transposed solve graded as A x = b misses the bound."""
+    n, cond = 37, 1e20
+    parts = ill_conditioned(n, cond, seed=11)
+    rng = np.random.default_rng(12)
+    B = planted_rhs(parts, rng, k=3)
+    lu = md.QDLu(*parts)
+    assert lu.n == n
+    X = lu.solve(*B)
+    assert [p.shape for p in X] == [(n, 3)] * 4
+    assert same_bits(X, md.qd_solve(*parts, *B))
+    for c in range(3):
+        col = [np.ascontiguousarray(p[:, c]) for p in B]
+        assert same_bits(lu.solve(*col), [p[:, c] for p in X]), c
+        assert same_bits(md.qd_solve(*parts, *col), [p[:, c] for p in X]), c
+    fwd, bwd = qd_errors(parts, B, X)
+    assert bwd <= n * UQ and fwd <= n * cond * UQ, (bwd / UQ, fwd / (cond * UQ))
+    T = lu.solve(*B, transpose=True)
+    fwd, bwd = qd_errors(parts, B, T, transpose=True)
+    print(f"transpose: forward {fwd / (cond * UQ):.2e} cond u, backward {bwd / UQ:.3f} u")
+    assert bwd <= n * UQ and fwd <= n * cond * UQ, (bwd / UQ, fwd / (cond * UQ))
+    assert qd_errors(parts, B, T)[1] > n * UQ
+    flip = [p.copy() for p in B]
+    flip[1][5, 1] = np.nextafter(flip[1][5, 1], np.inf)
+    assert not same_bits(lu.solve(*flip), X)
+
+
+def pinned_part(i, j, q):
+    """part q of entry (i, j) of the pinned system's matrix, or of entry i of b when j is None: `pinned_part` of the
+    Rust test qd_lu_pinned_bits (tests/linalg.rs), small integers over powers of two, exact in float64"""
+    scale = (2.0**-7, 2.0**-58, 2.0**-113, 2.0**-168)[q]
+    if j is None:
+        t = (i * 29 + q * 71) % 199 - 99
+    else:
+        t = (i * 37 + j * 101 + q * 53 + i * j * 7) % 211 - 105 + (64 if q == 0 and i == j else 0)
+    return t * scale
+
+
+def pinned_system(n=37):
+    """the four part arrays of the pinned A ((n, n), entry (i, j) at [i, j]) and of b (n)"""
+    A = [np.array([[pinned_part(i, j, q) for j in range(n)] for i in range(n)]) for q in range(4)]
+    b = [np.array([pinned_part(i, None, q) for i in range(n)]) for q in range(4)]
+    return A, b
+
+
+def parts_hash(x):
+    """FNV-1a over the bits of the four parts, all of part 0 first, as parts_hash of tests/linalg.rs"""
+    h = 0xCBF29CE484222325
+    for p in x:
+        for w in np.ascontiguousarray(p, dtype=np.float64).ravel().view(np.uint64):
+            h = ((h ^ int(w)) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+PINNED = (0x90714C6EBACC4705, 0xE34A230E39E22035)  # tests/linalg.rs, qd_lu_pinned_bits: A x = b and A^T x = b
+
+
+def test_qd_solve_is_the_rust_lu_bitwise():
+    """qd_solve and QDLu.solve (and its transpose) of the pinned system give the bits of the Rust QDLu called directly
+    (tests/linalg.rs pins the same hashes), with the parts renormalized as QD::new does. Control: b with one bit
+    changed in a second part gives another hash."""
+    A, b = pinned_system()
+    x = md.qd_solve(*A, *b)
+    assert parts_hash(x) == PINNED[0], hex(parts_hash(x))
+    lu = md.QDLu(*A)
+    assert parts_hash(lu.solve(*b)) == PINNED[0]
+    assert parts_hash(lu.solve(*b, transpose=True)) == PINNED[1]
+    c = [p.copy() for p in b]
+    c[1][5] = np.nextafter(c[1][5], np.inf)
+    assert parts_hash(md.qd_solve(*A, *c)) != PINNED[0]
+
+
+def test_qd_solve_renormalizes_its_inputs():
+    """parts that are not normalized are renormalized first: A and b given as (0, x0, x1, x2), the same values with a
+    zero leading part, which the pivot search and the zero-skips read, solve to the bounds (unnormalized, every
+    leading part would read as zero and the factorization would raise as singular), for A x = b and A^T x = b"""
+    n = 13
+    A, b = pinned_system(n)
+    A[3][:], b[3][:] = 0.0, 0.0  # three parts, so that the shift keeps the values exactly
+    shift = lambda p: [np.zeros_like(p[0]), p[0], p[1], p[2]]  # noqa: E731
+    cond = np.linalg.cond(A[0])  # in float64, enough for a bound
+    for t in (False, True):
+        x = md.QDLu(*shift(A)).solve(*shift(b), transpose=t)
+        fwd, bwd = qd_errors(A, b, x, transpose=t)
+        assert bwd <= n * UQ and fwd <= n * cond * UQ, (bwd / UQ, fwd / (cond * UQ))
+    assert qd_errors(A, b, md.qd_solve(*shift(A), *shift(b)))[1] <= n * UQ
+
+
+def test_qd_solve_errors():
+    """singular A (an exactly zero pivot), entries that are not finite in any part of A or b, and mismatched shapes
+    raise ValueError, as dd_solve does for a singular A; QDLu raises the same"""
+    n = 5
+    A, b = pinned_system(n)
+    z = [np.zeros((n, n))] * 4
+    with pytest.raises(ValueError, match="singular"):
+        md.qd_solve(*z, *b)
+    with pytest.raises(ValueError, match="singular"):
+        md.dd_solve(z[0], z[1], b[0], b[1])
+    twin = [p.copy() for p in A]
+    for p in twin:
+        p[3] = p[1]  # two equal rows
+    with pytest.raises(ValueError, match="singular"):
+        md.qd_solve(*twin, *b)
+    with pytest.raises(ValueError, match="singular"):
+        md.QDLu(*twin)
+    for q in range(4):
+        for bad in (np.nan, np.inf, -np.inf):
+            a = [p.copy() for p in A]
+            a[q][2, 3] = bad
+            with pytest.raises(ValueError, match=r"A has a non-finite entry at \(2, 3\)"):
+                md.qd_solve(*a, *b)
+            with pytest.raises(ValueError, match="non-finite"):
+                md.QDLu(*a)
+            c = [p.copy() for p in b]
+            c[q][4] = bad
+            with pytest.raises(ValueError, match="b has a non-finite entry at 4"):
+                md.qd_solve(*A, *c)
+            with pytest.raises(ValueError, match="non-finite"):
+                md.QDLu(*A).solve(*c)
+    big = [np.full((n, n), 1e308), np.full((n, n), 1e308), z[0], z[0]]  # finite parts whose sum overflows
+    with pytest.raises(ValueError, match="non-finite"):
+        md.qd_solve(*big, *b)
+    with pytest.raises(ValueError):
+        md.qd_solve(A[0][:, :4], A[1][:, :4], A[2][:, :4], A[3][:, :4], *b)  # not square
+    with pytest.raises(ValueError):
+        md.qd_solve(A[0], A[1], A[2], A[3][:4, :4], *b)  # the parts of A differ in shape
+    with pytest.raises(ValueError):
+        md.qd_solve(*A, b[0][:4], b[1][:4], b[2][:4], b[3][:4])  # b too short
+    with pytest.raises(ValueError):
+        md.qd_solve(*A, b[0], b[1], b[2], b[3][:4])  # the parts of b differ in shape
+    with pytest.raises(ValueError):
+        md.QDLu(*A).solve(*[p.reshape(n, 1, 1) for p in b])  # three-dimensional
+    with pytest.raises(TypeError):
+        md.qd_solve(A[0][0], A[1][0], A[2][0], A[3][0], *b)  # A one-dimensional
+    e = [np.zeros((0, 0))] * 4
+    assert [p.shape for p in md.qd_solve(*e, *[np.zeros(0)] * 4)] == [(0,)] * 4
+    assert [p.shape for p in md.QDLu(*A).solve(*[np.zeros((n, 0))] * 4)] == [(n, 0)] * 4
+
+
+def test_qd_lu_inputs_are_converted():
+    """QDLu's matrix and right-hand sides (k = 2, so b is 2-D too) as strided or reversed views, in Fortran order, as
+    integers, float32 or lists give the bits of the call with np.ascontiguousarray(x, dtype=np.float64). Control: the
+    Rust class itself raises on each of these inputs, Fortran order included."""
+    rng = np.random.default_rng(41)
+    n = 6
+    A = conversion_cases()["qd_solve"][:4]
+    B = [np.stack([p, p[::-1]], axis=1) for p in rand_qd(rng, n)]
+    want_lu = md.QDLu(*A)
+    for i in range(4):
+        for kind, v in variants(A[i]).items():
+            a = list(A)
+            a[i] = v
+            w = list(A)
+            w[i] = np.ascontiguousarray(v, dtype=np.float64)
+            assert same_bits(md.QDLu(*a).solve(*B), md.QDLu(*w).solve(*B)), (i, kind)
+            with pytest.raises((TypeError, ValueError)):
+                md._md.QDLu(*a)
+        for kind, v in variants(B[i]).items():
+            c = list(B)
+            c[i] = v
+            w = list(B)
+            w[i] = np.ascontiguousarray(v, dtype=np.float64)
+            assert same_bits(want_lu.solve(*c), want_lu.solve(*w)), (i, kind)
+            assert same_bits(want_lu.solve(*c, transpose=True), want_lu.solve(*w, transpose=True)), (i, kind)
+            with pytest.raises((TypeError, ValueError)):
+                want_lu._lu.solve(*c)
+
+
 def conversion_cases():
     """every array function of the package with valid arguments, all arrays C-contiguous float64: name -> arguments"""
     rng = np.random.default_rng(31)
@@ -440,11 +732,13 @@ def conversion_cases():
     Sh = Sh + 16 * np.eye(6)
     z, y = rand_qd(rng, n), rand_qd(rng, n)
     Ch, Cl = (np.array(c) for c in rand_series(rng, 5, n))
+    Q = [Sh, Sl, Sl * 2.0**-53 * rng.uniform(-1, 1, (6, 6)), Sl * 2.0**-106 * rng.uniform(-1, 1, (6, 6))]
     two = (ah, al, bh, bl)
     return {
         "add": two, "sub": two, "mul": two, "div": two, "dd_op": (1,) + two, "dd_dot": two,
         "dd_matvec": (Ah, Al, bh[:7], bl[:7]), "dd_solve": (Sh, Sl, bh[:6], bl[:6]),
         "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y), "dd_horner": (Ch, Cl, 0.4341),
+        "qd_solve": (*Q, *[p[:6] for p in z]),
     }
 
 
