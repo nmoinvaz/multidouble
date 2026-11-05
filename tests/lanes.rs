@@ -1,11 +1,12 @@
 //! The 8-lane types against the scalar ones, bit for bit, on every backend this CPU runs (`simd::available()`:
-//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV`, `OV`, and the
-//! octo-double jet `OJet` against its scalar series `OSeries`.
+//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV`, `OV`, the
+//! octo-double jet `OJet` against its scalar series `OSeries`, and the octo-double dual `Ou` against its formulas in
+//! scalar octo-double.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{Lane, Param};
+use multidouble::dual::{Lane, Ou, Param};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::jet::{OJet, OSeries};
 use multidouble::od::{OdAcc, OD};
@@ -883,6 +884,107 @@ fn ojet_matches_oseries_control_fma_on_one_backend() {
     for (name, bad) in &ran {
         let native = *name == <multidouble::simd::Native as Simd>::NAME;
         println!("{name}: {bad} lane coefficients differ (native {native})");
+        assert_eq!(*bad > 0, native, "{name}: {bad}");
+    }
+}
+
+/// the lanes of `Ou` against its formulas in scalar octo-double on one backend: the number of lane values and tangents
+/// that differ in any bit
+#[derive(Clone)]
+struct OuMatchesOd;
+
+impl Kernel for OuMatchesOd {
+    type Output = usize;
+    /// every dual operation against the scalar formulas, counting the lane parts that differ
+    #[inline(always)]
+    fn run<S: Simd>(self) -> usize {
+        let mut bad = 0;
+        let mut r = Rng(23);
+        for _ in 0..ROUNDS / 40 {
+            let (xv, xd, yd): ([OD; 8], [OD; 8], [OD; 8]) = (
+                std::array::from_fn(|_| od8(&mut r)),
+                std::array::from_fn(|_| od8(&mut r)),
+                std::array::from_fn(|_| od8(&mut r)),
+            );
+            let yv: [OD; 8] = std::array::from_fn(|_| OD::from_f64(1.5) + od8(&mut r).mul_pwr2(2f64.powi(-12)));
+            let cd: [DD; 8] = std::array::from_fn(|_| r.dd(3));
+            let f = r.dd(5).hi;
+            let x = Ou::<S> {
+                v: OV::from_lanes(&xv),
+                d: OV::from_lanes(&xd),
+            };
+            let y = Ou::<S> {
+                v: OV::from_lanes(&yv),
+                d: OV::from_lanes(&yd),
+            };
+            let c = DV::<S>::load(&cd.map(|d| d.hi), &cd.map(|d| d.lo));
+            let acc = Ou::<S>::fin(Ou::<S>::acc1(
+                Ou::<S>::accc(Ou::<S>::acc(Ou::<S>::acc0(), x, y), y, c),
+                x,
+            ));
+            let lanes = [x + y, x - y, -x, x * y, x / y, x.mulc(c), x.mulf(f), x.addc(c), acc];
+            for j in 0..8 {
+                let (a, ad, b, bd, cj) = (xv[j], xd[j], yv[j], yd[j], OD::from_dd(cd[j]));
+                let prod = OdAcc::zero().add_prod(a, bd).add_prod(ad, b).finish();
+                let q = a / b;
+                let want = [
+                    (a + b, ad + bd),
+                    (a - b, ad - bd),
+                    (-a, -ad),
+                    (a * b, prod),
+                    (q, (ad - q * bd) / b),
+                    (a * cj, ad * cj),
+                    (a.mul_f(f), ad.mul_f(f)),
+                    (a + cj, ad),
+                    (
+                        OdAcc::zero().add_prod(a, b).add_prod(b, cj).add(a).finish(),
+                        OdAcc::zero()
+                            .add_prod(a, bd)
+                            .add_prod(ad, b)
+                            .add_prod(bd, cj)
+                            .add(ad)
+                            .finish(),
+                    ),
+                ];
+                for (n, (wv, wd)) in want.iter().enumerate() {
+                    for (g, w) in [(lanes[n].v.lane(j), wv), (lanes[n].d.lane(j), wd)] {
+                        if !g.x.iter().zip(w.x.iter()).all(|(u, v)| same(*u, *v)) {
+                            if bad == 0 {
+                                println!("{}: op {n} lane {j}: {g:?} vs {w:?}", S::NAME);
+                            }
+                            bad += 1;
+                        }
+                    }
+                }
+            }
+        }
+        bad
+    }
+}
+
+/// `Ou` matches its scalar octo-double formulas bit for bit lane by lane on every backend: the arithmetic, the
+/// constants and the accumulator, value and tangent
+#[test]
+fn ou_matches_od() {
+    let ran = simd::for_each_available(OuMatchesOd);
+    assert_eq!(ran.iter().map(|r| r.0).collect::<Vec<_>>(), simd::available());
+    assert!(ran.iter().all(|r| r.1 == 0), "lane parts that differ: {ran:?}");
+    println!("checked on {:?}", simd::available());
+}
+
+/// Control (feature `mutate`): with two-product's fused multiply-subtract replaced by a plain product on the
+/// compile-time backend only (`od::mutate::OV_FMA_PLAIN`), the dual check fails on that backend and passes on the
+/// others
+#[cfg(feature = "mutate")]
+#[test]
+fn ou_matches_od_control_fma_on_one_backend() {
+    use multidouble::od::mutate;
+    mutate::set(mutate::OV_FMA_PLAIN);
+    let ran = simd::for_each_available(OuMatchesOd);
+    mutate::set(0);
+    for (name, bad) in &ran {
+        let native = *name == <multidouble::simd::Native as Simd>::NAME;
+        println!("{name}: {bad} lane parts differ (native {native})");
         assert_eq!(*bad > 0, native, "{name}: {bad}");
     }
 }

@@ -1,14 +1,15 @@
 //! The in-place accumulation and Cauchy sums against the value-returning ones, bit for bit, on every backend this CPU
 //! runs (`simd::for_each_available`), with random inputs in every part of every lane type: `Lane::acc_mut` against
-//! `Lane::acc` for the double-double, quad-double and octo-double values, the dual and f64-tangent lanes, the jets
-//! (`QJet<24>` among them, and `OJet<24>` in optimized builds) and the counting lane, `QDotAcc::add_prod_mut` and
-//! `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and
-//! `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check has a control that must fail, the same comparison
-//! of a sum with two of its terms swapped, and for the field sums also of a sum without its last term.
+//! `Lane::acc` for the double-double, quad-double and octo-double values, the dual lanes (`Ou` among them) and the
+//! f64-tangent lanes, the jets (`QJet<24>` among them, and `OJet<24>` in optimized builds) and the counting lane,
+//! `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`,
+//! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check has a control that
+//! must fail, the same comparison of a sum with two of its terms swapped, and for the field sums also of a sum without
+//! its last term.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
+use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::field::{cs, cs_into, cs_lane_into, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_lane_into, Fl};
 use multidouble::jet::{Jet, OJet, QJet};
@@ -251,6 +252,20 @@ impl<S: Simd, const N: usize> Gen for OJet<S, N> {
     }
 }
 
+impl<S: Simd> Gen for Ou<S> {
+    fn gen(r: &mut Rng) -> Self {
+        Ou { v: ov(r), d: ov(r) }
+    }
+    fn bits(&self, w: &mut Vec<u64>) {
+        self.v.bits(w);
+        self.d.bits(w);
+    }
+    fn acc_bits(a: &Self::Acc, w: &mut Vec<u64>) {
+        put_odot(w, &a.0);
+        put_odot(w, &a.1);
+    }
+}
+
 impl<L: Gen> Gen for Counted<L> {
     fn gen(r: &mut Rng) -> Self {
         Counted(L::gen(r))
@@ -314,6 +329,7 @@ fn every_lane<S: Simd>(c: &mut impl Check) {
     if !cfg!(debug_assertions) {
         c.check::<OJet<S, 24>>("OJet<24>");
     }
+    c.check::<Ou<S>>("Ou");
 }
 
 /// k, a check that panics on a mismatch, run on every backend this CPU has, on a thread with a 64 MiB stack. Built
