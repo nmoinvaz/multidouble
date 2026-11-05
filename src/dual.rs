@@ -17,6 +17,8 @@
 //!   through [`Param`] (`Lane::P`: `DD` on every other lane, `jet::Series<N>` on a jet).
 //! * `jet::QJet<N>`: the same with N quad-double coefficients (`Lane::P` is `jet::QSeries<N>`), read and set in
 //!   quad-double through `Lane::coef_qd` and `set_coef_qd`.
+//! * `jet::OJet<N>`: the same with N octo-double coefficients (`Lane::P` is `jet::OSeries<N>`), read and set in
+//!   octo-double through `Lane::coef_od` and `set_coef_od`.
 //!
 //! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
 //! generic code.
@@ -31,10 +33,46 @@ use crate::simd::Simd;
 use crate::v8::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+/// Deliberate breakage of the octo-double jet lanes for the controls of their tests (feature `mutate`; ids below, 0 =
+/// none), as `crate::od::mutate` breaks the octo-double arithmetic: `set(id)` selects one in the current thread, and
+/// without the feature the hooks are compile-time `false`.
+pub mod mutate {
+    /// `crate::jet::OJet`'s product: the last term of each convolution, x_k y_0, dropped (orders k >= 1)
+    pub const OJET_CONV: u32 = 1;
+    /// number of ids
+    pub const N: u32 = 1;
+    /// the mutations' descriptions, by id
+    pub const NAMES: [&str; 2] = ["none", "octo-double jet product: last convolution term dropped"];
+
+    #[cfg(feature = "mutate")]
+    thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
+
+    /// select the mutation for the current thread (0 = none)
+    #[cfg(feature = "mutate")]
+    pub fn set(id: u32) {
+        ID.with(|m| m.set(id));
+    }
+
+    /// whether mutation id is selected in the current thread
+    #[cfg(feature = "mutate")]
+    #[inline(always)]
+    pub fn on(id: u32) -> bool {
+        ID.with(|m| m.get() == id)
+    }
+
+    /// whether mutation id is selected: never, without the feature `mutate`
+    #[cfg(not(feature = "mutate"))]
+    #[inline(always)]
+    pub fn on(_id: u32) -> bool {
+        false
+    }
+}
+
 /// The arithmetic of a parameter a computation over [`Lane`] is continued in ([`Lane::P`]): the scalar double-double
 /// on every lane that is not a jet, where a constant formed from the parameter is bit for bit the scalar operations
-/// it was, and a scalar truncated power series (`crate::jet::Series<N>`, `crate::jet::QSeries<N>` in quad-double) on
-/// a jet lane, whose constants then carry their own Taylor coefficients in the parameter.
+/// it was, and a scalar truncated power series (`crate::jet::Series<N>`, `crate::jet::QSeries<N>` in quad-double,
+/// `crate::jet::OSeries<N>` in octo-double) on a jet lane, whose constants then carry their own Taylor coefficients in
+/// the parameter.
 pub trait Param:
     Copy
     + Send
@@ -119,16 +157,16 @@ pub trait Lane:
     /// a lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`; a jet's
     /// solve goes order by order, `NJ`)
     const VAL_QD: bool = false;
-    /// values in octo-double (`crate::ov::OV`): as for `VAL_QD`, a solve with a double-double LU is refined for such a
-    /// lane with the residual formed in its arithmetic, with about twice the steps, as each gains about cond(A)
-    /// 2^-104. Lanes that set it leave `VAL_QD` unset, so code that refines quad-double lanes a fixed number of steps
-    /// does not apply that count to them.
+    /// values in octo-double (`crate::ov::OV`, `crate::jet::OJet<N>`): as for `VAL_QD`, a solve with a double-double
+    /// LU is refined for such a lane with the residual formed in its arithmetic, with about twice the steps, as each
+    /// gains about cond(A) 2^-104. Lanes that set it leave `VAL_QD` unset, so code that refines quad-double lanes a
+    /// fixed number of steps does not apply that count to them.
     const VAL_OD: bool = false;
-    /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`), 0 for every other lane: code
-    /// with a branch for jets, such as an order-by-order solve, tests it
+    /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`, `crate::jet::OJet<N>`), 0 for
+    /// every other lane: code with a branch for jets, such as an order-by-order solve, tests it
     const NJ: usize = 0;
-    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>` and
-    /// `crate::jet::QSeries<N>` on `QJet<N>`
+    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>`,
+    /// `crate::jet::QSeries<N>` on `QJet<N>` and `crate::jet::OSeries<N>` on `OJet<N>`
     type P: Param;
     /// times a parameter constant (`muls` on every lane that is not a jet)
     fn mulp(self, p: Self::P) -> Self;

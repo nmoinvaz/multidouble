@@ -8,13 +8,14 @@
 //!
 //! [`QJet<N>`] is the same in quad-double, with [`QSeries<N>`] its parameter arithmetic: the coefficients to
 //! quad-double accuracy where a cancellation in the computation amplifies double-double rounding past what the
-//! continuation needs.
+//! continuation needs. [`OJet<N>`] and [`OSeries<N>`] are the same in octo-double, for when that amplification
+//! exceeds even quad-double.
 #![allow(clippy::needless_range_loop)]
 use crate::dd::DD;
-use crate::dual::{Lane, Param};
+use crate::dual::{mutate, Lane, Param};
 use crate::dv::{DotAcc, DV};
 use crate::od::{OdAcc, OD};
-use crate::ov::OV;
+use crate::ov::{ODotAcc, OV};
 use crate::qd::{QdAcc, QD};
 use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
@@ -890,5 +891,312 @@ impl<const N: usize> Param for OSeries<N> {
             s.c[1] = OD::ONE;
         }
         s
+    }
+}
+
+/// `OJet<N>`: `Jet<N>` in octo-double, N octo-double lane vectors c\[0\], …, c\[N − 1\] for the orders 0, …, N − 1,
+/// with the same operations as [`QJet<N>`]: Cauchy products through the accumulator `ODotAcc`, quotients by the
+/// series-reciprocal recurrence with the 9N quotients by c\[0\]'s leading part through one divisor (`OV::div_by`), and
+/// the parameter arithmetic [`OSeries<N>`]. A computation over [`Lane`] evaluated on it gives its Taylor coefficients
+/// to octo-double accuracy, for when a quantity that grows through the computation amplifies even the quad-double
+/// rounding of `QJet<N>` past what is needed.
+///
+/// As for `OV`, the trait passes constants and inputs as double-double (they enter exactly), and `coef`, `val` and
+/// `tan` round back to double-double, `coef_qd` to quad-double. Octo-double coefficients enter and leave through
+/// [`Lane::set_coef_od`] and [`Lane::coef_od`], [`OJet::var_lanes`] and the field `c`. `VAL_OD` is set and `VAL_QD`
+/// is not: a solve of a jet goes order by order, which is the caller's, as for `QJet<N>`.
+#[derive(Clone, Copy, Debug)]
+pub struct OJet<S: Simd, const N: usize> {
+    /// the coefficients of the orders 0, ..., N - 1
+    pub c: [OV<S>; N],
+}
+
+impl<S: Simd, const N: usize> OJet<S, N> {
+    /// the series with the given coefficients
+    #[inline(always)]
+    pub fn from_coeffs(c: [OV<S>; N]) -> Self {
+        const { assert!(N >= 1, "a jet has at least its value") }
+        OJet { c }
+    }
+    /// the series variable with lane j's value c\[j\]: coefficient 0 the values, coefficient 1 one
+    pub fn var_lanes(c: &[OD; 8]) -> Self {
+        let mut j = Self::from_coeffs([OV::zero(); N]);
+        j.c[0] = OV::from_lanes(c);
+        if N > 1 {
+            j.c[1] = OV::splat(OD::ONE);
+        }
+        j
+    }
+    /// the Cauchy product's coefficient k of x and y, orders 0..=k through the dot accumulator (feature `mutate`:
+    /// `crate::dual::mutate::OJET_CONV` drops the term x_k y_0)
+    #[inline(always)]
+    fn conv(x: &[OV<S>; N], y: &[OV<S>; N], k: usize) -> ODotAcc<S> {
+        let mut a = ODotAcc::zero();
+        let last = if k > 0 && mutate::on(mutate::OJET_CONV) {
+            k - 1
+        } else {
+            k
+        };
+        for i in 0..=last {
+            a.add_prod_mut(&x[i], &y[k - i]);
+        }
+        a
+    }
+}
+
+impl<S: Simd, const N: usize> Add for OJet<S, N> {
+    type Output = Self;
+    /// coefficient by coefficient
+    #[inline(always)]
+    fn add(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = self.c[k] + o.c[k];
+        }
+        OJet { c }
+    }
+}
+impl<S: Simd, const N: usize> Sub for OJet<S, N> {
+    type Output = Self;
+    /// coefficient by coefficient
+    #[inline(always)]
+    fn sub(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = self.c[k] - o.c[k];
+        }
+        OJet { c }
+    }
+}
+impl<S: Simd, const N: usize> Neg for OJet<S, N> {
+    type Output = Self;
+    /// every coefficient negated
+    #[inline(always)]
+    fn neg(self) -> Self {
+        OJet { c: self.c.map(|x| -x) }
+    }
+}
+impl<S: Simd, const N: usize> Mul for OJet<S, N> {
+    type Output = Self;
+    /// the Cauchy product truncated at order N - 1
+    #[inline(always)]
+    fn mul(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = Self::conv(&self.c, &o.c, k).finish();
+        }
+        OJet { c }
+    }
+}
+impl<S: Simd, const N: usize> Div for OJet<S, N> {
+    type Output = Self;
+    /// q = x / y by q_k = (x_k − Σ_{i=1..k} y_i q_{k−i}) / y_0
+    #[inline(always)]
+    fn div(self, o: Self) -> Self {
+        // the 9N quotients by o.c[0].c[0] share its divisor (on AVX-512 its reciprocal)
+        let r = o.c[0].c[0].divisor();
+        let mut q = self.c;
+        q[0] = self.c[0].div_by(o.c[0], r);
+        for k in 1..N {
+            let mut a = ODotAcc::zero();
+            for i in 1..=k {
+                a.add_prod_mut(&o.c[i], &q[k - i]);
+            }
+            q[k] = (self.c[k] - a.finish()).div_by(o.c[0], r);
+        }
+        OJet { c: q }
+    }
+}
+
+impl<S: Simd, const N: usize> Lane for OJet<S, N> {
+    type S = S;
+    type Acc = [ODotAcc<S>; N];
+    type P = OSeries<N>;
+    const TANGENT: bool = true;
+    const VAL_OD: bool = true;
+    const NJ: usize = N;
+    /// the Cauchy product with the scalar series, coefficient k from the orders 0..=k through the dot accumulator
+    #[inline(always)]
+    fn mulp(self, p: OSeries<N>) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            let mut a = ODotAcc::zero();
+            for i in 0..=k {
+                a.add_prod_mut(&self.c[i], &OV::splat(p.c[k - i]));
+            }
+            c[k] = a.finish();
+        }
+        OJet { c }
+    }
+    /// plus the scalar series, coefficient by coefficient
+    #[inline(always)]
+    fn addp(self, p: OSeries<N>) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = self.c[k] + OV::splat(p.c[k]);
+        }
+        OJet { c }
+    }
+    /// coefficient k rounded to double-double, zero past the truncation
+    #[inline(always)]
+    fn coef(self, k: usize) -> DV<S> {
+        self.coef_od(k).to_dv()
+    }
+    /// set coefficient k from double-double, exactly
+    #[inline(always)]
+    fn set_coef(&mut self, k: usize, c: DV<S>) {
+        self.c[k] = OV::from_dv(c);
+    }
+    /// coefficient k rounded to quad-double, zero past the truncation
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<S> {
+        self.coef_od(k).to_qv()
+    }
+    /// set coefficient k from quad-double, exactly
+    #[inline(always)]
+    fn set_coef_qd(&mut self, k: usize, c: QV<S>) {
+        self.c[k] = OV::from_qv(c);
+    }
+    /// coefficient k, zero past the truncation
+    #[inline(always)]
+    fn coef_od(self, k: usize) -> OV<S> {
+        if k < N {
+            self.c[k]
+        } else {
+            OV::zero()
+        }
+    }
+    /// set coefficient k
+    #[inline(always)]
+    fn set_coef_od(&mut self, k: usize, c: OV<S>) {
+        self.c[k] = c;
+    }
+    /// the zero series
+    #[inline(always)]
+    fn zero() -> Self {
+        Self::from_coeffs([OV::zero(); N])
+    }
+    /// the constant series c (order 0), exactly
+    #[inline(always)]
+    fn cst(c: DV<S>) -> Self {
+        let mut j = Self::zero();
+        j.c[0] = OV::from_dv(c);
+        j
+    }
+    /// the series variable itself, c + h
+    #[inline(always)]
+    fn var(c: DD) -> Self {
+        let mut j = Self::splat(c);
+        if N > 1 {
+            j.c[1] = OV::splat(OD::ONE);
+        }
+        j
+    }
+    /// every coefficient times the constant lane vector c
+    #[inline(always)]
+    fn mulc(self, c: DV<S>) -> Self {
+        let c = OV::from_dv(c);
+        OJet {
+            c: self.c.map(|x| x * c),
+        }
+    }
+    /// every coefficient times an exact f64
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        OJet {
+            c: self.c.map(|x| x.mul_f(s)),
+        }
+    }
+    /// every coefficient times a power of two, exactly
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        OJet {
+            c: self.c.map(|x| x.mul_pwr2(s)),
+        }
+    }
+    /// plus the constant c at order 0
+    #[inline(always)]
+    fn addc(self, c: DV<S>) -> Self {
+        let mut j = self;
+        j.c[0] = self.c[0] + OV::from_dv(c);
+        j
+    }
+    /// every coefficient's 8 lanes set to its lane j
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        OJet {
+            c: self.c.map(|x| x.bcast(j)),
+        }
+    }
+    /// the value rounded to double-double
+    #[inline(always)]
+    fn val(self) -> DV<S> {
+        self.c[0].to_dv()
+    }
+    /// coefficient 1, rounded to double-double
+    #[inline(always)]
+    fn tan(self) -> DV<S> {
+        self.coef(1)
+    }
+    /// value v, coefficient 1 t, the others zero
+    #[inline(always)]
+    fn from_vt(v: DV<S>, t: DV<S>) -> Self {
+        let mut j = Self::cst(v);
+        if N > 1 {
+            j.c[1] = OV::from_dv(t);
+        }
+        j
+    }
+    /// the empty sum, one accumulator per order
+    #[inline(always)]
+    fn acc0() -> Self::Acc {
+        [ODotAcc::zero(); N]
+    }
+    /// a + x y, the Cauchy product's terms of order k added into accumulator k
+    #[inline(always)]
+    fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
+        let mut a = a;
+        for k in 0..N {
+            for i in 0..=k {
+                a[k].add_prod_mut(&x.c[i], &y.c[k - i]);
+            }
+        }
+        a
+    }
+    /// `acc` in place: the same products in the same order (`ODotAcc::add_prod_mut`), without moving the N
+    /// accumulators or the operands
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        for k in 0..N {
+            for i in 0..=k {
+                a[k].add_prod_mut(&x.c[i], &y.c[k - i]);
+            }
+        }
+    }
+    /// a + x c, c a constant lane vector
+    #[inline(always)]
+    fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
+        let c = OV::from_dv(c);
+        let mut a = a;
+        for k in 0..N {
+            a[k].add_prod_mut(&x.c[k], &c);
+        }
+        a
+    }
+    /// a + x
+    #[inline(always)]
+    fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
+        let mut a = a;
+        for k in 0..N {
+            a[k] = a[k].add(x.c[k]);
+        }
+        a
+    }
+    /// the sums, order by order
+    #[inline(always)]
+    fn fin(a: Self::Acc) -> Self {
+        OJet {
+            c: a.map(|x| x.finish()),
+        }
     }
 }
