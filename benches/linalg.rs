@@ -1,8 +1,9 @@
-// linalg.rs -- double-double LU against the f64 blocked LU, factor and solve, one thread
+// linalg.rs -- double-double LU against the f64 blocked LU, and the quad-double LU, factor and solve, one thread
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use multidouble::dd::DD;
-use multidouble::linalg::{ld_for, DDLu};
+use multidouble::linalg::{ld_for, DDLu, QDLu};
+use multidouble::qd::QD;
 
 fn matrix(n: usize) -> (usize, Vec<f64>, Vec<f64>) {
     let ld = ld_for(n);
@@ -34,6 +35,20 @@ fn lu(c: &mut Criterion) {
         g.bench_with_input(BenchmarkId::new("f64 factor", n), &n, |b, &n| {
             b.iter(|| DDLu::factor_f64(n, ld, hi.clone(), false).unwrap())
         });
+        // the same matrix in quad-double, with full lower parts
+        let qc: [Vec<f64>; 4] = {
+            let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+            for k in 0..ld * n {
+                let v = QD::new(hi[k], lo[k], lo[k] * 3.1e-17, hi[k] * 7.3e-49);
+                for (q, part) in c.iter_mut().enumerate() {
+                    part[k] = v.x[q];
+                }
+            }
+            c
+        };
+        g.bench_with_input(BenchmarkId::new("qd factor", n), &n, |b, &n| {
+            b.iter(|| QDLu::factor(n, ld, qc.clone(), false).unwrap())
+        });
         let f = DDLu::factor(n, ld, hi.clone(), lo.clone(), false).unwrap();
         let rhs: Vec<DD> = (0..n).map(|i| DD::from_f64(i as f64)).collect();
         g.throughput(Throughput::Elements((n * n) as u64));
@@ -41,6 +56,15 @@ fn lu(c: &mut Criterion) {
             b.iter(|| {
                 let mut x = rhs.clone();
                 f.solve(&mut x);
+                x
+            })
+        });
+        let qf = QDLu::factor(n, ld, qc, false).unwrap();
+        let qrhs: Vec<QD> = (0..n).map(|i| QD::from_f64(i as f64)).collect();
+        g.bench_with_input(BenchmarkId::new("qd solve", n), &n, |b, _| {
+            b.iter(|| {
+                let mut x = qrhs.clone();
+                qf.solve(&mut x);
                 x
             })
         });
