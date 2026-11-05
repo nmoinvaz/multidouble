@@ -88,6 +88,8 @@ pub mod native {
 }
 
 #[cfg(test)]
+mod od_tests;
+#[cfg(test)]
 mod qd_tests;
 
 /// The README's examples, compiled and run as doctests.
