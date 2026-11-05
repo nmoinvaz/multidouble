@@ -6,7 +6,10 @@
 //!
 //! The products accumulate with the lane type's dot accumulator (`Lane::acc`), in the order of the index; for the f64
 //! lanes (`VAL_F64` or `TAN_F64`) the B lane vectors' accumulations are interleaved, since a single f64 chain is
-//! latency-bound, and each still sums its terms in index order. A matrix product is `MatLane::dmat_apply`: the
+//! latency-bound, and each still sums its terms in index order. `cs_into`, `cs_range_into` and `cs_w_into` write the
+//! same sums, bitwise, into a caller's field, with the accumulator and the terms borrowed (`Lane::acc_mut`), which
+//! for jet lanes saves copying kilobytes per term. `cs_lane_into` and `cs_w_lane_into` are one lane vector of them,
+//! for a caller that sums the lane vectors on separate threads. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
@@ -413,6 +416,138 @@ fn cs_il<T: Lane, const B: usize>(
         }
     }
     Fl(a.map(T::fin))
+}
+
+/// `cs` into out: bitwise `cs(x, y, k)`, with the accumulator and the terms borrowed (`Lane::acc_mut`) and the sum
+/// written in place, so a jet lane's sum makes no copy of its kilobytes per term. out is borrowed apart from x and y;
+/// to write a series' own order k, split the vector (`split_at_mut`).
+///
+/// ```
+/// use multidouble::dd::DD;
+/// use multidouble::field::{cs, cs_into, Fl};
+/// use multidouble::native::QJet;
+/// let x: Vec<Fl<QJet<3>, 1>> = (1..4).map(|j| Fl::splat(DD::from_f64(j as f64))).collect();
+/// let mut out = Fl::zero();
+/// cs_into(&mut out, &x, &x, 2);
+/// assert_eq!(out.coef_qd(0).get(0), cs(&x, &x, 2).coef_qd(0).get(0));
+/// ```
+#[inline(always)]
+pub fn cs_into<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize) {
+    cs_range_into(out, x, y, k, 0, k);
+}
+
+/// `cs_range` into out: bitwise `cs_range(x, y, k, lo, hi)`, in place as `cs_into`
+#[inline(always)]
+pub fn cs_range_into<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+) {
+    if T::VAL_F64 || T::TAN_F64 {
+        cs_il_into(out, x, y, k, lo, hi, |_| 1.0, false);
+    } else {
+        for b in 0..B {
+            cs_lane_into(&mut out.0[b], b, x, y, k, lo, hi);
+        }
+    }
+}
+
+/// `cs_w` into out: bitwise `cs_w(x, y, k, lo, hi, w)`, in place as `cs_into`
+#[inline(always)]
+pub fn cs_w_into<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+) {
+    if T::VAL_F64 || T::TAN_F64 {
+        cs_il_into(out, x, y, k, lo, hi, w, true);
+    } else {
+        for b in 0..B {
+            cs_w_lane_into(&mut out.0[b], b, x, y, k, lo, hi, &w);
+        }
+    }
+}
+
+/// Lane vector b of `cs_range_into`, `sum_{j=lo..=hi} x[j].0[b] y[k-j].0[b]` into out: bitwise `cs_range`'s lane
+/// vector b on every lane type, the f64 lanes included (their interleaved sums take each vector's terms in the order
+/// j = lo..=hi too), so a caller can sum the B lane vectors on separate threads.
+#[inline(always)]
+pub fn cs_lane_into<T: Lane, const B: usize>(
+    out: &mut T,
+    b: usize,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+) {
+    let mut a = T::acc0();
+    for j in lo..=hi {
+        T::acc_mut(&mut a, &x[j].0[b], &y[k - j].0[b]);
+    }
+    *out = T::fin(a);
+}
+
+/// Lane vector b of `cs_w_into`, `sum_{j=lo..=hi} (w(j) x[j].0[b]) y[k-j].0[b]` into out: bitwise `cs_w`'s lane
+/// vector b on every lane type, as `cs_lane_into`
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn cs_w_lane_into<T: Lane, const B: usize>(
+    out: &mut T,
+    b: usize,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+) {
+    let mut a = T::acc0();
+    for j in lo..=hi {
+        let xw = x[j].0[b].mulf(w(j));
+        T::acc_mut(&mut a, &xw, &y[k - j].0[b]);
+    }
+    *out = T::fin(a);
+}
+
+/// `cs_il` into out, with the accumulators and the terms borrowed (`Lane::acc_mut`): bitwise `cs_il`
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn cs_il_into<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+    weighted: bool,
+) {
+    let mut a = [T::acc0(); B];
+    for j in lo..=hi {
+        let (xj, yj) = (&x[j].0, &y[k - j].0);
+        if weighted {
+            let wj = w(j);
+            for b in 0..B {
+                let xw = xj[b].mulf(wj);
+                T::acc_mut(&mut a[b], &xw, &yj[b]);
+            }
+        } else {
+            for b in 0..B {
+                T::acc_mut(&mut a[b], &xj[b], &yj[b]);
+            }
+        }
+    }
+    for b in 0..B {
+        out.0[b] = T::fin(a[b]);
+    }
 }
 
 /// Horner evaluation `sum_k s[k] h^k`
