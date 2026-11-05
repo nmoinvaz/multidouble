@@ -18,7 +18,7 @@ about 64 digits, and an octo-double a sum of eight, about 126 digits. All are bu
 | `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `DV::div_by` for several divisions by one b through `b.hi.divisor()`, bitwise the same as `/`; `dv::DotAcc` accumulates sums of products; `dd::split` and `dd::join` between slices of double-doubles and their hi and lo arrays |
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QV::div_by` for several divisions by one b through `b.c[0].divisor()`, bitwise the same as `/`; `QdAcc`, `QDotAcc` accumulators (`QDotAcc::add_prod_mut` adds a product in place); `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays; `qd::to_parts` and `qd::from_parts` between slices of quad-doubles and their four part arrays |
 | `od::OD`, `ov::OV` | octo-double, scalar and 8-lane: the quad-double algorithms carried to eight parts and written once for both, add, multiply, divide (also by a shared divisor), square root, comparisons, exact decimal parsing and printing; `OdAcc`, `ODotAcc` accumulators; `OV` is a `dual::Lane` (`Lane::VAL_OD`), so code written over the trait runs in octo-double and `solve_lanes_refine` refines a double-double LU's solve to octo-double; `OV::new` renormalizes eight parts on the lanes, and `ov::axpy_parts` is y + a x on octo-double vectors kept as eight part arrays |
-| `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
+| `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Ou`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, an octo-double value with an octo-double tangent (`Fl::from_vt_od` seeds a field of them), and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `jet::Jet<N>` | a truncated power series lane: N double-double coefficients in one variable, Cauchy products and series quotients, so a computation written over `dual::Lane` gives its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a high-order Taylor continuation of a branch); `jet::Series<N>` is its scalar parameter arithmetic (`Lane::P`, double-double on every other lane, so constants formed from the parameter stay bit for bit what they were) |
 | `jet::QJet<N>` | the same in quad-double, with `jet::QSeries<N>` its parameter arithmetic: Taylor coefficients to quad-double accuracy where cancellation in the computation amplifies double-double rounding; `Lane::coef_qd` and `set_coef_qd` read and set them without rounding to double-double |
 | `jet::OJet<N>` | the same in octo-double, with `jet::OSeries<N>` its parameter arithmetic, for when the amplification exceeds even quad-double; `Lane::coef_od` and `set_coef_od` read and set its coefficients in octo-double, and its sums accumulate in place (`ODotAcc::add_prod_mut`) |
@@ -177,8 +177,10 @@ The octo-double jet's coefficients are checked against exact arithmetic too (`te
 reciprocals, quotients and a rational function in the series variable, and series formed in the parameter arithmetic,
 are within 10⁻¹²³ of the sum of their terms' magnitudes (2.2×10⁻¹²⁸ seen, where the quad-double jet errs by 2×10⁻⁶⁴).
 The order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps (1.1×10⁻¹³⁰ seen; two steps
-leave 2.4×10⁻⁹⁵). On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12 times,
-and a 24-order solve on 32 values 8.3 times, with four refinement steps against two (`cargo bench --bench jet`).
+leave 2.4×10⁻⁹⁵). On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12
+times, and a 24-order solve on 32 values 8.3 times, with four refinement steps against two (`cargo bench --bench jet`).
+The octo-double dual `Ou` gives partial derivatives and Jacobian columns within 10⁻¹²³ of the exact ones (3.6×10⁻¹³⁰
+seen, where `Qu` errs by 1.9×10⁻⁶⁴), and its value is `OV`'s bit for bit.
 
 Every check can fail. Two kinds of controls show it:
 
@@ -206,7 +208,7 @@ cargo bench --bench jet                                         # OJet<24> again
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
 ```
 
-`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, and `OJet` its scalar series `OSeries`, on every backend the CPU has. The NEON backend's code is also
+`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, `OJet` its scalar series `OSeries` and `Ou` its scalar formulas, on every backend the CPU has. The NEON backend's code is also
 compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
 every runner, not only on ARM. CI runs the whole suite on:
 

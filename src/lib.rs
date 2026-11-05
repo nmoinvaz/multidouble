@@ -18,8 +18,8 @@
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent,
-//!   [`dual::Dc`] a double-double value with a complex tangent, and f64 variants), behind the [`dual::Lane`] trait,
-//!   so one generic code gives values and exact derivatives;
+//!   [`dual::Ou`] octo-double value and tangent, [`dual::Dc`] a double-double value with a complex tangent, and f64
+//!   variants), behind the [`dual::Lane`] trait, so one generic code gives values and exact derivatives;
 //!   [`dual::Counted`] counts the operations of such code.
 //! * [`jet`]: truncated power series over these lanes, in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
 //!   and octo-double ([`jet::OJet`]), with their scalar parameter arithmetic ([`jet::Series`], [`jet::QSeries`],
