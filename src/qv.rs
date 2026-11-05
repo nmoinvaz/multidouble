@@ -881,9 +881,10 @@ impl<S: Simd> QDotAcc<S> {
             || *self = self.plus_prod(a, b),
         )
     }
-    /// self + a b, the step of `add_prod` and `add_prod_mut`
+    /// self + a b, the step of `add_prod` and `add_prod_mut`, inlined where it is used (`crate::jet::QJet`'s
+    /// accumulation runs its convolution as one `Simd::hot` step around it)
     #[inline(always)]
-    fn plus_prod(&self, a: &QV<S>, b: &QV<S>) -> Self {
+    pub(crate) fn plus_prod(&self, a: &QV<S>, b: &QV<S>) -> Self {
         let (a, b) = (a.c, b.c);
         let (p00, e00) = two_prod(a[0], b[0]);
         let (p01, e01) = two_prod(a[0], b[1]);
@@ -1019,6 +1020,11 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     #[inline(always)]
     fn acc(a: QDotAcc<S>, x: Self, y: Self) -> QDotAcc<S> {
         a.add_prod(x, y)
+    }
+    /// `acc` in place (`QDotAcc::add_prod_mut`)
+    #[inline(always)]
+    fn acc_mut(a: &mut QDotAcc<S>, x: &Self, y: &Self) {
+        a.add_prod_mut(x, y);
     }
     #[inline(always)]
     fn accc(a: QDotAcc<S>, x: Self, c: DV<S>) -> QDotAcc<S> {
