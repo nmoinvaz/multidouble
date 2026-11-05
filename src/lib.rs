@@ -58,6 +58,7 @@ pub mod field;
 pub mod jet;
 pub mod linalg;
 pub mod od;
+pub mod ov;
 pub mod qd;
 pub mod qv;
 pub mod simd;
@@ -72,6 +73,8 @@ pub mod native {
     pub type DotAcc = crate::dv::DotAcc<Native>;
     pub type QV = crate::qv::QV<Native>;
     pub type QDotAcc = crate::qv::QDotAcc<Native>;
+    pub type OV = crate::ov::OV<Native>;
+    pub type ODotAcc = crate::ov::ODotAcc<Native>;
     pub type Du = crate::dual::Du<Native>;
     pub type Qu = crate::dual::Qu<Native>;
     pub type Dc = crate::dual::Dc<Native>;
