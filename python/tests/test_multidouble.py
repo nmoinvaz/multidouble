@@ -628,7 +628,9 @@ def test_qd_solve_is_the_rust_lu_bitwise():
 def test_qd_solve_renormalizes_its_inputs():
     """parts that are not normalized are renormalized first: A and b given as (0, x0, x1, x2), the same values with a
     zero leading part, which the pivot search and the zero-skips read, solve to the bounds (unnormalized, every
-    leading part would read as zero and the factorization would raise as singular), for A x = b and A^T x = b"""
+    leading part would read as zero and the factorization would raise as singular), for A x = b and A^T x = b by
+    QDLu and for qd_solve. Control: each of those solutions off by 2^-190 of its size in one entry misses the backward
+    bound."""
     n = 13
     A, b = pinned_system(n)
     A[3][:], b[3][:] = 0.0, 0.0  # three parts, so that the shift keeps the values exactly
@@ -638,7 +640,13 @@ def test_qd_solve_renormalizes_its_inputs():
         x = md.QDLu(*shift(A)).solve(*shift(b), transpose=t)
         fwd, bwd = qd_errors(A, b, x, transpose=t)
         assert bwd <= n * UQ and fwd <= n * cond * UQ, (bwd / UQ, fwd / (cond * UQ))
-    assert qd_errors(A, b, md.qd_solve(*shift(A), *shift(b)))[1] <= n * UQ
+        wrong = [p.copy() for p in x]
+        wrong[3][5] += 2.0**-190 * wrong[0][5]
+        assert qd_errors(A, b, wrong, transpose=t)[1] > n * UQ
+    x = [p.copy() for p in md.qd_solve(*shift(A), *shift(b))]
+    assert qd_errors(A, b, x)[1] <= n * UQ
+    x[3][5] += 2.0**-190 * x[0][5]
+    assert qd_errors(A, b, x)[1] > n * UQ
 
 
 def test_qd_solve_errors():
