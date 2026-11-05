@@ -146,6 +146,16 @@ impl<S: Simd> OV<S> {
     pub fn zero() -> Self {
         OV { c: [V8::zero(); 8] }
     }
+    /// renormalized from eight parts, lane j bitwise `OD::new` of the parts' lane j
+    #[inline]
+    pub fn new(c: [V8<S>; 8]) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || OV {
+                c: <V8<S> as Limb>::renorm(c),
+            },
+        )
+    }
     /// x on every lane
     #[inline(always)]
     pub fn splat(x: OD) -> Self {
