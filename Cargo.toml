@@ -44,3 +44,7 @@ harness = false
 [[bench]]
 name = "linalg"
 harness = false
+
+[[bench]]
+name = "field"
+harness = false
