@@ -13,6 +13,7 @@
 use crate::dd::DD;
 use crate::dual::{Lane, Param};
 use crate::dv::{DotAcc, DV};
+use crate::od::{OdAcc, OD};
 use crate::ov::OV;
 use crate::qd::{QdAcc, QD};
 use crate::qv::{QDotAcc, QV};
@@ -765,5 +766,129 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
         QJet {
             c: a.map(|x| x.finish()),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// octo-double jets
+// ---------------------------------------------------------------------------------------------------------------
+
+/// A scalar truncated power series, N octo-double coefficients: the parameter arithmetic ([`Lane::P`]) of
+/// `OJet<N>`, with `Param::var(c)` the series c + h. Products and quotients sum through the scalar accumulator
+/// `OdAcc`, the twin of `OJet`'s `ODotAcc`, so they are bitwise an `OJet<N>`'s with the series on every lane.
+#[derive(Clone, Copy, Debug)]
+pub struct OSeries<const N: usize> {
+    /// the coefficients of the orders 0, ..., N - 1
+    pub c: [OD; N],
+}
+
+impl<const N: usize> OSeries<N> {
+    /// the Cauchy product's coefficient k of x and y, orders 0..=k through the scalar dot accumulator
+    #[inline(always)]
+    fn conv(x: &[OD; N], y: &[OD; N], k: usize) -> OdAcc {
+        let mut a = OdAcc::zero();
+        for i in 0..=k {
+            a = a.add_prod(x[i], y[k - i]);
+        }
+        a
+    }
+}
+
+impl<const N: usize> Add for OSeries<N> {
+    type Output = Self;
+    /// coefficient by coefficient
+    #[inline(always)]
+    fn add(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = self.c[k] + o.c[k];
+        }
+        OSeries { c }
+    }
+}
+impl<const N: usize> Sub for OSeries<N> {
+    type Output = Self;
+    /// coefficient by coefficient
+    #[inline(always)]
+    fn sub(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = self.c[k] - o.c[k];
+        }
+        OSeries { c }
+    }
+}
+impl<const N: usize> Neg for OSeries<N> {
+    type Output = Self;
+    /// every coefficient negated
+    #[inline(always)]
+    fn neg(self) -> Self {
+        OSeries { c: self.c.map(|x| -x) }
+    }
+}
+impl<const N: usize> Mul for OSeries<N> {
+    type Output = Self;
+    /// the Cauchy product truncated at order N - 1
+    #[inline(always)]
+    fn mul(self, o: Self) -> Self {
+        let mut c = self.c;
+        for k in 0..N {
+            c[k] = Self::conv(&self.c, &o.c, k).finish();
+        }
+        OSeries { c }
+    }
+}
+impl<const N: usize> Div for OSeries<N> {
+    type Output = Self;
+    /// q = x / y by q_k = (x_k − Σ_{i=1..k} y_i q_{k−i}) / y_0
+    #[inline(always)]
+    fn div(self, o: Self) -> Self {
+        let mut q = self.c;
+        q[0] = self.c[0] / o.c[0];
+        for k in 1..N {
+            let mut a = OdAcc::zero();
+            for i in 1..=k {
+                a = a.add_prod(o.c[i], q[k - i]);
+            }
+            q[k] = (self.c[k] - a.finish()) / o.c[0];
+        }
+        OSeries { c: q }
+    }
+}
+
+impl<const N: usize> Param for OSeries<N> {
+    /// the constant series 1
+    #[inline(always)]
+    fn one() -> Self {
+        Self::from_dd(DD::ONE)
+    }
+    /// the constant series x, exactly
+    #[inline(always)]
+    fn from_f64(x: f64) -> Self {
+        Self::from_dd(DD::from_f64(x))
+    }
+    /// the constant series x, exactly
+    #[inline(always)]
+    fn from_dd(x: DD) -> Self {
+        const { assert!(N >= 1, "a series has at least its value") }
+        let mut c = [OD::ZERO; N];
+        c[0] = OD::from_dd(x);
+        OSeries { c }
+    }
+    /// every coefficient times an exact f64
+    #[inline(always)]
+    fn mul_f(self, s: f64) -> Self {
+        OSeries {
+            c: self.c.map(|x| x.mul_f(s)),
+        }
+    }
+    /// the series c + h
+    #[inline(always)]
+    fn var(c: DD) -> Self {
+        let mut s = Self::from_dd(c);
+        if N > 1 {
+            s.c[1] = OD::ONE;
+        }
+        s
     }
 }
