@@ -292,9 +292,16 @@ fn every_lane<S: Simd>(c: &mut impl Check) {
     c.check::<Counted<QJet<S, 5>>>("Counted<QJet<5>>");
 }
 
-/// k, a check that panics on a mismatch, run on every backend this CPU has
-fn on_every_backend<K: Kernel<Output = ()> + Clone>(k: K) {
-    let ran: Vec<&str> = simd::for_each_available(k).into_iter().map(|r| r.0).collect();
+/// k, a check that panics on a mismatch, run on every backend this CPU has, on a thread with a 64 MiB stack. Built
+/// without optimization (the coverage run) every temporary of a check has its own stack slot, and those of
+/// `QJet<24>`'s fields and accumulators overflow a test thread's 2 MiB on x86, where `Simd::hot` is always inlined.
+fn on_every_backend<K: Kernel<Output = ()> + Clone + Send + 'static>(k: K) {
+    let ran: Vec<&str> = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || simd::for_each_available(k).into_iter().map(|r| r.0).collect())
+        .expect("a thread for the check")
+        .join()
+        .unwrap_or_else(|e| std::panic::resume_unwind(e));
     assert_eq!(ran, simd::available());
     println!("checked on {ran:?}");
 }
