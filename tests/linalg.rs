@@ -733,6 +733,78 @@ fn qd_lu_sparse_and_singular() {
     assert!(QDLu::factor(n, ld, c, false).is_err());
 }
 
+/// part q of entry (i, j) of the pinned system's matrix, or of entry i of b when j is None: small integers over powers
+/// of two, exact in f64, so that the Python tests (`pinned_system` in python/tests/test_multidouble.py) build the same
+/// system. The parts overlap, so `QD::new` renormalizes them, as the Python binding does.
+fn pinned_part(i: usize, j: Option<usize>, q: usize) -> f64 {
+    let scale = [2f64.powi(-7), 2f64.powi(-58), 2f64.powi(-113), 2f64.powi(-168)][q];
+    let t = match j {
+        Some(j) => {
+            ((i * 37 + j * 101 + q * 53 + i * j * 7) % 211) as f64 - 105.0 + if q == 0 && i == j { 64.0 } else { 0.0 }
+        }
+        None => ((i * 29 + q * 71) % 199) as f64 - 99.0,
+    };
+    t * scale
+}
+
+/// FNV-1a over the bits of x's parts, part 0 of every entry first, then part 1, ... (as the Python tests hash them)
+fn parts_hash(x: &[QD]) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for q in 0..4 {
+        for v in x {
+            h ^= v.x[q].to_bits();
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    h
+}
+
+/// The pinned system's solutions of A x = b and A^T x = b by QDLu called directly (n = 37, so the last row block is
+/// partial, with row swaps), each entry renormalized by `QD::new` as the Python binding does. The Python tests check
+/// `qd_solve` and `QDLu` against the same hashes, so the binding gives the Rust LU's bits; any change to the LU's bits
+/// fails here. The solutions are checked to quad-double accuracy first. Control: the last bit of one entry's second
+/// part flipped in b (2^-105 of it) changes the hash.
+#[test]
+fn qd_lu_pinned_bits() {
+    let n = 37;
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..n {
+            let p = |q| pinned_part(i, Some(j), q);
+            let v = QD::new(p(0), p(1), p(2), p(3));
+            for q in 0..4 {
+                c[q][j * ld + i] = v.x[q];
+            }
+        }
+    }
+    let b: Vec<QD> = (0..n)
+        .map(|i| {
+            let p = |q| pinned_part(i, None, q);
+            QD::new(p(0), p(1), p(2), p(3))
+        })
+        .collect();
+    let lu = QDLu::factor(n, ld, c.clone(), false).unwrap();
+    assert!((0..n).any(|k| lu.perm[k] != k), "the pinned system should pivot");
+    let mut x = b.clone();
+    lu.solve(&mut x);
+    let mut y = b.clone();
+    lu.solve_t(&mut y);
+    for (sol, t) in [(&x, false), (&y, true)] {
+        let r = apply_qd(n, ld, &c, sol, t);
+        let e = max_rel_err_qd(&r, &b);
+        println!("pinned system, transpose {t}: relative residual {e:.1e}");
+        assert!(e < 1e-60, "{e:e}");
+    }
+    let (hx, hy) = (parts_hash(&x), parts_hash(&y));
+    println!("pinned system: hashes {hx:#018x} {hy:#018x}");
+    assert_eq!((hx, hy), (0x90714c6ebacc4705, 0xe34a230e39e22035));
+    let mut z = b.clone();
+    z[5].x[1] = f64::from_bits(z[5].x[1].to_bits() ^ 1);
+    lu.solve(&mut z);
+    assert_ne!(parts_hash(&z), hx);
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // the determinant of a complex matrix
 // ---------------------------------------------------------------------------------------------------------------
