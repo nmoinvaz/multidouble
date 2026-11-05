@@ -1,10 +1,13 @@
 //! The 8-lane types against the scalar ones, bit for bit, on every backend this CPU runs (`simd::available()`:
-//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV` and `OV`.
+//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV`, `OV`, and the
+//! octo-double jet `OJet` against its scalar series `OSeries`.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
+use multidouble::dual::{Lane, Param};
 use multidouble::dv::{DotAcc, DV};
+use multidouble::jet::{OJet, OSeries};
 use multidouble::od::{OdAcc, OD};
 use multidouble::ov::{ODotAcc, OV};
 use multidouble::qd::QD;
@@ -755,4 +758,131 @@ impl Kernel for OvSignedZeros {
 #[test]
 fn ov_signed_zeros_match_od() {
     on_every_backend(OvSignedZeros);
+}
+
+/// the lanes of `OJet<6>` against `OSeries<6>` on one backend, lane j of the jets being the series x_j, y_j: the
+/// number of lane coefficients that differ in any bit
+#[derive(Clone)]
+struct OjetMatchesOseries;
+
+impl Kernel for OjetMatchesOseries {
+    type Output = usize;
+    /// every jet operation against the scalar series, counting the lane coefficients that differ
+    #[inline(always)]
+    fn run<S: Simd>(self) -> usize {
+        const N: usize = 6;
+        let mut bad = 0;
+        let mut r = Rng(19);
+        let series = |r: &mut Rng, divisor: bool| -> [OSeries<N>; 8] {
+            std::array::from_fn(|_| {
+                let mut c: [OD; N] = std::array::from_fn(|_| od8(r));
+                if divisor {
+                    c[0] = OD::from_f64(1.5) + od8(r).mul_pwr2(2f64.powi(-12));
+                }
+                OSeries { c }
+            })
+        };
+        let jet = |s: &[OSeries<N>; 8]| -> OJet<S, N> {
+            OJet::from_coeffs(std::array::from_fn(|k| {
+                OV::from_lanes(&std::array::from_fn(|j| s[j].c[k]))
+            }))
+        };
+        for _ in 0..ROUNDS / 200 {
+            let (xs, ys) = (series(&mut r, false), series(&mut r, true));
+            let p = series(&mut r, false)[0];
+            let f = r.dd(5).hi;
+            let (x, y) = (jet(&xs), jet(&ys));
+            let acc = OJet::<S, N>::fin(OJet::<S, N>::acc1(OJet::<S, N>::acc(OJet::<S, N>::acc0(), x, y), y));
+            let mut acc_mut = OJet::<S, N>::acc0();
+            OJet::<S, N>::acc_mut(&mut acc_mut, &x, &y);
+            let lanes = [
+                x + y,
+                x - y,
+                -x,
+                x * y,
+                x / y,
+                x.mulp(p),
+                x.addp(p),
+                x.mulf(f),
+                x.mul_pwr2(0.125),
+                acc,
+                OJet::<S, N>::fin(acc_mut),
+            ];
+            for j in 0..8 {
+                let (a, b) = (xs[j], ys[j]);
+                let want = [
+                    a + b,
+                    a - b,
+                    -a,
+                    a * b,
+                    a / b,
+                    a * p,
+                    a + p,
+                    a.mul_f(f),
+                    OSeries {
+                        c: a.c.map(|v| v.mul_pwr2(0.125)),
+                    },
+                    OSeries {
+                        c: std::array::from_fn(|k| {
+                            let mut s = OdAcc::zero();
+                            for i in 0..=k {
+                                s = s.add_prod(a.c[i], b.c[k - i]);
+                            }
+                            s.add(b.c[k]).finish()
+                        }),
+                    },
+                    a * b,
+                ];
+                for (n, w) in want.iter().enumerate() {
+                    for k in 0..N {
+                        let g = lanes[n].c[k].lane(j);
+                        if !g.x.iter().zip(w.c[k].x.iter()).all(|(u, v)| same(*u, *v)) {
+                            if bad == 0 {
+                                println!("{}: op {n} lane {j} order {k}: {g:?} vs {:?}", S::NAME, w.c[k]);
+                            }
+                            bad += 1;
+                        }
+                    }
+                }
+                for k in 0..N {
+                    let c = a.c[k];
+                    let rounded = [
+                        (x.coef_qd(k).lane(j).x, c.to_qd().x),
+                        (QV::from_dv(x.coef(k)).lane(j).x, QD::from_dd(c.to_dd()).x),
+                    ];
+                    bad += rounded
+                        .iter()
+                        .filter(|(g, w)| !g.iter().zip(w.iter()).all(|(u, v)| same(*u, *v)))
+                        .count();
+                }
+            }
+        }
+        bad
+    }
+}
+
+/// `OJet` matches `OSeries` bit for bit lane by lane on every backend: the arithmetic, `mulp` and `addp` with a series,
+/// the accumulator by value and in place, and the coefficients rounded to quad-double and double-double
+#[test]
+fn ojet_matches_oseries() {
+    let ran = simd::for_each_available(OjetMatchesOseries);
+    assert_eq!(ran.iter().map(|r| r.0).collect::<Vec<_>>(), simd::available());
+    assert!(ran.iter().all(|r| r.1 == 0), "lane coefficients that differ: {ran:?}");
+    println!("checked on {:?}", simd::available());
+}
+
+/// Control (feature `mutate`): with two-product's fused multiply-subtract replaced by a plain product on the
+/// compile-time backend only (`od::mutate::OV_FMA_PLAIN`), the jet check fails on that backend and passes on the others
+#[cfg(feature = "mutate")]
+#[test]
+fn ojet_matches_oseries_control_fma_on_one_backend() {
+    use multidouble::od::mutate;
+    mutate::set(mutate::OV_FMA_PLAIN);
+    let ran = simd::for_each_available(OjetMatchesOseries);
+    mutate::set(0);
+    for (name, bad) in &ran {
+        let native = *name == <multidouble::simd::Native as Simd>::NAME;
+        println!("{name}: {bad} lane coefficients differ (native {native})");
+        assert_eq!(*bad > 0, native, "{name}: {bad}");
+    }
 }
