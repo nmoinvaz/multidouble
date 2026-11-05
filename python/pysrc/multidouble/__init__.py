@@ -12,6 +12,9 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double.
 
+Their array arguments may be any arrays or sequences of real numbers, strided, in Fortran order or of another numeric
+dtype. Each is converted to a C-contiguous float64 array, and one that is already so is passed on without a copy.
+
 In numpy, for code that composes them with other numpy operations (these are plain numpy expressions, so the same
 inputs give the same bits on every machine with IEEE float64 arithmetic):
 
@@ -25,11 +28,83 @@ import time
 
 import numpy as np
 
-from ._multidouble import add, dd_matvec, dd_op, dd_solve, div, isa, mul, qd_add_dd, qd_axpy, sub
-from ._multidouble import dd_dot as _dd_dot
+from . import _multidouble as _md
+from ._multidouble import isa
 
 __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_solve", "qd_add_dd", "qd_axpy", "isa", "two_sum",
            "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
+
+
+def _f64(v, name):
+    """v as a C-contiguous float64 array for the Rust functions: v itself if it is one (no copy), else a converted
+    copy (np.ascontiguousarray). Any array or sequence of real numbers converts (float, integer, unsigned and bool
+    dtypes, and objects that float() converts). Complex, string and other dtypes, and None, raise TypeError naming
+    the argument, where numpy's conversion would drop an imaginary part, parse a string or give nan."""
+    a = np.asarray(v)
+    if a.dtype.kind == "O":
+        # astype would turn None into nan
+        if any(x is None for x in a.flat):
+            raise TypeError(f"{name} must be real numbers, not None")
+        try:
+            a = a.astype(np.float64)
+        except (TypeError, ValueError) as e:
+            raise TypeError(f"{name} must be real numbers ({e})") from e
+    elif a.dtype.kind not in "biuf":
+        raise TypeError(f"{name} must be real numbers, not {a.dtype}")
+    return np.ascontiguousarray(a, dtype=np.float64)
+
+
+def dd_op(op, ah, al, bh, bl):
+    """(ah + al) op (bh + bl) elementwise in double-double, any length: op 0 add, 1 mul, 2 div, 3 sub. Returns the
+    (hi, lo) arrays of the result."""
+    return _md.dd_op(op, _f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def add(ah, al, bh, bl):
+    """a + b in double-double, elementwise: (hi, lo)"""
+    return _md.add(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def sub(ah, al, bh, bl):
+    """a - b in double-double, elementwise: (hi, lo)"""
+    return _md.sub(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def mul(ah, al, bh, bl):
+    """a b in double-double, elementwise: (hi, lo)"""
+    return _md.mul(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def div(ah, al, bh, bl):
+    """a / b in double-double, elementwise: (hi, lo)"""
+    return _md.div(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def dd_matvec(ah, al, vh, vl):
+    """A v in double-double: A as (n, m) hi and lo arrays, v as hi and lo arrays of length m, each row of the result
+    the dot product of dd_dot. Returns the (hi, lo) arrays of A v."""
+    return _md.dd_matvec(_f64(ah, "ah"), _f64(al, "al"), _f64(vh, "vh"), _f64(vl, "vl"))
+
+
+def dd_solve(ah, al, bh, bl):
+    """x with A x = b in double-double, by LU with partial pivoting: A as (n, n) hi and lo arrays, b as hi and lo
+    arrays of length n. Returns the (hi, lo) arrays of x. Raises ValueError if A is singular."""
+    return _md.dd_solve(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def qd_add_dd(z0, z1, z2, z3, dh, dl):
+    """(z0 + z1 + z2 + z3) + (dh + dl) elementwise in quad-double: a quad-double array (four float64 arrays,
+    renormalized first) plus a double-double one. Returns the four parts of the result, renormalized."""
+    z = [_f64(v, n) for v, n in ((z0, "z0"), (z1, "z1"), (z2, "z2"), (z3, "z3"))]
+    return _md.qd_add_dd(*z, _f64(dh, "dh"), _f64(dl, "dl"))
+
+
+def qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3):
+    """y + a x elementwise in quad-double for quad-double arrays x and y (four float64 arrays each, the parts
+    normalized) and a float a. Returns the four parts of the result."""
+    x = [_f64(v, n) for v, n in ((x0, "x0"), (x1, "x1"), (x2, "x2"), (x3, "x3"))]
+    y = [_f64(v, n) for v, n in ((y0, "y0"), (y1, "y1"), (y2, "y2"), (y3, "y3"))]
+    return _md.qd_axpy(a, *x, *y)
 
 
 def two_sum(a, b):
@@ -112,8 +187,7 @@ def dd_dot(xh, xl, yh, yl):
     """sum_i (xh + xl)_i (yh + yl)_i in double-double, as (hi, lo) floats: the Rust dot product (8 lanes at a time on
     the best SIMD backend, bitwise the same on every backend), to about (n / 8 + 12) 2^-106 of sum |x_i y_i|. Any
     sequences of numbers of one length."""
-    a = [np.ascontiguousarray(v, dtype=np.float64) for v in (xh, xl, yh, yl)]
-    return _dd_dot(*a)
+    return _md.dd_dot(_f64(xh, "xh"), _f64(xl, "xl"), _f64(yh, "yh"), _f64(yl, "yl"))
 
 
 def _dd_div(a, b):

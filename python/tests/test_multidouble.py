@@ -338,3 +338,107 @@ def test_dd_matvec_within_bound():
     assert abs(Fraction(wh[i]) + Fraction(wl[i]) - want) > bound * scale
     with pytest.raises(ValueError):
         md.dd_matvec(ah, al, vh[:-1], vl[:-1])
+
+
+def conversion_cases():
+    """every array function of the package with valid arguments, all arrays C-contiguous float64: name -> arguments"""
+    rng = np.random.default_rng(31)
+    n = 21
+    ah, al = rand_dd(rng, n)
+    bh, bl = rand_dd(rng, n)
+    Ah, Al = (x.reshape(3, 7) for x in rand_dd(rng, 21))
+    Sh, Sl = (x.reshape(6, 6) for x in rand_dd(rng, 36, emax=2))
+    Sh = Sh + 16 * np.eye(6)
+    z, y = rand_qd(rng, n), rand_qd(rng, n)
+    two = (ah, al, bh, bl)
+    return {
+        "add": two, "sub": two, "mul": two, "div": two, "dd_op": (1,) + two, "dd_dot": two,
+        "dd_matvec": (Ah, Al, bh[:7], bl[:7]), "dd_solve": (Sh, Sl, bh[:6], bl[:6]),
+        "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y),
+    }
+
+
+def same_bits(x, y):
+    """two results (tuples of arrays or of floats) with the same bits, NaNs included"""
+    bx = [np.asarray(o, dtype=np.float64).view(np.uint64) for o in x]
+    by = [np.asarray(o, dtype=np.float64).view(np.uint64) for o in y]
+    return len(bx) == len(by) and all(a.shape == b.shape and np.array_equal(a, b) for a, b in zip(bx, by))
+
+
+def variants(x):
+    """inputs with x's values (or values derived from them) that are not C-contiguous float64 arrays: a strided view,
+    a view in reverse order, Fortran order (2-D), integers, float32 and a nested list"""
+    s = np.zeros(x.shape[:-1] + (2 * x.shape[-1],))
+    s[..., ::2] = x
+    out = {"strided": s[..., ::2], "reversed": x[::-1].copy()[::-1], "int64": np.rint(x * 1024).astype(np.int64),
+           "float32": x.astype(np.float32), "list": x.tolist()}
+    if x.ndim == 2:
+        out["fortran"] = np.asfortranarray(x)
+    return out
+
+
+NAMES = list(conversion_cases())
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_array_inputs_are_converted(name):
+    """each array argument of each function given as a strided or reversed view, in Fortran order, as integers, as
+    float32 or as a list gives the bits of the same call with np.ascontiguousarray(x, dtype=np.float64). Control: the
+    Rust binding itself raises on each of these inputs, a Fortran-ordered matrix included, so the conversion is what
+    makes them pass."""
+    args = conversion_cases()[name]
+    f, raw = getattr(md, name), getattr(md._md, name)
+    for i, x in enumerate(args):
+        if not isinstance(x, np.ndarray):
+            continue
+        for kind, v in variants(x).items():
+            a = list(args)
+            a[i] = v
+            want = list(args)
+            want[i] = np.ascontiguousarray(v, dtype=np.float64)
+            assert same_bits(f(*a), f(*want)), (name, i, kind)
+            with pytest.raises((TypeError, ValueError)):
+                raw(*a)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_contiguous_float64_inputs_pass_through(name, monkeypatch):
+    """a C-contiguous float64 array reaches the Rust binding as the same object, not a copy, and the result is the
+    binding's own bit for bit"""
+    args = conversion_cases()[name]
+    raw = getattr(md._md, name)
+    seen = []
+
+    def spy(*a):
+        seen.extend(a)
+        return raw(*a)
+
+    monkeypatch.setattr(md._md, name, spy)
+    got = getattr(md, name)(*args)
+    assert len(seen) == len(args)
+    assert all(s is x for s, x in zip(seen, args) if isinstance(x, np.ndarray))
+    assert same_bits(got, raw(*args))
+
+
+def test_control_unconverted_inputs_fail(monkeypatch):
+    """control: with the conversion replaced by the identity, every function raises on a strided view"""
+    monkeypatch.setattr(md, "_f64", lambda v, name: v)
+    for name, args in conversion_cases().items():
+        a = list(args)
+        i = next(i for i, x in enumerate(a) if isinstance(x, np.ndarray))
+        a[i] = variants(a[i])["strided"]
+        with pytest.raises((TypeError, ValueError)):
+            getattr(md, name)(*a)
+
+
+@pytest.mark.parametrize("bad", [None, ["1.5", "2"], np.array([1 + 2j, 3j]), [object(), object()]],
+                         ids=["None", "strings", "complex", "objects"])
+def test_non_numeric_inputs_raise(bad):
+    """None, strings, complex numbers and other objects in an array argument raise TypeError naming it, where numpy's
+    float64 conversion would give nan, parse the strings or drop the imaginary parts"""
+    for name, args in conversion_cases().items():
+        a = list(args)
+        i = next(i for i, x in enumerate(a) if isinstance(x, np.ndarray))
+        a[i] = bad
+        with pytest.raises(TypeError, match="must be real numbers"):
+            getattr(md, name)(*a)
