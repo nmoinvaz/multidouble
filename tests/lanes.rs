@@ -587,9 +587,9 @@ fn od8(r: &mut Rng) -> OD {
     let v = r.dd(10).hi;
     let mut x = [0.0; 8];
     x[0] = v;
-    let sparse = r.next_u64() % 4 == 0;
+    let sparse = r.next_u64().is_multiple_of(4);
     for i in 1..8 {
-        x[i] = if sparse && r.next_u64() % 2 == 0 {
+        x[i] = if sparse && r.next_u64().is_multiple_of(2) {
             0.0
         } else {
             x[i - 1].abs().max(v.abs() * 2f64.powi(-53 * i as i32)) * 2f64.powi(-53) * r.sym()
