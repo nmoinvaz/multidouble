@@ -461,6 +461,19 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
+    /// self + a b into self, with a and b borrowed: bitwise `add_prod`, the nine levels updated where they are rather
+    /// than copied in and out, which saves an octo-double jet's sums (`crate::jet::OJet`) the copy of its accumulator
+    /// per product
+    #[inline]
+    pub fn add_prod_mut(&mut self, a: &OV<S>, b: &OV<S>) {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let t = alg::expand(&a.c, &b.c);
+                alg::acc_levels(&mut self.s, &t);
+            },
+        )
+    }
     /// self + a
     #[inline]
     pub fn add(self, a: OV<S>) -> Self {
@@ -554,6 +567,11 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     #[inline(always)]
     fn acc(a: ODotAcc<S>, x: Self, y: Self) -> ODotAcc<S> {
         a.add_prod(x, y)
+    }
+    /// `acc` in place (`ODotAcc::add_prod_mut`)
+    #[inline(always)]
+    fn acc_mut(a: &mut ODotAcc<S>, x: &Self, y: &Self) {
+        a.add_prod_mut(x, y);
     }
     #[inline(always)]
     fn accc(a: ODotAcc<S>, x: Self, c: DV<S>) -> ODotAcc<S> {

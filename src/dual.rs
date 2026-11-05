@@ -198,7 +198,7 @@ pub trait Lane:
     /// a + x y into a, with the accumulator and the operands borrowed: bitwise `acc`. Moving them copies the jets'
     /// accumulators and coefficients, several kilobytes each (`[QDotAcc; N]` and N quad-double coefficients for
     /// `crate::jet::QJet<N>`), once per term of a sum. The default is `acc`. The jets, `Dtn` and `Fun` add in place,
-    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`.
+    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`, `crate::ov::OV` through `crate::ov::ODotAcc::add_prod_mut`.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         *a = Self::acc(*a, *x, *y);
