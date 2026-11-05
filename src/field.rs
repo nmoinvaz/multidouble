@@ -12,7 +12,7 @@
 //! for a caller that sums the lane vectors on separate threads. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
-use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
+use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
 use crate::dv::{DotAcc, DV};
 use crate::jet::{Jet, OJet, QJet};
 use crate::linalg::DDLu;
@@ -285,6 +285,19 @@ impl<S: Simd, const B: usize> Fl<Qu<S>, B> {
         let mut r = [Qu::zero(); B];
         for b in 0..B {
             r[b] = Qu { v: v.0[b], d: t.0[b] };
+        }
+        Fl(r)
+    }
+}
+
+impl<S: Simd, const B: usize> Fl<Ou<S>, B> {
+    /// a field from octo-double values and tangents, exactly (`from_vt` takes them in double-double), for instance the
+    /// values with the tangent `Fl::<OV<S>, B>::unit(j)`, an octo-double Jacobian column's seed. `coef_od(0)` and
+    /// `coef_od(1)` read them back.
+    pub fn from_vt_od(v: &Fl<OV<S>, B>, t: &Fl<OV<S>, B>) -> Self {
+        let mut r = [Ou::zero(); B];
+        for b in 0..B {
+            r[b] = Ou { v: v.0[b], d: t.0[b] };
         }
         Fl(r)
     }
@@ -668,6 +681,7 @@ impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
 impl<S: Simd> MatLane for OV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
+impl<S: Simd> MatLane for Ou<S> {}
 impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for OJet<S, N> {}
@@ -831,7 +845,7 @@ pub trait FieldSolve {
         steps: usize,
         resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B>;
-    /// `solve_lanes_refine` for a lane type with a tangent (`Du`, `Qu`): the value and the tangent are refined
+    /// `solve_lanes_refine` for a lane type with a tangent (`Du`, `Qu`, `Ou`): the value and the tangent are refined
     /// together. The value solves use `self`, the tangent solves `lu_t`, the LU of the differentiated system's matrix
     /// (`self` again where that is the value system's matrix), and `resid(x)` returns rhs - A x formed by the caller
     /// in T's arithmetic for the value and for the tangent, so that the tangent's residual is that of the
