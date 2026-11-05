@@ -17,6 +17,7 @@ const N: usize = 40000;
 /// CodeRabbit's case on PR #32: two cancelling pairs, out of order, whose sum is zero
 const CANCEL: [f64; 4] = [1.0, 1e16, -1.0, -1e16];
 
+/// the unit in the last place of a finite x (the subnormal spacing for x = 0 and subnormal x), exactly
 fn ulp(x: f64) -> Dy {
     let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
     Dy::from_f64(1.0).ldexp(if e == 0 { -1074 } else { e - 1075 })
@@ -37,6 +38,7 @@ fn exact_and_normalized(c: [f64; 4], r: [f64; 4]) -> bool {
     })
 }
 
+/// +1 or -1 with equal odds
 fn sign(r: &mut Rng) -> f64 {
     if r.next_u64() & 1 == 0 {
         1.0
@@ -62,6 +64,7 @@ fn normalized(r: &mut Rng) -> [f64; 4] {
         .x
 }
 
+/// x in a random order (Fisher-Yates)
 fn permuted(r: &mut Rng, mut x: [f64; 4]) -> [f64; 4] {
     for i in (1..4).rev() {
         x.swap(i, (r.next_u64() % (i as u64 + 1)) as usize);
@@ -90,6 +93,7 @@ fn unordered(r: &mut Rng, i: usize) -> [f64; 4] {
     }
 }
 
+/// `QD::from_sum` gives zero for CANCEL, and every unordered case sums exactly to a normalized result
 #[test]
 fn from_sum_is_exact_in_any_order() {
     let z = QD::from_sum(CANCEL[0], CANCEL[1], CANCEL[2], CANCEL[3]);
@@ -149,11 +153,13 @@ fn new_fails_the_check_on_unordered_parts() {
     assert!(missed >= N / 10, "QD::new missed only {missed} of {N}");
 }
 
+/// `qv::renorm4_any` on 8 lanes of mixed normalized, unordered and non-finite parts against the scalar, bit for bit
 #[derive(Clone)]
 struct LanesMatchScalar;
 
 impl Kernel for LanesMatchScalar {
     type Output = ();
+    /// the check on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) {
         let mut r = Rng(23);
@@ -186,6 +192,7 @@ impl Kernel for LanesMatchScalar {
     }
 }
 
+/// LanesMatchScalar on every backend this CPU runs
 #[test]
 fn renorm4_any_lanes_match_scalar() {
     let ran: Vec<&str> = simd::for_each_available(LanesMatchScalar)
