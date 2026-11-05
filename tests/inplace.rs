@@ -1,8 +1,9 @@
 //! The in-place accumulation and Cauchy sums against the value-returning ones, bit for bit, on every backend this CPU
 //! runs (`simd::for_each_available`), with random inputs in every part of every lane type: `Lane::acc_mut` against
 //! `Lane::acc` for the double-double, quad-double and octo-double values, the dual and f64-tangent lanes, the jets
-//! (`QJet<24>` among them) and the counting lane, `QDotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`,
-//! `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check
+//! (`QJet<24>` and `OJet<24>` among them) and the counting lane, `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut`
+//! against `add_prod`, and `field::cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`
+//! against `cs`, `cs_range` and `cs_w`. Each check
 //! has a control that must fail, the same comparison of a sum with two of its terms swapped, and for the field sums
 //! also of a sum without its last term.
 mod common;
@@ -11,8 +12,8 @@ use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::field::{cs, cs_into, cs_lane_into, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_lane_into, Fl};
-use multidouble::jet::{Jet, QJet};
-use multidouble::ov::OV;
+use multidouble::jet::{Jet, OJet, QJet};
+use multidouble::ov::{ODotAcc, OV};
 use multidouble::qv::{QDotAcc, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
@@ -65,6 +66,11 @@ fn put_qdot<S: Simd>(w: &mut Vec<u64>, a: &QDotAcc<S>) {
     a.s.iter().for_each(|&s| put(w, s));
 }
 
+/// the bits of every level of an octo-double accumulator, appended to w
+fn put_odot<S: Simd>(w: &mut Vec<u64>, a: &ODotAcc<S>) {
+    a.s.iter().for_each(|&s| put(w, s));
+}
+
 impl<S: Simd> Gen for DV<S> {
     fn gen(r: &mut Rng) -> Self {
         dv(r)
@@ -98,7 +104,7 @@ impl<S: Simd> Gen for OV<S> {
         self.c.iter().for_each(|&c| put(w, c));
     }
     fn acc_bits(a: &Self::Acc, w: &mut Vec<u64>) {
-        a.s.iter().for_each(|&s| put(w, s));
+        put_odot(w, a);
     }
 }
 
@@ -234,6 +240,18 @@ impl<S: Simd, const N: usize> Gen for QJet<S, N> {
     }
 }
 
+impl<S: Simd, const N: usize> Gen for OJet<S, N> {
+    fn gen(r: &mut Rng) -> Self {
+        OJet::from_coeffs(std::array::from_fn(|_| ov(r)))
+    }
+    fn bits(&self, w: &mut Vec<u64>) {
+        self.c.iter().for_each(|c| c.bits(w));
+    }
+    fn acc_bits(a: &Self::Acc, w: &mut Vec<u64>) {
+        a.iter().for_each(|d| put_odot(w, d));
+    }
+}
+
 impl<L: Gen> Gen for Counted<L> {
     fn gen(r: &mut Rng) -> Self {
         Counted(L::gen(r))
@@ -290,6 +308,10 @@ fn every_lane<S: Simd>(c: &mut impl Check) {
     c.check::<QJet<S, 24>>("QJet<24>");
     c.check::<Counted<DV<S>>>("Counted<DV>");
     c.check::<Counted<QJet<S, 5>>>("Counted<QJet<5>>");
+    // last, so that the checks above keep their seeds
+    c.check::<OJet<S, 5>>("OJet<5>");
+    c.check::<OJet<S, 24>>("OJet<24>");
+    c.check::<Counted<OJet<S, 5>>>("Counted<OJet<5>>");
 }
 
 /// k, a check that panics on a mismatch, run on every backend this CPU has, on a thread with a 64 MiB stack. Built
@@ -431,6 +453,60 @@ impl Kernel for AddProdMutIsAddProd {
 #[test]
 fn add_prod_mut_is_add_prod() {
     on_every_backend(AddProdMutIsAddProd);
+}
+
+/// `odot_add_prod_mut_is_add_prod` on one backend
+#[derive(Clone)]
+struct OdotAddProdMutIsAddProd;
+
+impl Kernel for OdotAddProdMutIsAddProd {
+    type Output = ();
+    /// the check on the backend S
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let mut r = Rng(82);
+        let terms: Vec<(OV<S>, OV<S>)> = (0..200).map(|_| (ov(&mut r), ov(&mut r))).collect();
+        let acc_bits = |a: &ODotAcc<S>| -> Vec<u64> {
+            let mut w = Vec::new();
+            put_odot(&mut w, a);
+            w
+        };
+        let (mut a, mut m) = (ODotAcc::zero(), ODotAcc::zero());
+        for (t, (x, y)) in terms.iter().enumerate() {
+            a = a.add_prod(*x, *y);
+            m.add_prod_mut(x, y);
+            assert_eq!(
+                acc_bits(&a),
+                acc_bits(&m),
+                "{}: add_prod_mut differs from add_prod after term {t}",
+                S::NAME
+            );
+        }
+        // the control: the chain with terms 0 and 1 swapped, against add_prod's after every term from the second
+        let (mut a, mut swapped, mut caught) = (ODotAcc::zero(), ODotAcc::zero(), 0);
+        for (t, u) in [1, 0].into_iter().chain(2..terms.len()).enumerate() {
+            a = a.add_prod(terms[t].0, terms[t].1);
+            swapped.add_prod_mut(&terms[u].0, &terms[u].1);
+            caught += (t > 0 && acc_bits(&a) != acc_bits(&swapped)) as usize;
+        }
+        assert!(
+            caught > 0,
+            "{}: control: the sum with two terms swapped has add_prod's bits",
+            S::NAME
+        );
+        println!(
+            "{}: ODotAcc add_prod_mut matched add_prod at {} terms, the control caught {caught}",
+            S::NAME,
+            terms.len()
+        );
+    }
+}
+
+/// `ODotAcc::add_prod_mut` is `add_prod` bit for bit in every level of the accumulator, on every backend. Control:
+/// the chain with two terms swapped differs after some term.
+#[test]
+fn odot_add_prod_mut_is_add_prod() {
+    on_every_backend(OdotAddProdMutIsAddProd);
 }
 
 /// `Counted::acc_mut` counts one `op::ACC` and nothing else
