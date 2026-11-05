@@ -24,6 +24,8 @@ type Parts<'py> = (
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+mod octo;
+
 type Pair<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
 
 const ADD: u8 = 0;
@@ -804,5 +806,6 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
+    octo::register(m)?;
     Ok(())
 }
