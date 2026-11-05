@@ -868,42 +868,55 @@ impl<S: Simd> QDotAcc<S> {
     pub fn add_prod(self, a: QV<S>, b: QV<S>) -> Self {
         S::hot(
             #[inline(always)]
-            || {
-                let (a, b) = (a.c, b.c);
-                let (p00, e00) = two_prod(a[0], b[0]);
-                let (p01, e01) = two_prod(a[0], b[1]);
-                let (p10, e10) = two_prod(a[1], b[0]);
-                let (p02, e02) = two_prod(a[0], b[2]);
-                let (p11, e11) = two_prod(a[1], b[1]);
-                let (p20, e20) = two_prod(a[2], b[0]);
-                let r3 = eps3(&a, &b);
-                let (s0, t0) = two_sum(self.s[0], p00);
-                let (x1, y1) = two_sum(p01, p10);
-                let (x2, y2) = two_sum(e00, t0);
-                let (x3, y3) = two_sum(x1, x2);
-                let (s1, y4) = two_sum(self.s[1], x3);
-                let (z1, w1) = two_sum(p02, p20);
-                let (z2, w2) = two_sum(p11, e01);
-                let (z3, w3) = two_sum(e10, y1);
-                let (z4, w4) = two_sum(y2, y3);
-                let (z5, w5) = two_sum(z1, z2);
-                let (z6, w6) = two_sum(z3, z4);
-                let (z7, w7) = two_sum(z5, z6);
-                let (z8, w8) = two_sum(z7, y4);
-                let (s2, w9) = two_sum(self.s[2], z8);
-                let (w, w9) = if mutate::on(mutate::ACC_L3) {
-                    (V8::zero(), V8::zero())
-                } else {
-                    (w1.add(w2).add(w3.add(w4)).add(w5.add(w6).add(w7.add(w8))), w9)
-                };
-                let r = w.add(r3).add(e02.add(e11)).add(e20);
-                let (s3, x9) = two_sum(self.s[3], w9);
-                let (s3, x10) = two_sum(s3, r);
-                QDotAcc {
-                    s: [s0, s1, s2, s3, self.s[4].add(x9.add(x10))],
-                }
-            },
+            || self.plus_prod(&a, &b),
         )
+    }
+    /// self + a b into self, with a and b borrowed: bitwise `add_prod`. The step runs through `Simd::hot` with only
+    /// the three references captured, so that where the compiler keeps it out of line (NEON, SSE2, portable) the call
+    /// copies nothing; `add_prod` copies its accumulator, operands and result there, 1152 bytes per product.
+    #[inline(always)]
+    pub fn add_prod_mut(&mut self, a: &QV<S>, b: &QV<S>) {
+        S::hot(
+            #[inline(always)]
+            || *self = self.plus_prod(a, b),
+        )
+    }
+    /// self + a b, the step of `add_prod` and `add_prod_mut`
+    #[inline(always)]
+    fn plus_prod(&self, a: &QV<S>, b: &QV<S>) -> Self {
+        let (a, b) = (a.c, b.c);
+        let (p00, e00) = two_prod(a[0], b[0]);
+        let (p01, e01) = two_prod(a[0], b[1]);
+        let (p10, e10) = two_prod(a[1], b[0]);
+        let (p02, e02) = two_prod(a[0], b[2]);
+        let (p11, e11) = two_prod(a[1], b[1]);
+        let (p20, e20) = two_prod(a[2], b[0]);
+        let r3 = eps3(&a, &b);
+        let (s0, t0) = two_sum(self.s[0], p00);
+        let (x1, y1) = two_sum(p01, p10);
+        let (x2, y2) = two_sum(e00, t0);
+        let (x3, y3) = two_sum(x1, x2);
+        let (s1, y4) = two_sum(self.s[1], x3);
+        let (z1, w1) = two_sum(p02, p20);
+        let (z2, w2) = two_sum(p11, e01);
+        let (z3, w3) = two_sum(e10, y1);
+        let (z4, w4) = two_sum(y2, y3);
+        let (z5, w5) = two_sum(z1, z2);
+        let (z6, w6) = two_sum(z3, z4);
+        let (z7, w7) = two_sum(z5, z6);
+        let (z8, w8) = two_sum(z7, y4);
+        let (s2, w9) = two_sum(self.s[2], z8);
+        let (w, w9) = if mutate::on(mutate::ACC_L3) {
+            (V8::zero(), V8::zero())
+        } else {
+            (w1.add(w2).add(w3.add(w4)).add(w5.add(w6).add(w7.add(w8))), w9)
+        };
+        let r = w.add(r3).add(e02.add(e11)).add(e20);
+        let (s3, x9) = two_sum(self.s[3], w9);
+        let (s3, x10) = two_sum(s3, r);
+        QDotAcc {
+            s: [s0, s1, s2, s3, self.s[4].add(x9.add(x10))],
+        }
     }
     /// self + a
     #[inline(always)]
