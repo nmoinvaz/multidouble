@@ -511,9 +511,10 @@ impl<S: Simd> ODotAcc<S> {
 /// Octo-double values as a `Lane`, so that code generic over `Lane` compiles and runs with octo-double lanes. As for
 /// `QV`, the trait passes constants and inputs as double-double (`DV`): they enter exactly (`from_dv`) but carry only
 /// double-double accuracy, and `val` rounds back to double-double, so this instantiation computes in octo-double with
-/// double-double data. `coef_qd(0)` is the value rounded to quad-double (`to_qv`). `VAL_OD` is set and `VAL_QD` is
-/// not: a solve with a double-double LU is refined for these lanes with the residual in octo-double
-/// (`crate::field::FieldSolve::solve_lanes_refine`), and needs about twice the steps of a quad-double lane.
+/// double-double data. `coef_qd(0)` is the value rounded to quad-double (`to_qv`), `coef_od(0)` the value itself.
+/// `VAL_OD` is set and `VAL_QD` is not: a solve with a double-double LU is refined for these lanes with the residual
+/// in octo-double (`crate::field::FieldSolve::solve_lanes_refine`), and needs about twice the steps of a quad-double
+/// lane.
 impl<S: Simd> crate::dual::Lane for OV<S> {
     type S = S;
     type Acc = ODotAcc<S>;
@@ -592,6 +593,15 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
             self.to_qv()
         } else {
             QV::zero()
+        }
+    }
+    /// the value itself (k = 0), zero past it
+    #[inline(always)]
+    fn coef_od(self, k: usize) -> OV<S> {
+        if k == 0 {
+            self
+        } else {
+            OV::zero()
         }
     }
 }

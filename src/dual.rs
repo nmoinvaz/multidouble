@@ -25,6 +25,7 @@
 //! `Lane` runs on the instruction set [`crate::simd::dispatch`] picks.
 use crate::dd::DD;
 use crate::dv::{DotAcc, DV};
+use crate::ov::OV;
 use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
 use crate::v8::V8;
@@ -159,6 +160,19 @@ pub trait Lane:
     #[inline(always)]
     fn set_coef_qd(&mut self, k: usize, c: QV<Self::S>) {
         self.set_coef(k, c.to_dv())
+    }
+    /// coefficient k in octo-double, for code generic over `Lane` that reads an octo-double jet's coefficients without
+    /// rounding them (`coef` and `coef_qd` do): the jet's own on `crate::jet::OJet<N>`, the octo-double value on `OV`,
+    /// and `coef_qd(k)`, exactly, on every other lane
+    #[inline(always)]
+    fn coef_od(self, k: usize) -> OV<Self::S> {
+        OV::from_qv(self.coef_qd(k))
+    }
+    /// set coefficient k of a jet from octo-double: exactly on `crate::jet::OJet<N>`, rounded to quad-double
+    /// (`OV::to_qv`) on `crate::jet::QJet<N>` and to double-double (`OV::to_dv`) on `crate::jet::Jet<N>`
+    #[inline(always)]
+    fn set_coef_od(&mut self, k: usize, c: OV<Self::S>) {
+        self.set_coef_qd(k, c.to_qv())
     }
     fn zero() -> Self;
     /// a constant (zero tangent)
@@ -1614,6 +1628,14 @@ impl<L: Lane> Lane for Counted<L> {
     #[inline(always)]
     fn set_coef_qd(&mut self, k: usize, c: QV<Self::S>) {
         self.0.set_coef_qd(k, c)
+    }
+    #[inline(always)]
+    fn coef_od(self, k: usize) -> OV<Self::S> {
+        self.0.coef_od(k)
+    }
+    #[inline(always)]
+    fn set_coef_od(&mut self, k: usize, c: OV<Self::S>) {
+        self.0.set_coef_od(k, c)
     }
     #[inline(always)]
     fn zero() -> Self {
