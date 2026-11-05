@@ -463,7 +463,8 @@ fn field_refine_refuses_a_smaller_lu() {
 
 /// A quad-double field's four parts' arrays go in and out unchanged (`Fl::<QV, B>::load_parts` and `store_parts`: not
 /// renormalized, so parts that overlap stay as they are), value j at lane j % 8 of vector j / 8 as `QV::from_lanes`
-/// places them; `get` reads them back. Control: the test parts overlap, so a load that renormalized would move them.
+/// places them; `get` reads them back, and `Fl::load_parts` with its type inferred from its use compiles (one
+/// `load_parts` among the field types). Control: the test parts overlap, so a load that renormalized would move them.
 #[test]
 fn qd_field_load_store_get() {
     let mut r = Rng(63);
@@ -497,6 +498,9 @@ fn qd_field_load_store_get() {
         (0..4).any(|k| renorm.x[k].to_bits() != c[k][0].to_bits()),
         "control: the parts do not overlap"
     );
+    // the type inferred from the use, as hp's qsolve calls it: one load_parts on a field type only
+    let inferred: Fl<QV, B> = Fl::load_parts(&c[0], &c[1], &c[2], &c[3]);
+    assert!((0..M).all(|j| inferred.get(j).x == f.get(j).x), "the inferred load");
 }
 
 /// The refinement is for values only: a lane type with tangents (Du here) is refused, not given a zero derivative
