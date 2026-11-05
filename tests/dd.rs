@@ -1,11 +1,14 @@
 //! Scalar double-double against exact dyadic arithmetic (`multidouble::exact`, no shared code with the algorithms):
 //! the error-free transformations must be exact, and the operations must stay inside their error bounds, measured
-//! relative to the exact result in units of u^2 = 2^-106.
+//! relative to the exact result in units of u^2 = 2^-106. Also the slice conversions of double-double and quad-double
+//! arrays (`dd::split`, `dd::join`, `qd::to_parts`, `qd::from_parts`), bit for bit.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::{Rng, U2};
-use multidouble::dd::{is_pwr2, pow2_near, quick_two_sum, two_prod, two_sum, DD};
+use multidouble::dd::{is_pwr2, join, pow2_near, quick_two_sum, split, two_prod, two_sum, DD};
 use multidouble::exact::Dy;
+use multidouble::native::QV;
+use multidouble::qd::{from_parts, to_parts, QD};
 
 const N: usize = 20_000;
 
@@ -179,4 +182,110 @@ fn pow2_near_refuses_a_subnormal_result_in_debug() {
 #[should_panic(expected = "outside the normal range")]
 fn pow2_near_refuses_an_infinite_result_in_debug() {
     pow2_near(f64::MAX);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// slice conversions
+// ---------------------------------------------------------------------------------------------------------------
+
+fn bits(v: &[f64]) -> Vec<u64> {
+    v.iter().map(|x| x.to_bits()).collect()
+}
+
+/// `split` and `join` are the loops they replace (the parts collected one array at a time, and `DD { hi, lo }` from
+/// the zipped arrays) bit for bit, and each undoes the other, also for parts that overlap (which `join` keeps as
+/// they are, where `DD::new` would renormalize them) and for empty arrays. Controls: a join with the lo parts dropped
+/// or the parts swapped does not give the double-doubles back.
+#[test]
+fn split_and_join_are_the_loops_and_inverses() {
+    let mut r = Rng(91);
+    let v: Vec<DD> = (0..37).map(|_| r.dd(20)).collect();
+    let (h, l) = split(&v);
+    let (hh, ll): (Vec<f64>, Vec<f64>) = (v.iter().map(|d| d.hi).collect(), v.iter().map(|d| d.lo).collect());
+    assert!(bits(&h) == bits(&hh) && bits(&l) == bits(&ll));
+    let w = join(&h, &l);
+    let hand: Vec<DD> = h.iter().zip(&l).map(|(&a, &c)| DD { hi: a, lo: c }).collect();
+    let same = |a: &[DD], b: &[DD]| {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(x, y)| x.hi.to_bits() == y.hi.to_bits() && x.lo.to_bits() == y.lo.to_bits())
+    };
+    assert!(same(&w, &hand) && same(&w, &v));
+    // overlapping parts, each about 2^-20 of its hi
+    let (oh, ol): (Vec<f64>, Vec<f64>) = (0..37).map(|_| (r.sym(), r.sym() * 2f64.powi(-20))).unzip();
+    let (h2, l2) = split(&join(&oh, &ol));
+    assert!(bits(&h2) == bits(&oh) && bits(&l2) == bits(&ol));
+    assert!(
+        oh.iter()
+            .zip(&ol)
+            .any(|(&a, &b)| DD::new(a, b).hi.to_bits() != a.to_bits()),
+        "control: no overlap"
+    );
+    assert!(split(&[]) == (vec![], vec![]) && join(&[], &[]).is_empty());
+    assert!(!same(&join(&h, &vec![0.0; h.len()]), &v), "control: lo dropped");
+    assert!(!same(&join(&l, &h), &v), "control: parts swapped");
+}
+
+#[test]
+#[should_panic(expected = "join: 3 hi parts and 2 lo parts")]
+fn join_refuses_arrays_of_different_lengths() {
+    join(&[1.0, 2.0, 3.0], &[0.0, 0.0]);
+}
+
+/// `to_parts` and `from_parts` are the loops they replace (part k of every value collected into array k, and
+/// `QD { x }` from part k of each array at index i) bit for bit, each undoes the other for parts that overlap (not
+/// renormalized, as `QD::new` would), and `from_parts` reads the four arrays as `QV::load` does, value i at lane i.
+/// Controls: two parts swapped, or the last part dropped, do not give the quad-doubles back.
+#[test]
+fn to_parts_and_from_parts_are_the_loops_and_inverses() {
+    let mut r = Rng(92);
+    let n = 40;
+    // overlapping parts, each about 2^-20 of the one before
+    let c: [Vec<f64>; 4] = std::array::from_fn(|k| (0..n).map(|_| r.sym() * 2f64.powi(-20 * k as i32)).collect());
+    let q = from_parts([&c[0], &c[1], &c[2], &c[3]]);
+    let hand: Vec<QD> = (0..n)
+        .map(|i| QD {
+            x: std::array::from_fn(|k| c[k][i]),
+        })
+        .collect();
+    let same = |a: &[QD], b: &[QD]| {
+        a.len() == b.len()
+            && a.iter()
+                .zip(b)
+                .all(|(x, y)| x.x.iter().zip(y.x.iter()).all(|(p, s)| p.to_bits() == s.to_bits()))
+    };
+    assert!(same(&q, &hand));
+    let back = to_parts(&q);
+    let loops: [Vec<f64>; 4] = std::array::from_fn(|k| q.iter().map(|v| v.x[k]).collect());
+    for k in 0..4 {
+        assert!(
+            bits(&back[k]) == bits(&c[k]) && bits(&loops[k]) == bits(&c[k]),
+            "part {k}"
+        );
+    }
+    for b in 0..n / 8 {
+        let o = 8 * b;
+        let v = QV::load(&c[0][o..o + 8], &c[1][o..o + 8], &c[2][o..o + 8], &c[3][o..o + 8]);
+        assert!(same(&v.lanes(), &q[o..o + 8]), "lane vector {b}");
+    }
+    assert!(
+        (0..4).any(|k| QD::new(c[0][0], c[1][0], c[2][0], c[3][0]).x[k].to_bits() != c[k][0].to_bits()),
+        "control: no overlap"
+    );
+    assert!(to_parts(&[]).iter().all(|p| p.is_empty()) && from_parts([&[], &[], &[], &[]]).is_empty());
+    assert!(
+        !same(&from_parts([&c[1], &c[0], &c[2], &c[3]]), &q),
+        "control: parts swapped"
+    );
+    assert!(
+        !same(&from_parts([&c[0], &c[1], &c[2], &vec![0.0; n]]), &q),
+        "control: last part dropped"
+    );
+}
+
+#[test]
+#[should_panic(expected = "from_parts: the four arrays must have one length")]
+fn from_parts_refuses_arrays_of_different_lengths() {
+    from_parts([&[1.0, 2.0], &[0.0, 0.0], &[0.0], &[0.0, 0.0]]);
 }
