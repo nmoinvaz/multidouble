@@ -649,6 +649,54 @@ def test_qd_solve_renormalizes_its_inputs():
     assert qd_errors(A, b, x)[1] > n * UQ
 
 
+def test_qd_inputs_in_any_order():
+    """qd_solve, QDLu and qd_add_dd take each entry as the exact sum of its four parts in any order (QD::from_sum).
+    The 1 x 1 matrix (1, 1e16, -1, -1e16), whose sum is zero, raises as singular; summed in QD::new's order it read
+    as 1. The pinned system with every entry's parts permuted, and its double-double rounding written as (B, x0, -B,
+    x1) with B 2^60 above x0, solve to the backward and forward bounds of the true values, for A x = b and A^T x = b by
+    QDLu and for qd_solve; a permutation changes the representation, so the bits may differ. qd_add_dd of permuted
+    parts is within 2^-205 of the exact sum on its lanes and its scalar tail. Controls: a solution off by 2^-190 of its
+    size in one entry misses the backward bound, and qd_add_dd with z3 dropped misses its bound."""
+    one = lambda v: np.array([[v]])  # noqa: E731
+    with pytest.raises(ValueError, match="singular"):
+        md.qd_solve(one(1.0), one(1e16), one(-1.0), one(-1e16), *[np.ones(1)] * 4)
+    n = 13
+    A, b = pinned_system(n)
+    perm = (2, 0, 3, 1)
+    shuffled = lambda p: [p[q] for q in perm]  # noqa: E731
+    A2 = [A[0], A[1], np.zeros_like(A[0]), np.zeros_like(A[0])]
+    big = np.exp2(np.floor(np.log2(np.abs(A[0]) + 1e-300)) + 60)
+    cases = [(A, shuffled(A), shuffled(b)), (A2, [big, A[0], -big, A[1]], b)]
+    for true_A, given_A, given_b in cases:
+        cond = np.linalg.cond(true_A[0])  # in float64, enough for a bound
+        for t in (False, True):
+            x = md.QDLu(*given_A).solve(*given_b, transpose=t)
+            fwd, bwd = qd_errors(true_A, b, x, transpose=t)
+            assert bwd <= n * UQ and fwd <= n * cond * UQ, (bwd / UQ, fwd / (cond * UQ))
+        x = [p.copy() for p in md.qd_solve(*given_A, *given_b)]
+        assert qd_errors(true_A, b, x)[1] <= n * UQ
+        x[3][5] += 2.0**-190 * x[0][5]
+        assert qd_errors(true_A, b, x)[1] > n * UQ
+    rng = np.random.default_rng(13)
+    m = 11  # 8 lanes and a scalar tail of 3
+    z = rand_qd(rng, m)
+    dh, dl = rand_dd(rng, m)
+
+    def worst(parts):
+        """largest error of qd_add_dd(parts, d) against the exact sum of z (the true parts) and d"""
+        r = md.qd_add_dd(*parts, dh, dl)
+        out = 0
+        for i in range(m):
+            zi = sum(Fraction(p[i]) for p in z)
+            want = zi + Fraction(dh[i]) + Fraction(dl[i])
+            got = sum(Fraction(p[i]) for p in r)
+            out = max(out, abs(got - want) / max(abs(zi), abs(Fraction(dh[i]) + Fraction(dl[i]))))
+        return out
+
+    assert worst(shuffled(z)) <= Fraction(1, 2**205)
+    assert worst(shuffled(z[:3] + [np.zeros(m)])) > Fraction(1, 2**205)
+
+
 def test_qd_solve_errors():
     """singular A (an exactly zero pivot), entries that are not finite in any part of A or b, and mismatched shapes
     raise ValueError, as dd_solve does for a singular A; QDLu raises the same"""
