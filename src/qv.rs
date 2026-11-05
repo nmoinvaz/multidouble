@@ -100,6 +100,46 @@ pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4
     )
 }
 
+/// `qd::grow_expansion` on all lanes
+#[inline(always)]
+fn grow_expansion<S: Simd>(e: &mut [V8<S>; 8], m: usize, b: V8<S>) {
+    let mut q = b;
+    for x in e.iter_mut().take(m) {
+        let (s, h) = two_sum(q, *x);
+        *x = h;
+        q = s;
+    }
+    e[m] = q;
+}
+
+/// `qd::renorm4_any` on all lanes, bitwise the same per lane: `renorm4` of the parts where that is exact and normalized
+/// or the parts are not all finite, `renorm4` of their Grow-Expansion elsewhere
+#[inline(always)]
+pub fn renorm4_any<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4] {
+    let r = renorm4(c0, c1, c2, c3);
+    let inf = V8::splat(f64::INFINITY);
+    let finite = inf
+        .gt(c0.abs())
+        .and(inf.gt(c1.abs()))
+        .and(inf.gt(c2.abs()))
+        .and(inf.gt(c3.abs()));
+    let z = V8::zero();
+    let mut e = [z; 8];
+    e[0] = c0;
+    for (m, c) in [c1, c2, c3].into_iter().enumerate() {
+        grow_expansion(&mut e, m + 1, c);
+    }
+    let g = renorm4(e[3], e[2], e[1], e[0]);
+    for (k, x) in r.into_iter().enumerate() {
+        grow_expansion(&mut e, 4 + k, x.neg());
+    }
+    let h = V8::splat(0.5 * f64::EPSILON);
+    let normal = (0..3).fold(z.eq(z), |m, k| m.and(h.mul(r[k].abs()).ge(r[k + 1].abs())));
+    let exact = e.iter().fold(normal, |m, x| m.and(x.eq(z)));
+    let keep = exact.or(finite.not());
+    std::array::from_fn(|k| keep.sel(r[k], g[k]))
+}
+
 /// QD's renormalization of five parts to four, all lanes (see the module doc)
 #[inline(always)]
 pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -> [V8<S>; 4] {

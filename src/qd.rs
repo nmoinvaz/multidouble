@@ -152,6 +152,49 @@ pub fn renorm4(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
     [s0, s1, s2, s3]
 }
 
+/// Grow-Expansion step (Shewchuk, Discrete Comput. Geom. 18 (1997) 305-363, doi 10.1007/PL00009321): b added to the
+/// expansion e[..m] (nonoverlapping, increasing in magnitude, zeros allowed) by a two-sum through its components,
+/// smallest first, leaving e[..m + 1] with the same properties, exactly
+#[inline(always)]
+pub fn grow_expansion(e: &mut [f64; 8], m: usize, b: f64) {
+    let mut q = b;
+    for x in e.iter_mut().take(m) {
+        let (s, h) = two_sum(q, *x);
+        *x = h;
+        q = s;
+    }
+    e[m] = q;
+}
+
+/// The exact sum of four parts given in any order, renormalized. `renorm4` of the parts as given is kept when it is
+/// exact, which an error-free check decides (the Grow-Expansion of the parts minus its result is all zeros), and
+/// normalized (each part at most 2^-53 of the one before). Both hold for every normalized quad-double, whose bits are
+/// then `QD::new`'s. Otherwise the result is `renorm4` of the
+/// parts' Grow-Expansion, largest component first. `renorm4` assumes ordered parts, and on (1, 1e16, -1, -1e16) it
+/// gives 1. Parts that are not all finite give `renorm4` of the parts as they are.
+#[inline(always)]
+pub fn renorm4_any(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
+    let r = renorm4(c0, c1, c2, c3);
+    if !(c0.is_finite() && c1.is_finite() && c2.is_finite() && c3.is_finite()) {
+        return r;
+    }
+    let mut e = [0.0; 8];
+    e[0] = c0;
+    for (m, c) in [c1, c2, c3].into_iter().enumerate() {
+        grow_expansion(&mut e, m + 1, c);
+    }
+    let g = [e[3], e[2], e[1], e[0]];
+    for (k, x) in r.into_iter().enumerate() {
+        grow_expansion(&mut e, 4 + k, -x);
+    }
+    let normal = (0..3).all(|k| r[k + 1].abs() <= 0.5 * f64::EPSILON * r[k].abs());
+    if normal && e.iter().all(|&x| x == 0.0) {
+        r
+    } else {
+        renorm4(g[0], g[1], g[2], g[3])
+    }
+}
+
 /// QD's renormalization of five parts to four (no-op if c0 is infinite)
 #[inline(always)]
 pub fn renorm5(c0: f64, c1: f64, c2: f64, c3: f64, c4: f64) -> [f64; 4] {
@@ -263,6 +306,13 @@ impl QD {
     pub fn new(x0: f64, x1: f64, x2: f64, x3: f64) -> QD {
         QD {
             x: renorm4(x0, x1, x2, x3),
+        }
+    }
+    /// the exact sum of four parts in any order, renormalized (`renorm4_any`); bitwise `new` on normalized parts
+    #[inline(always)]
+    pub fn from_sum(x0: f64, x1: f64, x2: f64, x3: f64) -> QD {
+        QD {
+            x: renorm4_any(x0, x1, x2, x3),
         }
     }
     #[inline(always)]
