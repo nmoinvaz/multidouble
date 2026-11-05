@@ -2771,8 +2771,10 @@ fn od_axpy_rows<S: Simd>(b: [&mut [f64]; 8], l: [&[f64]; 8], lo: usize, hi: usiz
 
 impl ODLu {
     /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero), part q
-    /// of entry (i, j) at c[q][j * ld + i]. par: update the trailing columns in parallel (rayon's current pool). A
-    /// zero or non-finite pivot is an error naming its column.
+    /// of entry (i, j) at c[q][j * ld + i]. Each entry's parts must be normalized, as `OD` keeps them (`OD::new`
+    /// renormalizes raw parts): the pivot search and the skipped zero updates read the leading parts only, as in
+    /// `QDLu`. par: update the trailing columns in parallel (rayon's current pool). A zero or non-finite pivot is an
+    /// error naming its column.
     ///
     /// ```
     /// use multidouble::linalg::ODLu;
