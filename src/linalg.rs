@@ -6,6 +6,8 @@
 //! too ill-conditioned for double-double.
 use crate::dd::{pow2_near, two_prod, two_sum, DD};
 use crate::dv::{self, DotAcc, DV};
+use crate::od::OD;
+use crate::ov::OV;
 use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::{self, Kernel, Simd};
@@ -2679,6 +2681,438 @@ impl Kernel for SolveQd<'_> {
     #[inline(always)]
     fn run<S: Simd>(self) {
         self.lu.solve_on::<S>(self.b)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Dense octo-double LU
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Variants of `ODLu::factor_control`: the scalar reference of the lanes, and a deliberate breakage for the controls
+/// of the accuracy tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OdLuControl {
+    None,
+    /// every update in scalar octo-double (`OD`), entry by entry: bitwise `None` (each lane of `OV` is the scalar
+    /// computation), the reference of the bitwise tests and of the lanes' benchmark
+    Scalar,
+    /// every trailing update rounded to quad-double (its four lower parts dropped)
+    UpdateQd,
+}
+
+/// Dense octo-double LU with partial pivoting (LAPACK getf2 order, as `QDLu`), column-major with the leading dimension
+/// a multiple of 8 and each entry's eight parts in eight arrays, so that the multipliers and the trailing update run
+/// on 8-row `OV` lanes; the trailing columns are updated in parallel (rayon) for large matrices. For systems whose
+/// condition number nears 2^209, where a quad-double solve has no correct digit: a solve's error is about cond(A)
+/// 2^-418 (backward stability of partial pivoting; Higham, Accuracy and Stability of Numerical Algorithms, 2nd ed.,
+/// SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an exactly zero pivot-row entry is
+/// skipped (it cannot change a value). Every backend gives the same bits.
+#[derive(Clone)]
+pub struct ODLu {
+    pub n: usize,
+    pub ld: usize,
+    /// part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it) at c[q][j * ld + i]
+    pub c: [Vec<f64>; 8],
+    pub perm: Vec<usize>,
+}
+
+#[inline(always)]
+fn load_ov<S: Simd>(c: [&[f64]; 8], i: usize) -> OV<S> {
+    OV::load(c.map(|p| &p[i..i + 8]))
+}
+
+#[inline(always)]
+fn sel_ov<S: Simd>(m: M8<S>, u: OV<S>, a: OV<S>) -> OV<S> {
+    OV {
+        c: std::array::from_fn(|q| m.sel(u.c[q], a.c[q])),
+    }
+}
+
+/// b[i] += l[i] t for i in lo..hi, on the 8-row blocks that meet lo..hi (rows outside keep their value), or with
+/// `OdLuControl::Scalar` row by row in `OD`. Blocks of l that are exactly zero are skipped. Every slice holds hi
+/// rounded up to 8 rows.
+#[inline(always)]
+fn od_axpy_rows<S: Simd>(b: [&mut [f64]; 8], l: [&[f64]; 8], lo: usize, hi: usize, t: OD, ctl: OdLuControl) {
+    let tv = OV::<S>::splat(t);
+    let mut b = b;
+    let mut i = 8 * (lo / 8);
+    while i < hi {
+        if l[0][i..i + 8].iter().any(|&v| v != 0.0) {
+            if ctl == OdLuControl::Scalar {
+                for r in i.max(lo)..(i + 8).min(hi) {
+                    let a = OD {
+                        x: std::array::from_fn(|q| b[q][r]),
+                    };
+                    let y = a + OD {
+                        x: std::array::from_fn(|q| l[q][r]),
+                    } * t;
+                    for q in 0..8 {
+                        b[q][r] = y.x[q];
+                    }
+                }
+            } else {
+                let a = OV::<S>::load(b.each_ref().map(|p| &p[i..i + 8]));
+                let mut r = a + load_ov::<S>(l, i) * tv;
+                if ctl == OdLuControl::UpdateQd {
+                    r = OV::from_qv(r.to_qv());
+                }
+                sel_ov(rows_in::<S>(i, lo, hi), r, a).store(b.each_mut().map(|p| &mut p[i..i + 8]));
+            }
+        }
+        i += 8;
+    }
+}
+
+impl ODLu {
+    /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero), part q
+    /// of entry (i, j) at c[q][j * ld + i]. par: update the trailing columns in parallel (rayon's current pool). A
+    /// zero or non-finite pivot is an error naming its column.
+    ///
+    /// ```
+    /// use multidouble::linalg::ODLu;
+    /// use multidouble::od::OD;
+    /// // [[2, 1], [1, 3]] x = [1, 2]: x = (1/5, 3/5)
+    /// let (n, ld) = (2, 8);
+    /// let mut c: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    /// (c[0][0], c[0][1], c[0][ld], c[0][ld + 1]) = (2.0, 1.0, 1.0, 3.0);
+    /// let lu = ODLu::factor(n, ld, c, false).unwrap();
+    /// let mut b = [OD::from_f64(1.0), OD::from_f64(2.0)];
+    /// lu.solve(&mut b);
+    /// assert!((b[0] * OD::from_f64(5.0) - OD::ONE).abs().to_f64() < 1e-125);
+    /// assert!((b[1] * OD::from_f64(5.0) - OD::from_f64(3.0)).abs().to_f64() < 1e-125);
+    /// ```
+    pub fn factor(n: usize, ld: usize, c: [Vec<f64>; 8], par: bool) -> Result<ODLu, String> {
+        Self::factor_control(n, ld, c, par, OdLuControl::None)
+    }
+
+    /// `factor` with a variant (`OdLuControl`; None is `factor`)
+    pub fn factor_control(n: usize, ld: usize, c: [Vec<f64>; 8], par: bool, ctl: OdLuControl) -> Result<ODLu, String> {
+        simd::dispatch(FactorOd { n, ld, c, par, ctl })
+    }
+
+    fn factor_on<S: Simd>(
+        n: usize,
+        ld: usize,
+        mut c: [Vec<f64>; 8],
+        par: bool,
+        ctl: OdLuControl,
+    ) -> Result<ODLu, String> {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                assert!(ld.is_multiple_of(8) && ld >= n && c.iter().all(|p| p.len() >= ld * n));
+                let mut perm = vec![0usize; n];
+                let mut m: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0f64; ld]);
+                for k in 0..n {
+                    let ck = k * ld;
+                    let (p, best) = pivot_search::<S>(&c[0][ck..ck + ld], k, n);
+                    if best == 0.0 || !best.is_finite() {
+                        return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                    }
+                    perm[k] = p;
+                    if p != k {
+                        for j in 0..n {
+                            for part in c.iter_mut() {
+                                part.swap(j * ld + k, j * ld + p);
+                            }
+                        }
+                    }
+                    let piv = OD {
+                        x: std::array::from_fn(|q| c[q][ck + k]),
+                    };
+                    // the multipliers l_ik = a_ik / a_kk, rows k + 1..n
+                    if ctl == OdLuControl::Scalar {
+                        for i in k + 1..n {
+                            let l = OD {
+                                x: std::array::from_fn(|q| c[q][ck + i]),
+                            } / piv;
+                            for q in 0..8 {
+                                c[q][ck + i] = l.x[q];
+                            }
+                        }
+                    } else {
+                        let pv = OV::<S>::splat(piv);
+                        let r = pv.c[0].divisor();
+                        let mut i = 8 * ((k + 1) / 8);
+                        while i < n {
+                            let o = ck + i;
+                            let x = OV::<S>::load(c.each_ref().map(|p| &p[o..o + 8]));
+                            let y = sel_ov(rows_in::<S>(i, k + 1, n), x.div_by(pv, r), x);
+                            y.store(c.each_mut().map(|p| &mut p[o..o + 8]));
+                            i += 8;
+                        }
+                    }
+                    if k + 1 == n {
+                        break;
+                    }
+                    let r0 = 8 * ((k + 1) / 8);
+                    for q in 0..8 {
+                        for i in r0..ld {
+                            m[q][i] = if i > k && i < n { c[q][ck + i] } else { 0.0 };
+                        }
+                    }
+                    let ncols = n - k - 1;
+                    let ml: [&[f64]; 8] = m.each_ref().map(|p| &p[..]);
+                    // the trailing columns, each as its eight parts
+                    let mut parts = c
+                        .each_mut()
+                        .map(|p| p[(k + 1) * ld..(k + 1 + ncols) * ld].chunks_mut(ld));
+                    let cols: Vec<[&mut [f64]; 8]> = (0..ncols)
+                        .map(|_| parts.each_mut().map(|it| it.next().unwrap()))
+                        .collect();
+                    let upd = |a: [&mut [f64]; 8]| {
+                        S::vectorize(
+                            #[inline(always)]
+                            || {
+                                if a[0][k] == 0.0 {
+                                    return;
+                                }
+                                let nt = -OD {
+                                    x: std::array::from_fn(|q| a[q][k]),
+                                };
+                                od_axpy_rows::<S>(a, ml, k + 1, n, nt, ctl);
+                            },
+                        )
+                    };
+                    if par && ncols * (ld - r0) > 512 {
+                        cols.into_par_iter().for_each(upd);
+                    } else {
+                        cols.into_iter().for_each(upd);
+                    }
+                }
+                Ok(ODLu { n, ld, c, perm })
+            },
+        )
+    }
+
+    /// entry (i, j) of the factors
+    #[inline(always)]
+    pub fn at(&self, i: usize, j: usize) -> OD {
+        let o = j * self.ld + i;
+        OD {
+            x: std::array::from_fn(|q| self.c[q][o]),
+        }
+    }
+
+    fn col(&self, k: usize) -> [&[f64]; 8] {
+        let r = k * self.ld..(k + 1) * self.ld;
+        std::array::from_fn(|q| &self.c[q][r.clone()])
+    }
+
+    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
+    /// zero), then U x = y, each column's update 8 rows at a time on the backend `simd::dispatch` picks.
+    pub fn solve(&self, b: &mut [OD]) {
+        simd::dispatch(SolveOd { lu: self, b })
+    }
+
+    fn solve_on<S: Simd>(&self, b: &mut [OD]) {
+        S::vectorize(
+            #[inline(always)]
+            move || {
+                let (n, ld) = (self.n, self.ld);
+                assert!(b.len() >= n);
+                for k in 0..n {
+                    let p = self.perm[k];
+                    if p != k {
+                        b.swap(k, p);
+                    }
+                }
+                let mut v: [Vec<f64>; 8] = std::array::from_fn(|q| {
+                    let mut a = vec![0.0f64; ld];
+                    for i in 0..n {
+                        a[i] = b[i].x[q];
+                    }
+                    a
+                });
+                let get = |v: &[Vec<f64>; 8], i: usize| OD {
+                    x: std::array::from_fn(|q| v[q][i]),
+                };
+                for k in 0..n {
+                    let t = -get(&v, k);
+                    if t.x[0] == 0.0 {
+                        continue;
+                    }
+                    od_axpy_rows::<S>(
+                        v.each_mut().map(|p| &mut p[..]),
+                        self.col(k),
+                        k + 1,
+                        n,
+                        t,
+                        OdLuControl::None,
+                    );
+                }
+                for k in (0..n).rev() {
+                    let q = get(&v, k) / self.at(k, k);
+                    for p in 0..8 {
+                        v[p][k] = q.x[p];
+                    }
+                    if q.x[0] != 0.0 {
+                        od_axpy_rows::<S>(
+                            v.each_mut().map(|p| &mut p[..]),
+                            self.col(k),
+                            0,
+                            k,
+                            -q,
+                            OdLuControl::None,
+                        );
+                    }
+                }
+                for i in 0..n {
+                    b[i] = get(&v, i);
+                }
+            },
+        )
+    }
+
+    /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
+    pub fn solve_t(&self, b: &mut [OD]) {
+        let n = self.n;
+        for k in 0..n {
+            let mut acc = b[k];
+            for i in 0..k {
+                acc = acc - self.at(i, k) * b[i];
+            }
+            b[k] = acc / self.at(k, k);
+        }
+        for k in (0..n).rev() {
+            let mut acc = b[k];
+            for i in k + 1..n {
+                acc = acc - self.at(i, k) * b[i];
+            }
+            b[k] = acc;
+        }
+        for k in (0..n).rev() {
+            let p = self.perm[k];
+            if p != k {
+                b.swap(k, p);
+            }
+        }
+    }
+
+    /// min and max |u_kk| (leading parts)
+    pub fn pivot_range(&self) -> (f64, f64) {
+        let mut lo = f64::INFINITY;
+        let mut hi = 0.0f64;
+        for k in 0..self.n {
+            let v = self.c[0][k * self.ld + k].abs();
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        (lo, hi)
+    }
+}
+
+struct FactorOd {
+    n: usize,
+    ld: usize,
+    c: [Vec<f64>; 8],
+    par: bool,
+    ctl: OdLuControl,
+}
+
+impl Kernel for FactorOd {
+    type Output = Result<ODLu, String>;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> Self::Output {
+        ODLu::factor_on::<S>(self.n, self.ld, self.c, self.par, self.ctl)
+    }
+}
+
+struct SolveOd<'a> {
+    lu: &'a ODLu,
+    b: &'a mut [OD],
+}
+
+impl Kernel for SolveOd<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        self.lu.solve_on::<S>(self.b)
+    }
+}
+
+#[cfg(test)]
+mod od_lu_tests {
+    use super::*;
+
+    /// ODLu on one backend: the bits of the factors (with the parallel trailing update), the pivots, and the
+    /// solutions of A x = b and A^T x = b
+    #[derive(Clone)]
+    struct OdOnBackend {
+        n: usize,
+        ld: usize,
+        c: [Vec<f64>; 8],
+        b: Vec<OD>,
+    }
+
+    impl Kernel for OdOnBackend {
+        type Output = Vec<u64>;
+        #[inline(always)]
+        fn run<S: Simd>(self) -> Vec<u64> {
+            let lu = ODLu::factor_on::<S>(self.n, self.ld, self.c, true, OdLuControl::None).unwrap();
+            let (mut x, mut y) = (self.b.clone(), self.b);
+            lu.solve_on::<S>(&mut x);
+            lu.solve_t(&mut y);
+            let bits = |v: &[f64]| v.iter().map(|f| f.to_bits()).collect::<Vec<u64>>();
+            let parts = |v: &[OD]| -> Vec<u64> { v.iter().flat_map(|q| q.x.map(f64::to_bits)).collect() };
+            let perm: Vec<u64> = lu.perm.iter().map(|&p| p as u64).collect();
+            [bits(&lu.c.concat()), perm, parts(&x), parts(&y)].concat()
+        }
+    }
+
+    /// The octo-double LU's factors (with the parallel trailing update), pivots and solutions of A x = b and A^T x = b
+    /// are bitwise the same on every backend this CPU runs, on a block-sparse matrix (skipped zero updates) with all
+    /// eight parts in use and a b with zeros and negative zeros. Control: one flipped low bit is caught by the same
+    /// comparison.
+    #[test]
+    fn od_lu_every_backend_gives_the_same_bits() {
+        let n = 61;
+        let ld = ld_for(n);
+        let mut s = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (s >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+        };
+        let mut c: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; ld * n]);
+        for j in 0..n {
+            for i in 0..n {
+                if (i / 8).abs_diff(j / 8) > 1 {
+                    continue;
+                }
+                let mut x = [0.0; 8];
+                x[0] = next() + if i == j { 3.0 } else { 0.0 };
+                for q in 1..8 {
+                    x[q] = x[q - 1] * next() * 2f64.powi(-52);
+                }
+                let v = OD::new(x);
+                for q in 0..8 {
+                    c[q][j * ld + i] = v.x[q];
+                }
+            }
+        }
+        let b: Vec<OD> = (0..n)
+            .map(|i| match i % 5 {
+                0 => OD::ZERO,
+                3 => OD::from_f64(-0.0),
+                _ => OD::new(std::array::from_fn(|q| next() * 2f64.powi(-53 * q as i32))),
+            })
+            .collect();
+        let ran = simd::for_each_available(OdOnBackend { n, ld, c, b });
+        let (first, want) = (ran[0].0, &ran[0].1);
+        for (name, got) in &ran[1..] {
+            let differ = want.iter().zip(got).filter(|(a, b)| a != b).count();
+            assert_eq!(differ, 0, "{name} against {first}");
+        }
+        let mut wrong = want.clone();
+        let m = want.len() / 2;
+        wrong[m] ^= 1;
+        assert_eq!(want.iter().zip(&wrong).filter(|(a, b)| a != b).count(), 1);
+        println!(
+            "ODLu bitwise the same on {:?}",
+            ran.iter().map(|r| r.0).collect::<Vec<_>>()
+        );
     }
 }
 
