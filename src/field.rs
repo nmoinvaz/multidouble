@@ -12,7 +12,7 @@
 //! for a caller that sums the lane vectors on separate threads. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
-use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
+use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
 use crate::jet::{Jet, OJet, QJet};
 use crate::linalg::DDLu;
@@ -780,8 +780,9 @@ impl<L: MatLane> MatLane for Counted<L> {
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
 /// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), `solve_lanes_refine`, the double-double
-/// solve refined in the field's lane type, and `solve_lanes_jet` and `solve_lanes_jet_refine`, a jet's system solved
-/// order by order in double-double and in quad-double. All panic if the order is not 8 B.
+/// solve refined in the field's lane type, and `solve_lanes_jet`, `solve_lanes_jet_refine` and
+/// `solve_lanes_jet_refine_od`, a jet's system solved order by order in double-double, quad-double and octo-double.
+/// All panic if the order is not 8 B.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
@@ -907,6 +908,66 @@ pub trait FieldSolve {
         couple: impl FnMut(usize, &Fl<QV<T::S>, B>, Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
         resid0: impl FnMut(&Fl<QV<T::S>, B>, &Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
     ) -> Fl<T, B>;
+    /// `solve_lanes_jet_refine` in octo-double, for an octo-double jet (`crate::jet::OJet`). The coefficients are read
+    /// and set in octo-double (`Lane::coef_od`, `Lane::set_coef_od`), `couple(j, x, r)` returns r - A_j x in
+    /// octo-double, and each order's solve is `solve_lanes_refine` on `OV` lanes with `steps` steps and the residual
+    /// `resid0(r, x)` = r - A_0 x formed by the caller in octo-double. Each step multiplies the error by about
+    /// cond(A_0) 2^-104, so with the LU of A_0 to double-double four steps reach octo-double where cond(A_0) is below
+    /// about 10^6, five where it is below about 10^10: twice the steps of the quad-double solve. A quad-double jet's
+    /// coefficients are rounded back to quad-double, a double-double jet's to double-double. A lane type without jet
+    /// coefficients panics. Provided in terms of `solve_lanes_refine`, so every implementation has it.
+    ///
+    /// With the feature `mutate`, `crate::dual::mutate::OJET_REFINE_QD` forms each refinement residual at the iterate
+    /// rounded to quad-double, which leaves the solve at quad-double accuracy (the control of its tests).
+    ///
+    /// ```
+    /// use multidouble::dd::DD;
+    /// use multidouble::dual::Lane;
+    /// use multidouble::field::{FieldSolve, Fl};
+    /// use multidouble::linalg::DDLu;
+    /// use multidouble::native::OJet;
+    /// use multidouble::od::OD;
+    /// // (3 + h) x(h) = 1, so x_1 = -1/9, here to octo-double
+    /// let lu = DDLu::factor(8, 8, (0..64).map(|k| if k % 9 == 0 { 3.0 } else { 0.0 }).collect(), vec![0.0; 64], false)
+    ///     .unwrap();
+    /// let kappa = Fl::<OJet<3>, 1>([OJet::var(DD::from_f64(3.0))]);
+    /// let rhs = Fl::<OJet<3>, 1>([OJet::splat(DD::ONE)]);
+    /// let k0 = kappa.coef_od(0);
+    /// let x = lu.solve_lanes_jet_refine_od(&rhs, 4, |j, x, r| r - kappa.coef_od(j) * *x, |r, x| *r - k0 * *x);
+    /// let x1 = x.coef_od(1).get(0);
+    /// assert!((x1 + OD::ONE / OD::from_f64(9.0)).to_f64().abs() < 1e-120);
+    /// ```
+    fn solve_lanes_jet_refine_od<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        mut couple: impl FnMut(usize, &Fl<OV<T::S>, B>, Fl<OV<T::S>, B>) -> Fl<OV<T::S>, B>,
+        mut resid0: impl FnMut(&Fl<OV<T::S>, B>, &Fl<OV<T::S>, B>) -> Fl<OV<T::S>, B>,
+    ) -> Fl<T, B> {
+        // run-time, as in solve_lanes_refine
+        assert!(
+            T::NJ > 0,
+            "FieldSolve::solve_lanes_jet_refine_od solves jets: a lane type without jet coefficients has no orders"
+        );
+        let mut x = Fl::<T, B>::zero();
+        let mut xs: Vec<Fl<OV<T::S>, B>> = Vec::with_capacity(T::NJ);
+        for k in 0..T::NJ {
+            let mut r = rhs.coef_od(k);
+            for j in 1..=k {
+                r = couple(j, &xs[k - j], r);
+            }
+            let xk = self.solve_lanes_refine(&r, steps, |y| {
+                if mutate::on(mutate::OJET_REFINE_QD) {
+                    resid0(&r, &Fl(y.0.map(|v| OV::from_qv(v.to_qv()))))
+                } else {
+                    resid0(&r, y)
+                }
+            });
+            x.set_coef_od(k, &xk);
+            xs.push(xk);
+        }
+        x
+    }
 }
 
 impl FieldSolve for DDLu {
