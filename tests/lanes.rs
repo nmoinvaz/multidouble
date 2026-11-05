@@ -1,10 +1,12 @@
 //! The 8-lane types against the scalar ones, bit for bit, on every backend this CPU runs (`simd::available()`:
-//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree.
+//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV` and `OV`.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dv::{DotAcc, DV};
+use multidouble::od::{OdAcc, OD};
+use multidouble::ov::{ODotAcc, OV};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, QV};
 use multidouble::simd::{self, Kernel, Simd};
@@ -577,4 +579,177 @@ fn axpy_parts_matches_qd() {
         std::panic::catch_unwind(|| axpy_parts(a, view(&x), [&y[0][..n - 1], &y[1][..], &y[2][..], &y[3][..]]))
             .is_err()
     );
+}
+
+/// an octo-double with all eight parts in use, or (one in four) with exact zeros among its parts, so that the
+/// renormalization's zero test is taken both ways
+fn od8(r: &mut Rng) -> OD {
+    let v = r.dd(10).hi;
+    let mut x = [0.0; 8];
+    x[0] = v;
+    let sparse = r.next_u64() % 4 == 0;
+    for i in 1..8 {
+        x[i] = if sparse && r.next_u64() % 2 == 0 {
+            0.0
+        } else {
+            x[i - 1].abs().max(v.abs() * 2f64.powi(-53 * i as i32)) * 2f64.powi(-53) * r.sym()
+        };
+    }
+    OD::new(x)
+}
+
+/// the lanes of `OV` against `OD` on one backend: the number of lane results that differ in any bit
+#[derive(Clone)]
+struct OvMatchesOd;
+
+impl Kernel for OvMatchesOd {
+    type Output = usize;
+    #[inline(always)]
+    fn run<S: Simd>(self) -> usize {
+        let mut bad = 0;
+        let mut r = Rng(17);
+        for _ in 0..ROUNDS / 16 {
+            let x: [OD; 8] = std::array::from_fn(|_| od8(&mut r));
+            let y: [OD; 8] = std::array::from_fn(|_| od8(&mut r));
+            let f: [f64; 8] = std::array::from_fn(|_| r.dd(5).hi);
+            let (vx, vy, vf) = (OV::<S>::from_lanes(&x), OV::<S>::from_lanes(&y), V8::<S>::from_array(f));
+            let acc = ODotAcc::<S>::zero().add_prod(vx, vy).add(vy).add_prod(vy, vy).finish();
+            let lanes = [
+                vx + vy,
+                vx - vy,
+                vx * vy,
+                vx / vy,
+                vx.div_by(vy, vy.c[0].divisor()),
+                vx.abs().sqrt(),
+                vx.add_v(vf),
+                vx.mul_v(vf),
+                -vx,
+                vx.abs(),
+                acc,
+                OV::from_qv(vx.to_qv()),
+                OV::from_dv(vx.to_dv()),
+                OV::from_v8(vx.to_v8()),
+            ];
+            for j in 0..8 {
+                let want = [
+                    x[j] + y[j],
+                    x[j] - y[j],
+                    x[j] * y[j],
+                    x[j] / y[j],
+                    x[j] / y[j],
+                    x[j].abs().sqrt(),
+                    x[j].add_f(f[j]),
+                    x[j].mul_f(f[j]),
+                    -x[j],
+                    x[j].abs(),
+                    OdAcc::zero()
+                        .add_prod(x[j], y[j])
+                        .add(y[j])
+                        .add_prod(y[j], y[j])
+                        .finish(),
+                    OD::from_qd(x[j].to_qd()),
+                    OD::from_dd(x[j].to_dd()),
+                    OD::from_f64(x[j].to_f64()),
+                ];
+                for (k, w) in want.iter().enumerate() {
+                    let g = lanes[k].lane(j);
+                    if !g.x.iter().zip(w.x.iter()).all(|(a, b)| same(*a, *b)) {
+                        if bad == 0 {
+                            println!("{}: op {k} lane {j}: {g:?} vs {w:?}", S::NAME);
+                        }
+                        bad += 1;
+                    }
+                }
+            }
+            let m = [vx.lt(vy), vx.le(vy), vx.gt(vy), vx.ge(vy), vx.eq(vx)].map(|m| m.bits());
+            for j in 0..8 {
+                let want = [x[j] < y[j], x[j] <= y[j], x[j] > y[j], x[j] >= y[j], true];
+                for (k, w) in want.iter().enumerate() {
+                    if (m[k] >> j & 1 == 1) != *w {
+                        println!("{}: comparison {k} lane {j}", S::NAME);
+                        bad += 1;
+                    }
+                }
+            }
+        }
+        bad
+    }
+}
+
+/// `OV` matches `OD` bit for bit on every backend: the arithmetic, the accumulator, the conversions and the
+/// comparisons, on values with all parts in use and with zero parts
+#[test]
+fn ov_matches_od() {
+    let ran = simd::for_each_available(OvMatchesOd);
+    assert_eq!(ran.iter().map(|r| r.0).collect::<Vec<_>>(), simd::available());
+    assert!(ran.iter().all(|r| r.1 == 0), "lanes that differ: {ran:?}");
+    println!("checked on {:?}", simd::available());
+}
+
+/// Control (feature `mutate`): with two-product's fused multiply-subtract replaced by a plain product on the compile-time
+/// backend only (`od::mutate::OV_FMA_PLAIN`), the same check fails on that backend and passes on the others.
+#[cfg(feature = "mutate")]
+#[test]
+fn ov_matches_od_control_fma_on_one_backend() {
+    use multidouble::od::mutate;
+    mutate::set(mutate::OV_FMA_PLAIN);
+    let ran = simd::for_each_available(OvMatchesOd);
+    mutate::set(0);
+    for (name, bad) in &ran {
+        let native = *name == <multidouble::simd::Native as Simd>::NAME;
+        println!("{name}: {bad} lane results differ (native {native})");
+        assert_eq!(*bad > 0, native, "{name}: {bad}");
+    }
+}
+
+/// Signed zeros in the parts of octo-doubles: the lanes give the scalar type's zero signs, and negation leaves every
+/// zero lower part +0
+#[derive(Clone)]
+struct OvSignedZeros;
+
+impl Kernel for OvSignedZeros {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let mut vals = Vec::new();
+        for d in zero_dds() {
+            for tail in [0.0, -0.0] {
+                let mut x = [tail; 8];
+                x[0] = d.hi;
+                x[1] = d.lo;
+                vals.push(OD { x });
+            }
+        }
+        let same_od = |g: OD, w: OD| g.x.iter().zip(w.x.iter()).all(|(a, b)| same(*a, *b));
+        for &a in &vals {
+            let n = -a;
+            assert!(
+                same(n.x[0], -a.x[0]) && n.x[1..].iter().all(|v| same(*v, 0.0)),
+                "OD neg {a:?}: {n:?}"
+            );
+            for &b in &vals {
+                let (va, vb) = (OV::<S>::splat(a), OV::<S>::splat(b));
+                let mut ops = vec![("neg", -va, -a), ("add", va + vb, a + b), ("sub", va - vb, a - b)];
+                ops.push(("mul", va * vb, a * b));
+                if b.x[0] != 0.0 {
+                    ops.push(("div", va / vb, a / b));
+                }
+                for (name, g, w) in ops {
+                    for j in 0..8 {
+                        assert!(
+                            same_od(g.lane(j), w),
+                            "{}: OV {name} {a:?} {b:?}: {:?} vs {w:?}",
+                            S::NAME,
+                            g.lane(j)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ov_signed_zeros_match_od() {
+    on_every_backend(OvSignedZeros);
 }
