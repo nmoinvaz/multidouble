@@ -1,8 +1,8 @@
-//! Double-double and quad-double floating-point arithmetic, scalar and on 8-lane SIMD vectors.
+//! Double-double, quad-double and octo-double floating-point arithmetic, scalar and on 8-lane SIMD vectors.
 //!
 //! A double-double is an unevaluated sum `hi + lo` of two `f64` (about 32 significant digits); a quad-double is a sum
-//! of four (about 64 digits). The lane types run the same algorithms on 8 values at once, with **bitwise the same
-//! results per lane** as the scalar types, on every backend:
+//! of four (about 64 digits), an octo-double of eight (about 126 digits). The lane types run the same algorithms on 8
+//! values at once, with **bitwise the same results per lane** as the scalar types, on every backend:
 //!
 //! * [`v8::V8`]: 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or four NEON registers, or a plain
 //!   array (the cargo feature `portable` forces it), with fused multiply-add throughout.
@@ -13,6 +13,8 @@
 //! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with two
 //!   repairs found by this crate's tests), exact decimal parsing and printing;
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
+//! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
+//!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent,
@@ -24,7 +26,8 @@
 //!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
 //!   arithmetic of power-series methods.
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
-//!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double), solves,
+//!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double) and in octo-double
+//!   ([`linalg::ODLu`], for those too ill-conditioned for quad-double), solves,
 //!   transpose solves, solves refined to quad-double and Gram matrices, and the determinant of a complex matrix
 //!   ([`linalg::clu_logdet`]); [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase

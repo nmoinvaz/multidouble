@@ -4,19 +4,20 @@
 [![Lint](https://github.com/nmoinvaz/multidouble/actions/workflows/lint.yml/badge.svg)](https://github.com/nmoinvaz/multidouble/actions/workflows/lint.yml)
 [![codecov](https://codecov.io/gh/nmoinvaz/multidouble/graph/badge.svg)](https://codecov.io/gh/nmoinvaz/multidouble)
 
-Double-double and quad-double floating-point arithmetic for Rust, scalar and on 8-lane SIMD vectors, with **bitwise the
-same results on AVX-512, AVX2, SSE2, NEON and portable builds**. It also has forward-mode dual numbers over these lanes and a dense
-LU factorization in double-double.
+Double-double, quad-double and octo-double floating-point arithmetic for Rust, scalar and on 8-lane SIMD vectors, with
+**bitwise the same results on AVX-512, AVX2, SSE2, NEON and portable builds**. It also has forward-mode dual numbers over
+these lanes and dense LU factorizations in double-double, quad-double and octo-double.
 
 A double-double is an unevaluated sum `hi + lo` of two `f64`, about 32 significant digits. A quad-double is a sum of four,
-about 64 digits. Both are built from error-free transformations (two-sum, FMA two-product), so they run at hardware
-speed, with no allocation and no arbitrary-precision library.
+about 64 digits, and an octo-double a sum of eight, about 126 digits. All are built from error-free transformations
+(two-sum, FMA two-product), so they run at hardware speed, with no allocation and no arbitrary-precision library.
 
 | Type | What it is |
 |---|---|
 | `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout; `divisor` and `div_by` for several divisions by one vector, on AVX-512 by its reciprocal (`rcp14`, Newton steps and one correction), bitwise the same as `div` |
 | `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `DV::div_by` for several divisions by one b through `b.hi.divisor()`, bitwise the same as `/`; `dv::DotAcc` accumulates sums of products; `dd::split` and `dd::join` between slices of double-doubles and their hi and lo arrays |
 | `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QV::div_by` for several divisions by one b through `b.c[0].divisor()`, bitwise the same as `/`; `QdAcc`, `QDotAcc` accumulators; `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays; `qd::to_parts` and `qd::from_parts` between slices of quad-doubles and their four part arrays |
+| `od::OD`, `ov::OV` | octo-double, scalar and 8-lane: the quad-double algorithms carried to eight parts and written once for both, add, multiply, divide (also by a shared divisor), square root, comparisons, exact decimal parsing and printing; `OdAcc`, `ODotAcc` accumulators; `OV` is a `dual::Lane` (`Lane::VAL_OD`), so code written over the trait runs in octo-double and `solve_lanes_refine` refines a double-double LU's solve to octo-double |
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `jet::Jet<N>` | a truncated power series lane: N double-double coefficients in one variable, Cauchy products and series quotients, so a computation written over `dual::Lane` gives its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a high-order Taylor continuation of a branch); `jet::Series<N>` is its scalar parameter arithmetic (`Lane::P`, double-double on every other lane, so constants formed from the parameter stay bit for bit what they were) |
 | `jet::QJet<N>` | the same in quad-double, with `jet::QSeries<N>` its parameter arithmetic: Taylor coefficients to quad-double accuracy where cancellation in the computation amplifies double-double rounding; `Lane::coef_qd` and `set_coef_qd` read and set them without rounding to double-double |
@@ -24,6 +25,7 @@ speed, with no allocation and no arbitrary-precision library.
 | `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with f64 tangents set and unit tangents seeded (`set_tan64`, `unit`, `unit_tangent`), Cauchy products (`cs`, `cs_range`, `cs_w`), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together, a complex tangent by its real part and a jet refused, and `solve_lanes_jet` and `solve_lanes_jet_refine`, a jet's system order by order with the LU at the values, in double-double or each order refined to quad-double) and an early end of a series once its tangent terms have stayed below a tolerance, relative to their largest so far, for a run of orders (`TangentTail`): the arithmetic of power-series methods, for every lane type |
 | `linalg::DDLu`, `linalg::clu_logdet` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices, the determinant; ln\|det\| and arg det of a complex double-double matrix by the same LU (`clu_logdet`) |
 | `linalg::QDLu` | dense LU with partial pivoting in quad-double (8-row `QV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in quad-double: for systems too ill-conditioned for double-double |
+| `linalg::ODLu` | dense LU with partial pivoting in octo-double (8-row `OV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in octo-double: for systems too ill-conditioned for quad-double, to about cond(A) 2^-418 |
 | `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
 | `linalg::StaircaseLu` | the f64 LU with partial pivoting of a staircase (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without the dense matrix; solves and transpose solves in double-double |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
@@ -125,8 +127,9 @@ rounded.
 ## Python
 
 [`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double
-add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double and
-quad-double LU solves, and numpy versions of the error-free transformations (`pip install ./python`, which builds it with maturin).
+add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double, quad-double
+and octo-double LU solves (`od_solve` takes eight part arrays), and numpy versions of the error-free transformations
+(`pip install ./python`, which builds it with maturin).
 
 ## Accuracy
 
@@ -150,10 +153,30 @@ two repairs found by these tests:
 
 Quad-double costs 8–29 times double-double per operation, and 14–17 times in sums of products.
 
+The octo-double operations are checked the same way, against exact arithmetic on random, cancelling, near-overflow,
+near-underflow, near-power-of-two, sparse and computed inputs. In units of 2⁻⁴¹⁸ (relative to |a| + |b| for the adds):
+
+| Operation | Bound checked | Worst seen (2,000 inputs per kind) |
+|---|---|---|
+| add, subtract, + f64 | 1 | 1.1×10⁻⁴ |
+| multiply, × f64 | 1 | 9.5×10⁻⁵ |
+| divide | 2 | 1.1×10⁻⁴ |
+| square root | 2 | 1.1×10⁻⁴ |
+| dot products of 1 to 64 terms (relative to Σ \|aᵢbᵢ\|) | (8 + n)/8 | 9.8×10⁻⁵ |
+
+Octo-double costs 4–8 times quad-double per operation on the NEON lanes (add 3.7, multiply 5.3, divide 7.6) and about 14
+times in sums of products, whose quad-double accumulator drops the smallest partial products where this one keeps them.
+The worst error, about 2⁻⁴³¹, is the rounding of the result to eight parts. The near-underflow inputs are checked with
+an absolute allowance of 16×2⁻¹⁰⁷⁴, as for quad-double: full precision needs every part to be a normal `f64`, so values
+above about 2⁻⁶⁰⁰. `ODLu` solves to about 10⁻¹³³ cond(A) against planted solutions, 2⁻²²⁰ times the quad-double LU's
+error on the same systems, for condition numbers from 1 to 10³⁰.
+
 Every check can fail. Two kinds of controls show it:
 
-- **Built-in breakage.** The feature `mutate` breaks the quad-double algorithms one at a time on purpose, and
-  `cargo test --release --features mutate` checks that each breakage fails a test.
+- **Built-in breakage.** The feature `mutate` breaks the quad-double and octo-double algorithms one at a time on
+  purpose, and `cargo test --release --features mutate` checks that each breakage fails a test. One of them replaces
+  a fused multiply-subtract by a plain product on the compile-time backend only, and the backend check catches it there
+  and on no other backend.
 - **Hand-written controls.** The integration tests contain controls that feed deliberately wrong results to the same
   checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor, and f128 conversions
   that round twice.
@@ -168,11 +191,12 @@ RUSTFLAGS="-C target-cpu=native" cargo test --release           # AVX-512 where 
 cargo test --release --features mutate                          # the mutation controls
 cargo +nightly test --release --features f128                   # the f128 conversions
 cargo llvm-cov --features mutate                                # coverage (cargo-llvm-cov)
-cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double
-cargo bench --bench linalg                                      # double-double LU against f64 LU
+cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double, octo-double
+cargo bench --bench linalg                                      # double-double LU against f64 LU, and the octo-double LU
+cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
 ```
 
-`tests/lanes.rs` checks that `V8`, `DV` and `QV` match the scalar types bit for bit, on every backend the CPU has. The NEON backend's code is also
+`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, on every backend the CPU has. The NEON backend's code is also
 compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
 every runner, not only on ARM. CI runs the whole suite on:
 
@@ -190,9 +214,9 @@ The minimum Rust version is 1.89, where the AVX-512 intrinsics became stable.
 
 This code was written for a double-double solver of Choptuik's critical collapse in D dimensions
 ([choptuik-large-d](https://github.com/nmoinvaz/choptuik-large-d)). That solver needs about 30 digits and an exact
-Jacobian at the speed of SIMD f64 code.
+Jacobian at the speed of SIMD f64 code, and at large D, where rounding is amplified, quad-double and octo-double.
 
 ## License
 
 [BSD 3-Clause](LICENSE), the license of the QD library whose quad-double algorithms `src/qd.rs` and `src/qv.rs`
-follow. QD's own notice is kept in [LICENSE-QD](LICENSE-QD).
+follow, and `src/od.rs` carries to eight parts. QD's own notice is kept in [LICENSE-QD](LICENSE-QD).

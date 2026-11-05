@@ -27,6 +27,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 /// Eight octo-doubles, part k of lane j at `c[k]` lane j.
 #[derive(Clone, Copy, Debug)]
 pub struct OV<S: Simd> {
+    /// the parts, largest first, each of the 8 lanes
     pub c: [V8<S>; 8],
 }
 
@@ -140,22 +141,27 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
 }
 
 impl<S: Simd> OV<S> {
+    /// 0 on every lane
     #[inline(always)]
     pub fn zero() -> Self {
         OV { c: [V8::zero(); 8] }
     }
+    /// x on every lane
     #[inline(always)]
     pub fn splat(x: OD) -> Self {
         OV { c: x.x.map(V8::splat) }
     }
+    /// x on every lane, exactly
     #[inline(always)]
     pub fn splat_f(x: f64) -> Self {
         OV::splat(OD::from_f64(x))
     }
+    /// x on every lane, exactly
     #[inline(always)]
     pub fn splat_dd(x: DD) -> Self {
         OV::splat(OD::from_dd(x))
     }
+    /// x on every lane, exactly
     #[inline(always)]
     pub fn splat_qd(x: QD) -> Self {
         OV::splat(OD::from_qd(x))
@@ -214,17 +220,20 @@ impl<S: Simd> OV<S> {
             v.store(s);
         }
     }
+    /// lane j = x\[j\]
     pub fn from_lanes(x: &[OD; 8]) -> Self {
         OV {
             c: std::array::from_fn(|k| V8::from_array(std::array::from_fn(|j| x[j].x[k]))),
         }
     }
+    /// lane j as a scalar octo-double
     #[inline(always)]
     pub fn lane(self, j: usize) -> OD {
         OD {
             x: self.c.map(|v| v.to_array()[j]),
         }
     }
+    /// the 8 lanes as scalar octo-doubles
     pub fn lanes(self) -> [OD; 8] {
         let a = self.c.map(|v| v.to_array());
         std::array::from_fn(|j| OD {
@@ -275,6 +284,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
+    /// od + f64 on every lane, as `OD::add_f`
     #[inline]
     pub fn add_f(self, b: f64) -> Self {
         self.add_v(V8::splat(b))
@@ -289,6 +299,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
+    /// od x f64 on every lane, as `OD::mul_f`
     #[inline]
     pub fn mul_f(self, b: f64) -> Self {
         self.mul_v(V8::splat(b))
@@ -304,6 +315,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
+    /// 1 / self
     #[inline]
     pub fn recip(self) -> Self {
         OV::splat_f(1.0) / self
@@ -422,10 +434,12 @@ impl<S: Simd> Div for OV<S> {
 /// Accumulator for sums of octo-double products (see the module doc); the 8-lane twin of `od::OdAcc`.
 #[derive(Clone, Copy, Debug)]
 pub struct ODotAcc<S: Simd> {
+    /// the running levels, the largest first
     pub s: [V8<S>; 9],
 }
 
 impl<S: Simd> ODotAcc<S> {
+    /// the empty sum on every lane
     #[inline(always)]
     pub fn zero() -> Self {
         ODotAcc { s: [V8::zero(); 9] }
