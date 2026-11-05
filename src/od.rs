@@ -2,7 +2,7 @@
 //! overlap (|x_{i+1}| <= ulp(x_i)/2), about 126 significant digits (2^-418 relative, `OD::EPS`). The 8-lane
 //! `ov::OV` runs the same algorithms with bitwise the same results.
 //!
-//! The algorithms are written once over [`Limb`], a part position of one value (`f64`) or of eight (`V8`), so the
+//! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the
 //! scalar type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double
 //! algorithms of the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating
 //! point arithmetic", ARITH-15, 2001) from four parts to eight, with the error-free transformations two-sum and the
@@ -19,8 +19,8 @@
 //!   the eighth level. Its error is relative to |a| + |b| (Cray-style), as QD's `+`.
 //! * Multiplication: every partial product a_i b_j of order i + j <= 7 by two-product, the products of order 8 by
 //!   fused multiply-adds, all deposited by order into nine levels whose first eight sum with two-sums, then
-//!   renormalized: QD's accurate multiply, extended to eight parts. The levels hold the product to about 2^-470
-//!   relative, so its error is that of the renormalization's eighth part.
+//!   renormalized: QD's accurate multiply, extended to eight parts. The levels carry the product's terms to order 8,
+//!   below the eighth part, so its error is that of the renormalization's rounding to eight parts.
 //! * Division: long division, nine quotient terms q_k = r_0 / b_0 with the remainder r - b q_k updated in one pass
 //!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), four steps, after scaling by a
 //!   power of four (QD's, with this crate's scaling, `qd::QD::sqrt`).
@@ -67,6 +67,7 @@ pub mod mutate {
     pub const OV_FMA_PLAIN: u32 = 11;
     /// number of ids
     pub const N: u32 = 11;
+    /// the mutations' descriptions, by id
     pub const NAMES: [&str; 12] = [
         "none",
         "renorm: eighth part dropped",
@@ -91,12 +92,14 @@ pub mod mutate {
         ID.with(|m| m.set(id));
     }
 
+    /// whether mutation id is selected in the current thread
     #[cfg(feature = "mutate")]
     #[inline(always)]
     pub fn on(id: u32) -> bool {
         ID.with(|m| m.get() == id)
     }
 
+    /// whether mutation id is selected: never, without the feature `mutate`
     #[cfg(not(feature = "mutate"))]
     #[inline(always)]
     pub fn on(_id: u32) -> bool {
@@ -563,11 +566,14 @@ pub(crate) mod alg {
 /// Octo-double `x[0] + x[1] + ... + x[7]`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct OD {
+    /// the parts, largest first
     pub x: [f64; 8],
 }
 
 impl OD {
+    /// 0
     pub const ZERO: OD = OD { x: [0.0; 8] };
+    /// 1
     pub const ONE: OD = OD {
         x: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     };
@@ -579,6 +585,7 @@ impl OD {
     pub fn new(x: [f64; 8]) -> OD {
         OD { x: renorm_scalar(x) }
     }
+    /// exact
     #[inline(always)]
     pub fn from_f64(x: f64) -> OD {
         let mut o = OD::ZERO;
@@ -624,10 +631,12 @@ impl OD {
         let [a, b, c, d] = alg::to_qd_parts(&self.x);
         QD::new(a, b, c, d)
     }
+    /// the leading part is zero (so, renormalized, every part is)
     #[inline(always)]
     pub fn is_zero(self) -> bool {
         self.x[0] == 0.0
     }
+    /// |self|: negated where the leading part is negative
     #[inline(always)]
     pub fn abs(self) -> OD {
         if self.x[0] < 0.0 {
@@ -658,6 +667,7 @@ impl OD {
             x: alg::mul_f(&self.x, b),
         }
     }
+    /// 1 / self
     #[inline]
     pub fn recip(self) -> OD {
         OD::ONE / self
@@ -833,14 +843,16 @@ pub fn from_parts(c: [&[f64]; 8]) -> Vec<OD> {
 
 /// Scalar sum-of-products accumulator, the twin of `ov::ODotAcc` (same algorithm, bitwise the same per lane): nine
 /// running levels, the first eight summed with two-sums and the last in plain f64. Each product's levels (`expand`,
-/// to about 2^-470 relative to |a b|) are added into them with their errors carried down, so the error of a dot
-/// product is that of `finish` and a small multiple of 2^-470 sum |a_i b_i|.
+/// its terms to order 8) are added into them with their errors carried down, so the error of a dot product is mostly
+/// that of `finish`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OdAcc {
+    /// the running levels, the largest first
     pub s: [f64; 9],
 }
 
 impl OdAcc {
+    /// the empty sum
     pub fn zero() -> OdAcc {
         OdAcc::default()
     }

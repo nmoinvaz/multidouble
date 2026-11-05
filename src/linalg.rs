@@ -2692,6 +2692,7 @@ impl Kernel for SolveQd<'_> {
 /// of the accuracy tests.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OdLuControl {
+    /// the factorization itself
     None,
     /// every update in scalar octo-double (`OD`), entry by entry: bitwise `None` (each lane of `OV` is the scalar
     /// computation), the reference of the bitwise tests and of the lanes' benchmark
@@ -2709,10 +2710,13 @@ pub enum OdLuControl {
 /// skipped (it cannot change a value). Every backend gives the same bits.
 #[derive(Clone)]
 pub struct ODLu {
+    /// the order
     pub n: usize,
+    /// the leading dimension, a multiple of 8
     pub ld: usize,
     /// part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it) at c[q][j * ld + i]
     pub c: [Vec<f64>; 8],
+    /// the row swaps: row k was exchanged with row perm\[k\] at step k
     pub perm: Vec<usize>,
 }
 
