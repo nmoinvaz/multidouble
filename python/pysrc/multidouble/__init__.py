@@ -38,9 +38,11 @@ __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_so
 
 
 def _masked(v):
-    """v, or an array or element of a sequence v (nested lists and tuples included), has a masked value"""
+    """v, or an array or element of a sequence or object array v (nested ones included), has a masked value"""
     if np.ma.isMaskedArray(v):
         return bool(np.ma.getmaskarray(v).any())
+    if isinstance(v, np.ndarray) and v.dtype == object:
+        return any(_masked(x) for x in v.flat)
     if isinstance(v, (list, tuple)):
         return any(_masked(x) for x in v)
     return False
