@@ -195,6 +195,14 @@ pub trait Lane:
     fn acc0() -> Self::Acc;
     /// a + x y
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc;
+    /// a + x y into a, with the accumulator and the operands borrowed: bitwise `acc`. Moving them copies the jets'
+    /// accumulators and coefficients, several kilobytes each (`[QDotAcc; N]` and N quad-double coefficients for
+    /// `crate::jet::QJet<N>`), once per term of a sum. The default is `acc`. The jets, the quad-double lanes, `Dtn` and
+    /// `Fun` add in place, the quad-double ones through `QDotAcc::add_prod_mut`.
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        *a = Self::acc(*a, *x, *y);
+    }
     /// a + x c, c constant
     fn accc(a: Self::Acc, x: Self, c: DV<Self::S>) -> Self::Acc;
     /// a + x
@@ -739,6 +747,13 @@ impl<S: Simd> Lane for Qu<S> {
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
         (a.0.add_prod(x.v, y.v), a.1.add_prod(x.v, y.d).add_prod(x.d, y.v))
     }
+    /// `acc` in place (`QDotAcc::add_prod_mut`)
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        a.0.add_prod_mut(&x.v, &y.v);
+        a.1.add_prod_mut(&x.v, &y.d);
+        a.1.add_prod_mut(&x.d, &y.v);
+    }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
         let c = QV::from_dv(c);
@@ -1227,6 +1242,14 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
         }
         (a.0.add_prod(x.v, y.v), d)
     }
+    /// `acc` in place: the same operations on each tangent and the value
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        for i in 0..N {
+            a.1[i] = x.v.hi.fma(y.d[i], x.d[i].fma(y.v.hi, a.1[i]));
+        }
+        a.0 = a.0.add_prod(x.v, y.v);
+    }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
         let mut d = a.1;
@@ -1433,6 +1456,14 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
             d[i] = x.v.fma(y.d[i], x.d[i].fma(y.v, a.1[i]));
         }
         (x.v.fma(y.v, a.0), d)
+    }
+    /// `acc` in place: the same operations on each tangent and the value
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        for i in 0..N {
+            a.1[i] = x.v.fma(y.d[i], x.d[i].fma(y.v, a.1[i]));
+        }
+        a.0 = x.v.fma(y.v, a.0);
     }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
@@ -1645,6 +1676,12 @@ impl<L: Lane> Lane for Counted<L> {
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
         count(op::ACC);
         L::acc(a, x.0, y.0)
+    }
+    /// counted as `acc`
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        count(op::ACC);
+        L::acc_mut(a, &x.0, &y.0)
     }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<Self::S>) -> Self::Acc {

@@ -335,6 +335,17 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
         }
         a
     }
+    /// `acc` in place: the same products in the same order, without moving the N accumulators or the operands
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        for k in 0..N {
+            let mut s = a[k];
+            for i in 0..=k {
+                s = s.add_prod(x.c[i], y.c[k - i]);
+            }
+            a[k] = s;
+        }
+    }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
         let mut a = a;
@@ -707,6 +718,24 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
             }
         }
         a
+    }
+    /// `acc` in place: the same products in the same order, without moving the N accumulators or the operands. The
+    /// convolution is one `Simd::hot` step with each product's step inlined in it, so that where the compiler keeps
+    /// the step out of line (NEON, SSE2, portable) one call per term remains, not one per product.
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        S::hot(
+            #[inline(always)]
+            || {
+                for k in 0..N {
+                    let mut s = a[k];
+                    for i in 0..=k {
+                        s = s.plus_prod(&x.c[i], &y.c[k - i]);
+                    }
+                    a[k] = s;
+                }
+            },
+        )
     }
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
