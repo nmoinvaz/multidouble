@@ -557,8 +557,8 @@ impl<L: MatLane> MatLane for Counted<L> {
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
 /// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), `solve_lanes_refine`, the double-double
-/// solve refined in the field's lane type, and `solve_lanes_jet`, a jet's system solved order by order. All panic if
-/// the order is not 8 B.
+/// solve refined in the field's lane type, and `solve_lanes_jet` and `solve_lanes_jet_refine`, a jet's system solved
+/// order by order in double-double and in quad-double. All panic if the order is not 8 B.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
@@ -647,6 +647,38 @@ pub trait FieldSolve {
         &self,
         rhs: &Fl<T, B>,
         couple: impl FnMut(usize, &Fl<DV<T::S>, B>, Fl<DV<T::S>, B>) -> Fl<DV<T::S>, B>,
+    ) -> Fl<T, B>;
+    /// `solve_lanes_jet` in quad-double, for a quad-double jet (`crate::jet::QJet`). The coefficients are read and
+    /// set in quad-double (`Lane::coef_qd`, `Lane::set_coef_qd`), and `couple(j, x, r)` returns r - A_j x in
+    /// quad-double. Each order's solve is `solve_lanes_refine` on `QV` lanes with `steps` steps, its residual
+    /// `resid0(r, x)` = r - A_0 x formed by the caller in quad-double with its own A_0 (r the order's right-hand side).
+    /// When this is the LU of A_0 to double-double, two steps reach quad-double where cond(A_0) is below about 10^10,
+    /// as for `solve_lanes_refine`. A double-double jet's coefficients are rounded back to double-double. A lane type
+    /// without jet coefficients panics.
+    ///
+    /// ```
+    /// use multidouble::dd::DD;
+    /// use multidouble::dual::Lane;
+    /// use multidouble::field::{FieldSolve, Fl};
+    /// use multidouble::linalg::DDLu;
+    /// use multidouble::native::QJet;
+    /// use multidouble::qd::QD;
+    /// // (3 + h) x(h) = 1, so x_1 = -1/9, here to quad-double
+    /// let lu = DDLu::factor(8, 8, (0..64).map(|k| if k % 9 == 0 { 3.0 } else { 0.0 }).collect(), vec![0.0; 64], false)
+    ///     .unwrap();
+    /// let kappa = Fl::<QJet<3>, 1>([QJet::var(DD::from_f64(3.0))]);
+    /// let rhs = Fl::<QJet<3>, 1>([QJet::splat(DD::ONE)]);
+    /// let k0 = kappa.coef_qd(0);
+    /// let x = lu.solve_lanes_jet_refine(&rhs, 2, |j, x, r| r - kappa.coef_qd(j) * *x, |r, x| *r - k0 * *x);
+    /// let x1 = x.coef_qd(1).get(0);
+    /// assert!((x1 + QD::ONE / QD::from_f64(9.0)).to_f64().abs() < 1e-60);
+    /// ```
+    fn solve_lanes_jet_refine<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        couple: impl FnMut(usize, &Fl<QV<T::S>, B>, Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
+        resid0: impl FnMut(&Fl<QV<T::S>, B>, &Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
     ) -> Fl<T, B>;
 }
 
@@ -742,6 +774,31 @@ impl FieldSolve for DDLu {
             }
             let xk = self.solve_lanes(&r);
             x.set_coef(k, &xk);
+            xs.push(xk);
+        }
+        x
+    }
+
+    fn solve_lanes_jet_refine<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        steps: usize,
+        mut couple: impl FnMut(usize, &Fl<QV<T::S>, B>, Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
+        mut resid0: impl FnMut(&Fl<QV<T::S>, B>, &Fl<QV<T::S>, B>) -> Fl<QV<T::S>, B>,
+    ) -> Fl<T, B> {
+        assert!(
+            T::NJ > 0,
+            "FieldSolve::solve_lanes_jet_refine solves jets: a lane type without jet coefficients has no orders"
+        );
+        let mut x = Fl::<T, B>::zero();
+        let mut xs: Vec<Fl<QV<T::S>, B>> = Vec::with_capacity(T::NJ);
+        for k in 0..T::NJ {
+            let mut r = rhs.coef_qd(k);
+            for j in 1..=k {
+                r = couple(j, &xs[k - j], r);
+            }
+            let xk = self.solve_lanes_refine(&r, steps, |y| resid0(&r, y));
+            x.set_coef_qd(k, &xk);
             xs.push(xk);
         }
         x
