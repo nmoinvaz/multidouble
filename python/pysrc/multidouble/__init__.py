@@ -134,13 +134,14 @@ def _parts(names, *v):
 
 
 def qd_solve(a0, a1, a2, a3, b0, b1, b2, b3):
-    """x with A x = b in quad-double, by LU with partial pivoting (the Rust crate's QDLu, getf2 order, its updates
-    8 rows at a time on the best SIMD backend, bitwise the same on every backend): A as four (n, n) part arrays (A =
-    a0 + a1 + a2 + a3 entrywise), b as four part arrays of shape (n,), or (n, k) for k right-hand sides, the columns
-    of b. Each entry is renormalized first, so any four parts summing to the value will do. The error is about
-    cond(A) 2^-209 relative (partial pivoting is backward stable). Returns the four parts of x, of b's shape. Raises
-    ValueError if A is singular (an exactly zero pivot), if A or b has an entry that is not finite, or for mismatched
-    shapes. QDLu(a0, a1, a2, a3).solve(b0, b1, b2, b3) gives the same bits and keeps the factors."""
+    """x with A x = b in quad-double, by LU with partial pivoting (the Rust crate's QDLu, getf2 order, its updates 8
+    rows at a time on the best SIMD backend, bitwise the same on every backend): A as four (n, n) part arrays (A = a0 +
+    a1 + a2 + a3 entrywise), b as four part arrays of shape (n,), or (n, k) for k right-hand sides, the columns of b.
+    Each entry is the exact sum of its four parts in any order, so any four parts summing to the value will do, and
+    normalized parts give the bits of their renormalization as before. The error is about cond(A) 2^-209 relative
+    (partial pivoting is backward stable). Returns the four parts of x, of b's shape. Raises ValueError if A is singular
+    (an exactly zero pivot), if A or b has an entry that is not finite, or for mismatched shapes. QDLu(a0, a1, a2,
+    a3).solve(b0, b1, b2, b3) gives the same bits and keeps the factors."""
     a = _parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3)
     b = _parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3)
     return _md.qd_solve(*a, *b)
@@ -148,9 +149,9 @@ def qd_solve(a0, a1, a2, a3, b0, b1, b2, b3):
 
 class QDLu:
     """The quad-double LU of A with partial pivoting, factored once for several solves, e.g. the same Jacobian over
-    several Newton steps: QDLu(a0, a1, a2, a3) with A as four (n, n) part arrays, each entry renormalized first. The
-    factorization costs about n^3 / 3 quad-double multiply-adds and each solve about n^2. Raises ValueError if A is
-    singular or has an entry that is not finite."""
+    several Newton steps: QDLu(a0, a1, a2, a3) with A as four (n, n) part arrays, each entry the exact sum of its parts
+    in any order. The factorization costs about n^3 / 3 quad-double multiply-adds and each solve about n^2. Raises
+    ValueError if A is singular or has an entry that is not finite."""
 
     def __init__(self, a0, a1, a2, a3):
         self._lu = _md.QDLu(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3))
@@ -162,15 +163,16 @@ class QDLu:
 
     def solve(self, b0, b1, b2, b3, transpose=False):
         """x with A x = b in quad-double, or A^T x = b when transpose: b as four part arrays of shape (n,) or (n, k),
-        each entry renormalized first. Returns the four parts of x, of b's shape. A x = b gives the bits of qd_solve
-        (8 rows at a time on the SIMD lanes); A^T x = b runs in scalar quad-double. Raises ValueError if b has an entry
-        that is not finite or the wrong shape."""
+        each entry the exact sum of its parts in any order. Returns the four parts of x, of b's shape. A x = b gives the
+        bits of qd_solve (8 rows at a time on the SIMD lanes); A^T x = b runs in scalar quad-double. Raises ValueError
+        if b has an entry that is not finite or the wrong shape."""
         return self._lu.solve(*_parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3), bool(transpose))
 
 
 def qd_add_dd(z0, z1, z2, z3, dh, dl):
-    """(z0 + z1 + z2 + z3) + (dh + dl) elementwise in quad-double: a quad-double array (four float64 arrays,
-    renormalized first) plus a double-double one. Returns the four parts of the result, renormalized."""
+    """(z0 + z1 + z2 + z3) + (dh + dl) elementwise in quad-double: a quad-double array (four float64 arrays, each
+    element the exact sum of its parts in any order) plus a double-double one. Returns the four parts of the result,
+    renormalized."""
     z = [_f64(v, n) for v, n in ((z0, "z0"), (z1, "z1"), (z2, "z2"), (z3, "z3"))]
     return _md.qd_add_dd(*z, _f64(dh, "dh"), _f64(dl, "dl"))
 
