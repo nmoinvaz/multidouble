@@ -26,6 +26,7 @@ type P = <T as Lane>::P;
 struct Rng(u64);
 
 impl Rng {
+    /// the next value in [-0.5, 0.5)
     fn next(&mut self) -> f64 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
@@ -63,6 +64,7 @@ struct Series {
     d: DMat<B>,
 }
 
+/// the series with every order random, from a fixed seed, and the orders 0 the recursion starts from
 fn series() -> Series {
     let mut r = Rng(0x2545_f491_4f6c_dd1d);
     let mut v = || (0..=K).map(|_| r.qjet_field(0.0)).collect::<Vec<F>>();
@@ -98,6 +100,7 @@ struct Consts {
 }
 
 impl Consts {
+    /// the constants at order k, with the dimension n the series variable 1.7 + h
     fn at(k: usize) -> Self {
         let n = P::var(DD::from_f64(1.7));
         Consts {
@@ -209,6 +212,7 @@ fn bits(s: &Series, k: usize) -> Vec<u64> {
         .collect()
 }
 
+/// one order, value-returning against in place, after checking that both give the same bits
 fn centre(c: &mut Criterion) {
     let (mut sv, mut si) = (series(), series());
     let z = F::zero();
@@ -240,6 +244,7 @@ fn centre(c: &mut Criterion) {
     g.finish();
 }
 
+/// single sums at order K, value-returning against in place, for QJet<24>, Jet<24> and QV
 fn sums(c: &mut Criterion) {
     let s = series();
     let (x, y) = (&s.cc, &s.pp);
