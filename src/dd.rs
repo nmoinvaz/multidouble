@@ -53,6 +53,24 @@ pub fn is_pwr2(b: f64) -> bool {
     b.to_bits() & 0x000f_ffff_ffff_ffff == 0 && e != 0 && e != 0x7ff
 }
 
+/// the hi and lo parts of double-doubles as two arrays, the inverse of `join`
+pub fn split(v: &[DD]) -> (Vec<f64>, Vec<f64>) {
+    (v.iter().map(|d| d.hi).collect(), v.iter().map(|d| d.lo).collect())
+}
+
+/// double-doubles from the arrays of their hi and lo parts, the parts as they are (`DD { hi, lo }`, not
+/// renormalized). Arrays of different lengths panic.
+pub fn join(hi: &[f64], lo: &[f64]) -> Vec<DD> {
+    assert_eq!(
+        hi.len(),
+        lo.len(),
+        "join: {} hi parts and {} lo parts",
+        hi.len(),
+        lo.len()
+    );
+    hi.iter().zip(lo).map(|(&hi, &lo)| DD { hi, lo }).collect()
+}
+
 impl DD {
     pub const ZERO: DD = DD { hi: 0.0, lo: 0.0 };
     pub const ONE: DD = DD { hi: 1.0, lo: 0.0 };

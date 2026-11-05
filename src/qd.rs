@@ -1036,6 +1036,27 @@ impl Div for QD {
     }
 }
 
+/// the four parts of quad-doubles as four arrays, part k of value i at index i of array k (the layout of
+/// `qv::axpy_parts` and `QV::load`), the inverse of `from_parts`
+pub fn to_parts(v: &[QD]) -> [Vec<f64>; 4] {
+    std::array::from_fn(|k| v.iter().map(|q| q.x[k]).collect())
+}
+
+/// quad-doubles from the arrays of their four parts, the parts as they are (`QD { x }` and `QV::load`, not
+/// renormalized as `QD::new`). Arrays of different lengths panic.
+pub fn from_parts(c: [&[f64]; 4]) -> Vec<QD> {
+    let n = c[0].len();
+    assert!(
+        c.iter().all(|p| p.len() == n),
+        "from_parts: the four arrays must have one length"
+    );
+    (0..n)
+        .map(|i| QD {
+            x: std::array::from_fn(|k| c[k][i]),
+        })
+        .collect()
+}
+
 /// Scalar sum-of-products accumulator, the twin of `qv::QDotAcc` (same algorithm, bitwise the same per lane).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct QdAcc {
