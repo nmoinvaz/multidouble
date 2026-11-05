@@ -6,7 +6,7 @@ use multidouble::dd::{self, DD};
 use multidouble::dv::{self, DotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu, QDLu};
 use multidouble::qd::QD;
-use multidouble::qv::{axpy_parts, renorm4, QV};
+use multidouble::qv::{axpy_parts, renorm4_any, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
 use numpy::ndarray::{ArrayD, Dimension};
@@ -192,9 +192,9 @@ fn div<'py>(
     elementwise(py, DIV, ah, al, bh, bl)
 }
 
-/// z + d elementwise for a quad-double z (four parts, renormalized first as `QD::new` does) and a double-double d
-/// (`QD::add_dd`): 8 lanes at a time on the backend S, the remainder in scalar quad-double (bitwise the same per
-/// element)
+/// z + d elementwise for a quad-double z (four parts in any order, summed exactly as `QD::from_sum` does) and a
+/// double-double d (`QD::add_dd`): 8 lanes at a time on the backend S, the remainder in scalar quad-double (bitwise
+/// the same per element)
 struct QdAddDd<'a> {
     z: [&'a [f64]; 4],
     d: (&'a [f64], &'a [f64]),
@@ -212,7 +212,7 @@ impl Kernel for QdAddDd<'_> {
         for i in (0..full).step_by(8) {
             let q = QV::<S>::load(&z[0][i..i + 8], &z[1][i..i + 8], &z[2][i..i + 8], &z[3][i..i + 8]);
             let q = QV {
-                c: renorm4(q.c[0], q.c[1], q.c[2], q.c[3]),
+                c: renorm4_any(q.c[0], q.c[1], q.c[2], q.c[3]),
             };
             let r = q.add_dv(DV::<S>::load(&self.d.0[i..i + 8], &self.d.1[i..i + 8]));
             r.store(
@@ -223,7 +223,7 @@ impl Kernel for QdAddDd<'_> {
             );
         }
         for i in full..n {
-            let r = QD::new(z[0][i], z[1][i], z[2][i], z[3][i]).add_dd(DD {
+            let r = QD::from_sum(z[0][i], z[1][i], z[2][i], z[3][i]).add_dd(DD {
                 hi: self.d.0[i],
                 lo: self.d.1[i],
             });
@@ -496,9 +496,9 @@ type DynParts<'py> = (
     Bound<'py, PyArrayDyn<f64>>,
 );
 
-/// A in the layout of `QDLu::factor`: four (n, n) row-major part arrays, each entry renormalized (`QD::new`) and
-/// stored column-major with leading dimension `ld_for(n)`, the padding rows zero. Returns (n, ld, parts). Raises
-/// ValueError for unequal or non-square shapes and for an entry that is not finite.
+/// A in the layout of `QDLu::factor`: four (n, n) row-major part arrays, each entry the exact sum of its parts in any
+/// order (`QD::from_sum`), stored column-major with leading dimension `ld_for(n)`, the padding rows zero. Returns (n,
+/// ld, parts). Raises ValueError for unequal or non-square shapes and for an entry that is not finite.
 fn qd_matrix(a: [&PyReadonlyArray2<'_, f64>; 4]) -> PyResult<(usize, usize, [Vec<f64>; 4])> {
     let n = a[0].shape()[0];
     if a.iter().any(|p| p.shape() != [n, n]) {
@@ -515,7 +515,7 @@ fn qd_matrix(a: [&PyReadonlyArray2<'_, f64>; 4]) -> PyResult<(usize, usize, [Vec
     for i in 0..n {
         for j in 0..n {
             let k = i * n + j;
-            let v = QD::new(s[0][k], s[1][k], s[2][k], s[3][k]);
+            let v = QD::from_sum(s[0][k], s[1][k], s[2][k], s[3][k]);
             if !v.x.iter().all(|x| x.is_finite()) {
                 return Err(PyValueError::new_err(format!("A has a non-finite entry at ({i}, {j})")));
             }
@@ -527,9 +527,9 @@ fn qd_matrix(a: [&PyReadonlyArray2<'_, f64>; 4]) -> PyResult<(usize, usize, [Vec
     Ok((n, ld, c))
 }
 
-/// b as k columns of n quad-doubles, each entry renormalized (`QD::new`): four part arrays of shape (n,) (k = 1) or
-/// (n, k), row-major. Returns b's shape and the columns. Raises ValueError for another shape, unequal shapes or an
-/// entry that is not finite.
+/// b as k columns of n quad-doubles, each entry the exact sum of its parts in any order (`QD::from_sum`): four part
+/// arrays of shape (n,) (k = 1) or (n, k), row-major. Returns b's shape and the columns. Raises ValueError for another
+/// shape, unequal shapes or an entry that is not finite.
 fn qd_rhs(b: [&PyReadonlyArrayDyn<'_, f64>; 4], n: usize) -> PyResult<(Vec<usize>, Vec<Vec<QD>>)> {
     let shape = b[0].shape().to_vec();
     let k = match shape[..] {
@@ -554,7 +554,7 @@ fn qd_rhs(b: [&PyReadonlyArrayDyn<'_, f64>; 4], n: usize) -> PyResult<(Vec<usize
     for i in 0..n {
         for (j, col) in cols.iter_mut().enumerate() {
             let o = i * k + j;
-            let v = QD::new(s[0][o], s[1][o], s[2][o], s[3][o]);
+            let v = QD::from_sum(s[0][o], s[1][o], s[2][o], s[3][o]);
             if !v.x.iter().all(|x| x.is_finite()) {
                 return Err(PyValueError::new_err(if shape.len() == 1 {
                     format!("b has a non-finite entry at {i}")
@@ -598,9 +598,9 @@ fn solve_cols(py: Python<'_>, lu: &QDLu, cols: &mut [Vec<QD>], transpose: bool) 
 }
 
 /// x with A x = b in quad-double, by LU with partial pivoting (the crate's `QDLu`): A as four (n, n) row-major part
-/// arrays, b as four part arrays of shape (n,) or (n, k) (k right-hand sides, the columns of b), each entry
-/// renormalized first. Returns the four parts of x, of b's shape. Raises ValueError if A is singular, if A or b has a
-/// non-finite entry, or for mismatched shapes.
+/// arrays, b as four part arrays of shape (n,) or (n, k) (k right-hand sides, the columns of b), each entry the exact
+/// sum of its parts in any order. Returns the four parts of x, of b's shape. Raises ValueError if A is singular, if A
+/// or b has a non-finite entry, or for mismatched shapes.
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 fn qd_solve<'py>(
@@ -625,8 +625,8 @@ fn qd_solve<'py>(
 }
 
 /// The quad-double LU of A with partial pivoting (the crate's `QDLu`), factored once for several solves: QDLu(a0, a1,
-/// a2, a3) with A as four (n, n) row-major part arrays, each entry renormalized first. Raises ValueError if A is
-/// singular or has a non-finite entry.
+/// a2, a3) with A as four (n, n) row-major part arrays, each entry the exact sum of its parts in any order. Raises
+/// ValueError if A is singular or has a non-finite entry.
 #[pyclass(name = "QDLu", module = "multidouble._multidouble", frozen)]
 struct PyQdLu {
     lu: QDLu,
@@ -656,8 +656,8 @@ impl PyQdLu {
     }
 
     /// x with A x = b (A^T x = b when transpose) in quad-double: b as four part arrays of shape (n,) or (n, k), each
-    /// entry renormalized first. Returns the four parts of x, of b's shape; with transpose false, bitwise those of
-    /// qd_solve. Raises ValueError if b has a non-finite entry or the wrong shape.
+    /// entry the exact sum of its parts in any order. Returns the four parts of x, of b's shape; with transpose false,
+    /// bitwise those of qd_solve. Raises ValueError if b has a non-finite entry or the wrong shape.
     #[pyo3(signature = (b0, b1, b2, b3, transpose = false))]
     fn solve<'py>(
         &self,

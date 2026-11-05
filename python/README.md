@@ -28,12 +28,12 @@ print(md.isa())                           # the SIMD backend in use, detected at
   about 2^-53 of each term unless a is a power of two.
 - `dd_solve(Ah, Al, bh, bl)`: x with A x = b by LU with partial pivoting, A as (n, n) row-major hi and lo arrays.
 - `qd_solve(a0, a1, a2, a3, b0, b1, b2, b3)`: x with A x = b by LU with partial pivoting in quad-double, A as four
-  (n, n) part arrays and b as four part arrays of shape (n,) or (n, k) (k right-hand sides), each entry renormalized
-  first; returns the four parts of x, of b's shape, to about cond(A) 2^-209. `QDLu(a0, a1, a2, a3)` factors A once,
-  and its `solve(b0, b1, b2, b3, transpose=False)` gives the bits of `qd_solve` (or solves A^T x = b) without
-  factoring again. Both raise `ValueError` for a singular A and for entries that are not finite.
-- `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, renormalized first) plus a
-  double-double one, elementwise in quad-double; returns the four parts of the sum.
+  (n, n) part arrays and b as four part arrays of shape (n,) or (n, k) (k right-hand sides), each entry the exact sum of
+  its parts in any order; returns the four parts of x, of b's shape, to about cond(A) 2^-209. `QDLu(a0, a1, a2, a3)`
+  factors A once, and its `solve(b0, b1, b2, b3, transpose=False)` gives the bits of `qd_solve` (or solves A^T x = b)
+  without factoring again. Both raise `ValueError` for a singular A and for entries that are not finite.
+- `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, each element the exact sum of its
+  parts in any order) plus a double-double one, elementwise in quad-double; returns the four parts of the sum.
 - `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a
   float a, elementwise in quad-double; returns the four parts.
 - The array arguments of the functions above may be any arrays or sequences of real numbers, strided, in Fortran order
