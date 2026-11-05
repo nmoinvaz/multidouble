@@ -193,6 +193,38 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
+    /// set f64 tangent k of every value from an `F8` field, the inverse of `tan64`, on the `TAN_F64` lane types
+    /// (`Fu`, `Dtn`, `Fun`) with k < `Lane::NT`. Any other lane type, or a k past the last tangent, panics.
+    pub fn set_tan64(&mut self, k: usize, t: &Fl<F8<T::S>, B>) {
+        assert!(
+            T::TAN_F64 && k < T::NT,
+            "Fl::set_tan64: f64 tangent {k} of a lane type with {} f64 tangents",
+            T::NT
+        );
+        for b in 0..B {
+            self.0[b].set_tan64(k, t.0[b].0);
+        }
+    }
+    /// the unit field e_j, one at value j and zero at the others, as constants of the lane type (zero tangents)
+    pub fn unit(j: usize) -> Self {
+        assert!(j < 8 * B, "Fl::unit: value {j} of a field of {} values", 8 * B);
+        let mut e = [0.0; 8];
+        e[j % 8] = 1.0;
+        let mut r = Self::zero();
+        r.0[j / 8] = T::cst(DV {
+            hi: V8::from_array(e),
+            lo: V8::zero(),
+        });
+        r
+    }
+    /// values v with the tangent e_j (`unit`), the seed of a Jacobian column in forward mode. It is `from_vt(v, e_j)`,
+    /// so it sets the tangent of `Du` and `Qu`, the real part of `Dc`'s, order 1 of a jet, and the first f64 tangent
+    /// of `Fu`, `Dtn` and `Fun`, whose other tangents `set_tan64` with `unit` seeds. A lane type without a tangent
+    /// panics.
+    pub fn unit_tangent(v: &Fl<Dv<T>, B>, j: usize) -> Self {
+        assert!(T::TANGENT, "Fl::unit_tangent: a lane type without a tangent");
+        Self::from_vt(v, &Fl::<Dv<T>, B>::unit(j))
+    }
 }
 
 impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
@@ -221,6 +253,19 @@ impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
                 r: re.0[b],
                 i: im.0[b],
             };
+        }
+        Fl(r)
+    }
+}
+
+impl<S: Simd, const B: usize> Fl<Qu<S>, B> {
+    /// a field from quad-double values and tangents, exactly (`from_vt` takes them in double-double), for instance the
+    /// values with the tangent `Fl::<QV<S>, B>::unit(j)`, a quad-double Jacobian column's seed. `coef_qd(0)` and
+    /// `coef_qd(1)` read them back.
+    pub fn from_vt_qd(v: &Fl<QV<S>, B>, t: &Fl<QV<S>, B>) -> Self {
+        let mut r = [Qu::zero(); B];
+        for b in 0..B {
+            r[b] = Qu { v: v.0[b], d: t.0[b] };
         }
         Fl(r)
     }

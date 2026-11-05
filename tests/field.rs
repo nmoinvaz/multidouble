@@ -568,6 +568,177 @@ fn field_tan64_is_the_lanes_tangent() {
     );
 }
 
+/// the bits of a field of any lane type: coefficients 0 and 1 (value and tangent) and a jet's others in quad-double
+/// (`Lane::coef_qd`, exact), and the f64 tangents
+fn lane_bits<T: Lane<S = Native>>(f: &Fl<T, B>) -> Vec<u64> {
+    let mut w: Vec<u64> = (0..T::NJ.max(2))
+        .flat_map(|k| qvalues(&f.coef_qd(k)).into_iter().flat_map(|q| q.x.map(f64::to_bits)))
+        .collect();
+    for k in 0..T::NT {
+        w.extend(f.tan64(k).0.iter().flat_map(|t| t.0.to_array().map(f64::to_bits)));
+    }
+    w
+}
+
+/// an f64 field of 8 B random values
+fn f8_field(r: &mut Rng) -> Fl<F8, B> {
+    Fl(std::array::from_fn(|_| {
+        multidouble::dual::F8(multidouble::v8::V8::from_array(std::array::from_fn(|_| r.sym())))
+    }))
+}
+
+/// `Fl::set_tan64` is the lane-by-lane `Lane::set_tan64` loop it replaces (hp's psolve writes a solved f64 tangent
+/// so, `out.0[b].set_tan64(k, fd.0[b].hi)`) bit for bit, on `Fu`, `Dtn<3>` and `Fun<2>`, and `tan64` reads back what
+/// it set, with the value and the other tangents unchanged. Control: the loop on the next tangent is caught.
+#[test]
+fn field_set_tan64_is_the_lane_loop() {
+    fn check<T: Lane<S = Native>>(r: &mut Rng) {
+        let (v, _) = field(r, 1.0);
+        let (d, _) = field(r, 1.0);
+        let mut f = Fl::<T, B>::from_vt(&v, &d);
+        for k in 0..T::NT {
+            let t = f8_field(r);
+            let (before, mut g) = (f, f);
+            for b in 0..B {
+                g.0[b].set_tan64(k, t.0[b].0);
+            }
+            f.set_tan64(k, &t);
+            assert_eq!(lane_bits(&f), lane_bits(&g), "the lane loop, tangent {k}");
+            let back: Vec<u64> = f
+                .tan64(k)
+                .0
+                .iter()
+                .flat_map(|x| x.0.to_array().map(f64::to_bits))
+                .collect();
+            let want: Vec<u64> = t.0.iter().flat_map(|x| x.0.to_array().map(f64::to_bits)).collect();
+            assert_eq!(back, want, "tan64 after set_tan64, tangent {k}");
+            for o in (0..T::NT).filter(|&o| o != k) {
+                assert_eq!(lane_bits(&f.tan64(o)), lane_bits(&before.tan64(o)), "tangent {o} moved");
+            }
+            assert_eq!(lane_bits(&f.val()), lane_bits(&before.val()), "the value moved");
+            if k + 1 < T::NT {
+                let mut wrong = before;
+                for b in 0..B {
+                    wrong.0[b].set_tan64(k + 1, t.0[b].0);
+                }
+                assert_ne!(lane_bits(&f), lane_bits(&wrong), "control: the next tangent");
+            }
+        }
+    }
+    let mut r = Rng(75);
+    check::<Fu>(&mut r);
+    check::<Dtn<3>>(&mut r);
+    check::<Fun<2>>(&mut r);
+}
+
+#[test]
+#[should_panic(expected = "Fl::set_tan64: f64 tangent 0 of a lane type with 0 f64 tangents")]
+fn field_set_tan64_refuses_a_double_double_tangent() {
+    let mut f = Fl::<Du, B>::zero();
+    f.set_tan64(0, &Fl::zero());
+}
+
+/// `Fu`'s own `set_tan64` ignores k, so the field's check is what refuses its tangent 1
+#[test]
+#[should_panic(expected = "Fl::set_tan64: f64 tangent 1 of a lane type with 1 f64 tangents")]
+fn field_set_tan64_refuses_a_tangent_past_the_last() {
+    let mut f = Fl::<Fu, B>::zero();
+    f.set_tan64(1, &Fl::zero());
+}
+
+/// The unit seeds are hp's hand-built ones bit for bit: `unit_tangent(v, j)` is `from_vt(v, t)` with t loaded with a
+/// one at value j (hp's model::jac_column), on every lane type with a tangent; `set_tan64(k, &unit(j))` on a field
+/// from `from_vt(v, 0)` is the lane vector's `set_tan64` with e_{j % 8} (hp's jac_columns_n), for three tangents at
+/// once; `from_vt_qd(v, &unit(j))` is the `Qu` field built from the quad-double values with the one at value j
+/// (hp's qsolve::jac_column_q), and gives its values and tangents back (`coef_qd`). `unit(j)` reads one at j and zero
+/// elsewhere. Control: a seed one value off is caught.
+#[test]
+fn field_unit_seeds_are_the_hand_built_ones() {
+    fn seed<T: Lane<S = Native>>(v: &Fl<DV, B>, j: usize) -> Fl<T, B> {
+        let mut th = vec![0.0; M];
+        let tl = vec![0.0; M];
+        th[j] = 1.0;
+        Fl::<T, B>::from_vt(v, &Fl::load(&th, &tl))
+    }
+    fn check<T: Lane<S = Native>>(v: &Fl<DV, B>) {
+        for j in [0, 5, 8, M - 1] {
+            assert_eq!(
+                lane_bits(&Fl::<T, B>::unit_tangent(v, j)),
+                lane_bits(&seed::<T>(v, j)),
+                "value {j}"
+            );
+        }
+        assert_ne!(
+            lane_bits(&Fl::<T, B>::unit_tangent(v, 3)),
+            lane_bits(&seed::<T>(v, 4)),
+            "control"
+        );
+    }
+    let mut r = Rng(76);
+    let (v, _) = field(&mut r, 1.0);
+    check::<Du>(&v);
+    check::<Dc>(&v);
+    check::<Qu>(&v);
+    check::<Fu>(&v);
+    check::<Dtn<2>>(&v);
+    check::<Fun<3>>(&v);
+    check::<Jet<4>>(&v);
+    check::<QJet<4>>(&v);
+    assert!((0..M).all(|i| Fl::<Dc, B>::unit_tangent(&v, 5).tan_im().get(i) == DD::ZERO));
+    for j in 0..M {
+        let (e, q) = (Fl::<DV, B>::unit(j), Fl::<QV, B>::unit(j));
+        for i in 0..M {
+            let one: f64 = if i == j { 1.0 } else { 0.0 };
+            assert!(e.get(i).hi.to_bits() == one.to_bits() && e.get(i).lo.to_bits() == 0);
+            assert!(q.get(i).x[0].to_bits() == one.to_bits() && q.get(i).x[1..].iter().all(|p| p.to_bits() == 0));
+        }
+    }
+    // three f64 tangents seeded on three values
+    let tasks = [(0, 2), (1, 9), (2, M - 1)];
+    let mut f = Fl::<Dtn<3>, B>::from_vt(&v, &Fl::zero());
+    let mut g = f;
+    for &(k, j) in &tasks {
+        let mut e = [0.0; 8];
+        e[j % 8] = 1.0;
+        g.0[j / 8].set_tan64(k, multidouble::v8::V8::from_array(e));
+        f.set_tan64(k, &Fl::<F8, B>::unit(j));
+    }
+    assert_eq!(lane_bits(&f), lane_bits(&g));
+    let mut wrong = Fl::<Dtn<3>, B>::from_vt(&v, &Fl::zero());
+    wrong.set_tan64(1, &Fl::<F8, B>::unit(10));
+    assert_ne!(lane_bits(&f), lane_bits(&wrong), "control");
+    // a quad-double Jacobian seed
+    let vq: Vec<QD> = (0..M).map(|_| jet_coef(&mut r, 0.0, 1.0, true)).collect();
+    let tq: Vec<QD> = (0..M).map(|_| jet_coef(&mut r, 0.0, 1.0, true)).collect();
+    let (fv, ft) = (qfield(&vq), qfield(&tq));
+    let both = Fl::<Qu, B>::from_vt_qd(&fv, &ft);
+    assert!(same_qd(&qvalues(&both.coef_qd(0)), &vq) && same_qd(&qvalues(&both.coef_qd(1)), &tq));
+    assert!(!same_qd(&qvalues(&both.coef_qd(1)), &vq), "control");
+    for j in [0, 9] {
+        let mut hand = [Qu::zero(); B];
+        for bb in 0..B {
+            hand[bb].v = fv.0[bb];
+        }
+        let mut e = [QD::ZERO; 8];
+        e[j % 8] = QD::ONE;
+        hand[j / 8].d = QV::from_lanes(&e);
+        let s = Fl::<Qu, B>::from_vt_qd(&fv, &Fl::<QV, B>::unit(j));
+        assert_eq!(lane_bits(&s), lane_bits(&Fl(hand)), "Qu seed on value {j}");
+    }
+}
+
+#[test]
+#[should_panic(expected = "Fl::unit_tangent: a lane type without a tangent")]
+fn field_unit_tangent_refuses_a_value_lane() {
+    Fl::<QV, B>::unit_tangent(&Fl::zero(), 0);
+}
+
+#[test]
+#[should_panic(expected = "Fl::unit: value 16 of a field of 16 values")]
+fn field_unit_refuses_a_value_past_the_field() {
+    Fl::<DV, B>::unit(M);
+}
+
 /// a `Dc` field from its three parts gives them back bit for bit, and `from_vt` sets the imaginary part to zero
 #[test]
 fn dc_field_parts_round_trip() {
