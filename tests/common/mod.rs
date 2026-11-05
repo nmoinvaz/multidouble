@@ -32,3 +32,15 @@ impl Rng {
 
 /// u^2 = 2^-106, the unit of double-double error bounds
 pub const U2: f64 = 1.232_595_164_407_831e-32;
+
+/// f run on a thread with a 64 MiB stack, its panic passed on. Built without optimization (the coverage run) every
+/// temporary has its own stack slot, and those of the octo-double jets' fields and accumulators can overflow a test
+/// thread's 2 MiB.
+pub fn big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(f)
+        .expect("a thread for the check")
+        .join()
+        .unwrap_or_else(|e| std::panic::resume_unwind(e))
+}
