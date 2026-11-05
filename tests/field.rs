@@ -1,7 +1,8 @@
 //! Fields (`field::Fl`): Cauchy products, Horner evaluation and constant-matrix products against scalar references,
 //! in double-double (to its rounding, against quad-double sums), in the f64 lanes (bitwise the scalar fused
 //! multiply-add chains in index order) and in quad-double; the counting lane's matrix product; and the field solves,
-//! with the refinement of the double-double solve in the lane type (to quad-double for `QV`).
+//! with the refinement of the double-double solve in the lane type (to quad-double for `QV`), and the order-by-order
+//! solves of jets (bit for bit the loops they replace, and against planted solutions formed in exact arithmetic).
 //! Each accuracy check has a control fed a wrong result.
 #![allow(clippy::needless_range_loop)]
 mod common;
@@ -719,4 +720,428 @@ fn tangent_tail_ends_after_the_predicted_order() {
         Some(15),
         "control: a large term at k = 12 does not restart the run"
     );
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the order-by-order jet solves
+// ---------------------------------------------------------------------------------------------------------------
+
+/// A jet system (omega(h) D + diag kappa(h)) x(h) = rhs(h), the form of a regular-horizon series' systems: D a
+/// constant matrix with entries below 0.05, omega(h) a series constant over the values with omega_0 in [1, 2), and
+/// kappa(h) a field with kappa_0 in [2, 3), so that A_0 = omega_0 D + diag kappa_0 is diagonally dominant. The
+/// coefficients are quad-doubles with all four parts in use, or double-doubles. `lu` is the LU of A_0 rounded to
+/// double-double.
+struct JetSystem {
+    d: DMat<Native, B>,
+    /// D by rows
+    dd: Vec<DD>,
+    omega: Vec<QD>,
+    kappa: Vec<Vec<QD>>,
+    lu: DDLu,
+}
+
+/// c + w u (u uniform in [-1, 1)) with all four parts in use, or rounded to double-double
+fn jet_coef(r: &mut Rng, c: f64, w: f64, qd: bool) -> QD {
+    let h = c + w * r.sym();
+    let a = h.abs();
+    let q = QD::from_dd(DD::new(h, r.sym() * a * 2f64.powi(-53)))
+        .add_dd(DD::new(r.sym() * a * 2f64.powi(-106), r.sym() * a * 2f64.powi(-159)));
+    if qd {
+        q
+    } else {
+        QD::from_dd(q.to_dd())
+    }
+}
+
+/// n coefficients of a field, each value in [-1, 1)
+fn jet_coefs(r: &mut Rng, n: usize, qd: bool) -> Vec<Vec<QD>> {
+    (0..n)
+        .map(|_| (0..M).map(|_| jet_coef(r, 0.0, 1.0, qd)).collect())
+        .collect()
+}
+
+fn jet_system(r: &mut Rng, n: usize, qd: bool) -> JetSystem {
+    let dd: Vec<DD> = (0..M * M)
+        .map(|_| DD::new(0.05 * r.sym(), 0.05 * r.sym() * 1e-17))
+        .collect();
+    let (h, l): (Vec<f64>, Vec<f64>) = dd.iter().map(|d| (d.hi, d.lo)).unzip();
+    let omega: Vec<QD> = (0..n)
+        .map(|k| {
+            if k == 0 {
+                jet_coef(r, 1.5, 0.5, qd)
+            } else {
+                jet_coef(r, 0.0, 1.0, qd)
+            }
+        })
+        .collect();
+    let kappa: Vec<Vec<QD>> = (0..n)
+        .map(|k| {
+            (0..M)
+                .map(|_| {
+                    if k == 0 {
+                        jet_coef(r, 2.5, 0.5, qd)
+                    } else {
+                        jet_coef(r, 0.0, 1.0, qd)
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let ld = ld_for(M);
+    let (mut ch, mut cl) = (vec![0.0; ld * M], vec![0.0; ld * M]);
+    for i in 0..M {
+        for j in 0..M {
+            let mut a = omega[0].to_dd() * dd[i * M + j];
+            if i == j {
+                a = a + kappa[0][i].to_dd();
+            }
+            ch[j * ld + i] = a.hi;
+            cl[j * ld + i] = a.lo;
+        }
+    }
+    let lu = DDLu::factor(M, ld, ch, cl, false).unwrap();
+    JetSystem {
+        d: DMat::from_rows(&h, &l),
+        dd,
+        omega,
+        kappa,
+        lu,
+    }
+}
+
+/// a jet constant over the values (`Lane::set_coef_qd`, so rounded to double-double on `Jet`)
+fn jet_scalar<T: Lane<S = Native>>(c: &[QD]) -> T {
+    let mut t = T::zero();
+    for (k, &q) in c.iter().enumerate() {
+        t.set_coef_qd(k, QV::splat(q));
+    }
+    t
+}
+
+/// a jet field with the values c[k] as its coefficient k
+fn jet_field<T: Lane<S = Native>>(c: &[Vec<QD>]) -> Fl<T, B> {
+    let mut f = Fl::<T, B>::zero();
+    for (k, v) in c.iter().enumerate() {
+        f.set_coef_qd(k, &qfield(v));
+    }
+    f
+}
+
+/// the bits of every coefficient in quad-double (exact for `Jet`), order by order
+fn jet_bits<T: Lane<S = Native>>(f: &Fl<T, B>) -> Vec<u64> {
+    (0..T::NJ)
+        .flat_map(|k| qvalues(&f.coef_qd(k)).into_iter().flat_map(|q| q.x.map(f64::to_bits)))
+        .collect()
+}
+
+fn dv_bits(f: &Fl<DV, B>) -> Vec<u64> {
+    (0..M)
+        .flat_map(|i| [f.get(i).hi.to_bits(), f.get(i).lo.to_bits()])
+        .collect()
+}
+
+/// FNV-1a
+fn fold_bits(h: u64, w: &[u64]) -> u64 {
+    w.iter().fold(h, |h, &w| (h ^ w).wrapping_mul(0x0000_0100_0000_01b3))
+}
+
+/// psolve's double-double jet branch (choptuik-large-d, hp/src/model.rs, multidouble 2.0.0), the code
+/// `solve_lanes_jet` is to replace bit for bit
+fn psolve_jet<T: Lane<S = Native>>(
+    d: &DMat<Native, B>,
+    lu: &DDLu,
+    kappa: &Fl<T, B>,
+    rhs: &Fl<T, B>,
+    omega: T,
+) -> Fl<T, B> {
+    let mut f = Fl::<T, B>::zero();
+    let mut fs: Vec<Fl<DV, B>> = Vec::with_capacity(T::NJ);
+    for k in 0..T::NJ {
+        let mut r = rhs.coef(k);
+        for j in 1..=k {
+            let dfv = d.apply::<DV>(&fs[k - j]);
+            let od = Fl::<DV, B>([omega.coef(j); B]);
+            r = (r - dfv * od) - kappa.coef(j) * fs[k - j];
+        }
+        let fk = lu.solve_lanes(&r);
+        f.set_coef(k, &fk);
+        fs.push(fk);
+    }
+    f
+}
+
+/// psolve's quad-double jet branch, likewise for `solve_lanes_jet_refine`
+fn psolve_qjet<T: Lane<S = Native>>(
+    d: &DMat<Native, B>,
+    lu: &DDLu,
+    kappa: &Fl<T, B>,
+    rhs: &Fl<T, B>,
+    omega: T,
+    steps: usize,
+) -> Fl<T, B> {
+    let om: Vec<QV> = (0..T::NJ).map(|j| omega.coef_qd(j)).collect();
+    let k0 = kappa.coef_qd(0);
+    let mut f = Fl::<T, B>::zero();
+    let mut fs: Vec<Fl<QV, B>> = Vec::with_capacity(T::NJ);
+    for k in 0..T::NJ {
+        let mut r = rhs.coef_qd(k);
+        for j in 1..=k {
+            r = (r - d.apply(&fs[k - j]).mul_t(om[j])) - kappa.coef_qd(j) * fs[k - j];
+        }
+        let fk = lu.solve_lanes_refine(&r, steps, |x| r - (d.apply(x).mul_t(om[0]) + k0 * *x));
+        f.set_coef_qd(k, &fk);
+        fs.push(fk);
+    }
+    f
+}
+
+/// `solve_lanes_jet` with psolve's coupling
+fn solve_dd<T: Lane<S = Native>>(s: &JetSystem, kappa: &Fl<T, B>, rhs: &Fl<T, B>, omega: T) -> Fl<T, B> {
+    s.lu.solve_lanes_jet(rhs, |j, x, r| {
+        (r - s.d.apply::<DV>(x) * Fl([omega.coef(j); B])) - kappa.coef(j) * *x
+    })
+}
+
+/// `solve_lanes_jet_refine` with psolve's coupling and residual
+fn solve_qd<T: Lane<S = Native>>(s: &JetSystem, kappa: &Fl<T, B>, rhs: &Fl<T, B>, omega: T, steps: usize) -> Fl<T, B> {
+    let om: Vec<QV> = (0..T::NJ).map(|j| omega.coef_qd(j)).collect();
+    let k0 = kappa.coef_qd(0);
+    s.lu.solve_lanes_jet_refine(
+        rhs,
+        steps,
+        |j, x, r| (r - s.d.apply(x).mul_t(om[j])) - kappa.coef_qd(j) * *x,
+        |r, x| *r - (s.d.apply(x).mul_t(om[0]) + k0 * *x),
+    )
+}
+
+/// One random system of N orders through both solves and both of psolve's loops, bit for bit, the outputs folded
+/// into h. Returns whether the coupling reassociated, r - (omega_j D x + kappa_j x), changed a bit (double-double,
+/// quad-double).
+fn psolve_case<const N: usize>(r: &mut Rng, h: &mut [u64; 2]) -> [bool; 2] {
+    let s = jet_system(r, N, false);
+    let (kappa, omega) = (jet_field::<Jet<N>>(&s.kappa), jet_scalar::<Jet<N>>(&s.omega));
+    let c = jet_coefs(r, N, false);
+    let rhs = jet_field::<Jet<N>>(&c);
+    let x = solve_dd(&s, &kappa, &rhs, omega);
+    assert_eq!(
+        jet_bits(&x),
+        jet_bits(&psolve_jet(&s.d, &s.lu, &kappa, &rhs, omega)),
+        "Jet<{N}>"
+    );
+    h[0] = fold_bits(h[0], &jet_bits(&x));
+    // a quad-double jet of the same double-double data is solved in double-double alike
+    let (kq, oq) = (jet_field::<QJet<N>>(&s.kappa), jet_scalar::<QJet<N>>(&s.omega));
+    assert_eq!(
+        jet_bits(&solve_dd(&s, &kq, &jet_field::<QJet<N>>(&c), oq)),
+        jet_bits(&x),
+        "QJet<{N}> in dd"
+    );
+    let re = s.lu.solve_lanes_jet(&rhs, |j, x, r| {
+        r - (s.d.apply::<DV>(x) * Fl([omega.coef(j); B]) + kappa.coef(j) * *x)
+    });
+    let moved_dd = jet_bits(&re) != jet_bits(&x);
+    let s = jet_system(r, N, true);
+    let (kappa, omega) = (jet_field::<QJet<N>>(&s.kappa), jet_scalar::<QJet<N>>(&s.omega));
+    let rhs = jet_field::<QJet<N>>(&jet_coefs(r, N, true));
+    for steps in [0, 2, 3] {
+        let x = solve_qd(&s, &kappa, &rhs, omega, steps);
+        let want = psolve_qjet(&s.d, &s.lu, &kappa, &rhs, omega, steps);
+        assert_eq!(jet_bits(&x), jet_bits(&want), "QJet<{N}>, {steps} steps");
+        h[1] = fold_bits(h[1], &jet_bits(&x));
+    }
+    let om: Vec<QV> = (0..N).map(|j| omega.coef_qd(j)).collect();
+    let k0 = kappa.coef_qd(0);
+    let re = s.lu.solve_lanes_jet_refine(
+        &rhs,
+        2,
+        |j, x, r| r - (s.d.apply(x).mul_t(om[j]) + kappa.coef_qd(j) * *x),
+        |r, x| *r - (s.d.apply(x).mul_t(om[0]) + k0 * *x),
+    );
+    [
+        moved_dd,
+        jet_bits(&re) != jet_bits(&solve_qd(&s, &kappa, &rhs, omega, 2)),
+    ]
+}
+
+/// The jet solves with psolve's coupling are psolve's own jet loops (choptuik-large-d's hp/src/model.rs, written out
+/// above) bit for bit, on `Jet<N>` and on `QJet<N>` with 0, 2 and 3 refinement steps, N = 2, 5 and 8, so that hp can
+/// call them without a change in its results; a quad-double jet in `solve_lanes_jet` is the double-double one on its
+/// rounded coefficients. The outputs' bits are pinned (hashes recorded with the first implementation; every backend
+/// gives these bits). Control: the coupling reassociated, r - (omega_j D x + kappa_j x), changes the bits.
+#[test]
+fn jet_solves_are_the_psolve_loops_bitwise() {
+    let mut r = Rng(81);
+    let mut h = [0xcbf2_9ce4_8422_2325u64; 2];
+    let mut moved = [false; 2];
+    for _ in 0..3 {
+        for (i, m) in [
+            psolve_case::<2>(&mut r, &mut h),
+            psolve_case::<5>(&mut r, &mut h),
+            psolve_case::<8>(&mut r, &mut h),
+        ]
+        .concat()
+        .into_iter()
+        .enumerate()
+        {
+            moved[i % 2] |= m;
+        }
+    }
+    let want: [u64; 2] = [0x2f44_6d53_8800_2abe, 0x2e99_109e_8c6e_ed24];
+    assert!(
+        h == want,
+        "pinned: {:#018x} {:#018x}, want {:#018x} {:#018x}",
+        h[0],
+        h[1],
+        want[0],
+        want[1]
+    );
+    assert!(
+        moved == [true, true],
+        "control: a reassociated coupling gives the same bits ({moved:?})"
+    );
+}
+
+/// a planted solution x(h) and rhs(h) = A(h) x(h) formed exactly (dyadic arithmetic) and rounded to quad-double, or
+/// to double-double, sum_{j=0..k} (omega_j D + diag kappa_j) x_{k-j} at order k
+fn jet_planted(r: &mut Rng, s: &JetSystem, n: usize, qd: bool) -> (Vec<Vec<QD>>, Vec<Vec<QD>>) {
+    let x = jet_coefs(r, n, qd);
+    let rhs = (0..n)
+        .map(|k| {
+            (0..M)
+                .map(|i| {
+                    let mut acc = Dy::zero();
+                    for j in 0..=k {
+                        let xs = &x[k - j];
+                        let mut dx = Dy::zero();
+                        for l in 0..M {
+                            let dil = Dy::from_f64(s.dd[i * M + l].hi).add(&Dy::from_f64(s.dd[i * M + l].lo));
+                            dx = dx.add(&dil.mul(&xs[l].exact()));
+                        }
+                        acc = acc.add(&s.omega[j].exact().mul(&dx));
+                        acc = acc.add(&s.kappa[j][i].exact().mul(&xs[i].exact()));
+                    }
+                    let g = acc.greedy4();
+                    if qd {
+                        QD { x: g }
+                    } else {
+                        QD::from_dd(DD::new(g[0], g[1]))
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    (x, rhs)
+}
+
+/// worst over the orders of max_i |x_k,i - planted_k,i| / max_i |planted_k,i|
+fn jet_err<T: Lane<S = Native>>(f: &Fl<T, B>, planted: &[Vec<QD>]) -> f64 {
+    (0..T::NJ)
+        .map(|k| qd_err(&qvalues(&f.coef_qd(k)), &planted[k]))
+        .fold(0.0, f64::max)
+}
+
+/// Planted solutions of jet systems against the solves with psolve's coupling: `Jet<8>` within 1e-29 of the
+/// planted coefficients (double-double rounding of the right-hand side and the solves, carried through the orders;
+/// 5e-32 seen), also through the refined solve, and `QJet<8>` with two refinement steps within 1e-60 (1e-64 seen).
+/// Controls: the coupling with its sign flipped, r + A_j x, and the coupling without its last term, j = k skipped,
+/// miss the double-double bound; no refinement (steps 0) misses the quad-double bound, and so does the quad-double
+/// jet through the double-double solve.
+#[test]
+fn jet_solves_reach_the_planted_solution() {
+    let mut r = Rng(82);
+    let (mut worst_dd, mut worst_qd) = (0.0f64, 0.0f64);
+    for _ in 0..3 {
+        let s = jet_system(&mut r, 8, false);
+        let (x0, c) = jet_planted(&mut r, &s, 8, false);
+        let (kappa, omega, rhs) = (
+            jet_field::<Jet<8>>(&s.kappa),
+            jet_scalar::<Jet<8>>(&s.omega),
+            jet_field::<Jet<8>>(&c),
+        );
+        let e = jet_err(&solve_dd(&s, &kappa, &rhs, omega), &x0);
+        assert!(e <= 1e-29, "Jet<8>: {e:e}");
+        worst_dd = worst_dd.max(e);
+        let flip = s.lu.solve_lanes_jet(&rhs, |j, x, r| {
+            (r + s.d.apply::<DV>(x) * Fl([omega.coef(j); B])) + kappa.coef(j) * *x
+        });
+        let e = jet_err(&flip, &x0);
+        assert!(e > 1e-29, "control: the coupling's sign flipped passes ({e:e})");
+        // per order k the calls are j = 1, ..., k, so the last skips A_k x_0
+        let mut calls = 0;
+        let skip = s.lu.solve_lanes_jet(&rhs, |j, x, r| {
+            calls += 1;
+            if j > 1 && calls % j == 0 {
+                return r;
+            }
+            (r - s.d.apply::<DV>(x) * Fl([omega.coef(j); B])) - kappa.coef(j) * *x
+        });
+        let e = jet_err(&skip, &x0);
+        assert!(e > 1e-29, "control: the coupling without its last term passes ({e:e})");
+        // a double-double jet through the refined solve, its coefficients rounded back to double-double
+        let e = jet_err(&solve_qd(&s, &kappa, &rhs, omega, 2), &x0);
+        assert!(e <= 1e-29, "Jet<8> refined: {e:e}");
+
+        let s = jet_system(&mut r, 8, true);
+        let (x0, c) = jet_planted(&mut r, &s, 8, true);
+        let (kappa, omega, rhs) = (
+            jet_field::<QJet<8>>(&s.kappa),
+            jet_scalar::<QJet<8>>(&s.omega),
+            jet_field::<QJet<8>>(&c),
+        );
+        let e = jet_err(&solve_qd(&s, &kappa, &rhs, omega, 2), &x0);
+        assert!(e <= 1e-60, "QJet<8>: {e:e}");
+        worst_qd = worst_qd.max(e);
+        let e0 = jet_err(&solve_qd(&s, &kappa, &rhs, omega, 0), &x0);
+        assert!(e0 > 1e-60, "control: the unrefined solve passes ({e0:e})");
+        let ed = jet_err(&solve_dd(&s, &kappa, &rhs, omega), &x0);
+        assert!(ed > 1e-60, "control: the double-double solve passes ({ed:e})");
+    }
+    println!("worst error: Jet<8> {worst_dd:.1e}, QJet<8> {worst_qd:.1e}");
+}
+
+/// `solve_lanes_jet` on `Jet<2>` is the solve of a system with a tangent on `Du` lanes, value x_v = A_0^-1 r_v and
+/// tangent x_d = A_0^-1 (r_d - omega_d D x_v - kappa_d x_v), bit for bit. Control: the jet's coupling with the sign
+/// of omega_1 D x flipped differs.
+#[test]
+fn jet_solve_of_order_one_is_the_dual_solve() {
+    let mut r = Rng(83);
+    for _ in 0..3 {
+        let s = jet_system(&mut r, 2, false);
+        let c = jet_coefs(&mut r, 2, false);
+        let (kappa, omega, rhs) = (
+            jet_field::<Jet<2>>(&s.kappa),
+            jet_scalar::<Jet<2>>(&s.omega),
+            jet_field::<Jet<2>>(&c),
+        );
+        let x = solve_dd(&s, &kappa, &rhs, omega);
+        let kd = Fl::<Du, B>::from_vt(&kappa.coef(0), &kappa.coef(1));
+        let od = Du::from_vt(omega.coef(0), omega.coef(1));
+        let rd = Fl::<Du, B>::from_vt(&rhs.coef(0), &rhs.coef(1));
+        let fv = s.lu.solve_lanes(&rd.val());
+        let rt = (rd.tan() - s.d.apply::<DV>(&fv) * Fl([od.tan(); B])) - kd.tan() * fv;
+        let fd = s.lu.solve_lanes(&rt);
+        assert_eq!(dv_bits(&x.coef(0)), dv_bits(&fv));
+        assert_eq!(dv_bits(&x.coef(1)), dv_bits(&fd));
+        let flip = s.lu.solve_lanes_jet(&rhs, |j, x, r| {
+            (r + s.d.apply::<DV>(x) * Fl([omega.coef(j); B])) - kappa.coef(j) * *x
+        });
+        assert_ne!(dv_bits(&flip.coef(1)), dv_bits(&fd), "control");
+    }
+}
+
+/// The jet solves refuse a lane type without jet coefficients
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_jet solves jets")]
+fn jet_solve_refuses_a_dual_lane() {
+    let lu = lu_of_order(M);
+    let rhs = Fl::<Du, B>([Du::splat(DD::ONE); B]);
+    lu.solve_lanes_jet(&rhs, |_, _, r| r);
+}
+
+#[test]
+#[should_panic(expected = "FieldSolve::solve_lanes_jet_refine solves jets")]
+fn jet_solve_refine_refuses_a_value_lane() {
+    let lu = lu_of_order(M);
+    let rhs = qfield(&[QD::ONE; M]);
+    lu.solve_lanes_jet_refine(&rhs, 2, |_, _, r| r, |r, _| *r);
 }
