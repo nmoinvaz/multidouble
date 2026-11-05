@@ -125,8 +125,8 @@ rounded.
 ## Python
 
 [`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double
-add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, a double-double LU solve,
-and numpy versions of the error-free transformations (`pip install ./python`, which builds it with maturin).
+add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double and
+quad-double LU solves, and numpy versions of the error-free transformations (`pip install ./python`, which builds it with maturin).
 
 ## Accuracy
 
