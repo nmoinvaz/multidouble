@@ -366,19 +366,19 @@ fn octo_double_outputs_are_pinned() {
     let _ = QD::ZERO;
 }
 
-/// An octo-double field's eight parts' arrays go in and out unchanged (`Fl::<OV, B>::load_parts` and `store_parts`:
-/// not renormalized, so parts that overlap stay as they are), value j at lane j % 8 of vector j / 8 as
-/// `OV::from_lanes` places them; `get` reads them back, and `coef_od(0)` of the field is the field itself. Control: the
-/// test parts overlap, so a load that renormalized would move them.
+/// An octo-double field's eight parts' arrays go in and out unchanged (`Fl::<OV, B>::load_parts_od` and
+/// `store_parts_od`: not renormalized, so parts that overlap stay as they are), value j at lane j % 8 of vector j / 8
+/// as `OV::from_lanes` places them; `get` reads them back, and `coef_od(0)` of the field is the field itself. Control:
+/// the test parts overlap, so a load that renormalized would move them.
 #[test]
 fn od_field_load_store_get() {
     let mut r = Rng(86);
     // overlapping parts (each about 2^-20 of the one before, far above half its ulp)
     let c: [Vec<f64>; 8] = std::array::from_fn(|k| (0..M).map(|_| r.sym() * 2f64.powi(-20 * k as i32)).collect());
-    let f = Fl::<OV, B>::load_parts(std::array::from_fn(|k| &c[k][..]));
+    let f = Fl::<OV, B>::load_parts_od(std::array::from_fn(|k| &c[k][..]));
     let mut out: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; M]);
     let [o0, o1, o2, o3, o4, o5, o6, o7] = &mut out;
-    f.store_parts([o0, o1, o2, o3, o4, o5, o6, o7].map(|o| &mut o[..]));
+    f.store_parts_od([o0, o1, o2, o3, o4, o5, o6, o7].map(|o| &mut o[..]));
     for k in 0..8 {
         assert!(
             c[k].iter().zip(&out[k]).all(|(a, b)| a.to_bits() == b.to_bits()),

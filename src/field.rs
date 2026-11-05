@@ -347,8 +347,9 @@ impl<S: Simd, const B: usize> Fl<QV<S>, B> {
 
 impl<S: Simd, const B: usize> Fl<OV<S>, B> {
     /// from 8 B octo-double values given as their eight parts' arrays (part q of value j at `c[q][j]`, `OV::load` per
-    /// lane vector: the parts as they are, not renormalized). Arrays shorter than 8 B panic.
-    pub fn load_parts(c: [&[f64]; 8]) -> Self {
+    /// lane vector: the parts as they are, not renormalized). Arrays shorter than 8 B panic. It has a name of its own
+    /// so that `Fl::load_parts(..)`, the quad-double one, keeps its type inferred from where it is used.
+    pub fn load_parts_od(c: [&[f64]; 8]) -> Self {
         let mut r = [OV::zero(); B];
         for b in 0..B {
             let o = 8 * b;
@@ -356,8 +357,8 @@ impl<S: Simd, const B: usize> Fl<OV<S>, B> {
         }
         Fl(r)
     }
-    /// the 8 B values' eight parts into eight arrays, the inverse of `load_parts`
-    pub fn store_parts(&self, c: [&mut [f64]; 8]) {
+    /// the 8 B values' eight parts into eight arrays, the inverse of `load_parts_od`
+    pub fn store_parts_od(&self, c: [&mut [f64]; 8]) {
         for (q, part) in c.into_iter().enumerate() {
             for b in 0..B {
                 self.0[b].c[q].store(&mut part[8 * b..8 * b + 8]);
