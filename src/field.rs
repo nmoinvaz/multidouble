@@ -556,8 +556,9 @@ impl<L: MatLane> MatLane for Counted<L> {
 }
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
-/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), and `solve_lanes_refine`, the double-double
-/// solve refined in the field's lane type. All panic if the order is not 8 B.
+/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), `solve_lanes_refine`, the double-double
+/// solve refined in the field's lane type, and `solve_lanes_jet`, a jet's system solved order by order. All panic if
+/// the order is not 8 B.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
@@ -621,6 +622,32 @@ pub trait FieldSolve {
     ) -> Fl<T, B>
     where
         Self: Sized;
+    /// x(h) with A(h) x(h) = rhs(h) for a jet lane (`Lane::NJ` > 0), with A(h) = A_0 + sum_j A_j h^j and this the LU
+    /// of A_0. The orders are solved in turn in double-double (`Lane::coef`, `Lane::set_coef`), x_k = A_0^-1 r_k with
+    /// r_k = rhs_k - sum_{j=1..k} A_j x_{k-j}. The caller forms the coupling. `couple(j, x, r)` returns r - A_j x,
+    /// called for j = 1, ..., k in that order with x = x_{k-j}, so the caller also fixes the order of the operations
+    /// and with it the bits. A quad-double jet's coefficients are rounded to double-double here, and
+    /// `solve_lanes_jet_refine` keeps them. A lane type without jet coefficients panics.
+    ///
+    /// ```
+    /// use multidouble::dd::DD;
+    /// use multidouble::dual::Lane;
+    /// use multidouble::field::{FieldSolve, Fl};
+    /// use multidouble::linalg::DDLu;
+    /// use multidouble::native::Jet;
+    /// // (2 + h) x(h) = 1, so x_k = (-1)^k / 2^(k+1)
+    /// let lu = DDLu::factor(8, 8, (0..64).map(|k| if k % 9 == 0 { 2.0 } else { 0.0 }).collect(), vec![0.0; 64], false)
+    ///     .unwrap();
+    /// let kappa = Fl::<Jet<3>, 1>([Jet::var(DD::from_f64(2.0))]);
+    /// let rhs = Fl::<Jet<3>, 1>([Jet::splat(DD::ONE)]);
+    /// let x = lu.solve_lanes_jet(&rhs, |j, x, r| r - kappa.coef(j) * *x);
+    /// assert_eq!([0, 1, 2].map(|k| x.coef(k).get(0).to_f64()), [0.5, -0.25, 0.125]);
+    /// ```
+    fn solve_lanes_jet<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        couple: impl FnMut(usize, &Fl<DV<T::S>, B>, Fl<DV<T::S>, B>) -> Fl<DV<T::S>, B>,
+    ) -> Fl<T, B>;
 }
 
 impl FieldSolve for DDLu {
@@ -692,6 +719,30 @@ impl FieldSolve for DDLu {
         for _ in 0..steps {
             let r = resid(&x);
             x = x + Fl::<T, B>::from_vt(&self.solve_lanes(&r.val()), &tsolve(&r));
+        }
+        x
+    }
+
+    fn solve_lanes_jet<T: Lane, const B: usize>(
+        &self,
+        rhs: &Fl<T, B>,
+        mut couple: impl FnMut(usize, &Fl<DV<T::S>, B>, Fl<DV<T::S>, B>) -> Fl<DV<T::S>, B>,
+    ) -> Fl<T, B> {
+        // run-time, as in solve_lanes_refine
+        assert!(
+            T::NJ > 0,
+            "FieldSolve::solve_lanes_jet solves jets: a lane type without jet coefficients has no orders"
+        );
+        let mut x = Fl::<T, B>::zero();
+        let mut xs: Vec<Fl<DV<T::S>, B>> = Vec::with_capacity(T::NJ);
+        for k in 0..T::NJ {
+            let mut r = rhs.coef(k);
+            for j in 1..=k {
+                r = couple(j, &xs[k - j], r);
+            }
+            let xk = self.solve_lanes(&r);
+            x.set_coef(k, &xk);
+            xs.push(xk);
         }
         x
     }
