@@ -39,11 +39,11 @@ impl Rng {
         let mut f = F::zero();
         for v in f.0.iter_mut() {
             for (i, x) in v.c.iter_mut().enumerate() {
-                for q in 0..4 {
+                for (q, part) in x.c.iter_mut().enumerate() {
                     let s = 2f64.powi(-53 * q as i32);
                     let add = if i == 0 && q == 0 { c } else { 0.0 };
                     let a: [f64; 8] = std::array::from_fn(|_| self.next() * s + add);
-                    x.c[q] = multidouble::native::V8::from_array(a);
+                    *part = multidouble::native::V8::from_array(a);
                 }
             }
         }
