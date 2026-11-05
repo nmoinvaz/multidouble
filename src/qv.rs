@@ -873,7 +873,8 @@ impl<S: Simd> QDotAcc<S> {
     }
     /// self + a b into self, with a and b borrowed: bitwise `add_prod`. The step runs through `Simd::hot` with only
     /// the three references captured, so that where the compiler keeps it out of line (NEON, SSE2, portable) the call
-    /// copies nothing; `add_prod` copies its accumulator, operands and result there, 1152 bytes per product.
+    /// copies nothing. Around an out-of-line `add_prod` the accumulator is copied in and the result out, 640 bytes per
+    /// product (NEON).
     #[inline(always)]
     pub fn add_prod_mut(&mut self, a: &QV<S>, b: &QV<S>) {
         S::hot(
