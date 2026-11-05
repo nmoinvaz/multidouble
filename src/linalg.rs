@@ -3228,6 +3228,30 @@ mod tests {
         }
     }
 
+    /// QDLu on one backend: the factors (with the parallel trailing update) and pivots, and the solutions of A x = b
+    /// and A^T x = b
+    #[derive(Clone)]
+    struct QdOnBackend {
+        n: usize,
+        ld: usize,
+        c: [Vec<f64>; 4],
+        b: Vec<QD>,
+    }
+
+    impl Kernel for QdOnBackend {
+        type Output = Vec<f64>;
+        #[inline(always)]
+        fn run<S: Simd>(self) -> Vec<f64> {
+            let lu = QDLu::factor_on::<S>(self.n, self.ld, self.c, true, QdLuControl::None).unwrap();
+            let (mut x, mut y) = (self.b.clone(), self.b);
+            lu.solve_on::<S>(&mut x);
+            lu.solve_t(&mut y);
+            let parts = |v: &[QD]| -> Vec<f64> { v.iter().flat_map(|q| q.x).collect() };
+            let perm: Vec<f64> = lu.perm.iter().map(|&p| p as f64).collect();
+            [lu.c.concat(), perm, parts(&x), parts(&y)].concat()
+        }
+    }
+
     /// a staircase LU with column groups a, b (k of them), a (b = 2 a), each row block filled with deterministic
     /// pseudo-random entries
     fn stair(a: usize, k: usize) -> StaircaseLu {
@@ -3638,6 +3662,42 @@ mod tests {
         assert_eq!(bits_differ(want, &wrong), 1);
         println!(
             "linalg bitwise the same on {:?}",
+            ran.iter().map(|r| r.0).collect::<Vec<_>>()
+        );
+    }
+
+    /// The quad-double LU's factors (with the parallel trailing update), pivots and solutions of A x = b and A^T x = b
+    /// are bitwise the same on every backend this CPU runs, on the block-sparse matrix (skipped zero updates) with two
+    /// more parts and a b with zeros and negative zeros. Control: one flipped low bit is caught by the same comparison.
+    #[test]
+    fn qd_lu_every_backend_gives_the_same_bits() {
+        let n = 157;
+        let (ld, h, l) = sparse(n, 20, 5);
+        let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+        for k in 0..ld * n {
+            let v = QD::new(h[k], l[k], l[k] * 3.1e-17, h[k] * 7.3e-49);
+            for (q, part) in c.iter_mut().enumerate() {
+                part[k] = v.x[q];
+            }
+        }
+        let b: Vec<QD> = (0..n)
+            .map(|i| match i % 5 {
+                0 => QD::ZERO,
+                3 => QD::from_f64(-0.0),
+                _ => QD::new(h[i * 3], l[i * 7], h[i] * 2.9e-42, 0.0),
+            })
+            .collect();
+        let ran = simd::for_each_available(QdOnBackend { n, ld, c, b });
+        let (first, want) = (ran[0].0, &ran[0].1);
+        for (name, got) in &ran[1..] {
+            assert_eq!(bits_differ(want, got), 0, "{name} against {first}");
+        }
+        let mut wrong = want.clone();
+        let m = want.len() / 2;
+        wrong[m] = f64::from_bits(wrong[m].to_bits() ^ 1);
+        assert_eq!(bits_differ(want, &wrong), 1);
+        println!(
+            "QDLu bitwise the same on {:?}",
             ran.iter().map(|r| r.0).collect::<Vec<_>>()
         );
     }
