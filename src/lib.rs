@@ -57,6 +57,7 @@ pub mod exact;
 pub mod field;
 pub mod jet;
 pub mod linalg;
+pub mod od;
 pub mod qd;
 pub mod qv;
 pub mod simd;
