@@ -1,11 +1,10 @@
 //! The in-place accumulation and Cauchy sums against the value-returning ones, bit for bit, on every backend this CPU
 //! runs (`simd::for_each_available`), with random inputs in every part of every lane type: `Lane::acc_mut` against
 //! `Lane::acc` for the double-double, quad-double and octo-double values, the dual and f64-tangent lanes, the jets
-//! (`QJet<24>` and `OJet<24>` among them) and the counting lane, `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut`
-//! against `add_prod`, and `field::cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`
-//! against `cs`, `cs_range` and `cs_w`. Each check
-//! has a control that must fail, the same comparison of a sum with two of its terms swapped, and for the field sums
-//! also of a sum without its last term.
+//! (`QJet<24>` among them, and `OJet<24>` in optimized builds) and the counting lane, `QDotAcc::add_prod_mut` and
+//! `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and
+//! `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check has a control that must fail, the same comparison
+//! of a sum with two of its terms swapped, and for the field sums also of a sum without its last term.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
@@ -310,8 +309,11 @@ fn every_lane<S: Simd>(c: &mut impl Check) {
     c.check::<Counted<QJet<S, 5>>>("Counted<QJet<5>>");
     // last, so that the checks above keep their seeds
     c.check::<OJet<S, 5>>("OJet<5>");
-    c.check::<OJet<S, 24>>("OJet<24>");
     c.check::<Counted<OJet<S, 5>>>("Counted<OJet<5>>");
+    // optimized builds only: unoptimized (the coverage run) its sums take minutes, and the code is OJet<5>'s
+    if !cfg!(debug_assertions) {
+        c.check::<OJet<S, 24>>("OJet<24>");
+    }
 }
 
 /// k, a check that panics on a mismatch, run on every backend this CPU has, on a thread with a 64 MiB stack. Built
