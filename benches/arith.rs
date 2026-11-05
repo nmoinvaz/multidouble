@@ -1,4 +1,5 @@
 // arith.rs -- throughput of the arithmetic, scalar against 8-lane, f64 against double-double against quad-double
+// against octo-double
 //
 // Each benchmark runs a dependent chain over a small array, so the result is used and the compiler cannot drop the
 // work; throughput is counted in element operations (8 per lane operation). The lane benchmarks run on every backend
@@ -14,8 +15,10 @@ use multidouble::dd::DD;
 use multidouble::dual::{Fu, Fun};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::jet::Jet;
+use multidouble::od::OD;
+use multidouble::ov::{ODotAcc, OV};
 use multidouble::qd::QD;
-use multidouble::qv::QV;
+use multidouble::qv::{QDotAcc, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
 
@@ -63,6 +66,10 @@ fn scalar(c: &mut Criterion) {
     g.bench_function("qd sqrt", |bch| {
         bch.iter(|| qd.iter().map(|&x| x.sqrt()).fold(0.0, |s, r| s + r.x[0]))
     });
+    let od: Vec<OD> = qd.iter().map(|&q| OD::from_qd(q)).collect();
+    g.bench_function("od add", |bch| bch.iter(|| od.iter().fold(OD::ZERO, |s, &x| s + x)));
+    g.bench_function("od mul", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s * x)));
+    g.bench_function("od div", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s / x)));
     g.finish();
 }
 
@@ -280,6 +287,79 @@ impl Kernel for Lanes<'_, '_> {
                             s = s / x;
                         }
                         s
+                    },
+                )
+            })
+        });
+        g.bench_function("qv dot (QDotAcc)", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = QDotAcc::zero();
+                        for &x in &qv {
+                            s = s.add_prod(x, x);
+                        }
+                        s.finish()
+                    },
+                )
+            })
+        });
+        // octo-double lanes: the values of the quad-double ones, the lower four parts zero; the chains' values grow
+        // into all eight parts after a few steps
+        let ov: Vec<OV<S>> = qv.iter().map(|&q| OV::from_qv(q)).collect();
+        g.bench_function("ov add", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = OV::zero();
+                        for &x in &ov {
+                            s = s + x;
+                        }
+                        s
+                    },
+                )
+            })
+        });
+        g.bench_function("ov mul", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = OV::splat_f(1.0);
+                        for &x in &ov {
+                            s = s * x;
+                        }
+                        s
+                    },
+                )
+            })
+        });
+        g.bench_function("ov div", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = OV::splat_f(1.0);
+                        for &x in &ov {
+                            s = s / x;
+                        }
+                        s
+                    },
+                )
+            })
+        });
+        g.bench_function("ov dot (ODotAcc)", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = ODotAcc::zero();
+                        for &x in &ov {
+                            s = s.add_prod(x, x);
+                        }
+                        s.finish()
                     },
                 )
             })

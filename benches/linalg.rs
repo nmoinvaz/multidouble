@@ -1,8 +1,10 @@
-// linalg.rs -- double-double LU against the f64 blocked LU, and the quad-double LU, factor and solve, one thread
+// linalg.rs -- double-double LU against the f64 blocked LU, and the quad-double LU, factor and solve, one thread; the
+// octo-double LU with its updates on the lanes and in scalar octo-double (larger orders: bench_od_lu in tests/odlu.rs)
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use multidouble::dd::DD;
-use multidouble::linalg::{ld_for, DDLu, QDLu};
+use multidouble::linalg::{ld_for, DDLu, ODLu, OdLuControl, QDLu};
+use multidouble::od::OD;
 use multidouble::qd::QD;
 
 fn matrix(n: usize) -> (usize, Vec<f64>, Vec<f64>) {
@@ -72,5 +74,40 @@ fn lu(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, lu);
+/// the double-double matrix as octo-double parts (the six lower parts zero; the factors fill them)
+fn matrix_od(n: usize) -> (usize, [Vec<f64>; 8]) {
+    let (ld, hi, lo) = matrix(n);
+    let mut c: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    c[0] = hi;
+    c[1] = lo;
+    (ld, c)
+}
+
+fn lu_od(c: &mut Criterion) {
+    let mut g = c.benchmark_group("od lu");
+    g.sample_size(10);
+    for &n in &[32usize, 64] {
+        let (ld, a) = matrix_od(n);
+        g.throughput(Throughput::Elements((n * n * n) as u64 * 2 / 3));
+        g.bench_with_input(BenchmarkId::new("od factor, lanes", n), &n, |b, &n| {
+            b.iter(|| ODLu::factor(n, ld, a.clone(), false).unwrap())
+        });
+        g.bench_with_input(BenchmarkId::new("od factor, scalar", n), &n, |b, &n| {
+            b.iter(|| ODLu::factor_control(n, ld, a.clone(), false, OdLuControl::Scalar).unwrap())
+        });
+        let f = ODLu::factor(n, ld, a.clone(), false).unwrap();
+        let rhs: Vec<OD> = (0..n).map(|i| OD::from_f64(i as f64)).collect();
+        g.throughput(Throughput::Elements((n * n) as u64));
+        g.bench_with_input(BenchmarkId::new("od solve", n), &n, |b, _| {
+            b.iter(|| {
+                let mut x = rhs.clone();
+                f.solve(&mut x);
+                x
+            })
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(benches, lu, lu_od);
 criterion_main!(benches);
