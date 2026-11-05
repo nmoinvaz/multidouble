@@ -83,6 +83,7 @@ fn matrix_od(n: usize) -> (usize, [Vec<f64>; 8]) {
     (ld, c)
 }
 
+/// ODLu factor (updates on the lanes and in scalar octo-double) and solve at n = 32 and 64
 fn lu_od(c: &mut Criterion) {
     let mut g = c.benchmark_group("od lu");
     g.sample_size(10);

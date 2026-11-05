@@ -202,6 +202,7 @@ class ODLu:
     multiply-adds and each solve about n^2. Raises ValueError if A is singular or has an entry that is not finite."""
 
     def __init__(self, a0, a1, a2, a3, a4, a5, a6, a7):
+        """factor A = a0 + ... + a7 (eight (n, n) part arrays)"""
         self._lu = _md.ODLu(*[_f64(v, f"a{q}") for q, v in enumerate((a0, a1, a2, a3, a4, a5, a6, a7))])
 
     @property

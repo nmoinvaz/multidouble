@@ -386,6 +386,7 @@ impl<S: Simd> Neg for OV<S> {
 
 impl<S: Simd> Add for OV<S> {
     type Output = Self;
+    /// a + b on every lane, as `OD`'s
     #[inline]
     fn add(self, b: Self) -> Self {
         S::vectorize(
@@ -399,6 +400,7 @@ impl<S: Simd> Add for OV<S> {
 
 impl<S: Simd> Sub for OV<S> {
     type Output = Self;
+    /// a + (-b) on every lane
     #[inline]
     fn sub(self, b: Self) -> Self {
         self + (-b)
@@ -407,6 +409,7 @@ impl<S: Simd> Sub for OV<S> {
 
 impl<S: Simd> Mul for OV<S> {
     type Output = Self;
+    /// a b on every lane, as `OD`'s
     #[inline]
     fn mul(self, b: Self) -> Self {
         S::vectorize(
@@ -420,6 +423,7 @@ impl<S: Simd> Mul for OV<S> {
 
 impl<S: Simd> Div for OV<S> {
     type Output = Self;
+    /// a / b on every lane, as `OD`'s
     #[inline]
     fn div(self, b: Self) -> Self {
         S::vectorize(

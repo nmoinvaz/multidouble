@@ -2720,11 +2720,13 @@ pub struct ODLu {
     pub perm: Vec<usize>,
 }
 
+/// the 8 entries i..i + 8 of an octo-double column, from its eight part arrays
 #[inline(always)]
 fn load_ov<S: Simd>(c: [&[f64]; 8], i: usize) -> OV<S> {
     OV::load(c.map(|p| &p[i..i + 8]))
 }
 
+/// u where m is set, a elsewhere, in every part
 #[inline(always)]
 fn sel_ov<S: Simd>(m: M8<S>, u: OV<S>, a: OV<S>) -> OV<S> {
     OV {
@@ -2794,6 +2796,7 @@ impl ODLu {
         simd::dispatch(FactorOd { n, ld, c, par, ctl })
     }
 
+    /// `factor_control` on the backend S
     fn factor_on<S: Simd>(
         n: usize,
         ld: usize,
@@ -2898,6 +2901,7 @@ impl ODLu {
         }
     }
 
+    /// the eight part arrays of column k of the factors
     fn col(&self, k: usize) -> [&[f64]; 8] {
         let r = k * self.ld..(k + 1) * self.ld;
         std::array::from_fn(|q| &self.c[q][r.clone()])
@@ -2909,6 +2913,7 @@ impl ODLu {
         simd::dispatch(SolveOd { lu: self, b })
     }
 
+    /// `solve` on the backend S
     fn solve_on<S: Simd>(&self, b: &mut [OD]) {
         S::vectorize(
             #[inline(always)]
@@ -3016,6 +3021,7 @@ struct FactorOd {
 
 impl Kernel for FactorOd {
     type Output = Result<ODLu, String>;
+    /// ODLu::factor_control on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
         ODLu::factor_on::<S>(self.n, self.ld, self.c, self.par, self.ctl)
@@ -3029,6 +3035,7 @@ struct SolveOd<'a> {
 
 impl Kernel for SolveOd<'_> {
     type Output = ();
+    /// ODLu::solve on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) {
         self.lu.solve_on::<S>(self.b)
@@ -3051,6 +3058,7 @@ mod od_lu_tests {
 
     impl Kernel for OdOnBackend {
         type Output = Vec<u64>;
+        /// the bits of the factors, pivots and solutions on the backend S
         #[inline(always)]
         fn run<S: Simd>(self) -> Vec<u64> {
             let lu = ODLu::factor_on::<S>(self.n, self.ld, self.c, true, OdLuControl::None).unwrap();

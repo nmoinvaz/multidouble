@@ -753,6 +753,7 @@ impl std::fmt::Display for OD {
 
 impl std::str::FromStr for OD {
     type Err = String;
+    /// parse a decimal (`OD::parse`)
     fn from_str(s: &str) -> Result<OD, String> {
         OD::parse(s)
     }
@@ -761,6 +762,7 @@ impl std::str::FromStr for OD {
 /// Lexicographic on the parts, as the QD library orders quad-doubles; None if a part is NaN. For renormalized values
 /// (nonoverlapping parts) this is the order of the values, up to ties at the parts' half-ulp bounds.
 impl PartialOrd for OD {
+    /// the parts compared in turn, the first that differ deciding
     fn partial_cmp(&self, o: &OD) -> Option<Ordering> {
         for i in 0..8 {
             match self.x[i].partial_cmp(&o.x[i])? {
@@ -783,6 +785,7 @@ impl Neg for OD {
 
 impl Add for OD {
     type Output = OD;
+    /// a + b (QD's sloppy add carried to eight parts, see the module doc)
     #[inline]
     fn add(self, b: OD) -> OD {
         OD {
@@ -793,6 +796,7 @@ impl Add for OD {
 
 impl Sub for OD {
     type Output = OD;
+    /// a + (-b)
     #[inline]
     fn sub(self, b: OD) -> OD {
         self + (-b)
@@ -801,6 +805,7 @@ impl Sub for OD {
 
 impl Mul for OD {
     type Output = OD;
+    /// a b (the partial products to order 8, renormalized)
     #[inline]
     fn mul(self, b: OD) -> OD {
         OD {
@@ -811,6 +816,7 @@ impl Mul for OD {
 
 impl Div for OD {
     type Output = OD;
+    /// a / b by long division, nine quotient terms
     #[inline]
     fn div(self, b: OD) -> OD {
         let b0 = b.x[0];

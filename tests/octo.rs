@@ -35,21 +35,25 @@ fn od_u(r: &mut Rng, lo: f64) -> OD {
     od_of(r, h)
 }
 
+/// an octo-double w u, u uniform in [-1, 1), with all eight parts in use
 fn od_s(r: &mut Rng, w: f64) -> OD {
     let h = w * r.sym();
     od_of(r, h)
 }
 
+/// eight double-doubles as lanes
 fn dv(v: &[DD; 8]) -> Dv {
     let hi: Vec<f64> = v.iter().map(|d| d.hi).collect();
     let lo: Vec<f64> = v.iter().map(|d| d.lo).collect();
     Dv::load(&hi, &lo)
 }
 
+/// every part the same bits
 fn same(a: OD, b: OD) -> bool {
     a.x.iter().zip(b.x.iter()).all(|(x, y)| x.to_bits() == y.to_bits())
 }
 
+/// every lane of v is want(j), bit for bit
 fn assert_lanes(what: &str, v: OV, want: impl Fn(usize) -> OD) {
     for j in 0..8 {
         let (g, w) = (v.lane(j), want(j));
@@ -107,6 +111,7 @@ fn ov_lane_methods_are_the_scalar_operations() {
     }
 }
 
+/// x^k, exactly
 fn pow(x: &Dy, k: usize) -> Dy {
     (0..k).fold(Dy::from_f64(1.0), |p, _| p.mul(x))
 }
@@ -179,17 +184,20 @@ fn dd_matrix(r: &mut Rng, graded: bool) -> Vec<DD> {
         .collect()
 }
 
+/// the matrix of a row-major double-double array
 fn dmat(a: &[DD]) -> DMat<Native, B> {
     let (h, l): (Vec<f64>, Vec<f64>) = a.iter().map(|d| (d.hi, d.lo)).unzip();
     DMat::from_rows(&h, &l)
 }
 
+/// an octo-double field from 8 B values
 fn ofield(v: &[OD]) -> Fl<OV, B> {
     Fl(std::array::from_fn(|b| {
         OV::from_lanes(v[8 * b..8 * b + 8].try_into().unwrap())
     }))
 }
 
+/// the 8 B values of an octo-double field
 fn ovalues(f: &Fl<OV, B>) -> Vec<OD> {
     f.0.iter().flat_map(|v| v.lanes()).collect()
 }
@@ -209,6 +217,7 @@ fn exact_matvec(a: &[DD], x: &[OD]) -> (Vec<Dy>, Vec<Dy>) {
         .unzip()
 }
 
+/// eight parts of a dyadic by greedy round-to-nearest
 fn greedy8(d: &Dy) -> OD {
     let mut r = d.clone();
     let mut x = [0.0; 8];
@@ -260,6 +269,7 @@ fn od_err(x: &[OD], y: &[OD]) -> f64 {
         / ym
 }
 
+/// the double-double LU of a row-major matrix of order M
 fn lu_of(a: &[DD]) -> DDLu {
     let ld = ld_for(M);
     let (mut ch, mut cl) = (vec![0.0; ld * M], vec![0.0; ld * M]);
