@@ -16,7 +16,9 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double;
 - ``od_solve``: x with A x = b by LU with partial pivoting in octo-double, A and b as eight float64 part arrays each,
-  to about cond(A) 2^-418; ``ODLu`` factors A once for several solves (and solves with A^T).
+  to about cond(A) 2^-418; ``ODLu`` factors A once for several solves (and solves with A^T);
+- ``od_add_dd``: an octo-double array (eight float64 arrays) plus a double-double one, elementwise in octo-double;
+- ``od_axpy``: y + a x for octo-double arrays x, y and a float a, elementwise in octo-double.
 
 Their array arguments may be any arrays or sequences of real numbers, strided, in Fortran order or of another numeric
 dtype. Each is converted to a C-contiguous float64 array, and one that is already so is passed on without a copy.
@@ -221,7 +223,25 @@ class ODLu:
         return self._lu.solve(*b, bool(transpose))
 
 
-__all__ += ["od_solve", "ODLu"]
+def od_add_dd(z0, z1, z2, z3, z4, z5, z6, z7, dh, dl):
+    """(z0 + ... + z7) + (dh + dl) elementwise in octo-double: an octo-double array (eight float64 arrays, each element
+    renormalized first, as od_solve takes its entries) plus a double-double one, e.g. a Newton step applied to a state
+    kept in octo-double. 8 elements at a time on the best SIMD backend and the rest in scalar octo-double, bitwise the
+    same per element. Returns the eight parts of the result, renormalized."""
+    z = [_f64(v, f"z{q}") for q, v in enumerate((z0, z1, z2, z3, z4, z5, z6, z7))]
+    return _md.od_add_dd(*z, _f64(dh, "dh"), _f64(dl, "dl"))
+
+
+def od_axpy(a, x0, x1, x2, x3, x4, x5, x6, x7, y0, y1, y2, y3, y4, y5, y6, y7):
+    """y + a x elementwise in octo-double for octo-double arrays x and y (eight float64 arrays each, the parts
+    normalized, e.g. the output of od_add_dd) and a float a: each element times a, then the sum, 8 at a time on the best
+    SIMD backend, bitwise the same on every backend. Returns the eight parts of the result."""
+    x = [_f64(v, f"x{q}") for q, v in enumerate((x0, x1, x2, x3, x4, x5, x6, x7))]
+    y = [_f64(v, f"y{q}") for q, v in enumerate((y0, y1, y2, y3, y4, y5, y6, y7))]
+    return _md.od_axpy(a, *x, *y)
+
+
+__all__ += ["od_solve", "ODLu", "od_add_dd", "od_axpy"]
 
 
 def two_sum(a, b):
