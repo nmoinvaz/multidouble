@@ -1,12 +1,14 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
-//! arithmetic, dot products and matrix-vector products on them on the best SIMD backend the CPU has, quad-double
-//! arrays (four parts) plus a double-double one or plus a multiple of another, and a dense double-double LU solve.
-use multidouble::dd::DD;
-use multidouble::dv::{DotAcc, DV};
+//! arithmetic, dot products, matrix-vector products and the Horner sum of a power series on them on the best SIMD
+//! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and a
+//! dense double-double LU solve.
+use multidouble::dd::{self, DD};
+use multidouble::dv::{self, DotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, renorm4, QV};
 use multidouble::simd::{self, Kernel, Simd};
+use multidouble::v8::V8;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 
 type Parts<'py> = (
@@ -483,6 +485,114 @@ fn dd_solve<'py>(
     ))
 }
 
+/// a x in double-double for an f64 a, as the numpy `dd_scale` forms it: the two-product of a and x.hi (exact, so
+/// bitwise Dekker's product there), then a x.lo added to its error unfused (`DD::mul_f` fuses it), then the quick
+/// two-sum
+#[inline(always)]
+fn scale_dd(x: DD, a: f64) -> DD {
+    let (p, e) = dd::two_prod(a, x.hi);
+    let e = e + a * x.lo;
+    let (h, l) = dd::quick_two_sum(p, e);
+    DD { hi: h, lo: l }
+}
+
+/// `scale_dd` on 8 lanes
+#[inline(always)]
+fn scale_dv<S: Simd>(x: DV<S>, a: V8<S>) -> DV<S> {
+    let (p, e) = dv::two_prod(a, x.hi);
+    let e = e.add(a.mul(x.lo));
+    let (h, l) = dv::quick_two_sum(p, e);
+    DV { hi: h, lo: l }
+}
+
+/// sum_k c_k a^k by Horner's rule: p = c_N, then p = c_k + `scale_dd`(p, a) for k = N - 1, ..., 0, which is the
+/// numpy `dd_add(c_k, dd_scale(p, a))` bit for bit. The coefficients are the rows of (N + 1) n row-major arrays. 8
+/// values at a time on the backend S, the remainder in scalar double-double with the same operations (bitwise the
+/// same per value).
+struct Horner<'a> {
+    n: usize,
+    c: (&'a [f64], &'a [f64]),
+    a: f64,
+    out: (&'a mut [f64], &'a mut [f64]),
+}
+
+/// coefficient k of values i..i + 8
+#[inline(always)]
+fn row_dv<S: Simd>(c: (&[f64], &[f64]), n: usize, k: usize, i: usize) -> DV<S> {
+    let o = k * n + i;
+    DV::<S>::load(&c.0[o..o + 8], &c.1[o..o + 8])
+}
+
+impl Kernel for Horner<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let (n, c) = (self.n, self.c);
+        let nc = c.0.len() / n;
+        let full = n / 8 * 8;
+        let (oh, ol) = self.out;
+        let a = V8::<S>::splat(self.a);
+        for i in (0..full).step_by(8) {
+            let mut p = row_dv::<S>(c, n, nc - 1, i);
+            for k in (0..nc - 1).rev() {
+                p = row_dv::<S>(c, n, k, i) + scale_dv(p, a);
+            }
+            p.store(&mut oh[i..i + 8], &mut ol[i..i + 8]);
+        }
+        for i in full..n {
+            let mut p = DD {
+                hi: c.0[(nc - 1) * n + i],
+                lo: c.1[(nc - 1) * n + i],
+            };
+            for k in (0..nc - 1).rev() {
+                let ck = DD {
+                    hi: c.0[k * n + i],
+                    lo: c.1[k * n + i],
+                };
+                p = ck + scale_dd(p, self.a);
+            }
+            oh[i] = p.hi;
+            ol[i] = p.lo;
+        }
+    }
+}
+
+/// sum_k (ch + cl)_k a^k by Horner's rule in double-double at a float a: the coefficients c_0, ..., c_N as (N + 1, n)
+/// row-major hi and lo arrays, coefficient k in row k. From p = c_N, each step p = c_k + a p is the numpy
+/// `dd_add(c_k, dd_scale(p, a))` bit for bit, 8 values at a time on the best SIMD backend, bitwise the same on every
+/// backend. Returns the (hi, lo) arrays of the n sums. Raises ValueError for no coefficients or unequal shapes.
+#[pyfunction]
+fn dd_horner<'py>(
+    py: Python<'py>,
+    ch: PyReadonlyArray2<'py, f64>,
+    cl: PyReadonlyArray2<'py, f64>,
+    a: f64,
+) -> PyResult<Pair<'py>> {
+    let [nc, n] = ch.shape() else {
+        return Err(PyValueError::new_err("ch must be two-dimensional, (N + 1, n)"));
+    };
+    let (nc, n) = (*nc, *n);
+    if cl.shape() != [nc, n] {
+        return Err(PyValueError::new_err("ch and cl must have one shape, (N + 1, n)"));
+    }
+    if nc == 0 {
+        return Err(PyValueError::new_err("a series needs at least one coefficient"));
+    }
+    let (chs, cls) = (rows(&ch, "ch")?, rows(&cl, "cl")?);
+    let mut oh = vec![0.0; n];
+    let mut ol = vec![0.0; n];
+    if n > 0 {
+        // with the GIL held, as the elementwise functions: the slices borrow the input arrays
+        simd::dispatch(Horner {
+            n,
+            c: (chs, cls),
+            a,
+            out: (&mut oh, &mut ol),
+        });
+    }
+    Ok((oh.into_pyarray(py), ol.into_pyarray(py)))
+}
+
 /// the SIMD backend the elementwise functions run on (avx512, avx2, sse2, neon or portable), detected at run time
 #[pyfunction]
 fn isa() -> &'static str {
@@ -498,6 +608,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(div, m)?)?;
     m.add_function(wrap_pyfunction!(dd_dot, m)?)?;
     m.add_function(wrap_pyfunction!(dd_matvec, m)?)?;
+    m.add_function(wrap_pyfunction!(dd_horner, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;

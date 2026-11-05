@@ -340,6 +340,95 @@ def test_dd_matvec_within_bound():
         md.dd_matvec(ah, al, vh[:-1], vl[:-1])
 
 
+def series_at(zh, zl, Zh, Zl, a):
+    """the loop dd_horner replaces (choptuik-large-d, hp/anm_run.py): z0 + sum_k z_k a^k by Horner's rule with the
+    numpy dd_add and dd_scale, z0 = (zh, zl) and Zh[0], Zl[0] unused"""
+    ph, pl = np.array(Zh[-1]), np.array(Zl[-1])
+    for k in range(len(Zh) - 2, 0, -1):
+        ph, pl = md.dd_add(Zh[k], Zl[k], *md.dd_scale(ph, pl, a))
+    return md.dd_add(zh, zl, *md.dd_scale(ph, pl, a))
+
+
+def rand_series(rng, terms, n):
+    """terms coefficient arrays of n double-doubles: (list of hi arrays, list of lo arrays)"""
+    c = [rand_dd(rng, n, emax=4) for _ in range(terms)]
+    return [h for h, _ in c], [l for _, l in c]
+
+
+def test_dd_horner_is_the_numpy_horner_loop_bitwise():
+    """dd_horner is the numpy Horner loop it replaces (series_at, with dd_add and dd_scale) bit for bit, for 2 to 25
+    coefficients of N values (the last 3 in the scalar tail), at points that are not powers of two, a power of two and
+    a negative one, from lists of arrays and from (N + 1, n) arrays alike. Control: the same loop with the Rust
+    double-double product (md.mul by (a, 0), whose low part is a fused multiply-add) differs in the low bits."""
+    rng = np.random.default_rng(21)
+    fused_differs = False
+    for terms in (2, 3, 8, 25):
+        Zh, Zl = rand_series(rng, terms, N)
+        for a in (0.4341, -1.37, 0.5, 2.0**-7 * 3):
+            got = md.dd_horner(Zh, Zl, a)
+            assert same_bits(got, series_at(Zh[0], Zl[0], Zh, Zl, a)), (terms, a)
+            assert same_bits(got, md.dd_horner(np.array(Zh), np.array(Zl), a)), (terms, a)
+            ph, pl = Zh[-1], Zl[-1]
+            for k in range(terms - 2, -1, -1):
+                ph, pl = md.add(Zh[k], Zl[k], *md.mul(ph, pl, np.full(N, a), np.zeros(N)))
+            fused_differs |= not same_bits(got, (ph, pl))
+    assert fused_differs, "control: the fused product gives the same bits"
+
+
+def test_dd_horner_against_mpmath():
+    """dd_horner against the sum in mpmath at 80 digits, for 25 coefficients at a = 0.4341 (not a power of two, so its
+    float64 powers are inexact) and a = -0.75: within (N + 2) 2^-104 of sum |c_k a^k|. Control: at 0.4341 the sum
+    with float64 powers a**k (each term c_k a**k in double-double, summed in double-double) misses that bound. Seen:
+    dd_horner 0.2 and 0.3 units of 2^-104, the float64 powers 2e14 units at 0.4341."""
+    import mpmath as mp
+
+    mp.mp.dps = 80
+    rng = np.random.default_rng(22)
+    terms, n = 25, 40
+    bound = (terms + 1) * mp.mpf(2) ** -104
+
+    def worst(h, l, Zh, Zl, a):
+        am, out = mp.mpf(a), mp.mpf(0)
+        for i in range(n):
+            t = [(mp.mpf(Zh[k][i]) + mp.mpf(Zl[k][i])) * am**k for k in range(terms)]
+            err = abs(mp.mpf(h[i]) + mp.mpf(l[i]) - mp.fsum(t)) / mp.fsum(abs(x) for x in t)
+            out = max(out, err)
+        return out
+
+    for a in (0.4341, -0.75):
+        Zh, Zl = rand_series(rng, terms, n)
+        w = worst(*md.dd_horner(Zh, Zl, a), Zh, Zl, a)
+        assert w <= bound, (a, float(w / 2.0**-104))
+        if a == 0.4341:
+            ph, pl = Zh[0], Zl[0]
+            for k in range(1, terms):
+                ph, pl = md.dd_add(ph, pl, *md.dd_scale(Zh[k], Zl[k], a**k))
+            wc = worst(ph, pl, Zh, Zl, a)
+            assert wc > bound, float(wc / 2.0**-104)
+
+
+def test_dd_horner_edge_cases():
+    """one coefficient gives c_0 back, a = 0 gives c_0 (as the loop does), empty coefficient arrays give empty sums,
+    and the lanes agree with the scalar tail (each value alone); no coefficients, coefficient arrays of different
+    lengths, ch and cl of different shapes and a 1-D ch raise ValueError"""
+    rng = np.random.default_rng(23)
+    Zh, Zl = rand_series(rng, 6, N)
+    assert same_bits(md.dd_horner(Zh[:1], Zl[:1], 0.3), (Zh[0], Zl[0]))
+    got = md.dd_horner(Zh, Zl, 0.0)
+    assert same_bits(got, (Zh[0], Zl[0])) and same_bits(got, series_at(Zh[0], Zl[0], Zh, Zl, 0.0))
+    assert same_bits(md.dd_horner(np.zeros((3, 0)), np.zeros((3, 0)), 0.3), (np.zeros(0), np.zeros(0)))
+    full = md.dd_horner(Zh, Zl, 0.4341)
+    for i in (0, 7, 8, 500, N - 1):
+        one = md.dd_horner([h[i:i + 1] for h in Zh], [l[i:i + 1] for l in Zl], 0.4341)
+        assert same_bits(one, (full[0][i:i + 1], full[1][i:i + 1])), i
+    for ch, cl in ((np.zeros((0, 4)), np.zeros((0, 4))),
+                   ([np.ones(4), np.ones(5)], [np.zeros(4), np.zeros(5)]),
+                   (np.ones((3, 4)), np.zeros((3, 5))),
+                   (np.ones(4), np.zeros(4))):
+        with pytest.raises(ValueError):
+            md.dd_horner(ch, cl, 0.5)
+
+
 def conversion_cases():
     """every array function of the package with valid arguments, all arrays C-contiguous float64: name -> arguments"""
     rng = np.random.default_rng(31)
@@ -350,11 +439,12 @@ def conversion_cases():
     Sh, Sl = (x.reshape(6, 6) for x in rand_dd(rng, 36, emax=2))
     Sh = Sh + 16 * np.eye(6)
     z, y = rand_qd(rng, n), rand_qd(rng, n)
+    Ch, Cl = (np.array(c) for c in rand_series(rng, 5, n))
     two = (ah, al, bh, bl)
     return {
         "add": two, "sub": two, "mul": two, "div": two, "dd_op": (1,) + two, "dd_dot": two,
         "dd_matvec": (Ah, Al, bh[:7], bl[:7]), "dd_solve": (Sh, Sl, bh[:6], bl[:6]),
-        "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y),
+        "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y), "dd_horner": (Ch, Cl, 0.4341),
     }
 
 

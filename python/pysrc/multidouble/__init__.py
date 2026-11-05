@@ -8,6 +8,8 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``dd_dot``: a dot product in double-double (8 lanes at a time, then the lane sums), to about (n / 8 + 12) 2^-106 of
   sum |x_i y_i|;
 - ``dd_matvec``: A v in double-double, each row a ``dd_dot``;
+- ``dd_horner``: sum_k c_k a^k by Horner's rule in double-double at a float a, each step ``dd_add(c_k, dd_scale(p,
+  a))`` bit for bit;
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double.
@@ -31,8 +33,8 @@ import numpy as np
 from . import _multidouble as _md
 from ._multidouble import isa
 
-__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_solve", "qd_add_dd", "qd_axpy", "isa", "two_sum",
-           "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
+__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "qd_add_dd", "qd_axpy", "isa",
+           "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
 
 
 def _f64(v, name):
@@ -84,6 +86,19 @@ def dd_matvec(ah, al, vh, vl):
     """A v in double-double: A as (n, m) hi and lo arrays, v as hi and lo arrays of length m, each row of the result
     the dot product of dd_dot. Returns the (hi, lo) arrays of A v."""
     return _md.dd_matvec(_f64(ah, "ah"), _f64(al, "al"), _f64(vh, "vh"), _f64(vl, "vl"))
+
+
+def dd_horner(ch, cl, a):
+    """sum_k (ch + cl)_k a^k by Horner's rule in double-double at a float a. ch and cl hold the hi and lo parts of the
+    coefficients c_0, ..., c_N, each a sequence of N + 1 arrays of one length n or an (N + 1, n) array, the form in
+    which a Taylor series' coefficients are collected order by order. From p = c_N each step p = c_k + a p is
+    dd_add(c_k, dd_scale(p, a)) bit for bit, in Rust, 8 values at a time on the best SIMD backend. A sum with
+    float64 powers a**k would carry an error of about 2^-53 of each term unless a is a power of two. Returns the
+    (hi, lo) arrays of the n sums."""
+    h, l = _f64(ch, "ch"), _f64(cl, "cl")
+    if h.ndim != 2 or l.ndim != 2:
+        raise ValueError("ch and cl must be sequences of N + 1 arrays of one length, or (N + 1, n) arrays")
+    return _md.dd_horner(h, l, float(a))
 
 
 def dd_solve(ah, al, bh, bl):
