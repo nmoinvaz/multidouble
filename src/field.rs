@@ -16,6 +16,8 @@ use crate::dual::{Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use crate::dv::{DotAcc, DV};
 use crate::jet::{Jet, QJet};
 use crate::linalg::DDLu;
+use crate::od::OD;
+use crate::ov::OV;
 use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::Simd;
@@ -174,6 +176,20 @@ impl<T: Lane, const B: usize> Fl<T, B> {
             self.0[b].set_coef_qd(k, c.0[b]);
         }
     }
+    /// coefficient k of every lane in octo-double (`Lane::coef_od`)
+    pub fn coef_od(&self, k: usize) -> Fl<OV<T::S>, B> {
+        let mut r = [OV::zero(); B];
+        for b in 0..B {
+            r[b] = self.0[b].coef_od(k);
+        }
+        Fl(r)
+    }
+    /// set coefficient k of every lane from octo-double (`Lane::set_coef_od`, jets)
+    pub fn set_coef_od(&mut self, k: usize, c: &Fl<OV<T::S>, B>) {
+        for b in 0..B {
+            self.0[b].set_coef_od(k, c.0[b]);
+        }
+    }
     pub fn tan(&self) -> Fl<Dv<T>, B> {
         let mut r = [DV::zero(); B];
         for b in 0..B {
@@ -325,6 +341,31 @@ impl<S: Simd, const B: usize> Fl<QV<S>, B> {
         }
     }
     pub fn get(&self, j: usize) -> QD {
+        self.0[j / 8].lane(j % 8)
+    }
+}
+
+impl<S: Simd, const B: usize> Fl<OV<S>, B> {
+    /// from 8 B octo-double values given as their eight parts' arrays (part q of value j at `c[q][j]`, `OV::load` per
+    /// lane vector: the parts as they are, not renormalized). Arrays shorter than 8 B panic.
+    pub fn load_parts(c: [&[f64]; 8]) -> Self {
+        let mut r = [OV::zero(); B];
+        for b in 0..B {
+            let o = 8 * b;
+            r[b] = OV::load(c.map(|p| &p[o..o + 8]));
+        }
+        Fl(r)
+    }
+    /// the 8 B values' eight parts into eight arrays, the inverse of `load_parts`
+    pub fn store_parts(&self, c: [&mut [f64]; 8]) {
+        for (q, part) in c.into_iter().enumerate() {
+            for b in 0..B {
+                self.0[b].c[q].store(&mut part[8 * b..8 * b + 8]);
+            }
+        }
+    }
+    /// value j as a scalar octo-double
+    pub fn get(&self, j: usize) -> OD {
         self.0[j / 8].lane(j % 8)
     }
 }
@@ -624,7 +665,7 @@ impl<S: Simd> MatLane for DV<S> {}
 impl<S: Simd> MatLane for Du<S> {}
 impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
-impl<S: Simd> MatLane for crate::ov::OV<S> {}
+impl<S: Simd> MatLane for OV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
 impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}
