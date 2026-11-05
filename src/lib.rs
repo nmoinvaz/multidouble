@@ -21,6 +21,9 @@
 //!   [`dual::Dc`] a double-double value with a complex tangent, and f64 variants), behind the [`dual::Lane`] trait,
 //!   so one generic code gives values and exact derivatives;
 //!   [`dual::Counted`] counts the operations of such code.
+//! * [`jet`]: truncated power series over these lanes, in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
+//!   and octo-double ([`jet::OJet`]), with their scalar parameter arithmetic ([`jet::Series`], [`jet::QSeries`],
+//!   [`jet::OSeries`]): one generic code gives its own Taylor coefficients in a parameter.
 //! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
 //!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the

@@ -21,8 +21,9 @@ about 64 digits, and an octo-double a sum of eight, about 126 digits. All are bu
 | `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, and a double-double value with a complex tangent, behind the `dual::Lane` trait |
 | `jet::Jet<N>` | a truncated power series lane: N double-double coefficients in one variable, Cauchy products and series quotients, so a computation written over `dual::Lane` gives its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a high-order Taylor continuation of a branch); `jet::Series<N>` is its scalar parameter arithmetic (`Lane::P`, double-double on every other lane, so constants formed from the parameter stay bit for bit what they were) |
 | `jet::QJet<N>` | the same in quad-double, with `jet::QSeries<N>` its parameter arithmetic: Taylor coefficients to quad-double accuracy where cancellation in the computation amplifies double-double rounding; `Lane::coef_qd` and `set_coef_qd` read and set them without rounding to double-double |
+| `jet::OJet<N>` | the same in octo-double, with `jet::OSeries<N>` its parameter arithmetic, for when the amplification exceeds even quad-double; `Lane::coef_od` and `set_coef_od` read and set its coefficients in octo-double, and its sums accumulate in place (`ODotAcc::add_prod_mut`) |
 | `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`, indexed by `dual::op`), the results bitwise L's: operation counts of code written over `dual::Lane` |
-| `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with f64 tangents set and unit tangents seeded (`set_tan64`, `unit`, `unit_tangent`), Cauchy products (`cs`, `cs_range`, `cs_w`, and bitwise the same in place, `cs_into`, `cs_range_into`, `cs_w_into`, or one lane vector at a time, `cs_lane_into`, `cs_w_lane_into`, through `Lane::acc_mut`, which saves a jet's sums the copy of its kilobytes per term), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together, a complex tangent by its real part and a jet refused, and `solve_lanes_jet` and `solve_lanes_jet_refine`, a jet's system order by order with the LU at the values, in double-double or each order refined to quad-double) and an early end of a series once its tangent terms have stayed below a tolerance, relative to their largest so far, for a run of orders (`TangentTail`): the arithmetic of power-series methods, for every lane type |
+| `field::Fl<T, B>`, `field::DMat`, `field::TangentTail` | 8 B values of a lane type as B lane vectors, with f64 tangents set and unit tangents seeded (`set_tan64`, `unit`, `unit_tangent`), quad-double and octo-double values as part arrays (`load_parts`, `store_parts`), Cauchy products (`cs`, `cs_range`, `cs_w`, and bitwise the same in place, `cs_into`, `cs_range_into`, `cs_w_into`, or one lane vector at a time, `cs_lane_into`, `cs_w_lane_into`, through `Lane::acc_mut`, which saves a jet's sums the copy of its kilobytes per term), Horner evaluation, a constant double-double matrix applied to them (`MatLane::dmat_apply`), solves with a `DDLu` (`FieldSolve`, including `solve_lanes_refine`, refined in the lane type: to quad-double for `QV`, and `solve_lanes_refine_t`, value and tangent together, a complex tangent by its real part and a jet refused, and `solve_lanes_jet`, `solve_lanes_jet_refine` and `solve_lanes_jet_refine_od`, a jet's system order by order with the LU at the values, in double-double or each order refined to quad-double or octo-double) and an early end of a series once its tangent terms have stayed below a tolerance, relative to their largest so far, for a run of orders (`TangentTail`): the arithmetic of power-series methods, for every lane type |
 | `linalg::DDLu`, `linalg::clu_logdet` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices, the determinant; ln\|det\| and arg det of a complex double-double matrix by the same LU (`clu_logdet`) |
 | `linalg::QDLu` | dense LU with partial pivoting in quad-double (8-row `QV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in quad-double: for systems too ill-conditioned for double-double |
 | `linalg::ODLu` | dense LU with partial pivoting in octo-double (8-row `OV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in octo-double: for systems too ill-conditioned for quad-double, to about cond(A) 2^-418 |
@@ -171,6 +172,13 @@ an absolute allowance of 16×2⁻¹⁰⁷⁴, as for quad-double: full precision
 above about 2⁻⁶⁰⁰. `ODLu` solves to about 10⁻¹³³ cond(A) against planted solutions, 2⁻²²⁰ times the quad-double LU's
 error on the same systems, for condition numbers from 1 to 10³⁰.
 
+The octo-double jet's coefficients are checked against exact arithmetic too (`tests/ojet.rs`). Polynomials,
+reciprocals, quotients and a rational function in the series variable, and series formed in the parameter arithmetic,
+are within 10⁻¹²³ of the sum of their terms' magnitudes (2.2×10⁻¹²⁸ seen, where the quad-double jet errs by 2×10⁻⁶⁴).
+The order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps (1.1×10⁻¹³⁰ seen; two steps
+leave 2.4×10⁻⁹⁵). On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12 times,
+and a 24-order solve on 32 values 8.3 times, with four refinement steps against two (`cargo bench --bench jet`).
+
 Every check can fail. Two kinds of controls show it:
 
 - **Built-in breakage.** The feature `mutate` breaks the quad-double and octo-double algorithms one at a time on
@@ -193,10 +201,11 @@ cargo +nightly test --release --features f128                   # the f128 conve
 cargo llvm-cov --features mutate                                # coverage (cargo-llvm-cov)
 cargo bench --bench arith                                       # scalar against lanes; f64, double-double, quad-double, octo-double
 cargo bench --bench linalg                                      # double-double LU against f64 LU, and the octo-double LU
+cargo bench --bench jet                                         # OJet<24> against QJet<24>: product, sums, the jet solve
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
 ```
 
-`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, on every backend the CPU has. The NEON backend's code is also
+`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, and `OJet` its scalar series `OSeries`, on every backend the CPU has. The NEON backend's code is also
 compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
 every runner, not only on ARM. CI runs the whole suite on:
 
