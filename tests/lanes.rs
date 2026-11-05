@@ -1,6 +1,7 @@
 //! The 8-lane types against the scalar ones, bit for bit, on every backend this CPU runs (`simd::available()`:
-//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV`, `OV`, and the
-//! octo-double jet `OJet` against its scalar series `OSeries`.
+//! avx512, avx2, sse2, neon, portable), so one run checks that they all agree: `V8`, `DV`, `QV`, `OV` (its
+//! renormalization `OV::new` and `ov::axpy_parts` among them), and the octo-double jet `OJet` against its scalar
+//! series `OSeries`.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -9,7 +10,7 @@ use multidouble::dual::{Lane, Param};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::jet::{OJet, OSeries};
 use multidouble::od::{OdAcc, OD};
-use multidouble::ov::{ODotAcc, OV};
+use multidouble::ov::{self, ODotAcc, OV};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, QV};
 use multidouble::simd::{self, Kernel, Simd};
@@ -582,6 +583,115 @@ fn axpy_parts_matches_qd() {
         std::panic::catch_unwind(|| axpy_parts(a, view(&x), [&y[0][..n - 1], &y[1][..], &y[2][..], &y[3][..]]))
             .is_err()
     );
+}
+
+/// eight parts of one value that overlap and come in no order: each part up to 2^-20 of the one before, a random
+/// sign, some zero, and the order shuffled, so that a renormalization moves them
+fn raw_parts(r: &mut Rng) -> [f64; 8] {
+    let mut x = [0.0; 8];
+    x[0] = r.dd(10).hi;
+    for i in 1..8 {
+        x[i] = if r.next_u64().is_multiple_of(5) {
+            0.0
+        } else {
+            x[i - 1].abs().max(x[0].abs() * 2f64.powi(-20 * i as i32)) * 2f64.powi(-20) * r.sym()
+        };
+    }
+    for i in (1..8).rev() {
+        x.swap(i, (r.next_u64() % (i as u64 + 1)) as usize);
+    }
+    x
+}
+
+/// `OV::new` against `OD::new` lane by lane on one backend: the number of lanes whose parts differ in any bit
+#[derive(Clone)]
+struct OvNewMatchesOdNew;
+
+impl Kernel for OvNewMatchesOdNew {
+    type Output = usize;
+    /// the renormalization of raw parts on the lanes against the scalar one
+    #[inline(always)]
+    fn run<S: Simd>(self) -> usize {
+        let mut r = Rng(43);
+        let mut bad = 0;
+        for _ in 0..ROUNDS / 8 {
+            let x: [[f64; 8]; 8] = std::array::from_fn(|_| raw_parts(&mut r));
+            let v = OV::<S>::new(std::array::from_fn(|k| {
+                V8::from_array(std::array::from_fn(|j| x[j][k]))
+            }));
+            for j in 0..8 {
+                let (g, w) = (v.lane(j), OD::new(x[j]));
+                bad += !g.x.iter().zip(w.x.iter()).all(|(a, b)| same(*a, *b)) as usize;
+            }
+        }
+        bad
+    }
+}
+
+/// `OV::new` renormalizes eight parts on the lanes bitwise as `OD::new` does each lane, on every backend, for parts
+/// that overlap, include zeros and come in any order. Control: the renormalization moves those parts.
+#[test]
+fn ov_new_matches_od_new() {
+    let ran = simd::for_each_available(OvNewMatchesOdNew);
+    assert_eq!(ran.iter().map(|r| r.0).collect::<Vec<_>>(), simd::available());
+    assert!(ran.iter().all(|r| r.1 == 0), "lanes that differ: {ran:?}");
+    let mut r = Rng(43);
+    let x = raw_parts(&mut r);
+    assert!(
+        !OD::new(x).x.iter().zip(x.iter()).all(|(a, b)| same(*a, *b)),
+        "control: the parts are already normalized"
+    );
+    println!("checked on {:?}", simd::available());
+}
+
+/// eight-part arrays of n normalized octo-doubles with all parts in use
+fn od_parts(r: &mut Rng, n: usize) -> [Vec<f64>; 8] {
+    let mut p: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; n]);
+    for i in 0..n {
+        let v = r.dd(10).hi;
+        let q = OD::new(std::array::from_fn(|k| {
+            v * 2f64.powi(-53 * k as i32) * if k == 0 { 1.0 } else { r.sym() }
+        }));
+        for k in 0..8 {
+            p[k][i] = q.x[k];
+        }
+    }
+    p
+}
+
+/// `ov::axpy_parts` is element by element the scalar y + x.mul_f(a), bit for bit, on a length that is not a multiple
+/// of 8 (lanes and the scalar tail); controls: x's second part dropped must change some element, and unequal lengths
+/// panic
+#[test]
+fn ov_axpy_parts_matches_od() {
+    let mut r = Rng(44);
+    let n = 21;
+    let (x, y) = (od_parts(&mut r, n), od_parts(&mut r, n));
+    let a = -0.37;
+    fn view(p: &[Vec<f64>; 8]) -> [&[f64]; 8] {
+        std::array::from_fn(|k| &p[k][..])
+    }
+    let out = ov::axpy_parts(a, view(&x), view(&y));
+    for i in 0..n {
+        let s = OD {
+            x: std::array::from_fn(|k| y[k][i]),
+        } + OD {
+            x: std::array::from_fn(|k| x[k][i]),
+        }
+        .mul_f(a);
+        assert!(
+            (0..8).all(|k| same(out[k][i], s.x[k])),
+            "element {i}: {:?} vs {s:?}",
+            (0..8).map(|k| out[k][i]).collect::<Vec<_>>()
+        );
+    }
+    let mut xw = x.clone();
+    xw[1].iter_mut().for_each(|v| *v = 0.0);
+    let wrong = ov::axpy_parts(a, view(&xw), view(&y));
+    assert!((0..n).any(|i| (0..8).any(|k| !same(wrong[k][i], out[k][i]))), "control");
+    let mut short = view(&y);
+    short[7] = &y[7][..n - 1];
+    assert!(std::panic::catch_unwind(|| ov::axpy_parts(a, view(&x), short)).is_err());
 }
 
 /// an octo-double with all eight parts in use, or (one in four) with exact zeros among its parts, so that the
