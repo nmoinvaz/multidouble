@@ -15,6 +15,7 @@
 //! The large operations run inside `Simd::vectorize` and are not forced inline (an octo-double product is about a
 //! thousand lane operations), so a copy the compiler keeps out of line still runs with the backend's instructions.
 use crate::dd::DD;
+use crate::dual::dd_param;
 use crate::dv::DV;
 use crate::od::{alg, mutate, quick_two_sum, vecsum, Limb, OD};
 use crate::qd::QD;
@@ -469,5 +470,92 @@ impl<S: Simd> ODotAcc<S> {
                 r
             },
         )
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// octo-double lanes as a `Lane`
+// ---------------------------------------------------------------------------------------------------------------
+
+/// Octo-double values as a `Lane`, so that code generic over `Lane` compiles and runs with octo-double lanes. As for
+/// `QV`, the trait passes constants and inputs as double-double (`DV`): they enter exactly (`from_dv`) but carry only
+/// double-double accuracy, and `val` rounds back to double-double, so this instantiation computes in octo-double with
+/// double-double data. `coef_qd(0)` is the value rounded to quad-double (`to_qv`). `VAL_OD` is set and `VAL_QD` is
+/// not: a solve with a double-double LU is refined for these lanes with the residual in octo-double
+/// (`crate::field::FieldSolve::solve_lanes_refine`), and needs about twice the steps of a quad-double lane.
+impl<S: Simd> crate::dual::Lane for OV<S> {
+    type S = S;
+    type Acc = ODotAcc<S>;
+    dd_param!();
+    const TANGENT: bool = false;
+    const VAL_OD: bool = true;
+    #[inline(always)]
+    fn zero() -> Self {
+        OV::zero()
+    }
+    #[inline(always)]
+    fn cst(c: DV<S>) -> Self {
+        OV::from_dv(c)
+    }
+    #[inline(always)]
+    fn mulc(self, c: DV<S>) -> Self {
+        self * OV::from_dv(c)
+    }
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        self.mul_f(s)
+    }
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        OV::mul_pwr2(self, s)
+    }
+    #[inline(always)]
+    fn addc(self, c: DV<S>) -> Self {
+        self + OV::from_dv(c)
+    }
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        OV::bcast(self, j)
+    }
+    #[inline(always)]
+    fn val(self) -> DV<S> {
+        self.to_dv()
+    }
+    #[inline(always)]
+    fn tan(self) -> DV<S> {
+        DV::zero()
+    }
+    #[inline(always)]
+    fn from_vt(v: DV<S>, _t: DV<S>) -> Self {
+        OV::from_dv(v)
+    }
+    #[inline(always)]
+    fn acc0() -> ODotAcc<S> {
+        ODotAcc::zero()
+    }
+    #[inline(always)]
+    fn acc(a: ODotAcc<S>, x: Self, y: Self) -> ODotAcc<S> {
+        a.add_prod(x, y)
+    }
+    #[inline(always)]
+    fn accc(a: ODotAcc<S>, x: Self, c: DV<S>) -> ODotAcc<S> {
+        a.add_prod(x, OV::from_dv(c))
+    }
+    #[inline(always)]
+    fn acc1(a: ODotAcc<S>, x: Self) -> ODotAcc<S> {
+        a.add(x)
+    }
+    #[inline(always)]
+    fn fin(a: ODotAcc<S>) -> Self {
+        a.finish()
+    }
+    /// the value rounded to quad-double (k = 0), zero past it
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<S> {
+        if k == 0 {
+            self.to_qv()
+        } else {
+            QV::zero()
+        }
     }
 }

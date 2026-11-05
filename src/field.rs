@@ -489,6 +489,7 @@ impl<S: Simd> MatLane for DV<S> {}
 impl<S: Simd> MatLane for Du<S> {}
 impl<S: Simd> MatLane for Dc<S> {}
 impl<S: Simd> MatLane for QV<S> {}
+impl<S: Simd> MatLane for crate::ov::OV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
 impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}

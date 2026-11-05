@@ -9,6 +9,7 @@
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
 //!   trajectory computed once (and to double-double accuracy) for all of them.
 //! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
+//! * `crate::ov::OV`: values in octo-double (`VAL_OD`), with double-double constants and inputs, as `QV` is.
 //! * `Dc`: a double-double value with a complex tangent (real and imaginary parts, each double-double): the
 //!   derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
 //! * `jet::Jet<N>`: a truncated power series, N double-double coefficients in one variable: the computation's own
@@ -117,6 +118,11 @@ pub trait Lane:
     /// a lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`; a jet's
     /// solve goes order by order, `NJ`)
     const VAL_QD: bool = false;
+    /// values in octo-double (`crate::ov::OV`): as for `VAL_QD`, a solve with a double-double LU is refined for such a
+    /// lane with the residual formed in its arithmetic, with about twice the steps, as each gains about cond(A)
+    /// 2^-104. Lanes that set it leave `VAL_QD` unset, so code that refines quad-double lanes a fixed number of steps
+    /// does not apply that count to them.
+    const VAL_OD: bool = false;
     /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`), 0 for every other lane: code
     /// with a branch for jets, such as an order-by-order solve, tests it
     const NJ: usize = 0;
@@ -1545,6 +1551,7 @@ impl<L: Lane> Lane for Counted<L> {
     const TAN_F64: bool = L::TAN_F64;
     const NT: usize = L::NT;
     const VAL_QD: bool = L::VAL_QD;
+    const VAL_OD: bool = L::VAL_OD;
     const NJ: usize = L::NJ;
     type P = L::P;
     #[inline(always)]
