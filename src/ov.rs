@@ -20,7 +20,7 @@ use crate::dv::DV;
 use crate::od::{alg, mutate, quick_two_sum, vecsum, Limb, OD};
 use crate::qd::QD;
 use crate::qv::QV;
-use crate::simd::{Native, Simd};
+use crate::simd::{self, Kernel, Native, Simd};
 use crate::v8::{Divisor, M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -614,4 +614,66 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
             OV::zero()
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// octo-double vectors as eight part arrays
+// ---------------------------------------------------------------------------------------------------------------
+
+/// y + a x on eight-part arrays: 8 elements at a time on the backend S, the rest in scalar octo-double (bitwise the
+/// same per element)
+struct AxpyParts<'a> {
+    a: f64,
+    x: [&'a [f64]; 8],
+    y: [&'a [f64]; 8],
+    out: [&'a mut [f64]; 8],
+}
+
+impl Kernel for AxpyParts<'_> {
+    type Output = ();
+    /// the lanes, then the scalar tail
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let n = self.y[0].len();
+        let full = n / 8 * 8;
+        let (a, x, y) = (self.a, self.x, self.y);
+        let mut out = self.out;
+        for i in (0..full).step_by(8) {
+            let xv = OV::<S>::load(x.map(|p| &p[i..i + 8]));
+            let yv = OV::<S>::load(y.map(|p| &p[i..i + 8]));
+            let s = yv + xv.mul_f(a);
+            for (q, o) in out.iter_mut().enumerate() {
+                s.c[q].store(&mut o[i..i + 8]);
+            }
+        }
+        for i in full..n {
+            let xi = OD { x: x.map(|p| p[i]) };
+            let yi = OD { x: y.map(|p| p[i]) };
+            let s = yi + xi.mul_f(a);
+            for (q, o) in out.iter_mut().enumerate() {
+                o[i] = s.x[q];
+            }
+        }
+    }
+}
+
+/// y + a x for octo-double vectors given as eight part arrays (part q of element i at `x[q][i]`, as `OD::x`, the
+/// parts normalized as `OD` keeps them), a an f64: each element `OD::mul_f` then `+`, 8 at a time on the best backend
+/// the CPU has and the rest in scalar octo-double, bitwise the same per element. Returns the eight parts of the
+/// result. Panics unless the sixteen arrays have one length.
+pub fn axpy_parts(a: f64, x: [&[f64]; 8], y: [&[f64]; 8]) -> [Vec<f64>; 8] {
+    let n = y[0].len();
+    assert!(
+        x.iter().chain(y.iter()).all(|p| p.len() == n),
+        "axpy_parts: the sixteen arrays must have one length"
+    );
+    let mut out: [Vec<f64>; 8] = std::array::from_fn(|_| vec![0.0; n]);
+    let [o0, o1, o2, o3, o4, o5, o6, o7] = &mut out;
+    simd::dispatch(AxpyParts {
+        a,
+        x,
+        y,
+        out: [o0, o1, o2, o3, o4, o5, o6, o7].map(|o| &mut o[..]),
+    });
+    out
 }
