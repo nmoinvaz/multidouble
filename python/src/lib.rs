@@ -30,6 +30,16 @@ fn slice<'a>(a: &'a PyReadonlyArray1<f64>, name: &str) -> PyResult<&'a [f64]> {
         .map_err(|_| PyValueError::new_err(format!("{name} must be a contiguous float64 array")))
 }
 
+/// a 2-D array's elements in row-major order. `as_slice` also takes a Fortran-ordered array, whose elements it gives
+/// in column-major order, so that is refused here.
+fn rows<'a>(a: &'a PyReadonlyArray2<f64>, name: &str) -> PyResult<&'a [f64]> {
+    let err = || PyValueError::new_err(format!("{name} must be C-contiguous"));
+    if !a.is_c_contiguous() {
+        return Err(err());
+    }
+    a.as_slice().map_err(|_| err())
+}
+
 /// out = a op b elementwise: 8 lanes at a time on the backend S, the remainder in scalar double-double (each lane is
 /// bitwise the scalar result, so the split does not show in the output)
 struct Elementwise<'a> {
@@ -372,12 +382,7 @@ fn dd_matvec<'py>(
             "A must be (n, m) in both parts and v of length m in both parts",
         ));
     }
-    let ahs = ah
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("ah must be C-contiguous"))?;
-    let als = al
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("al must be C-contiguous"))?;
+    let (ahs, als) = (rows(&ah, "ah")?, rows(&al, "al")?);
     let (v0, v1) = (slice(&vh, "vh")?, slice(&vl, "vl")?);
     let mut oh = vec![0.0; n];
     let mut ol = vec![0.0; n];
@@ -453,12 +458,7 @@ fn dd_solve<'py>(
             "A must be (n, n) and b of length n, in both parts",
         ));
     }
-    let ahs = ah
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("ah must be C-contiguous"))?;
-    let als = al
-        .as_slice()
-        .map_err(|_| PyValueError::new_err("al must be C-contiguous"))?;
+    let (ahs, als) = (rows(&ah, "ah")?, rows(&al, "al")?);
     let (b0, b1) = (slice(&bh, "bh")?, slice(&bl, "bl")?);
     let ld = ld_for(n);
     let mut h = vec![0.0; ld * n];
