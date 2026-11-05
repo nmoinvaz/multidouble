@@ -712,132 +712,145 @@ impl QD {
     /// Parse a decimal ("-1.234e-5", "3.14159...", "42"): the exact decimal value rounded to four parts by greedy
     /// round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), so |error| <= ulp(x3)/2 <= 2^-212 |v|.
     pub fn parse(s: &str) -> Result<QD, String> {
-        let t = s.trim();
-        let (neg, body) = match t.as_bytes().first() {
-            Some(b'-') => (true, &t[1..]),
-            Some(b'+') => (false, &t[1..]),
-            _ => (false, t),
-        };
-        let (mant, exp) = match body.find(['e', 'E']) {
-            Some(p) => (
-                &body[..p],
-                body[p + 1..]
-                    .parse::<i64>()
-                    .map_err(|e| format!("{s}: exponent: {e}"))?,
-            ),
-            None => (body, 0),
-        };
-        let (ip, fp) = match mant.find('.') {
-            Some(p) => (&mant[..p], &mant[p + 1..]),
-            None => (mant, ""),
-        };
-        if ip.is_empty() && fp.is_empty() || !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) {
-            return Err(format!("{s}: not a decimal number"));
-        }
-        let digits = format!("{ip}{fp}");
-        let digits = digits.trim_start_matches('0');
-        let n = BigU::from_dec(if digits.is_empty() { "0" } else { digits });
-        let e10 = exp - fp.len() as i64;
-        let mut r = if e10 >= 0 {
-            DecRat {
-                neg,
-                n: n.mul(&BigU::pow_small(10, e10 as u64)),
-                k: 0,
-                t: 0,
-            }
-        } else {
-            DecRat {
-                neg,
-                n,
-                k: (-e10) as u64,
-                t: 0,
-            }
-        };
-        let mut x = [0.0f64; 4];
-        for i in 0..4 {
-            let mut c = r.round();
-            if i == 3 && mutate::on(mutate::PARSE_TRUNC) && c != 0.0 && r.sub_f64(c).neg != r.neg {
-                // rounded away from zero: step one ulp back toward zero
-                c = f64::from_bits(c.to_bits() - 1);
-            }
-            if !c.is_finite() {
-                return Ok(QD { x: [c, 0.0, 0.0, 0.0] });
-            }
-            x[i] = c;
-            if c == 0.0 {
-                break;
-            }
-            r = r.sub_f64(c);
-        }
-        if neg && x[0] == 0.0 {
-            x[0] = -0.0;
-        }
-        Ok(QD { x })
+        parse_parts::<4>(s, mutate::on(mutate::PARSE_TRUNC)).map(|x| QD { x })
     }
 
     /// Scientific notation with `digits` significant digits, correctly rounded (half to even) from the exact value
     /// of the four-part sum: "-1.2345e-05" style, at least two exponent digits.
     pub fn to_sci(self, digits: usize) -> String {
-        let digits = digits.max(1);
-        if !self.x.iter().all(|v| v.is_finite()) {
-            return format!("{}", self.x[0] + self.x[1] + self.x[2] + self.x[3]);
+        sci_parts(&self.x, digits)
+    }
+}
+
+/// The parts of a decimal string by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), N of them, for
+/// `QD::parse` and `crate::od::OD::parse`. trunc: the last part rounded toward zero (the control `PARSE_TRUNC`).
+pub(crate) fn parse_parts<const N: usize>(s: &str, trunc: bool) -> Result<[f64; N], String> {
+    let t = s.trim();
+    let (neg, body) = match t.as_bytes().first() {
+        Some(b'-') => (true, &t[1..]),
+        Some(b'+') => (false, &t[1..]),
+        _ => (false, t),
+    };
+    let (mant, exp) = match body.find(['e', 'E']) {
+        Some(p) => (
+            &body[..p],
+            body[p + 1..]
+                .parse::<i64>()
+                .map_err(|e| format!("{s}: exponent: {e}"))?,
+        ),
+        None => (body, 0),
+    };
+    let (ip, fp) = match mant.find('.') {
+        Some(p) => (&mant[..p], &mant[p + 1..]),
+        None => (mant, ""),
+    };
+    if ip.is_empty() && fp.is_empty() || !ip.bytes().chain(fp.bytes()).all(|c| c.is_ascii_digit()) {
+        return Err(format!("{s}: not a decimal number"));
+    }
+    let digits = format!("{ip}{fp}");
+    let digits = digits.trim_start_matches('0');
+    let n = BigU::from_dec(if digits.is_empty() { "0" } else { digits });
+    let e10 = exp - fp.len() as i64;
+    let mut r = if e10 >= 0 {
+        DecRat {
+            neg,
+            n: n.mul(&BigU::pow_small(10, e10 as u64)),
+            k: 0,
+            t: 0,
         }
-        let v = self.exact();
-        let sign = if v.neg || (v.is_zero() && self.x[0].is_sign_negative()) {
-            "-"
-        } else {
-            ""
-        };
-        if v.is_zero() {
-            return format!(
-                "{sign}{}e+00",
-                if digits > 1 {
-                    format!("0.{}", "0".repeat(digits - 1))
-                } else {
-                    "0".into()
+    } else {
+        DecRat {
+            neg,
+            n,
+            k: (-e10) as u64,
+            t: 0,
+        }
+    };
+    let mut x = [0.0f64; N];
+    for i in 0..N {
+        let mut c = r.round();
+        if i == N - 1 && trunc && c != 0.0 && r.sub_f64(c).neg != r.neg {
+            // rounded away from zero: step one ulp back toward zero
+            c = f64::from_bits(c.to_bits() - 1);
+        }
+        if !c.is_finite() {
+            x[0] = c;
+            return Ok(x);
+        }
+        x[i] = c;
+        if c == 0.0 {
+            break;
+        }
+        r = r.sub_f64(c);
+    }
+    if neg && x[0] == 0.0 {
+        x[0] = -0.0;
+    }
+    Ok(x)
+}
+
+/// The exact sum of the parts x in scientific notation with `digits` significant digits, correctly rounded (half to
+/// even), for `QD::to_sci` and `crate::od::OD::to_sci`.
+pub(crate) fn sci_parts(x: &[f64], digits: usize) -> String {
+    let digits = digits.max(1);
+    if !x.iter().all(|v| v.is_finite()) {
+        return format!("{}", x.iter().fold(0.0, |s, v| s + v));
+    }
+    let v = Dy::sum(x);
+    let sign = if v.neg || (v.is_zero() && x[0].is_sign_negative()) {
+        "-"
+    } else {
+        ""
+    };
+    if v.is_zero() {
+        return format!(
+            "{sign}{}e+00",
+            if digits > 1 {
+                format!("0.{}", "0".repeat(digits - 1))
+            } else {
+                "0".into()
+            }
+        );
+    }
+    let (_, n, e10) = v.to_decimal();
+    let d = n.to_dec();
+    // value = 0.d × 10^(len + e10) = d[0].d[1..] × 10^(len - 1 + e10)
+    let mut exp10 = d.len() as i64 - 1 + e10;
+    let mut out: Vec<u8> = d.bytes().take(digits).collect();
+    while out.len() < digits {
+        out.push(b'0');
+    }
+    if d.len() > digits {
+        let next = d.as_bytes()[digits];
+        let rest = d.as_bytes()[digits + 1..].iter().any(|&c| c != b'0');
+        let odd = (out[digits - 1] - b'0') % 2 == 1;
+        if next > b'5' || (next == b'5' && (rest || odd)) {
+            // round up with carry
+            let mut i = digits;
+            loop {
+                if i == 0 {
+                    out.insert(0, b'1');
+                    out.pop();
+                    exp10 += 1;
+                    break;
                 }
-            );
-        }
-        let (_, n, e10) = v.to_decimal();
-        let d = n.to_dec();
-        // value = 0.d × 10^(len + e10) = d[0].d[1..] × 10^(len - 1 + e10)
-        let mut exp10 = d.len() as i64 - 1 + e10;
-        let mut out: Vec<u8> = d.bytes().take(digits).collect();
-        while out.len() < digits {
-            out.push(b'0');
-        }
-        if d.len() > digits {
-            let next = d.as_bytes()[digits];
-            let rest = d.as_bytes()[digits + 1..].iter().any(|&c| c != b'0');
-            let odd = (out[digits - 1] - b'0') % 2 == 1;
-            if next > b'5' || (next == b'5' && (rest || odd)) {
-                // round up with carry
-                let mut i = digits;
-                loop {
-                    if i == 0 {
-                        out.insert(0, b'1');
-                        out.pop();
-                        exp10 += 1;
-                        break;
-                    }
-                    i -= 1;
-                    if out[i] == b'9' {
-                        out[i] = b'0';
-                    } else {
-                        out[i] += 1;
-                        break;
-                    }
+                i -= 1;
+                if out[i] == b'9' {
+                    out[i] = b'0';
+                } else {
+                    out[i] += 1;
+                    break;
                 }
             }
         }
-        let m = String::from_utf8(out).unwrap();
-        let mant = if digits > 1 {
-            format!("{}.{}", &m[..1], &m[1..])
-        } else {
-            m
-        };
-        format!("{sign}{mant}e{}{:02}", if exp10 < 0 { '-' } else { '+' }, exp10.abs())
     }
+    let m = String::from_utf8(out).unwrap();
+    let mant = if digits > 1 {
+        format!("{}.{}", &m[..1], &m[1..])
+    } else {
+        m
+    };
+    format!("{sign}{mant}e{}{:02}", if exp10 < 0 { '-' } else { '+' }, exp10.abs())
 }
 
 #[cfg(feature = "f128")]
