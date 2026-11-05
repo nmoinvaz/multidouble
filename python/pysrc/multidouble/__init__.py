@@ -11,6 +11,8 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``dd_horner``: sum_k c_k a^k by Horner's rule in double-double at a float a, each step ``dd_add(c_k, dd_scale(p,
   a))`` bit for bit;
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
+- ``qd_solve``: x with A x = b by LU with partial pivoting in quad-double, A and b as four float64 part arrays each,
+  to about cond(A) 2^-209; ``QDLu`` factors A once for several solves (and solves with A^T);
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double.
 
@@ -33,8 +35,9 @@ import numpy as np
 from . import _multidouble as _md
 from ._multidouble import isa
 
-__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "qd_add_dd", "qd_axpy", "isa",
-           "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
+__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "qd_solve", "QDLu", "qd_add_dd",
+           "qd_axpy", "isa", "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot",
+           "gcr"]
 
 
 def _masked(v):
@@ -120,6 +123,47 @@ def dd_solve(ah, al, bh, bl):
     """x with A x = b in double-double, by LU with partial pivoting: A as (n, n) hi and lo arrays, b as hi and lo
     arrays of length n. Returns the (hi, lo) arrays of x. Raises ValueError if A is singular."""
     return _md.dd_solve(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+def _parts(names, *v):
+    """each of the arrays v converted by _f64 under its name, e.g. the four parts a0, a1, a2, a3 of a quad-double
+    array"""
+    return [_f64(x, n) for x, n in zip(v, names)]
+
+
+def qd_solve(a0, a1, a2, a3, b0, b1, b2, b3):
+    """x with A x = b in quad-double, by LU with partial pivoting (the Rust crate's QDLu, getf2 order, its updates
+    8 rows at a time on the best SIMD backend, bitwise the same on every backend): A as four (n, n) part arrays (A =
+    a0 + a1 + a2 + a3 entrywise), b as four part arrays of shape (n,), or (n, k) for k right-hand sides, the columns
+    of b. Each entry is renormalized first, so any four parts summing to the value will do. The error is about
+    cond(A) 2^-209 relative (partial pivoting is backward stable). Returns the four parts of x, of b's shape. Raises
+    ValueError if A is singular (an exactly zero pivot), if A or b has an entry that is not finite, or for mismatched
+    shapes. QDLu(a0, a1, a2, a3).solve(b0, b1, b2, b3) gives the same bits and keeps the factors."""
+    a = _parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3)
+    b = _parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3)
+    return _md.qd_solve(*a, *b)
+
+
+class QDLu:
+    """The quad-double LU of A with partial pivoting, factored once for several solves, e.g. the same Jacobian over
+    several Newton steps: QDLu(a0, a1, a2, a3) with A as four (n, n) part arrays, each entry renormalized first. The
+    factorization costs about n^3 / 3 quad-double multiply-adds and each solve about n^2. Raises ValueError if A is
+    singular or has an entry that is not finite."""
+
+    def __init__(self, a0, a1, a2, a3):
+        self._lu = _md.QDLu(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3))
+
+    @property
+    def n(self):
+        """the order of A"""
+        return self._lu.n
+
+    def solve(self, b0, b1, b2, b3, transpose=False):
+        """x with A x = b in quad-double, or A^T x = b when transpose: b as four part arrays of shape (n,) or (n, k),
+        each entry renormalized first. Returns the four parts of x, of b's shape. A x = b gives the bits of qd_solve
+        (8 rows at a time on the SIMD lanes); A^T x = b runs in scalar quad-double. Raises ValueError if b has an entry
+        that is not finite or the wrong shape."""
+        return self._lu.solve(*_parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3), bool(transpose))
 
 
 def qd_add_dd(z0, z1, z2, z3, dh, dl):

@@ -1,15 +1,19 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
 //! arithmetic, dot products, matrix-vector products and the Horner sum of a power series on them on the best SIMD
-//! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and a
-//! dense double-double LU solve.
+//! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and
+//! dense LU solves in double-double and in quad-double.
 use multidouble::dd::{self, DD};
 use multidouble::dv::{self, DotAcc, DV};
-use multidouble::linalg::{ld_for, DDLu};
+use multidouble::linalg::{ld_for, DDLu, QDLu};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, renorm4, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
-use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::ndarray::{ArrayD, Dimension};
+use numpy::{
+    IntoPyArray, IxDyn, PyArray1, PyArrayDyn, PyReadonlyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArrayDyn,
+    PyUntypedArrayMethods,
+};
 
 type Parts<'py> = (
     Bound<'py, PyArray1<f64>>,
@@ -32,9 +36,9 @@ fn slice<'a>(a: &'a PyReadonlyArray1<f64>, name: &str) -> PyResult<&'a [f64]> {
         .map_err(|_| PyValueError::new_err(format!("{name} must be a contiguous float64 array")))
 }
 
-/// a 2-D array's elements in row-major order. `as_slice` also takes a Fortran-ordered array, whose elements it gives
-/// in column-major order, so that is refused here.
-fn rows<'a>(a: &'a PyReadonlyArray2<f64>, name: &str) -> PyResult<&'a [f64]> {
+/// an array's elements in row-major order. `as_slice` also takes a Fortran-ordered array, whose elements it gives in
+/// column-major order, so that is refused here.
+fn rows<'a, D: Dimension>(a: &'a PyReadonlyArray<'_, f64, D>, name: &str) -> PyResult<&'a [f64]> {
     let err = || PyValueError::new_err(format!("{name} must be C-contiguous"));
     if !a.is_c_contiguous() {
         return Err(err());
@@ -485,6 +489,191 @@ fn dd_solve<'py>(
     ))
 }
 
+type DynParts<'py> = (
+    Bound<'py, PyArrayDyn<f64>>,
+    Bound<'py, PyArrayDyn<f64>>,
+    Bound<'py, PyArrayDyn<f64>>,
+    Bound<'py, PyArrayDyn<f64>>,
+);
+
+/// A in the layout of `QDLu::factor`: four (n, n) row-major part arrays, each entry renormalized (`QD::new`) and
+/// stored column-major with leading dimension `ld_for(n)`, the padding rows zero. Returns (n, ld, parts). Raises
+/// ValueError for unequal or non-square shapes and for an entry that is not finite.
+fn qd_matrix(a: [&PyReadonlyArray2<'_, f64>; 4]) -> PyResult<(usize, usize, [Vec<f64>; 4])> {
+    let n = a[0].shape()[0];
+    if a.iter().any(|p| p.shape() != [n, n]) {
+        return Err(PyValueError::new_err("A must be (n, n), the same in all four parts"));
+    }
+    let s = [
+        rows(a[0], "a0")?,
+        rows(a[1], "a1")?,
+        rows(a[2], "a2")?,
+        rows(a[3], "a3")?,
+    ];
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for i in 0..n {
+        for j in 0..n {
+            let k = i * n + j;
+            let v = QD::new(s[0][k], s[1][k], s[2][k], s[3][k]);
+            if !v.x.iter().all(|x| x.is_finite()) {
+                return Err(PyValueError::new_err(format!("A has a non-finite entry at ({i}, {j})")));
+            }
+            for (q, part) in c.iter_mut().enumerate() {
+                part[j * ld + i] = v.x[q];
+            }
+        }
+    }
+    Ok((n, ld, c))
+}
+
+/// b as k columns of n quad-doubles, each entry renormalized (`QD::new`): four part arrays of shape (n,) (k = 1) or
+/// (n, k), row-major. Returns b's shape and the columns. Raises ValueError for another shape, unequal shapes or an
+/// entry that is not finite.
+fn qd_rhs(b: [&PyReadonlyArrayDyn<'_, f64>; 4], n: usize) -> PyResult<(Vec<usize>, Vec<Vec<QD>>)> {
+    let shape = b[0].shape().to_vec();
+    let k = match shape[..] {
+        [r] if r == n => 1,
+        [r, k] if r == n => k,
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "b must be of shape (n,) or (n, k), n = {n} the order of A"
+            )))
+        }
+    };
+    if b.iter().any(|p| p.shape() != shape) {
+        return Err(PyValueError::new_err("b0, b1, b2 and b3 must have the same shape"));
+    }
+    let s = [
+        rows(b[0], "b0")?,
+        rows(b[1], "b1")?,
+        rows(b[2], "b2")?,
+        rows(b[3], "b3")?,
+    ];
+    let mut cols = vec![vec![QD::ZERO; n]; k];
+    for i in 0..n {
+        for (j, col) in cols.iter_mut().enumerate() {
+            let o = i * k + j;
+            let v = QD::new(s[0][o], s[1][o], s[2][o], s[3][o]);
+            if !v.x.iter().all(|x| x.is_finite()) {
+                return Err(PyValueError::new_err(if shape.len() == 1 {
+                    format!("b has a non-finite entry at {i}")
+                } else {
+                    format!("b has a non-finite entry at ({i}, {j})")
+                }));
+            }
+            col[i] = v;
+        }
+    }
+    Ok((shape, cols))
+}
+
+/// the columns of a quad-double solution as four part arrays of b's shape
+fn qd_parts<'py>(py: Python<'py>, shape: &[usize], cols: &[Vec<QD>]) -> PyResult<DynParts<'py>> {
+    let (n, k) = (shape[0], cols.len());
+    let part = |q: usize| -> PyResult<Bound<'py, PyArrayDyn<f64>>> {
+        let mut v = vec![0.0; n * k];
+        for (j, col) in cols.iter().enumerate() {
+            for (i, x) in col.iter().enumerate() {
+                v[i * k + j] = x.x[q];
+            }
+        }
+        let a = ArrayD::from_shape_vec(IxDyn(shape), v).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(a.into_pyarray(py))
+    };
+    Ok((part(0)?, part(1)?, part(2)?, part(3)?))
+}
+
+/// each column solved in place with the factors (A x = b, or A^T x = b when transpose), with the GIL released
+fn solve_cols(py: Python<'_>, lu: &QDLu, cols: &mut [Vec<QD>], transpose: bool) {
+    py.detach(|| {
+        for x in cols.iter_mut() {
+            if transpose {
+                lu.solve_t(x);
+            } else {
+                lu.solve(x);
+            }
+        }
+    });
+}
+
+/// x with A x = b in quad-double, by LU with partial pivoting (the crate's `QDLu`): A as four (n, n) row-major part
+/// arrays, b as four part arrays of shape (n,) or (n, k) (k right-hand sides, the columns of b), each entry
+/// renormalized first. Returns the four parts of x, of b's shape. Raises ValueError if A is singular, if A or b has a
+/// non-finite entry, or for mismatched shapes.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn qd_solve<'py>(
+    py: Python<'py>,
+    a0: PyReadonlyArray2<'py, f64>,
+    a1: PyReadonlyArray2<'py, f64>,
+    a2: PyReadonlyArray2<'py, f64>,
+    a3: PyReadonlyArray2<'py, f64>,
+    b0: PyReadonlyArrayDyn<'py, f64>,
+    b1: PyReadonlyArrayDyn<'py, f64>,
+    b2: PyReadonlyArrayDyn<'py, f64>,
+    b3: PyReadonlyArrayDyn<'py, f64>,
+) -> PyResult<DynParts<'py>> {
+    let (n, ld, c) = qd_matrix([&a0, &a1, &a2, &a3])?;
+    // b is read and checked before the factorization, which costs n^3 / 3 quad-double updates
+    let (shape, mut cols) = qd_rhs([&b0, &b1, &b2, &b3], n)?;
+    let lu = py
+        .detach(|| QDLu::factor(n, ld, c, false))
+        .map_err(PyValueError::new_err)?;
+    solve_cols(py, &lu, &mut cols, false);
+    qd_parts(py, &shape, &cols)
+}
+
+/// The quad-double LU of A with partial pivoting (the crate's `QDLu`), factored once for several solves: QDLu(a0, a1,
+/// a2, a3) with A as four (n, n) row-major part arrays, each entry renormalized first. Raises ValueError if A is
+/// singular or has a non-finite entry.
+#[pyclass(name = "QDLu", module = "multidouble._multidouble", frozen)]
+struct PyQdLu {
+    lu: QDLu,
+}
+
+#[pymethods]
+impl PyQdLu {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        a0: PyReadonlyArray2<'_, f64>,
+        a1: PyReadonlyArray2<'_, f64>,
+        a2: PyReadonlyArray2<'_, f64>,
+        a3: PyReadonlyArray2<'_, f64>,
+    ) -> PyResult<Self> {
+        let (n, ld, c) = qd_matrix([&a0, &a1, &a2, &a3])?;
+        let lu = py
+            .detach(|| QDLu::factor(n, ld, c, false))
+            .map_err(PyValueError::new_err)?;
+        Ok(PyQdLu { lu })
+    }
+
+    /// the order n of A
+    #[getter]
+    fn n(&self) -> usize {
+        self.lu.n
+    }
+
+    /// x with A x = b (A^T x = b when transpose) in quad-double: b as four part arrays of shape (n,) or (n, k), each
+    /// entry renormalized first. Returns the four parts of x, of b's shape; with transpose false, bitwise those of
+    /// qd_solve. Raises ValueError if b has a non-finite entry or the wrong shape.
+    #[pyo3(signature = (b0, b1, b2, b3, transpose = false))]
+    fn solve<'py>(
+        &self,
+        py: Python<'py>,
+        b0: PyReadonlyArrayDyn<'py, f64>,
+        b1: PyReadonlyArrayDyn<'py, f64>,
+        b2: PyReadonlyArrayDyn<'py, f64>,
+        b3: PyReadonlyArrayDyn<'py, f64>,
+        transpose: bool,
+    ) -> PyResult<DynParts<'py>> {
+        let (shape, mut cols) = qd_rhs([&b0, &b1, &b2, &b3], self.lu.n)?;
+        solve_cols(py, &self.lu, &mut cols, transpose);
+        qd_parts(py, &shape, &cols)
+    }
+}
+
 /// a x in double-double for an f64 a, as the numpy `dd_scale` forms it: the two-product of a and x.hi (exact, so
 /// bitwise Dekker's product there), then a x.lo added to its error unfused (`DD::mul_f` fuses it), then the quick
 /// two-sum
@@ -610,6 +799,8 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dd_matvec, m)?)?;
     m.add_function(wrap_pyfunction!(dd_horner, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
+    m.add_function(wrap_pyfunction!(qd_solve, m)?)?;
+    m.add_class::<PyQdLu>()?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
