@@ -168,7 +168,8 @@ def test_od_solve_is_the_rust_lu_bitwise():
 
 
 def test_od_solve_errors():
-    """singular A, non-finite entries and mismatched shapes raise ValueError naming the problem"""
+    """singular A (also one whose parts sum to zero only exactly), non-finite entries and mismatched shapes raise
+    ValueError naming the problem"""
     A, b = pinned_system(9)
     Z = [q.copy() for q in A]
     for q in Z:
@@ -193,3 +194,8 @@ def test_od_solve_errors():
         md.od_solve(*A[:7], A[7][:-1], *b)
     with pytest.raises(TypeError):
         md.od_solve(*A[:7], A[7].astype(complex), *b)
+    # parts out of order whose exact sum is zero: the renormalization's first pass is error-free (two-sums from the
+    # last part up), so the 1 x 1 matrix is singular; a quick-two-sum first pass would round the -1 away and give 1
+    one = [np.array([[v]]) for v in (1.0, 1e16, -1.0, -1e16, 0.0, 0.0, 0.0, 0.0)]
+    with pytest.raises(ValueError, match="pivot at column 0"):
+        md.od_solve(*one, *[np.array([1.0])] * 8)
