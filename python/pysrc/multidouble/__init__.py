@@ -37,14 +37,23 @@ __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_so
            "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot", "gcr"]
 
 
+def _masked(v):
+    """v, or an array or element of a sequence v (nested lists and tuples included), has a masked value"""
+    if np.ma.isMaskedArray(v):
+        return bool(np.ma.getmaskarray(v).any())
+    if isinstance(v, (list, tuple)):
+        return any(_masked(x) for x in v)
+    return False
+
+
 def _f64(v, name):
     """v as a C-contiguous float64 array for the Rust functions: v itself if it is one (no copy), else a converted
     copy (np.ascontiguousarray). Any array or sequence of real numbers converts (float, integer, unsigned and bool
     dtypes, and objects that float() converts). Complex, string and other dtypes, None and masked values raise
     TypeError naming the argument, where numpy's conversion would drop an imaginary part or a mask, parse a string or
     give nan."""
-    # np.asarray drops the mask and passes the hidden values on
-    if np.ma.isMaskedArray(v) and np.ma.getmaskarray(v).any():
+    # np.asarray drops the masks, also of masked arrays in a list, and passes the hidden values on
+    if _masked(v):
         raise TypeError(f"{name} must not have masked values")
     a = np.asarray(v)
     if a.dtype.kind == "O":

@@ -536,14 +536,22 @@ def test_non_numeric_inputs_raise(bad):
 
 
 def test_masked_values_raise():
-    """a masked array with a masked value raises TypeError, where np.asarray would pass the hidden value on, and one
-    with nothing masked gives the bits of its data"""
+    """a masked array with a masked value raises TypeError, where np.asarray would pass the hidden value on, and so
+    does a list holding one (a 2-D argument as a list of rows, one of them masked, or a 1-D one with np.ma.masked as
+    an element); a masked array with nothing masked gives the bits of its data"""
     for name, args in conversion_cases().items():
         f, a = getattr(md, name), list(args)
         i = next(i for i, x in enumerate(a) if isinstance(x, np.ndarray))
         m = np.zeros(args[i].shape, dtype=bool)
         m.flat[1] = True
         a[i] = np.ma.masked_array(args[i], mask=m)
+        with pytest.raises(TypeError, match="must not have masked values"):
+            f(*a)
+        x = args[i]
+        if x.ndim == 2:
+            a[i] = [np.ma.masked_array(r, mask=k) for r, k in zip(x, m)]
+        else:
+            a[i] = [x[0], np.ma.masked, *x[2:]]
         with pytest.raises(TypeError, match="must not have masked values"):
             f(*a)
         a[i] = np.ma.masked_array(args[i])
