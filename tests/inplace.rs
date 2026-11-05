@@ -19,8 +19,11 @@ use multidouble::v8::V8;
 
 /// A lane type with random values in every part, and the bits of every part of a value and of an accumulator.
 trait Gen: Lane {
+    /// a value with every part random
     fn gen(r: &mut Rng) -> Self;
+    /// the bits of every part, appended to w
     fn bits(&self, w: &mut Vec<u64>);
+    /// the bits of every part of an accumulator, appended to w
     fn acc_bits(a: &Self::Acc, w: &mut Vec<u64>);
 }
 
@@ -46,15 +49,18 @@ fn ov<S: Simd>(r: &mut Rng) -> OV<S> {
     OV::from_dv(dv(r)) * OV::from_dv(dv(r)) * (OV::from_dv(dv(r)) * OV::from_dv(dv(r)))
 }
 
+/// the bits of the 8 lanes of v, appended to w
 fn put<S: Simd>(w: &mut Vec<u64>, v: V8<S>) {
     w.extend(v.to_array().map(f64::to_bits));
 }
 
+/// the bits of a double-double accumulator, appended to w
 fn put_dot<S: Simd>(w: &mut Vec<u64>, a: &DotAcc<S>) {
     put(w, a.s);
     put(w, a.e);
 }
 
+/// the bits of every level of a quad-double accumulator, appended to w
 fn put_qdot<S: Simd>(w: &mut Vec<u64>, a: &QDotAcc<S>) {
     a.s.iter().for_each(|&s| put(w, s));
 }
@@ -262,6 +268,7 @@ fn same_acc<T: Gen>(a: &T::Acc, b: &T::Acc) -> bool {
 
 /// A check run for one lane type T.
 trait Check {
+    /// the check for T, named name in its messages; it panics on a mismatch or a control that is not caught
     fn check<T: Gen>(&mut self, name: &str);
 }
 
@@ -303,6 +310,7 @@ struct AccChain {
 }
 
 impl Check for AccChain {
+    /// the chain and its control for T, from the next seed
     fn check<T: Gen>(&mut self, name: &str) {
         self.seed += 1;
         let mut r = Rng(self.seed);
@@ -341,11 +349,13 @@ impl Check for AccChain {
     }
 }
 
+/// `acc_mut_is_acc` on one backend
 #[derive(Clone)]
 struct AccMutIsAcc;
 
 impl Kernel for AccMutIsAcc {
     type Output = ();
+    /// the check on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) {
         every_lane::<S>(&mut AccChain {
@@ -362,11 +372,13 @@ fn acc_mut_is_acc() {
     on_every_backend(AccMutIsAcc);
 }
 
+/// `add_prod_mut_is_add_prod` on one backend
 #[derive(Clone)]
 struct AddProdMutIsAddProd;
 
 impl Kernel for AddProdMutIsAddProd {
     type Output = ();
+    /// the check on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) {
         let mut r = Rng(81);
@@ -436,6 +448,7 @@ const B: usize = 3;
 /// orders of the series x and y, so the sums of order k < ORDERS have up to ORDERS terms
 const ORDERS: usize = 12;
 
+/// the bits of every part of every lane vector of f
 fn fl_bits<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
     let mut w = Vec::new();
     f.0.iter().for_each(|v| v.bits(&mut w));
@@ -454,6 +467,7 @@ struct Sums {
 }
 
 impl Check for Sums {
+    /// every sum and its controls for T, from the next seed
     fn check<T: Gen>(&mut self, name: &str) {
         self.seed += 1;
         let mut r = Rng(self.seed);
@@ -534,11 +548,13 @@ impl Check for Sums {
     }
 }
 
+/// `in_place_sums_are_the_sums` on one backend
 #[derive(Clone)]
 struct InPlaceSumsAreTheSums;
 
 impl Kernel for InPlaceSumsAreTheSums {
     type Output = ();
+    /// the check on the backend S
     #[inline(always)]
     fn run<S: Simd>(self) {
         every_lane::<S>(&mut Sums {
