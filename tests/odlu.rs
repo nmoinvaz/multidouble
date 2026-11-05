@@ -22,6 +22,7 @@ fn od_of(r: &mut Rng, h: f64) -> OD {
     OD::new(x)
 }
 
+/// a random octo-double in [-1, 1) with all eight parts in use
 fn rand_od(r: &mut Rng) -> OD {
     let h = r.sym();
     od_of(r, h)
@@ -46,6 +47,7 @@ fn matrix_od(n: usize, r: &mut Rng) -> (usize, [Vec<f64>; 8]) {
     (ld, c)
 }
 
+/// entry k (column-major) of a matrix in eight parts
 fn entry(c: &[Vec<f64>; 8], k: usize) -> OD {
     OD {
         x: std::array::from_fn(|q| c[q][k]),
@@ -145,6 +147,7 @@ fn control_od_lu_update_in_qd_is_caught() {
     assert!(f > 1e-90 && b > 1e-90, "{f:e} {b:e}");
 }
 
+/// the pivots and the bits of the factors
 fn lu_bits(lu: &ODLu) -> (Vec<usize>, Vec<u64>) {
     (lu.perm.clone(), lu.c.iter().flatten().map(|v| v.to_bits()).collect())
 }

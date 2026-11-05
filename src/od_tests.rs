@@ -26,14 +26,17 @@ fn unit() -> f64 {
     OD::EPS
 }
 
+/// the environment variable k as a number, or d
 fn env_usize(k: &str, d: usize) -> usize {
     std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
 }
 
+/// OD_REPORT=1: print the tables
 fn report() -> bool {
     std::env::var("OD_REPORT").map(|v| v == "1").unwrap_or(false)
 }
 
+/// select mutation id (0 = none) for the current thread
 fn set_mutation(id: u32) {
     #[cfg(feature = "mutate")]
     mutate::set(id);
@@ -41,6 +44,7 @@ fn set_mutation(id: u32) {
     assert_eq!(id, 0, "mutations need the mutate feature");
 }
 
+/// a random bit
 fn coin(r: &mut Rng) -> bool {
     r.next() & 1 == 1
 }
@@ -128,6 +132,7 @@ fn greedy8(d: &Dy) -> [f64; 8] {
     x
 }
 
+/// a dyadic as eight greedy parts
 fn od_of(d: &Dy) -> OD {
     OD { x: greedy8(d) }
 }
@@ -161,6 +166,7 @@ const CATS: [Cat; 7] = [
     Cat::Computed,
 ];
 
+/// the category's name in the tables
 fn cat_name(c: Cat) -> &'static str {
     match c {
         Cat::Wide => "wide",
@@ -300,6 +306,7 @@ enum Op {
 
 const OPS: [Op; 6] = [Op::Add, Op::AddF, Op::Mul, Op::MulF, Op::Div, Op::Sqrt];
 
+/// the operation's name in the tables
 fn op_name(op: Op) -> &'static str {
     match op {
         Op::Add => "add",
@@ -311,6 +318,7 @@ fn op_name(op: Op) -> &'static str {
     }
 }
 
+/// the kind of exact reference the operation is checked against
 fn op_kind(op: Op) -> Kind {
     match op {
         Op::Add | Op::AddF => Kind::Add,
@@ -333,6 +341,7 @@ fn op_thr(op: Op) -> f64 {
     }
 }
 
+/// the scalar operation
 fn apply_s(op: Op, a: OD, b: OD) -> OD {
     match op {
         Op::Add => a + b,
@@ -344,6 +353,7 @@ fn apply_s(op: Op, a: OD, b: OD) -> OD {
     }
 }
 
+/// the 8-lane operation
 fn apply_v(op: Op, a: OV, b: OV) -> OV {
     match op {
         Op::Add => a + b,
@@ -408,17 +418,20 @@ fn exact_err(op: Op, a: OD, b: OD, r: OD, under: bool) -> (Dy, Dy, f64, Dy) {
     }
 }
 
+/// err <= thr 2^-418 scale + allow, exactly
 fn within(err: &Dy, scale: &Dy, thr: f64, allow: &Dy) -> bool {
     let lim = scale.mul(&Dy::from_f64(thr * unit())).add(allow);
     err.cmp_abs(&lim) != Ordering::Greater
 }
 
+/// every part the same bits (any NaN equal to any NaN)
 fn same(a: OD, b: OD) -> bool {
     a.x.iter()
         .zip(b.x.iter())
         .all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()))
 }
 
+/// FNV-1a over the bits of the parts
 fn fnv(h: &mut u64, x: OD) {
     for v in x.x {
         let v = if v.is_nan() { f64::NAN } else { v };
@@ -449,11 +462,13 @@ struct Res {
 }
 
 impl Res {
+    /// no sample outside the bound and no lane different from the scalar result
     fn ok(&self) -> bool {
         self.fails == 0 && self.mism == 0
     }
 }
 
+/// the q-quantile of v (sorted in place)
 fn pct(v: &mut [f64], q: f64) -> f64 {
     if v.is_empty() {
         return 0.0;
@@ -462,6 +477,7 @@ fn pct(v: &mut [f64], q: f64) -> f64 {
     v[((v.len() - 1) as f64 * q).floor() as usize]
 }
 
+/// a number for the tables
 fn fmt_u(x: f64) -> String {
     if x == 0.0 {
         "0".into()
@@ -474,6 +490,7 @@ fn fmt_u(x: f64) -> String {
     }
 }
 
+/// print the rows of an accuracy table
 fn print_table(title: &str, rs: &[Res]) {
     println!("{title}");
     println!(
@@ -692,6 +709,7 @@ fn dec_scaled(neg: bool, digits: &str, e10: i64, sh: i64) -> Dy {
     }
 }
 
+/// 10^k, exactly
 fn pow10(k: i64) -> Dy {
     Dy {
         neg: false,
@@ -716,6 +734,7 @@ fn row(what: &str, cat: &'static str, n: usize, fails: usize, mism: usize) -> Re
     }
 }
 
+/// decimal parsing and printing, round trips, the conversions to DD, QD and f64, and the order, against exact arithmetic, with mutation id active
 fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     let mut r = Rng::new(seed ^ 0x0d10);
@@ -877,6 +896,7 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     out
 }
 
+/// print the rows of the decimal, conversion and order checks
 fn print_rows(title: &str, rs: &[Res]) {
     println!("{title}");
     for r in rs {
@@ -891,6 +911,7 @@ fn print_rows(title: &str, rs: &[Res]) {
 // the tests
 // -------------------------------------------------------------------------------------------------------------
 
+/// constants, decimal digits of pi, powers, special values, the power-of-two scaling and the conversions
 #[test]
 fn od_constants_and_special_values() {
     assert_eq!(OD::EPS, 2f64.powi(-418));
@@ -941,6 +962,7 @@ fn od_constants_and_special_values() {
     assert!(v.iter().zip(&back).all(|(a, b)| same(*a, *b)));
 }
 
+/// every operation in every input category against exact arithmetic, and the lanes against the scalar type
 #[test]
 fn od_accuracy() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -962,6 +984,7 @@ fn od_accuracy() {
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
 }
 
+/// the dot accumulators against exact sums, 1 to 64 terms
 #[test]
 fn od_accumulator() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -977,6 +1000,7 @@ fn od_accumulator() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
+/// decimal input and output, the conversions and the order, exactly
 #[test]
 fn od_decimal_io_conversions_and_order() {
     let n = env_usize("OD_N", 2000);

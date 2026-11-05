@@ -35,6 +35,7 @@ def from_parts(x):
 
 
 def reflector(rng, n):
+    """a Householder reflector I - 2 v v^T / v^T v of order n in mpmath, v from rng"""
     v = mp.matrix([mp.mpf(float(t)) for t in rng.uniform(-1, 1, n)])
     vv = sum(t * t for t in v)
     return mp.eye(n) - (v * v.T) * (2 / vv)
@@ -132,6 +133,7 @@ def pinned_part(i, j, q):
 
 
 def pinned_system(n=37):
+    """the eight part arrays of the pinned A ((n, n), entry (i, j) at [i, j]) and of b (n)"""
     A = [np.array([[pinned_part(i, j, q) for j in range(n)] for i in range(n)]) for q in range(8)]
     b = [np.array([pinned_part(i, None, q) for i in range(n)]) for q in range(8)]
     return A, b

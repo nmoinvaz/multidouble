@@ -182,6 +182,7 @@ struct PyOdLu {
 
 #[pymethods]
 impl PyOdLu {
+    /// factor A, given as eight (n, n) row-major part arrays
     #[new]
     #[pyo3(signature = (a0, a1, a2, a3, a4, a5, a6, a7))]
     #[allow(clippy::too_many_arguments)]

@@ -604,6 +604,7 @@ struct OvMatchesOd;
 
 impl Kernel for OvMatchesOd {
     type Output = usize;
+    /// every operation of the lanes against the scalar type, counting the lane results that differ
     #[inline(always)]
     fn run<S: Simd>(self) -> usize {
         let mut bad = 0;
@@ -709,6 +710,7 @@ struct OvSignedZeros;
 
 impl Kernel for OvSignedZeros {
     type Output = ();
+    /// every operation on signed-zero parts against the scalar type
     #[inline(always)]
     fn run<S: Simd>(self) {
         let mut vals = Vec::new();
@@ -749,6 +751,7 @@ impl Kernel for OvSignedZeros {
     }
 }
 
+/// signed zeros on every backend
 #[test]
 fn ov_signed_zeros_match_od() {
     on_every_backend(OvSignedZeros);
