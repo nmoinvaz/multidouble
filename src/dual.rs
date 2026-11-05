@@ -39,10 +39,17 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 pub mod mutate {
     /// `crate::jet::OJet`'s product: the last term of each convolution, x_k y_0, dropped (orders k >= 1)
     pub const OJET_CONV: u32 = 1;
+    /// `crate::field::FieldSolve::solve_lanes_jet_refine_od`: each refinement residual formed at the iterate rounded
+    /// to quad-double
+    pub const OJET_REFINE_QD: u32 = 2;
     /// number of ids
-    pub const N: u32 = 1;
+    pub const N: u32 = 2;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 2] = ["none", "octo-double jet product: last convolution term dropped"];
+    pub const NAMES: [&str; 3] = [
+        "none",
+        "octo-double jet product: last convolution term dropped",
+        "octo-double jet solve: residual at the iterate rounded to quad-double",
+    ];
 
     #[cfg(feature = "mutate")]
     thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
@@ -159,8 +166,9 @@ pub trait Lane:
     const VAL_QD: bool = false;
     /// values in octo-double (`crate::ov::OV`, `crate::jet::OJet<N>`): as for `VAL_QD`, a solve with a double-double
     /// LU is refined for such a lane with the residual formed in its arithmetic, with about twice the steps, as each
-    /// gains about cond(A) 2^-104. Lanes that set it leave `VAL_QD` unset, so code that refines quad-double lanes a
-    /// fixed number of steps does not apply that count to them.
+    /// gains about cond(A) 2^-104 (a jet's solve goes order by order,
+    /// `crate::field::FieldSolve::solve_lanes_jet_refine_od`). Lanes that set it leave `VAL_QD` unset, so code that
+    /// refines quad-double lanes a fixed number of steps does not apply that count to them.
     const VAL_OD: bool = false;
     /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`, `crate::jet::OJet<N>`), 0 for
     /// every other lane: code with a branch for jets, such as an order-by-order solve, tests it
