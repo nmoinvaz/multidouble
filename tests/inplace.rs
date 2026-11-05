@@ -1,13 +1,16 @@
-//! The in-place accumulation against the value-returning one, bit for bit, on every backend this CPU runs
-//! (`simd::for_each_available`), with random inputs in every part of every lane type: `Lane::acc_mut` against
+//! The in-place accumulation and Cauchy sums against the value-returning ones, bit for bit, on every backend this CPU
+//! runs (`simd::for_each_available`), with random inputs in every part of every lane type: `Lane::acc_mut` against
 //! `Lane::acc` for the double-double, quad-double and octo-double values, the dual and f64-tangent lanes, the jets
-//! (`QJet<24>` among them) and the counting lane, and `QDotAcc::add_prod_mut` against `add_prod`. Each check has a
-//! control that must fail, the same comparison of a sum with two of its terms swapped.
+//! (`QJet<24>` among them) and the counting lane, `QDotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`,
+//! `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check
+//! has a control that must fail, the same comparison of a sum with two of its terms swapped, and for the field sums
+//! also of a sum without its last term.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Qu, F8};
 use multidouble::dv::{DotAcc, DV};
+use multidouble::field::{cs, cs_into, cs_lane_into, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_lane_into, Fl};
 use multidouble::jet::{Jet, QJet};
 use multidouble::ov::OV;
 use multidouble::qv::{QDotAcc, QV};
@@ -422,4 +425,132 @@ fn counted_acc_mut_counts_an_acc() {
     let c = take_counts();
     assert_eq!(c[op::ACC], 1);
     assert_eq!(c.iter().sum::<u64>(), 1);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the in-place Cauchy sums
+// ---------------------------------------------------------------------------------------------------------------
+
+/// lane vectors of the fields: three, so that the f64 lanes' interleaved sums have an odd count
+const B: usize = 3;
+/// orders of the series x and y, so the sums of order k < ORDERS have up to ORDERS terms
+const ORDERS: usize = 12;
+
+fn fl_bits<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
+    let mut w = Vec::new();
+    f.0.iter().for_each(|v| v.bits(&mut w));
+    w
+}
+
+/// `cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` for one lane type against `cs`,
+/// `cs_range` and `cs_w` (lane vector b of them for the lane versions), at every order k < ORDERS with the ranges
+/// 0..=k, k/3..=k - k/4 and an empty one, each written over a random destination. The controls are the in-place
+/// range sum with the terms lo and lo + 1 swapped (x and y permuted so that the same products come in the other
+/// order), which must differ from the reference for some k, except in octo-double, whose sums round the swap away,
+/// and the sum without its last term, which must differ for every k.
+struct Sums {
+    backend: &'static str,
+    seed: u64,
+}
+
+impl Check for Sums {
+    fn check<T: Gen>(&mut self, name: &str) {
+        self.seed += 1;
+        let mut r = Rng(self.seed);
+        let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
+        let x: Vec<Fl<T, B>> = (0..ORDERS).map(|_| field(&mut r)).collect();
+        let y: Vec<Fl<T, B>> = (0..ORDERS).map(|_| field(&mut r)).collect();
+        let w = |j: usize| (2 * j + 1) as f64;
+        let be = self.backend;
+        let (mut checks, mut controls, mut caught, mut dropped) = (0, 0, 0, 0);
+        for k in 0..ORDERS {
+            let mut out = field(&mut r);
+            take_counts();
+            let want = cs(&x, &y, k);
+            let cv = take_counts();
+            cs_into(&mut out, &x, &y, k);
+            assert_eq!(
+                take_counts(),
+                cv,
+                "{be} {name}: cs_into counted otherwise than cs, k {k}"
+            );
+            assert_eq!(fl_bits(&out), fl_bits(&want), "{be} {name}: cs_into, k {k}");
+            checks += 1;
+            for (lo, hi) in [(0, k), (k / 3, k - k / 4), (k + 1, k)] {
+                let want = cs_range(&x, &y, k, lo, hi);
+                let want_w = cs_w(&x, &y, k, lo, hi, w);
+                let mut out = field(&mut r);
+                cs_range_into(&mut out, &x, &y, k, lo, hi);
+                assert_eq!(
+                    fl_bits(&out),
+                    fl_bits(&want),
+                    "{be} {name}: cs_range_into, k {k}, {lo}..={hi}"
+                );
+                cs_w_into(&mut out, &x, &y, k, lo, hi, w);
+                assert_eq!(
+                    fl_bits(&out),
+                    fl_bits(&want_w),
+                    "{be} {name}: cs_w_into, k {k}, {lo}..={hi}"
+                );
+                for b in 0..B {
+                    let mut o = T::gen(&mut r);
+                    cs_lane_into(&mut o, b, &x, &y, k, lo, hi);
+                    assert!(
+                        same(&o, &want.0[b]),
+                        "{be} {name}: cs_lane_into, k {k}, {lo}..={hi}, b {b}"
+                    );
+                    cs_w_lane_into(&mut o, b, &x, &y, k, lo, hi, w);
+                    assert!(
+                        same(&o, &want_w.0[b]),
+                        "{be} {name}: cs_w_lane_into, k {k}, {lo}..={hi}, b {b}"
+                    );
+                }
+                checks += 4;
+                if lo < hi {
+                    let (mut xs, mut ys) = (x.clone(), y.clone());
+                    xs.swap(lo, lo + 1);
+                    ys.swap(k - lo, k - lo - 1);
+                    cs_range_into(&mut out, &xs, &ys, k, lo, hi);
+                    controls += 1;
+                    caught += (fl_bits(&out) != fl_bits(&want)) as usize;
+                    cs_range_into(&mut out, &x, &y, k, lo, hi - 1);
+                    dropped += (fl_bits(&out) != fl_bits(&want)) as usize;
+                }
+            }
+        }
+        // the octo-double sums round a swap of two terms away (their accumulators show it, acc_mut_is_acc)
+        assert!(
+            caught > 0 || T::VAL_OD,
+            "{be} {name}: control: the sums with two terms swapped have the reference's bits"
+        );
+        assert_eq!(
+            dropped, controls,
+            "{be} {name}: control: a sum without its last term has the reference's bits"
+        );
+        println!(
+            "{be} {name}: {checks} in-place sums matched; the controls caught {caught} of {controls} swaps and \
+             {dropped} of {controls} dropped terms"
+        );
+    }
+}
+
+#[derive(Clone)]
+struct InPlaceSumsAreTheSums;
+
+impl Kernel for InPlaceSumsAreTheSums {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        every_lane::<S>(&mut Sums {
+            backend: S::NAME,
+            seed: 90,
+        });
+    }
+}
+
+/// The in-place Cauchy sums are the value-returning ones bit for bit, for every lane type on every backend. Controls:
+/// a sum with two terms swapped and a sum without its last term differ.
+#[test]
+fn in_place_sums_are_the_sums() {
+    on_every_backend(InPlaceSumsAreTheSums);
 }
