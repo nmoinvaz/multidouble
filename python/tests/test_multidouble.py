@@ -521,14 +521,30 @@ def test_control_unconverted_inputs_fail(monkeypatch):
             getattr(md, name)(*a)
 
 
-@pytest.mark.parametrize("bad", [None, ["1.5", "2"], np.array([1 + 2j, 3j]), [object(), object()]],
-                         ids=["None", "strings", "complex", "objects"])
+@pytest.mark.parametrize("bad", [None, ["1.5", "2"], np.array(["1.5", "2"], dtype=object), [1.0, None],
+                                 np.array([1 + 2j, 3j]), [object(), object()]],
+                         ids=["None", "strings", "object strings", "a None", "complex", "objects"])
 def test_non_numeric_inputs_raise(bad):
-    """None, strings, complex numbers and other objects in an array argument raise TypeError naming it, where numpy's
-    float64 conversion would give nan, parse the strings or drop the imaginary parts"""
+    """None, strings (also in an object array), complex numbers and other objects in an array argument raise TypeError
+    naming it, where numpy's float64 conversion would give nan, parse the strings or drop the imaginary parts"""
     for name, args in conversion_cases().items():
         a = list(args)
         i = next(i for i, x in enumerate(a) if isinstance(x, np.ndarray))
         a[i] = bad
         with pytest.raises(TypeError, match="must be real numbers"):
             getattr(md, name)(*a)
+
+
+def test_masked_values_raise():
+    """a masked array with a masked value raises TypeError, where np.asarray would pass the hidden value on, and one
+    with nothing masked gives the bits of its data"""
+    for name, args in conversion_cases().items():
+        f, a = getattr(md, name), list(args)
+        i = next(i for i, x in enumerate(a) if isinstance(x, np.ndarray))
+        m = np.zeros(args[i].shape, dtype=bool)
+        m.flat[1] = True
+        a[i] = np.ma.masked_array(args[i], mask=m)
+        with pytest.raises(TypeError, match="must not have masked values"):
+            f(*a)
+        a[i] = np.ma.masked_array(args[i])
+        assert same_bits(f(*a), f(*args)), name
