@@ -787,6 +787,8 @@ def conversion_cases():
     Sh, Sl = (x.reshape(6, 6) for x in rand_dd(rng, 36, emax=2))
     Sh = Sh + 16 * np.eye(6)
     z, y = rand_qd(rng, n), rand_qd(rng, n)
+    # octo-double arrays: the quad-double parts and four zero parts, each its own array
+    oz, oy = (*z, *(np.zeros(n) for _ in range(4))), (*y, *(np.zeros(n) for _ in range(4)))
     Ch, Cl = (np.array(c) for c in rand_series(rng, 5, n))
     Q = [Sh, Sl, Sl * 2.0**-53 * rng.uniform(-1, 1, (6, 6)), Sl * 2.0**-106 * rng.uniform(-1, 1, (6, 6))]
     two = (ah, al, bh, bl)
@@ -794,6 +796,7 @@ def conversion_cases():
         "add": two, "sub": two, "mul": two, "div": two, "dd_op": (1,) + two, "dd_dot": two,
         "dd_matvec": (Ah, Al, bh[:7], bl[:7]), "dd_solve": (Sh, Sl, bh[:6], bl[:6]),
         "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y), "dd_horner": (Ch, Cl, 0.4341),
+        "od_add_dd": (*oz, bh, bl), "od_axpy": (0.37, *oz, *oy),
         "qd_solve": (*Q, *[p[:6] for p in z]),
     }
 
