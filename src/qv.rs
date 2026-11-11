@@ -77,7 +77,9 @@ pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4
             };
             // second pass: slots s0..s3, k >= 1 where c1 != 0
             let (mut s0, mut s1, mut s2, mut s3) = (c0, c1, z, z);
-            let k1 = c1.ne(z);
+            // k1 hidden from the optimizer (`Simd::opaque`), so that the masks built from it stay
+            // bitwise operations on NEON
+            let k1 = c1.ne(z).opaque();
             // step c2 (k in {0, 1})
             let (t, e) = quick_two_sum(k1.sel(s1, s0), c2);
             s0 = k1.sel(s0, t);
@@ -158,7 +160,9 @@ pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -
                 quick_two_sum(c0, s)
             };
             let (mut s0, mut s1, mut s2, mut s3) = (c0, c1, z, z);
-            let k1 = c1.ne(z);
+            // k1 hidden from the optimizer (`Simd::opaque`), so that the masks built from it stay
+            // bitwise operations on NEON
+            let k1 = c1.ne(z).opaque();
             // step c2 (k in {0, 1})
             let (t, e) = quick_two_sum(k1.sel(s1, s0), c2);
             s0 = k1.sel(s0, t);

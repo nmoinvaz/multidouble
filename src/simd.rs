@@ -75,6 +75,13 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn and_ne(m: Self::M, a: Self::R, b: Self::R) -> Self::M {
         Self::and(m, Self::ne(a, b))
     }
+    /// m itself, on NEON hidden from the optimizer as a comparison's result, so that its and and or
+    /// with other masks stay 128-bit operations (the masks of `qv`'s renormalizations)
+    #[doc(hidden)]
+    #[inline(always)]
+    fn opaque(m: Self::M) -> Self::M {
+        m
+    }
     /// bit j = lane j
     fn bits(m: Self::M) -> u8;
     /// f run with this instruction set enabled. f should be an `#[inline(always)]` closure, so that its body is

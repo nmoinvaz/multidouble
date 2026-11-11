@@ -154,6 +154,11 @@ pub struct M8(pub [uint64x2_t; 4]);
 
 #[allow(unused_unsafe)]
 impl M8 {
+    /// self, hidden from the optimizer as a comparison's result (`opaque`)
+    #[inline(always)]
+    pub fn opaque(self) -> Self {
+        M8(opaque(self.0))
+    }
     #[inline(always)]
     pub fn and(self, o: Self) -> Self {
         four_mask!(vandq_u64, self, o)
