@@ -164,9 +164,11 @@ jobs:
         timeout-minutes: 30
         run: cargo test --release ${{ matrix.cargo-args }}
 
+      # Checks that the benchmarks compile and link, with the tests' profile and on their build.
+      # cargo bench would build them again with fat LTO and rebuild every dependency.
       - name: Build benchmarks
         if: ${{ !matrix.msrv && !matrix.cargo-args }}
-        run: cargo bench --no-run
+        run: cargo build --release --benches
 
   coverage:
     name: Coverage
