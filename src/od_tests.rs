@@ -968,11 +968,7 @@ fn od_accuracy() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
     let seed = env_usize("OD_SEED", 1) as u64;
     let rs = run_ops(n, seed, 0);
-    let mut digest = 0xcbf29ce484222325u64;
-    for r in &rs {
-        digest ^= r.digest;
-        digest = digest.wrapping_mul(0x100000001b3);
-    }
+    let digest = digest(&rs);
     if report() {
         print_table(
             &format!("octo-double accuracy (units of 2^-418; n per row; isa {})", V8::ISA),
@@ -982,6 +978,32 @@ fn od_accuracy() {
     println!("od digest {digest:016x} (n {n}, seed {seed}, isa {})", V8::ISA);
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
+    if (n, seed) == (2000, 1) {
+        assert!(
+            digest == OD_DIGEST,
+            "the results' bits changed: digest {digest:#018x}, pinned {:#018x}",
+            OD_DIGEST
+        );
+    }
+}
+
+/// the digest of every row's results (`Res::digest`), in order
+fn digest(rs: &[Res]) -> u64 {
+    rs.iter()
+        .fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
+}
+
+/// The digest of `od_accuracy`'s results at its default size and seed (2000, 1), recorded with
+/// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
+/// be the scalar ones. Every backend gives these bits.
+const OD_DIGEST: u64 = 0x6ff0_7dec_6a4e_4e28;
+
+/// Control for the pinned digest: with the order-6 term a2 b3 of the product dropped
+/// (`mutate::MUL_E23`), the results' digest is not the pinned one.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_digest_control() {
+    assert!(digest(&run_ops(2000, 1, mutate::MUL_E23)) != OD_DIGEST);
 }
 
 /// the dot accumulators against exact sums, 1 to 64 terms
