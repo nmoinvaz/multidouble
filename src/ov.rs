@@ -117,8 +117,9 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
     let mut acc = c[0];
     for i in 1..N {
         let (t, e) = quick_two_sum(acc, c[i]);
-        // k < 7 and a nonzero error: t goes to slot k, k advances, e carries on
-        let room = seven.gt(k);
+        // k < 7 and a nonzero error: t goes to slot k, k advances, e carries on. room is hidden from
+        // the optimizer (`Simd::opaque`), so that the masks built from it stay bitwise operations on NEON
+        let room = seven.gt(k).opaque();
         let emit = if mutate::on(mutate::OV_RENORM_MASK) {
             room
         } else {
