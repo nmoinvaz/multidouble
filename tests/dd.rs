@@ -289,3 +289,63 @@ fn to_parts_and_from_parts_are_the_loops_and_inverses() {
 fn from_parts_refuses_arrays_of_different_lengths() {
     from_parts([&[1.0, 2.0], &[0.0, 0.0], &[0.0], &[0.0, 0.0]]);
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// pinned outputs
+// ---------------------------------------------------------------------------------------------------------------
+
+/// the bits of the pinned double-double outputs, by group. nudge flips the last bit of the first
+/// x's high part.
+fn dd_outputs(nudge: bool) -> Vec<Vec<u64>> {
+    use multidouble::native::{DotAcc, DV, V8};
+    let bits = |v: &[DD]| -> Vec<u64> { v.iter().flat_map(|d| [d.hi.to_bits(), d.lo.to_bits()]).collect() };
+    let lanes = |v: DV| -> Vec<u64> { bits(&(0..8).map(|j| v.lane(j)).collect::<Vec<_>>()) };
+    let dv = |v: &[DD; 8]| DV::load(&v.map(|d| d.hi), &v.map(|d| d.lo));
+    let mut r = Rng(73);
+    let mut w = vec![Vec::new(); 5];
+    for i in 0..16 {
+        let mut x: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+        if nudge && i == 0 {
+            x[0].hi = f64::from_bits(x[0].hi.to_bits() ^ 1);
+        }
+        let y: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+        let f: [f64; 8] = std::array::from_fn(|_| r.dd(4).hi);
+        for j in 0..8 {
+            let (a, b) = (x[j], y[j]);
+            w[0].extend(bits(&[a + b, a - b, -a, a.abs()]));
+            w[0].push(a.to_f64().to_bits());
+            w[1].extend(bits(&[a * b, a.mul_f(f[j]), a.mul_pwr2(0.25)]));
+            w[2].extend(bits(&[a / b, a.recip()]));
+        }
+        // on the lanes, the operations without a scalar twin, and the dot accumulator
+        let (xv, yv, fv) = (dv(&x), dv(&y), V8::from_array(f));
+        for v in [xv.mul_v(fv), xv.add_v(fv), xv.div_by(yv, yv.hi.divisor())] {
+            w[3].extend(lanes(v));
+        }
+        w[4].extend(lanes(DotAcc::zero().add_prod(xv, yv).add_prod(yv, yv).add(xv).finish()));
+    }
+    w
+}
+
+/// The double-double outputs pinned bit for bit on fixed inputs, against hashes recorded with
+/// 4.1.1: the scalar operations, and on the lanes those without a scalar twin and the dot
+/// accumulator. Every backend gives these bits (tests/lanes.rs checks the lanes against the
+/// scalar arithmetic). Control: the first input's last bit flipped changes every group's hash.
+#[test]
+fn dd_outputs_are_pinned() {
+    let names = [
+        "add, sub, neg, abs, to_f64",
+        "mul, x f64, x 2^k",
+        "div, recip",
+        "lanes: x V8, + V8, div_by",
+        "dot accumulator",
+    ];
+    let want: [u64; 5] = [
+        0x5c8f_9441_3619_2b66,
+        0x855a_1020_6b1a_ff1a,
+        0xe3b9_1a9f_5250_529f,
+        0x0537_7e0c_19a4_3dcf,
+        0xd029_233f_9485_1d15,
+    ];
+    common::assert_pinned(&names, &dd_outputs(false), &dd_outputs(true), &want);
+}
