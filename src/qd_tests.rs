@@ -1044,11 +1044,7 @@ fn qd_accuracy() {
     let n = env_usize("QD_N", 4000) / 8 * 8;
     let seed = env_usize("QD_SEED", 1) as u64;
     let rs = run_ops(n, seed, 0);
-    let mut digest = 0xcbf29ce484222325u64;
-    for r in &rs {
-        digest ^= r.digest;
-        digest = digest.wrapping_mul(0x100000001b3);
-    }
+    let digest = digest(&rs);
     if report() {
         print_table(
             &format!("quad-double accuracy (units of 2^-209; n per row; isa {})", V8::ISA),
@@ -1058,6 +1054,32 @@ fn qd_accuracy() {
     println!("qd digest {digest:016x} (n {n}, seed {seed}, isa {})", V8::ISA);
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
+    if (n, seed) == (4000, 1) {
+        assert!(
+            digest == QD_DIGEST,
+            "the results' bits changed: digest {digest:#018x}, pinned {:#018x}",
+            QD_DIGEST
+        );
+    }
+}
+
+/// the digest of every row's results (`Res::digest`), in order
+fn digest(rs: &[Res]) -> u64 {
+    rs.iter()
+        .fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
+}
+
+/// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with
+/// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
+/// be the scalar ones. Every backend gives these bits.
+const QD_DIGEST: u64 = 0xaa5c_661a_6064_c9d4;
+
+/// Control for the pinned digest: with the O(eps^3) term a0 b2 of the product dropped
+/// (`mutate::SLOPPY_MUL_Q3`), the results' digest is not the pinned one.
+#[cfg(feature = "mutate")]
+#[test]
+fn qd_digest_control() {
+    assert!(digest(&run_ops(4000, 1, mutate::SLOPPY_MUL_Q3)) != QD_DIGEST);
 }
 
 /// Near-cancelling sums where QD's accurate add drops v when all parts are read with three emitted (up to 86 u), and
