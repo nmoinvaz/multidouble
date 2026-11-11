@@ -553,3 +553,54 @@ fn accessors_flags_and_counted() {
         assert_eq!(qbits(b.c[3]), qbits(QV::splat(j.c[3].lane(5))), "bcast");
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// pinned outputs
+// ---------------------------------------------------------------------------------------------------------------
+
+/// the bits of the pinned quad-double jet outputs, by group. nudge flips the last bit of the first
+/// jet's leading part, in lane 0 of coefficient 0.
+fn qjet_outputs(nudge: bool) -> Vec<Vec<u64>> {
+    let mut r = Rng(99);
+    let mut w = vec![Vec::new(); 4];
+    for i in 0..10 {
+        let (mut a, b) = (qjet::<8>(&mut r, false), qjet::<8>(&mut r, true));
+        if nudge && i == 0 {
+            let mut l = a.c[0].lanes();
+            l[0].x[0] = f64::from_bits(l[0].x[0].to_bits() ^ 1);
+            a.c[0] = QV::from_lanes(&l);
+        }
+        let p: QSeries<8> = qseries(&mut r);
+        w[0].extend([jbits(a * b), jbits(a / b)].concat());
+        w[1].extend([jbits(a.mulp(p)), jbits(a.addp(p))].concat());
+        w[2].extend(jbits(QJet::<8>::fin(QJet::<8>::acc1(
+            QJet::<8>::acc(QJet::<8>::acc0(), a, b),
+            b,
+        ))));
+        // the series of a's lane 0, so that the control reaches them too
+        let s = QSeries::<8> {
+            c: std::array::from_fn(|k| a.c[k].lane(0)),
+        };
+        let q: QSeries<8> = qseries(&mut r);
+        for t in [s * q, s / q] {
+            w[3].extend(t.c.iter().flat_map(|x| x.x.map(f64::to_bits)));
+        }
+    }
+    w
+}
+
+/// The quad-double jet's outputs pinned bit for bit on fixed inputs, against hashes recorded with
+/// 4.1.1: the product and quotient, `mulp` and `addp` with a series, the accumulator, and
+/// `QSeries`' product and quotient. Every backend gives these bits (tests/lanes.rs checks the lanes
+/// against `QSeries`). Control: the first input's last bit flipped changes every group's hash.
+#[test]
+fn qjet_outputs_are_pinned() {
+    let names = ["product and quotient", "mulp and addp", "accumulator", "QSeries"];
+    let want: [u64; 4] = [
+        0x0aec_45a2_7d78_12a2,
+        0x6b6a_1318_cae3_2b5c,
+        0x4b43_1851_478c_9631,
+        0x6ea7_7d1e_0053_392f,
+    ];
+    common::assert_pinned(&names, &qjet_outputs(false), &qjet_outputs(true), &want);
+}
