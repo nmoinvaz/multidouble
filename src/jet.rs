@@ -760,11 +760,15 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
         }
         a
     }
+    /// the sums, order by order, in a plain loop. Through `array::map` AVX2 and AVX-512 keep the
+    /// closure out of line, without their target features (`crate::simd::Kernel`)
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
-        QJet {
-            c: a.map(|x| x.finish()),
+        let mut c = [QV::zero(); N];
+        for k in 0..N {
+            c[k] = a[k].finish();
         }
+        QJet { c }
     }
 }
 
