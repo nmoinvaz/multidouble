@@ -61,10 +61,19 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     const ONE: Self::Scalar;
 
     /// a scalar from up to PARTS parts, the missing ones zero, renormalized (`QD::new`, `OD::new`)
+    ///
+    /// # Panics
+    /// `p` has more than PARTS parts.
     fn new(p: &[f64]) -> Self::Scalar;
     /// a scalar from exactly PARTS parts as they are, not renormalized (the struct literal `QD { x }`, `OD { x }`)
+    ///
+    /// # Panics
+    /// `p` does not have exactly PARTS parts.
     fn from_raw(p: &[f64]) -> Self::Scalar;
     /// part q of a scalar
+    ///
+    /// # Panics
+    /// `q` is not below PARTS.
     fn part(x: Self::Scalar, q: usize) -> f64;
     /// from double-double, exactly
     fn from_dd(d: DD) -> Self::Scalar;
@@ -85,6 +94,9 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
 
     /// a field of 8 B values from PARTS part arrays of at least 8 B values each (`Fl::load_parts`,
     /// `Fl::load_parts_od`)
+    ///
+    /// # Panics
+    /// `parts` does not hold exactly PARTS arrays, or one is shorter than 8 B.
     fn load_field<const B: usize>(parts: &[&[f64]]) -> Fl<Self::V, B>;
     /// value j of a field (`Fl::get`)
     fn field_get<const B: usize>(f: &Fl<Self::V, B>, j: usize) -> Self::Scalar;
@@ -96,7 +108,14 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     fn field_dual<const B: usize>(v: &Fl<Self::V, B>, t: &Fl<Self::V, B>) -> Fl<Self::U, B>;
 
     /// factor the n x n matrix of PARTS column-major part arrays with leading dimension ld (`QDLu::factor`,
-    /// `ODLu::factor`)
+    /// `ODLu::factor`). Each entry's parts must be normalized, as `new` returns them: the pivot search reads the
+    /// leading parts only.
+    ///
+    /// # Errors
+    /// `c` does not hold PARTS arrays, or a pivot is zero or not finite.
+    ///
+    /// # Panics
+    /// `ld` is not a multiple of 8, `ld < n`, or a part array is shorter than `ld * n`.
     fn lu_factor(n: usize, ld: usize, c: Vec<Vec<f64>>, par: bool) -> Result<Self::Lu, String>;
     /// solve in place with the factored matrix (`QDLu::solve`, `ODLu::solve`)
     fn lu_solve(lu: &Self::Lu, b: &mut [Self::Scalar]);
