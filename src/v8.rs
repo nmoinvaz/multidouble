@@ -1446,6 +1446,7 @@ mod neon_check {
             assert_eq!(m1.and(m2).bits(), m1.bits() & m2.bits());
             assert_eq!(m1.or(m2).bits(), m1.bits() | m2.bits());
             assert_eq!(m1.not().bits(), !m1.bits());
+            assert_eq!(m1.opaque().and(m2).bits(), m1.bits() & m2.bits());
             m1.sel(va, vb).store(&mut out);
             for j in 0..8 {
                 assert!(same(out[j], if m1.bits() >> j & 1 == 1 { a[j] } else { b[j] }));
