@@ -308,7 +308,17 @@ fn parts<T: Lane>(x: T) -> Vec<u64> {
 
 /// a lane with random normalized parts of either sign: value, and every tangent
 fn random_lane<T: Lane>(r: &mut Rng) -> T {
-    let v: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+    nudged_lane(r, false)
+}
+
+/// `random_lane`, with the last bit of every lane's leading value part flipped when nudge
+fn nudged_lane<T: Lane>(r: &mut Rng, nudge: bool) -> T {
+    let mut v: [DD; 8] = std::array::from_fn(|_| r.dd(8));
+    if nudge {
+        for d in &mut v {
+            d.hi = f64::from_bits(d.hi.to_bits() ^ 1);
+        }
+    }
     let t: [DD; 8] = std::array::from_fn(|_| r.dd(8));
     let mut x = T::from_vt(dv(&v), dv(&t));
     if T::TAN_F64 {
@@ -700,4 +710,92 @@ fn qu_value_is_qv_bitwise() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// pinned outputs
+// ---------------------------------------------------------------------------------------------------------------
+
+fn v8_bits(v: V8<Native>) -> Vec<u64> {
+    let mut a = [0.0; 8];
+    v.store(&mut a);
+    a.map(f64::to_bits).to_vec()
+}
+
+fn dv_bits(v: DV<Native>) -> Vec<u64> {
+    [v8_bits(v.hi), v8_bits(v.lo)].concat()
+}
+
+fn qv_bits(v: QV) -> Vec<u64> {
+    v.c.iter().flat_map(|&c| v8_bits(c)).collect()
+}
+
+/// the bits of the pinned outputs of lane type T, by group, every part of each read by bits. nudge
+/// flips the last bit of the first x's leading value part in every lane.
+fn dual_outputs<T: Lane<S = Native>>(bits: fn(T) -> Vec<u64>, nudge: bool) -> Vec<Vec<u64>> {
+    let mut r = Rng(39);
+    let s = DD::ONE / DD::from_f64(7.0);
+    let mut w = vec![Vec::new(); 3];
+    for i in 0..20 {
+        let x: T = nudged_lane(&mut r, nudge && i == 0);
+        let y: T = random_lane(&mut r);
+        let c = dv(&std::array::from_fn(|_| r.dd(2)));
+        w[0].extend([bits(x * y), bits(x / y)].concat());
+        w[1].extend(bits(T::fin(T::acc1(T::accc(T::acc(T::acc0(), x, y), y, c), x))));
+        w[2].extend(bits(g(x, y, c, s)));
+    }
+    w
+}
+
+/// the groups of lane type T, named, that differ from their pins
+fn dual_mismatches<T: Lane<S = Native>>(name: &str, bits: fn(T) -> Vec<u64>, want: [u64; 3]) -> Vec<String> {
+    let names = ["product and quotient", "accumulator", "every Lane method"].map(|g| format!("{name} {g}"));
+    let names: Vec<&str> = names.iter().map(|n| n.as_str()).collect();
+    common::pin_mismatches(&names, &dual_outputs(bits, false), &dual_outputs(bits, true), &want)
+}
+
+/// The dual lanes' outputs pinned bit for bit on fixed inputs, against hashes recorded with 4.1.1:
+/// the product and quotient, the accumulator, and every `Lane` method (`g`), on every part of `Du`,
+/// `Dc`, `Qu`, `F8`, `Fu`, `Dtn<3>` and `Fun<3>`. Every backend gives these bits (the lanes are the
+/// scalar formulas', tests/lanes.rs). Control: the first input's last bit flipped changes every
+/// group's hash.
+#[test]
+fn dual_outputs_are_pinned() {
+    let mut bad = Vec::new();
+    bad.extend(dual_mismatches::<Du>(
+        "Du",
+        |x| [dv_bits(x.v), dv_bits(x.d)].concat(),
+        [0x45f4_cdb7_5aab_2b9d, 0x95b1_ede5_43ef_f9a8, 0x4cf7_0a93_51e6_fe44],
+    ));
+    bad.extend(dual_mismatches::<Dc>(
+        "Dc",
+        |x| [dv_bits(x.v), dv_bits(x.r), dv_bits(x.i)].concat(),
+        [0x0679_8a53_2b10_989d, 0xe25f_5c9f_100a_8228, 0x81ad_a1cb_48f2_dd44],
+    ));
+    bad.extend(dual_mismatches::<Qu>(
+        "Qu",
+        |x| [qv_bits(x.v), qv_bits(x.d)].concat(),
+        [0x1c5f_166f_1ce5_153e, 0x81d2_45b1_a3d5_dd28, 0xe28f_da15_f617_9db8],
+    ));
+    bad.extend(dual_mismatches::<F8>(
+        "F8",
+        |x| v8_bits(x.0),
+        [0x3ca4_595b_a224_e9dc, 0x261b_b538_7d87_4e60, 0x7528_5721_cae9_fae0],
+    ));
+    bad.extend(dual_mismatches::<Fu>(
+        "Fu",
+        |x| [v8_bits(x.v), v8_bits(x.d)].concat(),
+        [0xad11_9f0e_d667_a92f, 0x6d85_92b9_6c62_0454, 0x09bb_5f64_1438_ffef],
+    ));
+    bad.extend(dual_mismatches::<Dtn<3>>(
+        "Dtn<3>",
+        |x| [dv_bits(x.v), x.d.iter().flat_map(|&d| v8_bits(d)).collect()].concat(),
+        [0x3433_5025_b06d_fb92, 0x0de6_7438_5c5b_8d96, 0x31fa_4905_ffd7_fe56],
+    ));
+    bad.extend(dual_mismatches::<Fun<3>>(
+        "Fun<3>",
+        |x| [v8_bits(x.v), x.d.iter().flat_map(|&d| v8_bits(d)).collect()].concat(),
+        [0xe100_30d7_742a_f188, 0x30bc_1854_d2a0_4e26, 0x097f_ce43_f176_0c58],
+    ));
+    assert!(bad.is_empty(), "{bad:#?}");
 }
