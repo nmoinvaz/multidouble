@@ -269,6 +269,7 @@ impl<S: Simd> QV<S> {
         self.c[2].store(c2);
         self.c[3].store(c3);
     }
+    #[inline(always)]
     pub fn from_lanes(x: &[QD; 8]) -> Self {
         let mut c = [[0.0f64; 8]; 4];
         for (j, q) in x.iter().enumerate() {
@@ -277,17 +278,32 @@ impl<S: Simd> QV<S> {
             }
         }
         QV {
-            c: c.map(V8::from_array),
+            c: [
+                V8::from_array(c[0]),
+                V8::from_array(c[1]),
+                V8::from_array(c[2]),
+                V8::from_array(c[3]),
+            ],
         }
     }
     #[inline(always)]
     pub fn lane(self, j: usize) -> QD {
         QD {
-            x: self.c.map(|v| v.to_array()[j]),
+            x: [
+                self.c[0].to_array()[j],
+                self.c[1].to_array()[j],
+                self.c[2].to_array()[j],
+                self.c[3].to_array()[j],
+            ],
         }
     }
     pub fn lanes(self) -> [QD; 8] {
-        let a = self.c.map(|v| v.to_array());
+        let a = [
+            self.c[0].to_array(),
+            self.c[1].to_array(),
+            self.c[2].to_array(),
+            self.c[3].to_array(),
+        ];
         std::array::from_fn(|j| QD {
             x: [a[0][j], a[1][j], a[2][j], a[3][j]],
         })
