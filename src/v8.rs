@@ -685,6 +685,28 @@ mod sse2 {
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 mod neon {
     use core::arch::aarch64::*;
+
+    /// m unchanged, hidden from the compiler as a comparison's result. Seen as one, the and and or
+    /// of two masks become operations on i1 vectors, which aarch64 runs on 32-bit lanes and widens
+    /// again for every select. The asm block counts against the inliner's budget, so a caller
+    /// hides one mask and builds the others from it.
+    #[inline(always)]
+    fn opaque(m: [uint64x2_t; 4]) -> [uint64x2_t; 4] {
+        let [mut a, mut b, mut c, mut d] = m;
+        // SAFETY: an empty template; the registers are read and written in place
+        unsafe {
+            core::arch::asm!(
+                "/* {0:v} {1:v} {2:v} {3:v} */",
+                inout(vreg) a,
+                inout(vreg) b,
+                inout(vreg) c,
+                inout(vreg) d,
+                options(pure, nomem, nostack, preserves_flags)
+            )
+        };
+        [a, b, c, d]
+    }
+
     include!("v8_neon.rs");
 }
 
@@ -1045,7 +1067,21 @@ simd!(backend::Avx2, avx2, always, "avx2,fma");
 #[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse2"))]
 simd!(backend::Sse2, sse2, hint);
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-simd!(backend::Neon, neon, hint);
+simd!(backend::Neon, neon, hint {
+    type D = neon::V8;
+    #[inline(always)]
+    fn divisor(b: neon::V8) -> neon::V8 {
+        b
+    }
+    #[inline(always)]
+    fn div_by(a: neon::V8, b: neon::V8) -> neon::V8 {
+        a.div(b)
+    }
+    #[inline(always)]
+    fn opaque(m: neon::M8) -> neon::M8 {
+        m.opaque()
+    }
+});
 simd!(backend::Portable, portable, hint);
 
 /// 8 f64 lanes on the backend S.
@@ -1207,6 +1243,11 @@ impl<S: Simd> M8<S> {
     pub fn and_ne(self, a: V8<S>, b: V8<S>) -> Self {
         M8(S::and_ne(self.0, a.0, b.0))
     }
+    /// self, hidden from the optimizer on NEON (`Simd::opaque`)
+    #[inline(always)]
+    pub(crate) fn opaque(self) -> Self {
+        M8(S::opaque(self.0))
+    }
     /// per lane: t where set, f elsewhere
     #[inline(always)]
     pub fn sel(self, t: V8<S>, f: V8<S>) -> V8<S> {
@@ -1321,6 +1362,10 @@ mod neon_model {
     }
     pub fn veorq_u64(a: uint64x2_t, b: uint64x2_t) -> uint64x2_t {
         u2(a, b, |x, y| x ^ y)
+    }
+    /// the identity (on aarch64 an empty asm block that hides a mask from the optimizer)
+    pub fn opaque(m: [uint64x2_t; 4]) -> [uint64x2_t; 4] {
+        m
     }
     pub fn vceqq_f64(a: float64x2_t, b: float64x2_t) -> uint64x2_t {
         cmp(a, b, |x, y| x == y)
