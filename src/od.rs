@@ -476,14 +476,23 @@ pub(crate) mod alg {
     /// times a power of two, every part
     #[inline(always)]
     pub fn mul_pwr2<L: Limb>(a: &[L; 8], s: L) -> [L; 8] {
-        a.map(|v| v.mul(s))
+        let mut r = *a;
+        for k in 0..8 {
+            r[k] = a[k].mul(s);
+        }
+        r
     }
 
     /// -a: the first part's sign bit flipped, the others as -x + 0, so a zero lower part is +0 (as `QD`'s)
     #[inline(always)]
     pub fn neg<L: Limb>(a: &[L; 8]) -> [L; 8] {
         let z = L::zero();
-        std::array::from_fn(|i| if i == 0 { a[0].neg() } else { a[i].neg().add(z) })
+        let mut r = *a;
+        r[0] = a[0].neg();
+        for k in 1..8 {
+            r[k] = a[k].neg().add(z);
+        }
+        r
     }
 
     /// The square root: Newton's iteration on 1/sqrt(a), four steps from the f64 value (each about doubling the
@@ -502,7 +511,10 @@ pub(crate) mod alg {
         let zero = x[0].is_zero();
         let s = x[0].sqrt().pow2_floor();
         let inv = L::splat(1.0).div(s);
-        let a = x.map(|v| v.mul(inv).mul(inv));
+        let mut a = *x;
+        for k in 0..8 {
+            a[k] = x[k].mul(inv).mul(inv);
+        }
         let mut r = [z; 8];
         r[0] = L::splat(1.0).div(a[0].sqrt());
         let h = mul_pwr2(&a, L::splat(0.5));
@@ -513,8 +525,11 @@ pub(crate) mod alg {
             let c = add_f(&neg(&hr2), L::splat(0.5));
             r = add(&r, &mul(&c, &r));
         }
-        let r = mul(&r, &a);
-        r.map(|v| L::sel(zero, z, v.mul(s)))
+        let mut r = mul(&r, &a);
+        for k in 0..8 {
+            r[k] = L::sel(zero, z, r[k].mul(s));
+        }
+        r
     }
 
     /// the levels of `expand` (or a's parts) added into the running levels acc: level l by two-sums into acc[l],
