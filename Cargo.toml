@@ -28,8 +28,16 @@ rayon = "1.10"
 [dev-dependencies]
 criterion = "0.8"
 
+# A library's profiles do not reach the crates that depend on it, so these serve only this
+# repository. The tests (cargo test --release) build without LTO, which would optimize std, the test
+# harness and the library again in each test binary and doctest, for the same results.
 [profile.release]
 opt-level = 3
+codegen-units = 1
+
+# The benchmarks measure the library at its fastest, as a fat-LTO release build of a dependent
+# crate would have it.
+[profile.bench]
 codegen-units = 1
 lto = "fat"
 
