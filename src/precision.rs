@@ -1,7 +1,7 @@
 //! The types and operations of one multi-double precision behind one trait, so that code is written once over
-//! quad-double ([`Quad`]) and octo-double ([`Octo`]).
+//! double-double ([`Double`]), quad-double ([`Quad`]) and octo-double ([`Octo`]).
 //!
-//! The two precisions have the same kinds of types (scalar, 8-lane vector, forward-mode dual, power series, dense LU
+//! The precisions have the same kinds of types (scalar, 8-lane vector, forward-mode dual, power series, dense LU
 //! and sum-of-products accumulator) with methods that differ in name or arity: `QD::new(a, b, c, d)` against
 //! `OD::new([..; 8])`, `Fl::load_parts` against `Fl::load_parts_od`, `coef_qd` against `coef_od`, `QDLu::factor` of
 //! four parts against `ODLu::factor` of eight. [`Precision`] names each kind once and delegates to those methods, so a
@@ -20,10 +20,11 @@
 //! assert_eq!(norm2::<Octo>(&[3.0, 4.0]), 25.0);
 //! ```
 use crate::dd::DD;
-use crate::dual::{Lane, Ou, Qu};
+use crate::dual::{Du, Lane, Ou, Qu};
+use crate::dv::DV;
 use crate::field::{Fl, MatLane};
-use crate::jet::{OJet, QJet};
-use crate::linalg::{ODLu, QDLu};
+use crate::jet::{Jet, OJet, QJet};
+use crate::linalg::{DDLu, ODLu, QDLu};
 use crate::od::{OdAcc, OD};
 use crate::ov::OV;
 use crate::qd::{QdAcc, QD};
@@ -35,9 +36,9 @@ use std::ops::{Add, Mul, Neg, Sub};
 /// One multi-double precision on the backend `S`: its types, and the operations whose names differ between
 /// precisions. Every method delegates to the precision's own method and returns its result bit for bit.
 pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
-    /// the number of f64 parts of a scalar: 4 for quad-double, 8 for octo-double
+    /// the number of f64 parts of a scalar: 2 for double-double, 4 for quad-double, 8 for octo-double
     const PARTS: usize;
-    /// the scalar: `QD`, `OD`
+    /// the scalar: `DD`, `QD`, `OD`
     type Scalar: Copy
         + Send
         + Sync
@@ -47,13 +48,13 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
         + Sub<Output = Self::Scalar>
         + Mul<Output = Self::Scalar>
         + Neg<Output = Self::Scalar>;
-    /// 8 scalars in lanes: `QV`, `OV`
+    /// 8 scalars in lanes: `DV`, `QV`, `OV`
     type V: MatLane<S = S>;
-    /// forward-mode dual, value and one tangent in this precision: `Qu`, `Ou`
+    /// forward-mode dual, value and one tangent in this precision: `Du`, `Qu`, `Ou`
     type U: MatLane<S = S>;
-    /// truncated power series with N coefficients in this precision: `QJet<N>`, `OJet<N>`
+    /// truncated power series with N coefficients in this precision: `Jet<N>`, `QJet<N>`, `OJet<N>`
     type J<const N: usize>: MatLane<S = S>;
-    /// dense LU with partial pivoting in this precision: `QDLu`, `ODLu`
+    /// dense LU with partial pivoting in this precision: `DDLu`, `QDLu`, `ODLu`
     type Lu: Send + Sync;
 
     /// zero and one
@@ -121,6 +122,10 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     fn lu_solve(lu: &Self::Lu, b: &mut [Self::Scalar]);
 }
 
+/// Double-double: `DD`, `DV`, `Du`, `Jet<N>`, `DDLu`; its dot product is the plain sum of double-double products
+#[derive(Clone, Copy, Debug)]
+pub struct Double;
+
 /// Quad-double: `QD`, `QV`, `Qu`, `QJet<N>`, `QDLu`, `QdAcc`
 #[derive(Clone, Copy, Debug)]
 pub struct Quad;
@@ -132,6 +137,93 @@ pub struct Octo;
 fn parts_of<const P: usize>(p: &[f64], what: &str) -> [f64; P] {
     assert!(p.len() <= P, "{what}: at most {P} parts, not {}", p.len());
     std::array::from_fn(|q| if q < p.len() { p[q] } else { 0.0 })
+}
+
+impl<S: Simd> Precision<S> for Double {
+    const PARTS: usize = 2;
+    type Scalar = DD;
+    type V = DV<S>;
+    type U = Du<S>;
+    type J<const N: usize> = Jet<S, N>;
+    type Lu = DDLu;
+    const ZERO: DD = DD::ZERO;
+    const ONE: DD = DD::ONE;
+
+    #[inline]
+    fn new(p: &[f64]) -> DD {
+        let x: [f64; 2] = parts_of(p, "Double::new");
+        DD::new(x[0], x[1])
+    }
+    #[inline]
+    fn from_raw(p: &[f64]) -> DD {
+        assert_eq!(p.len(), 2, "Double::from_raw: 2 parts");
+        DD { hi: p[0], lo: p[1] }
+    }
+    #[inline]
+    fn part(x: DD, q: usize) -> f64 {
+        [x.hi, x.lo][q]
+    }
+    #[inline]
+    fn from_dd(d: DD) -> DD {
+        d
+    }
+    #[inline]
+    fn to_dd(x: DD) -> DD {
+        x
+    }
+    fn dot(pairs: impl Iterator<Item = (DD, DD)>) -> DD {
+        let mut acc = DD::ZERO;
+        for (a, b) in pairs {
+            acc = acc + a * b;
+        }
+        acc
+    }
+    #[inline]
+    fn splat(x: DD) -> DV<S> {
+        DV::splat(x)
+    }
+    #[inline]
+    fn dual(v: DV<S>, d: DV<S>) -> Du<S> {
+        Du { v, d }
+    }
+    #[inline]
+    fn coef<L: Lane<S = S>>(l: L, k: usize) -> DV<S> {
+        l.coef(k)
+    }
+    #[inline]
+    fn set_coef<L: Lane<S = S>>(l: &mut L, k: usize, c: DV<S>) {
+        l.set_coef(k, c)
+    }
+    fn load_field<const B: usize>(parts: &[&[f64]]) -> Fl<DV<S>, B> {
+        assert_eq!(parts.len(), 2, "Double::load_field: 2 parts");
+        Fl::load(parts[0], parts[1])
+    }
+    #[inline]
+    fn field_get<const B: usize>(f: &Fl<DV<S>, B>, j: usize) -> DD {
+        f.get(j)
+    }
+    #[inline]
+    fn field_coef<L: Lane<S = S>, const B: usize>(f: &Fl<L, B>, k: usize) -> Fl<DV<S>, B> {
+        f.coef(k)
+    }
+    #[inline]
+    fn field_set_coef<L: Lane<S = S>, const B: usize>(f: &mut Fl<L, B>, k: usize, c: &Fl<DV<S>, B>) {
+        f.set_coef(k, c)
+    }
+    #[inline]
+    fn field_dual<const B: usize>(v: &Fl<DV<S>, B>, t: &Fl<DV<S>, B>) -> Fl<Du<S>, B> {
+        Fl::<Du<S>, B>::from_vt(v, t)
+    }
+    fn lu_factor(n: usize, ld: usize, c: Vec<Vec<f64>>, par: bool) -> Result<DDLu, String> {
+        let [hi, lo]: [Vec<f64>; 2] = c
+            .try_into()
+            .map_err(|c: Vec<Vec<f64>>| format!("Double::lu_factor: 2 parts, not {}", c.len()))?;
+        DDLu::factor(n, ld, hi, lo, par)
+    }
+    #[inline]
+    fn lu_solve(lu: &DDLu, b: &mut [DD]) {
+        lu.solve(b)
+    }
 }
 
 impl<S: Simd> Precision<S> for Quad {
@@ -452,6 +544,63 @@ mod tests {
         assert!(<Quad as Precision<N>>::lu_factor(n, ld, mat(8, 1), false).is_err());
     }
 
+    /// Double's methods against the double-double types' own, bit for bit: scalars, the dot product (hp's plain sum of
+    /// products), fields and their dual and jet coefficients, and the LU
+    #[test]
+    fn precision_double_matches_its_types() {
+        const B: usize = 2;
+        type D = Double;
+        for s in 0..20 {
+            let q = qd_parts(s);
+            assert_eq!(<D as Precision<N>>::new(&q[..2]), DD::new(q[0], q[1]));
+            assert_eq!(<D as Precision<N>>::new(&q[..1]), DD::new(q[0], 0.0));
+            let r = <D as Precision<N>>::from_raw(&q[..2]);
+            assert_eq!((r.hi, r.lo), (q[0], q[1]));
+            assert_eq!(
+                (<D as Precision<N>>::part(r, 0), <D as Precision<N>>::part(r, 1)),
+                (q[0], q[1])
+            );
+        }
+        let xs: Vec<DD> = (0..13).map(|s| DD::new(qd_parts(s)[0], qd_parts(s)[1])).collect();
+        let mut acc = DD::ZERO;
+        for w in xs.windows(2) {
+            acc = acc + w[0] * w[1];
+        }
+        assert_eq!(<D as Precision<N>>::dot(xs.windows(2).map(|w| (w[0], w[1]))), acc);
+        let cols: Vec<Vec<f64>> = (0..2)
+            .map(|q| (0..8 * B).map(|i| qd_parts(i as u64)[q]).collect())
+            .collect();
+        let f = <D as Precision<N>>::load_field::<B>(&[&cols[0], &cols[1]]);
+        let g = Fl::<DV<N>, B>::load(&cols[0], &cols[1]);
+        let unit = Fl::<DV<N>, B>::unit(3);
+        let du = <D as Precision<N>>::field_dual(&f, &unit);
+        let mut jet = Fl::<Jet<N, 4>, B>::zero();
+        <D as Precision<N>>::field_set_coef(&mut jet, 2, &g);
+        for j in 0..8 * B {
+            assert_eq!(<D as Precision<N>>::field_get(&f, j), g.get(j));
+            assert_eq!(<D as Precision<N>>::field_coef(&du, 0).get(j), g.get(j));
+            assert_eq!(
+                <D as Precision<N>>::field_coef(&du, 1).get(j),
+                if j == 3 { DD::ONE } else { DD::ZERO }
+            );
+            assert_eq!(<D as Precision<N>>::field_coef(&jet, 2).get(j), g.get(j));
+        }
+        let (n, ld) = (5, 8);
+        let hi: Vec<f64> = (0..ld * n)
+            .map(|i| ((i * 7 + 3) % 11) as f64 - 5.0 + if i % ld == i / ld { 9.0 } else { 0.0 })
+            .collect();
+        let lo: Vec<f64> = (0..ld * n).map(|i| qd_parts(i as u64)[1] * 1e-3).collect();
+        let mut b1: Vec<DD> = (0..n)
+            .map(|i| DD::new(qd_parts(i as u64)[0], qd_parts(i as u64)[1]))
+            .collect();
+        let mut b2 = b1.clone();
+        let lu = <D as Precision<N>>::lu_factor(n, ld, vec![hi.clone(), lo.clone()], false).unwrap();
+        <D as Precision<N>>::lu_solve(&lu, &mut b1);
+        DDLu::factor(n, ld, hi, lo, false).unwrap().solve(&mut b2);
+        assert_eq!(b1, b2);
+        assert!(<D as Precision<N>>::lu_factor(n, ld, vec![vec![0.0; ld * n]; 4], false).is_err());
+    }
+
     /// the control: the same comparison with two parts swapped on input must fail
     #[test]
     fn precision_mutated_differs() {
@@ -462,5 +611,9 @@ mod tests {
         let mut so = o;
         so.swap(0, 1);
         assert_ne!(<Octo as Precision<N>>::from_raw(&so), OD { x: o });
+        assert_ne!(
+            <Double as Precision<N>>::from_raw(&[p[1], p[0]]),
+            DD { hi: p[0], lo: p[1] }
+        );
     }
 }

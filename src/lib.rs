@@ -16,9 +16,10 @@
 //! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
 //!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
-//! * [`precision`]: one trait, [`precision::Precision`], over quad-double ([`precision::Quad`]) and octo-double
-//!   ([`precision::Octo`]), naming each kind of type once and delegating to each precision's own methods, so code
-//!   written once gives bitwise the results of the code written for one precision.
+//! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
+//!   ([`precision::Quad`]) and octo-double ([`precision::Octo`]), naming each kind of type once and delegating to
+//!   each precision's own methods, so code written once gives bitwise the results of the code written for one
+//!   precision.
 //! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
 //!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent,
 //!   [`dual::Ou`] octo-double value and tangent, [`dual::Dc`] a double-double value with a complex tangent, and f64
