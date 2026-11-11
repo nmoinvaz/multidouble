@@ -1094,3 +1094,79 @@ fn complex_logdet_reports_nan_pivots() {
     )
     .is_err());
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// pinned outputs of the double-double LUs
+// ---------------------------------------------------------------------------------------------------------------
+
+/// the bits of the pinned double-double LU outputs, by group. nudge flips the last bit of one
+/// matrix entry's leading part and of one right-hand side's.
+fn dd_lu_outputs(nudge: bool) -> Vec<Vec<u64>> {
+    let ddb = |v: &[DD]| -> Vec<u64> { v.iter().flat_map(|d| [d.hi.to_bits(), d.lo.to_bits()]).collect() };
+    let flip = |x: f64| f64::from_bits(x.to_bits() ^ 1);
+    let mut r = Rng(57);
+    let mut w = vec![Vec::new(); 4];
+    // unblocked (n = 37, a partial last row block) and blocked (n = 100, at least BLOCKED_MIN)
+    for n in [37, 100] {
+        let (ld, mut hi, lo) = matrix(n, &mut r);
+        let mut b: Vec<DD> = (0..n).map(|_| DD::new(r.sym(), r.sym() * 1e-17)).collect();
+        if nudge {
+            hi[3 * ld + 5] = flip(hi[3 * ld + 5]);
+            b[5].hi = flip(b[5].hi);
+        }
+        let lu = DDLu::factor(n, ld, hi, lo, false).unwrap();
+        w[0].extend(lu.hi.iter().chain(&lu.lo).map(|x| x.to_bits()));
+        let (mut x, mut y) = (b.clone(), b.clone());
+        lu.solve(&mut x);
+        lu.solve_t(&mut y);
+        w[1].extend([ddb(&x), ddb(&y)].concat());
+        // three right-hand sides at once, row-major: b, b / 3 and -b
+        let rows: Vec<DD> = [DD::ONE, DD::ONE / DD::from_f64(3.0), -DD::ONE]
+            .iter()
+            .flat_map(|&s| b.iter().map(move |&v| v * s))
+            .collect();
+        for transpose in [false, true] {
+            let mut bh: Vec<f64> = rows.iter().map(|d| d.hi).collect();
+            let mut bl: Vec<f64> = rows.iter().map(|d| d.lo).collect();
+            lu.solve_many(&mut bh, &mut bl, 3, transpose, false);
+            w[2].extend(bh.iter().chain(&bl).map(|x| x.to_bits()));
+        }
+    }
+    // the staircase LU: f64 factors, double-double solves
+    let (mut m, n, ld, groups, rblocks) = staircase_system(10, 20, 4, 9, 1);
+    let mut rhs: Vec<DD> = (0..n)
+        .map(|i| DD::new(r.sym(), r.sym() * 1e-17) + DD::from_f64((i % 5) as f64))
+        .collect();
+    if nudge {
+        let k = m.iter().position(|&v| v != 0.0).unwrap();
+        m[k] = flip(m[k]);
+        rhs[5].hi = flip(rhs[5].hi);
+    }
+    let lu = staircase(&m, n, ld, &groups, &rblocks, StaircaseControl::None);
+    let (mut x, mut y) = (rhs.clone(), rhs);
+    lu.solve(&mut x);
+    lu.solve_t(&mut y);
+    w[3].extend([ddb(&x), ddb(&y)].concat());
+    w
+}
+
+/// The double-double LUs' outputs pinned bit for bit on fixed systems, against hashes recorded
+/// with 4.1.1: `DDLu`'s factors (unblocked and blocked), its solves and transposed solves, and
+/// `solve_many`, and `StaircaseLu`'s solves. Every backend gives these bits. Control: one matrix
+/// entry's and one right-hand side's last bit flipped changes every group's hash.
+#[test]
+fn dd_lu_pinned_bits() {
+    let names = [
+        "DDLu factors",
+        "DDLu solve and solve_t",
+        "DDLu solve_many",
+        "StaircaseLu solves",
+    ];
+    let want: [u64; 4] = [
+        0x8e3a_e860_eecc_2d17,
+        0xe5e9_7df9_7f28_dfa5,
+        0xb206_154b_6241_e18f,
+        0xbdec_2753_3135_a6d9,
+    ];
+    common::assert_pinned(&names, &dd_lu_outputs(false), &dd_lu_outputs(true), &want);
+}
