@@ -137,7 +137,11 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
     if mutate::on(mutate::RENORM_DROP) {
         out[7] = z;
     }
-    std::array::from_fn(|m| inf.sel(if m < N { orig[m] } else { z }, out[m]))
+    let mut r = out;
+    for m in 0..8 {
+        r[m] = inf.sel(if m < N { orig[m] } else { z }, out[m]);
+    }
+    r
 }
 
 impl<S: Simd> OV<S> {
@@ -159,7 +163,11 @@ impl<S: Simd> OV<S> {
     /// x on every lane
     #[inline(always)]
     pub fn splat(x: OD) -> Self {
-        OV { c: x.x.map(V8::splat) }
+        let mut c = [V8::zero(); 8];
+        for k in 0..8 {
+            c[k] = V8::splat(x.x[k]);
+        }
+        OV { c }
     }
     /// x on every lane, exactly
     #[inline(always)]
@@ -221,7 +229,11 @@ impl<S: Simd> OV<S> {
     /// from the eight parts' arrays (8 values each)
     #[inline(always)]
     pub fn load(c: [&[f64]; 8]) -> Self {
-        OV { c: c.map(V8::load) }
+        let mut v = [V8::zero(); 8];
+        for k in 0..8 {
+            v[k] = V8::load(c[k]);
+        }
+        OV { c: v }
     }
     /// into the eight parts' arrays (8 values each)
     #[inline(always)]
@@ -231,21 +243,35 @@ impl<S: Simd> OV<S> {
         }
     }
     /// lane j = x\[j\]
+    #[inline(always)]
     pub fn from_lanes(x: &[OD; 8]) -> Self {
-        OV {
-            c: std::array::from_fn(|k| V8::from_array(std::array::from_fn(|j| x[j].x[k]))),
+        let mut a = [[0.0f64; 8]; 8];
+        for (j, o) in x.iter().enumerate() {
+            for k in 0..8 {
+                a[k][j] = o.x[k];
+            }
         }
+        let mut c = [V8::zero(); 8];
+        for k in 0..8 {
+            c[k] = V8::from_array(a[k]);
+        }
+        OV { c }
     }
     /// lane j as a scalar octo-double
     #[inline(always)]
     pub fn lane(self, j: usize) -> OD {
-        OD {
-            x: self.c.map(|v| v.to_array()[j]),
+        let mut x = [0.0; 8];
+        for k in 0..8 {
+            x[k] = self.c[k].to_array()[j];
         }
+        OD { x }
     }
     /// the 8 lanes as scalar octo-doubles
     pub fn lanes(self) -> [OD; 8] {
-        let a = self.c.map(|v| v.to_array());
+        let mut a = [[0.0; 8]; 8];
+        for k in 0..8 {
+            a[k] = self.c[k].to_array();
+        }
         std::array::from_fn(|j| OD {
             x: std::array::from_fn(|k| a[k][j]),
         })
@@ -321,7 +347,12 @@ impl<S: Simd> OV<S> {
         S::vectorize(
             #[inline(always)]
             || OV {
-                c: alg::div(&self.c, &b.c, |x: V8<S>| x.div_by(r)),
+                c: alg::div(
+                    &self.c,
+                    &b.c,
+                    #[inline(always)]
+                    |x: V8<S>| x.div_by(r),
+                ),
             },
         )
     }
@@ -349,7 +380,7 @@ impl<S: Simd> OV<S> {
         )
     }
     /// per lane self < o, lexicographic on the parts (as `OD`'s `PartialOrd`)
-    #[inline]
+    #[inline(always)]
     pub fn lt(self, o: Self) -> M8<S> {
         let mut r = self.c[7].gt(self.c[7]); // all false
         let mut eq = self.c[0].eq(self.c[0]).or(self.c[0].ne(self.c[0])); // all true
@@ -360,12 +391,12 @@ impl<S: Simd> OV<S> {
         r
     }
     /// per lane self > o
-    #[inline]
+    #[inline(always)]
     pub fn gt(self, o: Self) -> M8<S> {
         o.lt(self)
     }
     /// per lane every part equal (so -0 equals +0, and a NaN part is unequal)
-    #[inline]
+    #[inline(always)]
     pub fn eq(self, o: Self) -> M8<S> {
         let mut eq = self.c[0].eq(o.c[0]);
         for k in 1..8 {
@@ -374,12 +405,12 @@ impl<S: Simd> OV<S> {
         eq
     }
     /// per lane self <= o (no part NaN)
-    #[inline]
+    #[inline(always)]
     pub fn le(self, o: Self) -> M8<S> {
         self.lt(o).or(self.eq(o))
     }
     /// per lane self >= o (no part NaN)
-    #[inline]
+    #[inline(always)]
     pub fn ge(self, o: Self) -> M8<S> {
         o.le(self)
     }
