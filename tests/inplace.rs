@@ -304,32 +304,43 @@ trait Check {
     fn check<T: Gen>(&mut self, name: &str);
 }
 
+/// c's check for T, a function of its own compiled with the backend's target features
+/// (`Simd::vectorize`), so that on AVX2 and AVX-512 the check's lane operations inline and
+/// `every_lane` is not one function of every check
+#[inline(never)]
+fn own<S: Simd, T: Gen>(c: &mut impl Check, name: &str) {
+    S::vectorize(
+        #[inline(always)]
+        || c.check::<T>(name),
+    )
+}
+
 /// c for every lane type on the backend S: the values, the dual and f64-tangent lanes, the jets and the counting lane
 fn every_lane<S: Simd>(c: &mut impl Check) {
-    c.check::<DV<S>>("DV");
-    c.check::<QV<S>>("QV");
-    c.check::<OV<S>>("OV");
-    c.check::<Du<S>>("Du");
-    c.check::<Dc<S>>("Dc");
-    c.check::<Qu<S>>("Qu");
-    c.check::<F8<S>>("F8");
-    c.check::<Fu<S>>("Fu");
-    c.check::<Dtn<S, 3>>("Dtn<3>");
-    c.check::<Fun<S, 3>>("Fun<3>");
-    c.check::<Jet<S, 5>>("Jet<5>");
-    c.check::<Jet<S, 24>>("Jet<24>");
-    c.check::<QJet<S, 5>>("QJet<5>");
-    c.check::<QJet<S, 24>>("QJet<24>");
-    c.check::<Counted<DV<S>>>("Counted<DV>");
-    c.check::<Counted<QJet<S, 5>>>("Counted<QJet<5>>");
+    own::<S, DV<S>>(c, "DV");
+    own::<S, QV<S>>(c, "QV");
+    own::<S, OV<S>>(c, "OV");
+    own::<S, Du<S>>(c, "Du");
+    own::<S, Dc<S>>(c, "Dc");
+    own::<S, Qu<S>>(c, "Qu");
+    own::<S, F8<S>>(c, "F8");
+    own::<S, Fu<S>>(c, "Fu");
+    own::<S, Dtn<S, 3>>(c, "Dtn<3>");
+    own::<S, Fun<S, 3>>(c, "Fun<3>");
+    own::<S, Jet<S, 5>>(c, "Jet<5>");
+    own::<S, Jet<S, 24>>(c, "Jet<24>");
+    own::<S, QJet<S, 5>>(c, "QJet<5>");
+    own::<S, QJet<S, 24>>(c, "QJet<24>");
+    own::<S, Counted<DV<S>>>(c, "Counted<DV>");
+    own::<S, Counted<QJet<S, 5>>>(c, "Counted<QJet<5>>");
     // last, so that the checks above keep their seeds
-    c.check::<OJet<S, 5>>("OJet<5>");
-    c.check::<Counted<OJet<S, 5>>>("Counted<OJet<5>>");
+    own::<S, OJet<S, 5>>(c, "OJet<5>");
+    own::<S, Counted<OJet<S, 5>>>(c, "Counted<OJet<5>>");
     // optimized builds only: unoptimized (the coverage run) its sums take minutes, and the code is OJet<5>'s
     if !cfg!(debug_assertions) {
-        c.check::<OJet<S, 24>>("OJet<24>");
+        own::<S, OJet<S, 24>>(c, "OJet<24>");
     }
-    c.check::<Ou<S>>("Ou");
+    own::<S, Ou<S>>(c, "Ou");
 }
 
 /// k, a check that panics on a mismatch, run on every backend this CPU has, on a thread with a 64 MiB stack. Built
@@ -358,6 +369,7 @@ struct AccChain {
 
 impl Check for AccChain {
     /// the chain and its control for T, from the next seed
+    #[inline(always)]
     fn check<T: Gen>(&mut self, name: &str) {
         self.seed += 1;
         let mut r = Rng(self.seed);
@@ -569,6 +581,7 @@ struct Sums {
 
 impl Check for Sums {
     /// every sum and its controls for T, from the next seed
+    #[inline(always)]
     fn check<T: Gen>(&mut self, name: &str) {
         self.seed += 1;
         let mut r = Rng(self.seed);
