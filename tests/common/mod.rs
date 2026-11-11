@@ -55,8 +55,16 @@ pub fn pin_mismatches(names: &[&str], words: &[Vec<u64>], nudged: &[Vec<u64>], w
     let mut bad = Vec::new();
     for i in 0..names.len() {
         assert!(!words[i].is_empty(), "{}: no outputs", names[i]);
+        // the nudged outputs are the same outputs, so that the control compares like with like
         assert!(
-            words[i].iter().all(|&w| !f64::from_bits(w).is_nan()),
+            nudged[i].len() == words[i].len(),
+            "control: {} has {} nudged words for {}",
+            names[i],
+            nudged[i].len(),
+            words[i].len()
+        );
+        assert!(
+            words[i].iter().chain(&nudged[i]).all(|&w| !f64::from_bits(w).is_nan()),
             "{}: a NaN output",
             names[i]
         );
