@@ -195,11 +195,9 @@ impl<S: Simd, const N: usize> Mul for Jet<S, N> {
     type Output = Self;
     #[inline(always)]
     fn mul(self, o: Self) -> Self {
-        let mut c = self.c;
-        for k in 0..N {
-            c[k] = Self::conv(&self.c, &o.c, k).finish();
+        Jet {
+            c: std::array::from_fn(|k| Self::conv(&self.c, &o.c, k).finish()),
         }
-        Jet { c }
     }
 }
 impl<S: Simd, const N: usize> Div for Jet<S, N> {
