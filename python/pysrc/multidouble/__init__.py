@@ -338,6 +338,17 @@ def _dd_div(a, b):
     return float(h), float(q2 - (h - q))
 
 
+def _norm2(v):
+    """|v|_2 by numpy's norm, rescaled by max |v| where that underflows to zero or overflows (its sum of squares is
+    not scaled); elsewhere numpy's value, bit for bit"""
+    n = float(np.linalg.norm(v))
+    if n == 0.0 or n == np.inf:
+        m = float(np.max(np.abs(v))) if len(v) else 0.0
+        if 0.0 < m < np.inf:
+            return m * float(np.linalg.norm(v / m))
+    return n
+
+
 def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=None, verbose=False, coef="dd",
         nu=0.9):
     """x with A x = b, b = bh + bl in double-double: GMRES on A M^-1 (right preconditioning; Saad and Schultz, SIAM J.
@@ -394,13 +405,13 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
         info["errors"] = []
         refv = np.asarray(ref[0]) + np.asarray(ref[1])
     # the residual reached with step_tol, or at most the coefficients' rounding floor, n times their unit roundoff
-    rn = float(np.linalg.norm(rh + rl))
+    rn = _norm2(rh + rl)
     floor = rn * max(step_tol, n * (2.0 ** -104 if coef == "dd" else 2.0 ** -52))
     # whether the last iteration reduced |r| by the factor nu; the first takes the residual
     fell = True
     run = 0
     while True:
-        if rn == 0.0:
+        if not (rh.any() or rl.any()):
             info["converged"] = True
             break
         if rn != rn or info["products"] >= max_products:
@@ -419,7 +430,7 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
                 nb = (-beta[0], -beta[1])
                 wh, wl = axpy(nb, Wh, Wl, wh, wl)
                 uh, ul = axpy(nb, Uh, Ul, uh, ul)
-        nw = float(np.linalg.norm(wh + wl))
+        nw = _norm2(wh + wl)
         # a vanished image with r nonzero: not converged
         if not nw > 0:
             break
@@ -430,7 +441,7 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
         c = dot(wh, wl, rh, rl, w64, ww)
         xh, xl = axpy(c, uh, ul, xh, xl)
         rh, rl = axpy((-c[0], -c[1]), wh, wl, rh, rl)
-        rn1 = float(np.linalg.norm(rh + rl))
+        rn1 = _norm2(rh + rl)
         fell = rn1 <= nu * rn
         # at its rounding floor r stops falling without stagnating, but its steps still move x; a zero step is
         # stagnation at any residual, since an error along a weak direction of A barely shows in r
@@ -440,7 +451,7 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
         W.append((wh, wl))
         W64.append(w64)
         WW.append(ww)
-        ch = abs(c[0]) * float(np.linalg.norm(uh + ul)) / max(float(np.linalg.norm(xh + xl)), 1e-300)
+        ch = abs(c[0]) * _norm2(uh + ul) / max(_norm2(xh + xl), 1e-300)
         info["changes"].append(ch)
         if ref is not None:
             info["errors"].append(float(np.linalg.norm((xh - ref[0]) + (xl - ref[1])) / np.linalg.norm(refv)))
