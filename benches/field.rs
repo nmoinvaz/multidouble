@@ -8,6 +8,10 @@
 // which the value-returning sums move once per term. Before timing, the two versions' outputs are checked to be the
 // same bits. The single sums at the same k show the gain per sum, for QJet<24>, the double-double Jet<24> and QV.
 
+// Frames of jet fields, which nightly clippy's large_unopt_stack_frames flags in the unoptimized build. The
+// benchmarks run optimized, and stable clippy does not know the lint.
+#![allow(unknown_lints, clippy::large_unopt_stack_frames)]
+
 use std::hint::black_box;
 use std::time::Duration;
 
