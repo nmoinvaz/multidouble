@@ -20,6 +20,7 @@ use multidouble::ov::{ODotAcc, OV};
 use multidouble::qv::{QDotAcc, QV};
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A lane type with random values in every part, and the bits of every part of a value and of an accumulator.
 trait Gen: Lane {
@@ -574,7 +575,8 @@ fn fl_bits<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
 /// `cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` for one lane type against `cs`,
 /// `cs_range` and `cs_w` (lane vector b of them for the lane versions), at every order k < ORDERS with the ranges
 /// 0..=k, k/3..=k - k/4 and an empty one, each written over a random destination, and `cs_par`, `cs_range_par` and
-/// `cs_w_par` against the same, which must split some sums of every jet lane and none of the other lanes. The
+/// `cs_w_par` against the same, which must split some sums of every jet lane and none of the other lanes. A split
+/// `cs_w_par` must take its weights on rayon's workers, and an unsplit one on the calling thread, outside the pool. The
 /// controls are the in-place and the split range sum with the terms lo and lo + 1 swapped (x and y permuted so that
 /// the same products come in the other order), which must differ from the reference for some k, except in
 /// octo-double, whose sums round the swap away, and the sum without its last term, which must differ for every k.
@@ -649,12 +651,24 @@ impl Check for Sums {
                     fl_bits(&want),
                     "{be} {name}: cs_range_par, k {k}, {lo}..={hi}"
                 );
+                // the weights taken on rayon's workers, where only a split sum's tasks run
+                let on_pool = AtomicUsize::new(0);
+                let wp = |j: usize| {
+                    on_pool.fetch_add(rayon::current_thread_index().is_some() as usize, Ordering::Relaxed);
+                    w(j)
+                };
                 assert_eq!(
-                    fl_bits(&cs_w_par(&x, &y, k, lo, hi, w)),
+                    fl_bits(&cs_w_par(&x, &y, k, lo, hi, wp)),
                     fl_bits(&want_w),
                     "{be} {name}: cs_w_par, k {k}, {lo}..={hi}"
                 );
-                split += 2 * (hi >= lo && cs_splits::<T>(hi - lo + 1)) as usize;
+                let splits = hi >= lo && cs_splits::<T>(hi - lo + 1);
+                assert_eq!(
+                    on_pool.load(Ordering::Relaxed) > 0,
+                    splits,
+                    "{be} {name}: cs_w_par, k {k}, {lo}..={hi}: weights on rayon's workers, the sum splits: {splits}"
+                );
+                split += 2 * splits as usize;
                 checks += 6;
                 if lo < hi {
                     let (mut xs, mut ys) = (x.clone(), y.clone());
