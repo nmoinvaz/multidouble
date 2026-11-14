@@ -6,6 +6,10 @@
 // refinement steps, `solve_lanes_jet_refine_od` in octo-double with four, and with two for the same count), the
 // system of a regular-horizon series: (omega(h) D + diag kappa(h)) x(h) = rhs(h), D a constant double-double matrix.
 
+// Frames of jet fields, which nightly clippy's large_unopt_stack_frames flags in the unoptimized build. The
+// benchmarks run optimized, and stable clippy does not know the lint.
+#![allow(unknown_lints, clippy::large_unopt_stack_frames)]
+
 use std::hint::black_box;
 use std::time::Duration;
 
