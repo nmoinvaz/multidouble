@@ -643,7 +643,8 @@ pub fn cs_range_par<T: Lane, const B: usize>(
     out
 }
 
-/// `cs_w`, bitwise, split as `cs_par`
+/// `cs_w`, bitwise, split as `cs_par`, for a w that gives an index the same weight on every call and thread. A split
+/// sum calls w from several threads and in another order than `cs_w`.
 #[inline(always)]
 pub fn cs_w_par<T: Lane, const B: usize>(
     x: &[Fl<T, B>],
