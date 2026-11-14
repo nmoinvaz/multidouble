@@ -1,5 +1,6 @@
 // field.rs -- Cauchy sums of jet fields, value-returning (`cs`, `cs_range`, `cs_w`) against in place (`cs_into`,
-// `cs_range_into`, `cs_w_into`), one thread on the compile-time backend (`native`)
+// `cs_range_into`, `cs_w_into`), one thread on the compile-time backend (`native`), and the single sums also split
+// over the B lane vectors on rayon's threads (`cs_par`, `cs_w_par`)
 //
 // The workload is one order, k = 146, of a recursion for the power series of an ODE's solution about a regular
 // singular point, on Fl<QJet<24>, 4>: thirteen Cauchy sums of up to 147 terms, a matrix product and the field
@@ -13,7 +14,7 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 use multidouble::dd::DD;
 use multidouble::dual::{Lane, Param};
-use multidouble::field::{cs, cs_into, cs_range, cs_range_into, cs_w, cs_w_into, Fl};
+use multidouble::field::{cs, cs_into, cs_par, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_par, Fl};
 use multidouble::native::{DMat, Jet, QJet, QV};
 
 const K: usize = 146;
@@ -244,10 +245,29 @@ fn centre(c: &mut Criterion) {
     g.finish();
 }
 
-/// single sums at order K, value-returning against in place, for QJet<24>, Jet<24> and QV
+/// the bits of every part of every lane vector of a quad-double jet field
+fn fl_bits(f: &F) -> Vec<u64> {
+    f.0.iter()
+        .flat_map(|j| j.c.iter())
+        .flat_map(|q| q.c.iter())
+        .flat_map(|x| x.to_array().map(f64::to_bits))
+        .collect()
+}
+
+/// single sums at order K, value-returning against in place and split, for QJet<24>, Jet<24> and QV, after checking
+/// that the split QJet<24> sums give the same bits
 fn sums(c: &mut Criterion) {
     let s = series();
     let (x, y) = (&s.cc, &s.pp);
+    assert!(
+        fl_bits(&cs_par(x, y, K)) == fl_bits(&cs(x, y, K)),
+        "cs_par differs from cs"
+    );
+    let wj = |j: usize| j as f64;
+    assert!(
+        fl_bits(&cs_w_par(x, y, K, 1, K, wj)) == fl_bits(&cs_w(x, y, K, 1, K, wj)),
+        "cs_w_par differs from cs_w"
+    );
     let mut g = c.benchmark_group(format!("cauchy sum k = {K}, B = {B}"));
     g.sample_size(20).measurement_time(Duration::from_secs(5));
     let mut o = F::zero();
@@ -261,6 +281,12 @@ fn sums(c: &mut Criterion) {
     g.bench_function("QJet<24> cs_w_into", |bch| {
         bch.iter(|| cs_w_into(black_box(&mut o), black_box(x), black_box(y), K, 1, K, |j| j as f64))
     });
+    g.bench_function("QJet<24> cs_par", |bch| {
+        bch.iter(|| cs_par(black_box(x), black_box(y), K))
+    });
+    g.bench_function("QJet<24> cs_w_par", |bch| {
+        bch.iter(|| cs_w_par(black_box(x), black_box(y), K, 1, K, |j| j as f64))
+    });
     // the same values rounded to double-double jets
     let dj = |v: &[F]| -> Vec<Fl<Jet<24>, B>> {
         v.iter()
@@ -272,6 +298,9 @@ fn sums(c: &mut Criterion) {
     g.bench_function("Jet<24> cs", |bch| bch.iter(|| cs(black_box(&xd), black_box(&yd), K)));
     g.bench_function("Jet<24> cs_into", |bch| {
         bch.iter(|| cs_into(black_box(&mut od), black_box(&xd), black_box(&yd), K))
+    });
+    g.bench_function("Jet<24> cs_par", |bch| {
+        bch.iter(|| cs_par(black_box(&xd), black_box(&yd), K))
     });
     // and their values as quad-double lanes
     let qv = |v: &[F]| -> Vec<Fl<QV, B>> { v.iter().map(|f| Fl(f.0.map(|q| q.c[0]))).collect() };
