@@ -188,7 +188,11 @@ impl<S: Simd, const N: usize> Neg for Jet<S, N> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        Jet { c: self.c.map(|x| -x) }
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = -*x;
+        }
+        Jet { c: v }
     }
 }
 impl<S: Simd, const N: usize> Mul for Jet<S, N> {
@@ -281,21 +285,27 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     }
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
-        Jet {
-            c: self.c.map(|x| x * c),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = *x * c;
         }
+        Jet { c: v }
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
-        Jet {
-            c: self.c.map(|x| x.mul_f(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_f(s);
         }
+        Jet { c: v }
     }
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
-        Jet {
-            c: self.c.map(|x| x.mul_pwr2(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_pwr2(s);
         }
+        Jet { c: v }
     }
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
@@ -305,9 +315,11 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     }
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
-        Jet {
-            c: self.c.map(|x| x.bcast(j)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.bcast(j);
         }
+        Jet { c: v }
     }
     #[inline(always)]
     fn val(self) -> DV<S> {
@@ -368,11 +380,15 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
         }
         a
     }
+    /// the sums, order by order, in a plain loop. Through `array::map` AVX2 and AVX-512 keep the
+    /// closure out of line, without their target features (`crate::simd::Kernel`)
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
-        Jet {
-            c: a.map(|x| x.finish()),
+        let mut c = [DV::zero(); N];
+        for k in 0..N {
+            c[k] = a[k].finish();
         }
+        Jet { c }
     }
 }
 
@@ -559,7 +575,11 @@ impl<S: Simd, const N: usize> Neg for QJet<S, N> {
     type Output = Self;
     #[inline(always)]
     fn neg(self) -> Self {
-        QJet { c: self.c.map(|x| -x) }
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = -*x;
+        }
+        QJet { c: v }
     }
 }
 impl<S: Simd, const N: usize> Mul for QJet<S, N> {
@@ -665,21 +685,27 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
         let c = QV::from_dv(c);
-        QJet {
-            c: self.c.map(|x| x * c),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = *x * c;
         }
+        QJet { c: v }
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
-        QJet {
-            c: self.c.map(|x| x.mul_f(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_f(s);
         }
+        QJet { c: v }
     }
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
-        QJet {
-            c: self.c.map(|x| x.mul_pwr2(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_pwr2(s);
         }
+        QJet { c: v }
     }
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
@@ -689,9 +715,11 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
     }
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
-        QJet {
-            c: self.c.map(|x| x.bcast(j)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.bcast(j);
         }
+        QJet { c: v }
     }
     #[inline(always)]
     fn val(self) -> DV<S> {
@@ -975,7 +1003,11 @@ impl<S: Simd, const N: usize> Neg for OJet<S, N> {
     /// every coefficient negated
     #[inline(always)]
     fn neg(self) -> Self {
-        OJet { c: self.c.map(|x| -x) }
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = -*x;
+        }
+        OJet { c: v }
     }
 }
 impl<S: Simd, const N: usize> Mul for OJet<S, N> {
@@ -1098,23 +1130,29 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
         let c = OV::from_dv(c);
-        OJet {
-            c: self.c.map(|x| x * c),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = *x * c;
         }
+        OJet { c: v }
     }
     /// every coefficient times an exact f64
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
-        OJet {
-            c: self.c.map(|x| x.mul_f(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_f(s);
         }
+        OJet { c: v }
     }
     /// every coefficient times a power of two, exactly
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
-        OJet {
-            c: self.c.map(|x| x.mul_pwr2(s)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.mul_pwr2(s);
         }
+        OJet { c: v }
     }
     /// plus the constant c at order 0
     #[inline(always)]
@@ -1126,9 +1164,11 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     /// every coefficient's 8 lanes set to its lane j
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
-        OJet {
-            c: self.c.map(|x| x.bcast(j)),
+        let mut v = self.c;
+        for x in v.iter_mut() {
+            *x = x.bcast(j);
         }
+        OJet { c: v }
     }
     /// the value rounded to double-double
     #[inline(always)]
@@ -1194,11 +1234,14 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
         }
         a
     }
-    /// the sums, order by order
+    /// the sums, order by order, in a plain loop. Through `array::map` AVX2 and AVX-512 keep the
+    /// closure out of line, without their target features (`crate::simd::Kernel`)
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
-        OJet {
-            c: a.map(|x| x.finish()),
+        let mut c = [OV::zero(); N];
+        for k in 0..N {
+            c[k] = a[k].finish();
         }
+        OJet { c }
     }
 }
