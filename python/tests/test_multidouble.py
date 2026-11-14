@@ -292,6 +292,20 @@ def test_gcr_converges_on_an_exact_residual():
     assert not info["converged"], info
 
 
+@pytest.mark.parametrize("scale", [2.0 ** -600, 2.0 ** 600])
+def test_gcr_on_a_residual_whose_squares_underflow_or_overflow(scale):
+    """With A = I and b = (scale, scale), whose squares underflow to zero (2^-600) or overflow (2^600) in f64, gcr
+    converges to x = b within 1e-30 relative: the residual is taken neither for zero nor for infinite. Control: the
+    same check fails for x = 0, what an unscaled norm gave for 2^-600."""
+    b = [Fraction(scale), Fraction(scale)]
+    x, info = _dense_gcr(np.eye(2), [scale, scale])
+
+    def ok(x, converged):
+        return converged and max(abs(u - v) for u, v in zip(x, b)) / max(abs(v) for v in b) <= Fraction(1, 10**30)
+    assert ok(x, info["converged"]), (x, info)
+    assert not ok([Fraction(0), Fraction(0)], True), "control did not fire"
+
+
 @pytest.mark.parametrize("coef", ["dd", "f64"])
 def test_gcr_does_not_stop_on_a_zero_step_below_the_floor(coef):
     """With d = 2^-110, A = [[1, 0, 0], [0, 0, -d], [0, d, 0]], M^-1 = [[1, 0, 0], [-d, 1, 0], [0, 0, 1]] and
