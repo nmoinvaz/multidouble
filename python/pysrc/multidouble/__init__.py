@@ -338,16 +338,22 @@ def _dd_div(a, b):
     return float(h), float(q2 - (h - q))
 
 
-def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=None, verbose=False, coef="dd"):
+def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=None, verbose=False, coef="dd",
+        nu=0.9):
     """x with A x = b, b = bh + bl in double-double: GMRES on A M^-1 (right preconditioning; Saad and Schultz, SIAM J.
     Sci. Stat. Comput. 7 (1986) 856, doi:10.1137/0907058) in its GCR form (Eisenstat, Elman and Schultz, SIAM J.
     Numer. Anal. 20 (1983) 345, doi:10.1137/0720023). apply(uh, ul) returns A u in double-double as (hi, lo) (the
     products must be exact to double-double for the result to be); precond(rh, rl) returns M^-1 r as (hi, lo), M an
-    approximation of A such as its f64 LU. Each iteration takes the preconditioned residual u = M^-1 r as the new
-    direction, w = A u (one product), orthogonalizes w against the earlier w's (twice), applying the same coefficients
-    to u, and updates x += c u, r -= c w with c = w.r. The u, w, x and r are double-double and updated with the same
-    coefficients, so r stays the residual b - A x to double-double rounding without recomputing it. In exact
-    arithmetic the iterates are GMRES's.
+    approximation of A such as its f64 LU. Each iteration takes a direction u, forms w = A u (one product),
+    orthogonalizes w against the earlier w's (twice), applying the same coefficients to u, and updates x += c u,
+    r -= c w with c = w.r. The u, w, x and r are double-double and updated with the same coefficients, so r stays the
+    residual b - A x to double-double rounding without recomputing it.
+    The direction is the preconditioned residual u = M^-1 r while the last iteration reduced |r| by the factor nu, and
+    otherwise u = M^-1 w for the last w, the next Krylov vector of A M^-1 (the adaptive choice of Jiranek and
+    Rozloznik, Numer. Algorithms 53 (2010) 93, doi:10.1007/s11075-009-9311-2). The residual alone breaks down where
+    GMRES stagnates: there c = 0, r does not change, and its next direction's image lies in the span of the earlier w's.
+    The Krylov vector extends the span there, so in exact arithmetic the iterates are GMRES's. nu = inf gives the
+    residual directions only.
     coef: the coefficients c and the orthogonalization's in double-double ("dd", the default: c = (w.r) / (w.w) and
     beta = (W.w) / (W.W), the dot products by dd_dot and the quotients in double-double, each coefficient applied as two
     f64 updates), or in f64 from the vectors rounded to f64 with |w| = 1 assumed ("f64", fewer operations). w is scaled
@@ -355,9 +361,14 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
     about 2^-53 |r| along its direction in r, which the later directions, orthogonal to it, never remove: x then stalls
     near f64 accuracy relative to b, which a Newton step tolerates and a double-double solve does not.
     Stopping is on the change of x, not on the residual (an error along a weak direction of A barely shows in the
-    residual): the loop ends after `confirm` iterations in a row with |c u| <= step_tol |x|, or after max_products
-    products. The first iteration's u is M^-1 b, the plain preconditioned solve. The default step_tol asks for x to
-    double-double accuracy; inside a Newton iteration, whose steps need far less, a step_tol of 1e-10 saves products.
+    residual): the loop ends after `confirm` iterations in a row with |c u| <= step_tol |x|, each of which reduced |r|
+    by the factor nu, or left it at most max(step_tol, n u) |b| with a nonzero step, u the unit roundoff of the
+    coefficients (2^-104 with "dd", 2^-52 with "f64"). An iteration in which GMRES stagnates leaves x unchanged without
+    having converged, while r at its rounding floor stops falling once x has; an exactly zero step is stagnation even
+    below the floor. The loop also ends, converged, when r is exactly zero, and, not converged, after max_products
+    products or when a direction's image vanishes. The first iteration's u is M^-1 b, the plain preconditioned solve.
+    The default step_tol asks for x to double-double accuracy; inside a Newton iteration, whose steps need far less, a
+    step_tol of 1e-10 saves products.
     ref (optional, a double-double vector): the exact solution, for checks: info["errors"] gets |x - ref| / |ref|
     after each iteration.
     Returns (xh, xl, info): info = dict(products, changes, converged, t_prod, t_solve, errors)."""
@@ -382,10 +393,21 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
     if ref is not None:
         info["errors"] = []
         refv = np.asarray(ref[0]) + np.asarray(ref[1])
+    # the residual reached with step_tol, or at most the coefficients' rounding floor, n times their unit roundoff
+    rn = float(np.linalg.norm(rh + rl))
+    floor = rn * max(step_tol, n * (2.0 ** -104 if coef == "dd" else 2.0 ** -52))
+    # whether the last iteration reduced |r| by the factor nu; the first takes the residual
+    fell = True
     run = 0
-    while info["products"] < max_products:
+    while True:
+        if rn == 0.0:
+            info["converged"] = True
+            break
+        if rn != rn or info["products"] >= max_products:
+            break
+        sh, sl = (rh, rl) if fell or not W else W[-1]
         t = time.time()
-        uh, ul = (np.asarray(a) for a in precond(np.ascontiguousarray(rh), np.ascontiguousarray(rl)))
+        uh, ul = (np.asarray(a) for a in precond(np.ascontiguousarray(sh), np.ascontiguousarray(sl)))
         info["t_solve"] += time.time() - t
         t = time.time()
         wh, wl = (np.asarray(a) for a in apply(uh, ul))
@@ -398,6 +420,7 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
                 wh, wl = axpy(nb, Wh, Wl, wh, wl)
                 uh, ul = axpy(nb, Uh, Ul, uh, ul)
         nw = float(np.linalg.norm(wh + wl))
+        # a vanished image with r nonzero: not converged
         if not nw > 0:
             break
         wh, wl = dd_scale(wh, wl, 1.0 / nw)
@@ -407,6 +430,12 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
         c = dot(wh, wl, rh, rl, w64, ww)
         xh, xl = axpy(c, uh, ul, xh, xl)
         rh, rl = axpy((-c[0], -c[1]), wh, wl, rh, rl)
+        rn1 = float(np.linalg.norm(rh + rl))
+        fell = rn1 <= nu * rn
+        # at its rounding floor r stops falling without stagnating, but its steps still move x; a zero step is
+        # stagnation at any residual, since an error along a weak direction of A barely shows in r
+        counts = fell or (rn1 <= floor and c[0] != 0.0)
+        rn = rn1
         U.append((uh, ul))
         W.append((wh, wl))
         W64.append(w64)
@@ -418,7 +447,7 @@ def gcr(apply, precond, bh, bl, max_products=30, step_tol=1e-28, confirm=1, ref=
         if verbose:
             err = f", error {info['errors'][-1]:.1e}" if ref is not None else ""
             print(f"    gcr {len(U)}: change {ch:.1e}{err}", flush=True)
-        run = run + 1 if (len(U) > 1 and ch <= step_tol) else 0
+        run = run + 1 if (len(U) > 1 and counts and ch <= step_tol) else 0
         if run >= confirm:
             info["converged"] = True
             break
