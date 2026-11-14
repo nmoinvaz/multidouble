@@ -9,7 +9,8 @@
 //! latency-bound, and each still sums its terms in index order. `cs_into`, `cs_range_into` and `cs_w_into` write the
 //! same sums, bitwise, into a caller's field, with the accumulator and the terms borrowed (`Lane::acc_mut`), which
 //! for jet lanes saves copying kilobytes per term. `cs_lane_into` and `cs_w_lane_into` are one lane vector of them,
-//! for a caller that sums the lane vectors on separate threads. A matrix product is `MatLane::dmat_apply`: the
+//! for a caller that sums the lane vectors on separate threads, and `cs_par`, `cs_range_par` and `cs_w_par` do so for
+//! long jet sums (`cs_splits`), bitwise the same. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
@@ -22,6 +23,7 @@ use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::Simd;
 use crate::v8::V8;
+use rayon::prelude::*;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// 8 B values of the lane type T as B lane vectors: value j is lane j % 8 of vector j / 8.
@@ -570,6 +572,93 @@ pub fn cs_w_lane_into<T: Lane, const B: usize>(
         T::acc_mut(&mut a, &xw, &y[k - j].0[b]);
     }
     *out = T::fin(a);
+}
+
+/// Work, terms times jet coefficients, from which `cs_par`, `cs_range_par` and `cs_w_par` sum the B lane vectors on
+/// separate threads.
+pub const CS_PAR_MIN: usize = 48;
+
+/// Whether `cs_par`, `cs_range_par` and `cs_w_par` split a sum of `terms` products of T over its lane vectors. Only
+/// jet lanes split, each product a truncated convolution of `Lane::NJ` coefficients, once terms × NJ reaches
+/// `CS_PAR_MIN`. Other lanes' sums are too short to pay for a thread.
+#[inline(always)]
+pub fn cs_splits<T: Lane>(terms: usize) -> bool {
+    T::NJ > 0 && terms * T::NJ >= CS_PAR_MIN
+}
+
+/// `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]`, weighted only if w is given, with each lane vector summed by its own rayon
+/// task. Each task enters the backend's target features again (`Simd::vectorize`).
+fn cs_split<T: Lane, const B: usize>(
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+    w: Option<&(dyn Fn(usize) -> f64 + Sync)>,
+) -> Fl<T, B> {
+    let mut out = Fl::<T, B>::zero();
+    out.0.par_iter_mut().enumerate().for_each(|(b, o)| {
+        T::S::vectorize(
+            #[inline(always)]
+            || match w {
+                Some(w) => cs_w_lane_into(o, b, x, y, k, lo, hi, w),
+                None => cs_lane_into(o, b, x, y, k, lo, hi),
+            },
+        )
+    });
+    out
+}
+
+/// `cs`, bitwise, with a jet's lane vectors summed on separate threads of rayon's current pool when the sum is long
+/// enough (`cs_splits`). Every other sum is `cs_into`'s. A counting lane (`Counted`) makes the counts of a split sum
+/// on the threads that form it.
+///
+/// ```
+/// use multidouble::dd::DD;
+/// use multidouble::field::{cs, cs_par, cs_splits, Fl};
+/// use multidouble::native::QJet;
+/// let x: Vec<Fl<QJet<24>, 2>> = (1..4).map(|j| Fl::splat(DD::from_f64(j as f64))).collect();
+/// assert!(cs_splits::<QJet<24>>(3));
+/// assert_eq!(cs_par(&x, &x, 2).coef_qd(0).get(0), cs(&x, &x, 2).coef_qd(0).get(0));
+/// ```
+#[inline(always)]
+pub fn cs_par<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize) -> Fl<T, B> {
+    cs_range_par(x, y, k, 0, k)
+}
+
+/// `cs_range`, bitwise, split as `cs_par`
+#[inline(always)]
+pub fn cs_range_par<T: Lane, const B: usize>(
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+) -> Fl<T, B> {
+    if hi >= lo && cs_splits::<T>(hi - lo + 1) {
+        return cs_split(x, y, k, lo, hi, None);
+    }
+    let mut out = Fl::<T, B>::zero();
+    cs_range_into(&mut out, x, y, k, lo, hi);
+    out
+}
+
+/// `cs_w`, bitwise, split as `cs_par`
+#[inline(always)]
+pub fn cs_w_par<T: Lane, const B: usize>(
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    k: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64 + Sync,
+) -> Fl<T, B> {
+    if hi >= lo && cs_splits::<T>(hi - lo + 1) {
+        return cs_split(x, y, k, lo, hi, Some(&w));
+    }
+    let mut out = Fl::<T, B>::zero();
+    cs_w_into(&mut out, x, y, k, lo, hi, w);
+    out
 }
 
 /// `cs_il` into out, with the accumulators and the terms borrowed (`Lane::acc_mut`): bitwise `cs_il`
