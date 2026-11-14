@@ -233,6 +233,82 @@ def test_gcr_refines_an_f64_solve_to_double_double():
     assert f64c["errors"][-1] > 1e-20, f64c["errors"][-1]
 
 
+def _dd_of(xs):
+    """the double-double parts of exact rationals"""
+    hi = np.array([float(x) for x in xs])
+    return hi, np.array([float(x - Fraction(h)) for x, h in zip(xs, hi)])
+
+
+def _dense_gcr(A, b, M=None, nu=0.9, coef="dd"):
+    """gcr on the f64 matrix A with b, preconditioned by the f64 matrix M (the identity by default), every product
+    exact (fractions) and rounded to double-double: (x as exact rationals, info)"""
+    n = len(b)
+    M = np.eye(n) if M is None else np.asarray(M, dtype=float)
+
+    def mul(Q):
+        def f(uh, ul):
+            u = [Fraction(a) + Fraction(c) for a, c in zip(uh, ul)]
+            return _dd_of([sum(Fraction(q) * v for q, v in zip(row, u)) for row in np.asarray(Q, dtype=float)])
+        return f
+
+    bh, bl = _dd_of([Fraction(v) for v in b])
+    xh, xl, info = md.gcr(mul(A), mul(M), bh, bl, nu=nu, coef=coef)
+    return [Fraction(a) + Fraction(c) for a, c in zip(xh, xl)], info
+
+
+def _shift(n, sign):
+    """the cyclic shift of size n, A e_j = e_(j+1) and A e_(n-1) = sign e_0"""
+    A = np.zeros((n, n))
+    for j in range(n - 1):
+        A[j + 1, j] = 1.0
+    A[0, n - 1] = sign
+    return A
+
+
+@pytest.mark.parametrize("coef", ["dd", "f64"])
+def test_gcr_does_not_break_down_where_gmres_stagnates(coef):
+    """On the rotation [[0, -1], [1, 0]] with b = e_0, where GMRES stagnates at its first step, and on the cyclic shift
+    of size 6 with b = e_0, where it stagnates for five, gcr returns the solution sign e_(n-1) exactly, converged,
+    after n products. Control: with nu = inf (the residual directions only) the second direction's image vanishes on
+    both, and gcr returns x = 0, not converged."""
+    for n, sign in ((2, -1.0), (6, 1.0)):
+        b = np.eye(n)[0]
+        want = [Fraction(sign) if i == n - 1 else Fraction(0) for i in range(n)]
+        x, info = _dense_gcr(_shift(n, sign), b, coef=coef)
+        assert x == want and info["converged"] and info["products"] == n, (n, x, info)
+        x, info = _dense_gcr(_shift(n, sign), b, nu=float("inf"), coef=coef)
+        assert x != want and not info["converged"], (n, x, info)
+
+
+def test_gcr_converges_on_an_exact_residual():
+    """With A = I and b = e_0 gcr returns x = e_0, converged, after one product, and with b = 0 it returns x = 0,
+    converged, after none. Control: with the singular A = diag(1, 0) and b = e_1 the first direction's image vanishes
+    while r is nonzero, and gcr reports no convergence."""
+    x, info = _dense_gcr(np.eye(2), [1.0, 0.0])
+    assert x == [1, 0] and info["converged"] and info["products"] == 1, (x, info)
+    x, info = _dense_gcr(np.eye(2), [0.0, 0.0])
+    assert x == [0, 0] and info["converged"] and info["products"] == 0, (x, info)
+    _, info = _dense_gcr(np.diag([1.0, 0.0]), [0.0, 1.0])
+    assert not info["converged"], info
+
+
+@pytest.mark.parametrize("coef", ["dd", "f64"])
+def test_gcr_does_not_stop_on_a_zero_step_below_the_floor(coef):
+    """With d = 2^-110, A = [[1, 0, 0], [0, 0, -d], [0, d, 0]], M^-1 = [[1, 0, 0], [-d, 1, 0], [0, 0, 1]] and
+    b = (1, d, 0), the first iteration leaves r = (0, d, 0), far below the rounding floor, with x = (1, 0, 0) off by 1
+    along the weak direction, and the second takes a zero step. gcr goes on and returns the solution (1, 0, -1)
+    exactly, converged, after three products. Control: with nu = inf (every iteration counts) the zero step ends the
+    loop with x = (1, 0, 0)."""
+    d = 2.0 ** -110
+    A = [[1.0, 0.0, 0.0], [0.0, 0.0, -d], [0.0, d, 0.0]]
+    M = [[1.0, 0.0, 0.0], [-d, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    want = [1, 0, -1]
+    x, info = _dense_gcr(A, [1.0, d, 0.0], M=M, coef=coef)
+    assert x == want and info["converged"] and info["products"] == 3, (x, info)
+    x, info = _dense_gcr(A, [1.0, d, 0.0], M=M, nu=float("inf"), coef=coef)
+    assert x != want, (x, info)
+
+
 def test_dd_dot_against_exact():
     """dd_dot within 2^-100 of sum |x_i y_i| of the exact sum (fractions); control: the f64 dot product misses that"""
     rng = np.random.default_rng(11)
