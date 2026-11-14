@@ -3,15 +3,18 @@
 //! `Lane::acc` for the double-double, quad-double and octo-double values, the dual lanes (`Ou` among them) and the
 //! f64-tangent lanes, the jets (`QJet<24>` among them, and `OJet<24>` in optimized builds) and the counting lane,
 //! `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`,
-//! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` against `cs`, `cs_range` and `cs_w`. Each check has a control that
-//! must fail, the same comparison of a sum with two of its terms swapped, and for the field sums also of a sum without
-//! its last term.
+//! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`, and the split sums `cs_par`, `cs_range_par` and `cs_w_par`,
+//! against `cs`, `cs_range` and `cs_w`. Each check has a control that must fail, the same comparison of a sum with two
+//! of its terms swapped, and for the field sums also of a sum without its last term.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
 use multidouble::dv::{DotAcc, DV};
-use multidouble::field::{cs, cs_into, cs_lane_into, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_lane_into, Fl};
+use multidouble::field::{
+    cs, cs_into, cs_lane_into, cs_par, cs_range, cs_range_into, cs_range_par, cs_splits, cs_w, cs_w_into,
+    cs_w_lane_into, cs_w_par, Fl,
+};
 use multidouble::jet::{Jet, OJet, QJet};
 use multidouble::ov::{ODotAcc, OV};
 use multidouble::qv::{QDotAcc, QV};
@@ -570,10 +573,11 @@ fn fl_bits<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
 
 /// `cs_into`, `cs_range_into`, `cs_w_into`, `cs_lane_into` and `cs_w_lane_into` for one lane type against `cs`,
 /// `cs_range` and `cs_w` (lane vector b of them for the lane versions), at every order k < ORDERS with the ranges
-/// 0..=k, k/3..=k - k/4 and an empty one, each written over a random destination. The controls are the in-place
-/// range sum with the terms lo and lo + 1 swapped (x and y permuted so that the same products come in the other
-/// order), which must differ from the reference for some k, except in octo-double, whose sums round the swap away,
-/// and the sum without its last term, which must differ for every k.
+/// 0..=k, k/3..=k - k/4 and an empty one, each written over a random destination, and `cs_par`, `cs_range_par` and
+/// `cs_w_par` against the same, which must split some sums of every jet lane and none of the other lanes. The
+/// controls are the in-place and the split range sum with the terms lo and lo + 1 swapped (x and y permuted so that
+/// the same products come in the other order), which must differ from the reference for some k, except in
+/// octo-double, whose sums round the swap away, and the sum without its last term, which must differ for every k.
 struct Sums {
     backend: &'static str,
     seed: u64,
@@ -591,6 +595,7 @@ impl Check for Sums {
         let w = |j: usize| (2 * j + 1) as f64;
         let be = self.backend;
         let (mut checks, mut controls, mut caught, mut dropped) = (0, 0, 0, 0);
+        let (mut split, mut caught_par, mut dropped_par) = (0, 0, 0);
         for k in 0..ORDERS {
             let mut out = field(&mut r);
             take_counts();
@@ -603,7 +608,13 @@ impl Check for Sums {
                 "{be} {name}: cs_into counted otherwise than cs, k {k}"
             );
             assert_eq!(fl_bits(&out), fl_bits(&want), "{be} {name}: cs_into, k {k}");
-            checks += 1;
+            assert_eq!(
+                fl_bits(&cs_par(&x, &y, k)),
+                fl_bits(&want),
+                "{be} {name}: cs_par, k {k}"
+            );
+            split += cs_splits::<T>(k + 1) as usize;
+            checks += 2;
             for (lo, hi) in [(0, k), (k / 3, k - k / 4), (k + 1, k)] {
                 let want = cs_range(&x, &y, k, lo, hi);
                 let want_w = cs_w(&x, &y, k, lo, hi, w);
@@ -633,7 +644,18 @@ impl Check for Sums {
                         "{be} {name}: cs_w_lane_into, k {k}, {lo}..={hi}, b {b}"
                     );
                 }
-                checks += 4;
+                assert_eq!(
+                    fl_bits(&cs_range_par(&x, &y, k, lo, hi)),
+                    fl_bits(&want),
+                    "{be} {name}: cs_range_par, k {k}, {lo}..={hi}"
+                );
+                assert_eq!(
+                    fl_bits(&cs_w_par(&x, &y, k, lo, hi, w)),
+                    fl_bits(&want_w),
+                    "{be} {name}: cs_w_par, k {k}, {lo}..={hi}"
+                );
+                split += 2 * (hi >= lo && cs_splits::<T>(hi - lo + 1)) as usize;
+                checks += 6;
                 if lo < hi {
                     let (mut xs, mut ys) = (x.clone(), y.clone());
                     xs.swap(lo, lo + 1);
@@ -643,6 +665,8 @@ impl Check for Sums {
                     caught += (fl_bits(&out) != fl_bits(&want)) as usize;
                     cs_range_into(&mut out, &x, &y, k, lo, hi - 1);
                     dropped += (fl_bits(&out) != fl_bits(&want)) as usize;
+                    caught_par += (fl_bits(&cs_range_par(&xs, &ys, k, lo, hi)) != fl_bits(&want)) as usize;
+                    dropped_par += (fl_bits(&cs_range_par(&x, &y, k, lo, hi - 1)) != fl_bits(&want)) as usize;
                 }
             }
         }
@@ -651,13 +675,26 @@ impl Check for Sums {
             caught > 0 || T::VAL_OD,
             "{be} {name}: control: the sums with two terms swapped have the reference's bits"
         );
+        assert!(
+            caught_par > 0 || T::VAL_OD,
+            "{be} {name}: control: the split sums with two terms swapped have the reference's bits"
+        );
         assert_eq!(
             dropped, controls,
             "{be} {name}: control: a sum without its last term has the reference's bits"
         );
+        assert_eq!(
+            dropped_par, controls,
+            "{be} {name}: control: a split sum without its last term has the reference's bits"
+        );
+        assert_eq!(
+            split > 0,
+            T::NJ > 0,
+            "{be} {name}: {split} sums split, a jet lane must split some and another lane none"
+        );
         println!(
-            "{be} {name}: {checks} in-place sums matched; the controls caught {caught} of {controls} swaps and \
-             {dropped} of {controls} dropped terms"
+            "{be} {name}: {checks} in-place and split sums matched, {split} of them split; the controls caught \
+             {caught} and {caught_par} of {controls} swaps and {dropped} and {dropped_par} of {controls} dropped terms"
         );
     }
 }
@@ -678,8 +715,9 @@ impl Kernel for InPlaceSumsAreTheSums {
     }
 }
 
-/// The in-place Cauchy sums are the value-returning ones bit for bit, for every lane type on every backend. Controls:
-/// a sum with two terms swapped and a sum without its last term differ.
+/// The in-place and the split Cauchy sums are the value-returning ones bit for bit, for every lane type on every
+/// backend, and the split ones split some sums of each jet lane. Controls: a sum with two terms swapped and a sum
+/// without its last term differ.
 #[test]
 fn in_place_sums_are_the_sums() {
     on_every_backend(InPlaceSumsAreTheSums);
