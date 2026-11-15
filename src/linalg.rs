@@ -3142,6 +3142,16 @@ mod od_lu_tests {
 /// ln|det| and arg det are the sums of ln|u_kk| and arg u_kk in f64, the pivots rounded to f64 first, plus pi per
 /// row interchange; the factors are not kept. Also returns min and max |u_kk|. For a real matrix `DDLu::logdet`
 /// gives the sign and ln|det|.
+///
+/// The elimination is blocked in panels of columns (LAPACK's getrf), each trailing column taking a panel's
+/// interchanges and updates in one pass, and the updates that cannot change a value are skipped, as
+/// `DDLu::factor_blocked` skips them: those of the 8-row blocks whose multipliers are all exactly zero (a - 0 t returns
+/// a), and the multipliers of exactly zero entries. So the zero blocks of a sparse matrix, such as a multiple-shooting
+/// Jacobian's, cost nothing, and the results are those of getf2 as written (`CluControl::Dense`) bit for bit: each
+/// entry gets the same operations in the same order, and a skipped update only leaves the signs of zero parts as they
+/// were, where the accumulator would make them +0; the one place such a sign is read, the imaginary part of a negative
+/// real pivot (arg +-pi), is read as getf2 leaves it. Skipping is exact in a column while its entries are finite,
+/// normalized double-doubles; a column with another entry takes every update from then on.
 #[allow(clippy::type_complexity)]
 pub fn clu_logdet(
     n: usize,
@@ -3152,6 +3162,33 @@ pub fn clu_logdet(
     il: Vec<f64>,
     par: bool,
 ) -> Result<(f64, f64, f64, f64), String> {
+    clu_logdet_control(n, ld, rh, rl, ih, il, par, CluControl::None)
+}
+
+/// The elimination of `clu_logdet_control`: `None` is `clu_logdet`'s; `Dense` is getf2 as written, unblocked with
+/// every update, the reference that `None` matches bit for bit; `SignOfZero` and `KeepSkipping` are deliberate breakages of `None`,
+/// for checks that must be able to fail: the pivots' imaginary parts read with the signs of zeros that the skipped
+/// updates left, and the skipping kept on for an entry that is not a finite, normalized double-double.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CluControl {
+    None,
+    Dense,
+    SignOfZero,
+    KeepSkipping,
+}
+
+/// `clu_logdet` with the elimination `control` selects (`CluControl`).
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub fn clu_logdet_control(
+    n: usize,
+    ld: usize,
+    rh: Vec<f64>,
+    rl: Vec<f64>,
+    ih: Vec<f64>,
+    il: Vec<f64>,
+    par: bool,
+    control: CluControl,
+) -> Result<(f64, f64, f64, f64), String> {
     simd::dispatch(CluLogdet {
         n,
         ld,
@@ -3160,11 +3197,321 @@ pub fn clu_logdet(
         ih,
         il,
         par,
+        control,
     })
 }
 
+/// whether every entry of column j (rows 0..n) in the parts (hi, lo) is a finite, normalized double-double: hi + lo
+/// rounds to hi (so lo is zero where hi is)
+fn col_normalized(n: usize, ld: usize, j: usize, hi: &[f64], lo: &[f64]) -> bool {
+    let (h, l) = (&hi[j * ld..j * ld + n], &lo[j * ld..j * ld + n]);
+    h.iter()
+        .zip(l)
+        .all(|(&x, &y)| x.is_finite() && y.is_finite() && x + y == x)
+}
+
+/// Step k's update of one column (real parts ch + cl, imaginary parts dh + dl) with the step's multipliers (zero
+/// outside rows k + 1..n), a -= l t on the 8-row blocks `blocks`, as getf2 makes it (the real and the imaginary part
+/// each through the dot accumulator). A column whose pivot-row entry t has zero hi parts is left as it is, as getf2
+/// leaves it. `dirty` is set when a result is not finite, unless `keep`.
+#[inline(always)]
 #[allow(clippy::type_complexity)]
-fn clu_logdet_on<S: Simd>(
+fn clu_update<S: Simd>(
+    k: usize,
+    (ch, cl, dh, dl): (&mut [f64], &mut [f64], &mut [f64], &mut [f64]),
+    (mrh, mrl, mih, mil): (&[f64], &[f64], &[f64], &[f64]),
+    blocks: &[usize],
+    dirty: &mut bool,
+    keep: bool,
+) {
+    let tr = DD { hi: ch[k], lo: cl[k] };
+    let ti = DD { hi: dh[k], lo: dl[k] };
+    if tr.hi == 0.0 && ti.hi == 0.0 {
+        return;
+    }
+    let ntr = DV::<S>::splat(-tr);
+    let nti = DV::<S>::splat(-ti);
+    let pti = DV::<S>::splat(ti);
+    let zero = V8::<S>::zero();
+    let mut ok = zero.eq(zero);
+    for &i in blocks {
+        let ar = DV::<S>::load(&ch[i..i + 8], &cl[i..i + 8]);
+        let ai = DV::<S>::load(&dh[i..i + 8], &dl[i..i + 8]);
+        let lr = DV::<S>::load(&mrh[i..i + 8], &mrl[i..i + 8]);
+        let li = DV::<S>::load(&mih[i..i + 8], &mil[i..i + 8]);
+        // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
+        let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
+        let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
+        nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
+        ni.store(&mut dh[i..i + 8], &mut dl[i..i + 8]);
+        // x - x is zero exactly when x is finite; the accumulator's lo part is finite with its hi part
+        ok = ok.and(nr.hi.sub(nr.hi).eq(zero)).and(ni.hi.sub(ni.hi).eq(zero));
+    }
+    if !keep && ok.bits() != 0xff {
+        *dirty = true;
+    }
+}
+
+/// `clu_logdet`'s elimination: getf2's operations on every entry, in its order, blocked in panels of NB columns
+/// (LAPACK's right-looking getrf), without the updates that cannot change a value. Per panel of columns j0..je:
+///  1. each column k of the panel in turn: its pivot, the row interchange in the panel's columns, its multipliers
+///     (an exactly zero entry left as it is), and its update of the panel's later columns;
+///  2. every column right of the panel gets the panel's row interchanges, then the panel's updates k = j0, j0 + 1, ...
+///     in order, so that it passes through memory once per panel rather than once per k (in parallel over chunks of
+///     CW columns when par).
+///
+/// The columns left of the panel are not interchanged: the factors are not kept, and getf2 reads no column left of
+/// its step. A column takes, of step k's update, only the 8-row blocks whose multipliers are not all zero, while
+/// its entries are finite, normalized double-doubles (a - 0 t is then a, its zero parts made +0); a column that
+/// starts with another entry, or in which an update makes one, takes every block from then on (`dirty`), since there
+/// a - 0 t can change a value (0 Inf, 0 NaN, a renormalization).
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn clu_blocked_on<S: Simd>(
+    n: usize,
+    ld: usize,
+    mut rh: Vec<f64>,
+    mut rl: Vec<f64>,
+    mut ih: Vec<f64>,
+    mut il: Vec<f64>,
+    par: bool,
+    control: CluControl,
+) -> Result<(f64, f64, f64, f64), String> {
+    S::vectorize(
+        #[inline(always)]
+        move || {
+            assert!(ld.is_multiple_of(8) && ld >= n);
+            assert!(rh.len() >= ld * n && rl.len() >= ld * n && ih.len() >= ld * n && il.len() >= ld * n);
+            let at = |h: &[f64], l: &[f64], i: usize| DD { hi: h[i], lo: l[i] };
+            let keep = control == CluControl::KeepSkipping;
+            let mut dirty: Vec<bool> = (0..n)
+                .map(|j| !(keep || col_normalized(n, ld, j, &rh, &rl) && col_normalized(n, ld, j, &ih, &il)))
+                .collect();
+            let mut la = 0.0f64;
+            let mut arg = 0.0f64;
+            let mut pmin = f64::INFINITY;
+            let mut pmax = 0.0f64;
+            // the panel's multipliers, column c at offset c ld, zero outside rows k + 1..n; its 8-row blocks from
+            // 8 floor((k + 1) / 8) on, all of them and those with a nonzero multiplier
+            let (mut mrh, mut mrl, mut mih, mut mil) = (
+                vec![0.0f64; NB * ld],
+                vec![0.0f64; NB * ld],
+                vec![0.0f64; NB * ld],
+                vec![0.0f64; NB * ld],
+            );
+            let mut all: Vec<Vec<usize>> = (0..NB).map(|_| Vec::with_capacity(ld / 8)).collect();
+            let mut nz: Vec<Vec<usize>> = (0..NB).map(|_| Vec::with_capacity(ld / 8)).collect();
+            let mut perm = [0usize; NB];
+            let mut j0 = 0;
+            while j0 < n {
+                let jb = NB.min(n - j0);
+                let je = j0 + jb;
+                for c in 0..jb {
+                    let k = j0 + c;
+                    let ck = k * ld;
+                    let mut p = k;
+                    let mut best = -1.0f64;
+                    for i in k..n {
+                        let v = rh[ck + i].hypot(ih[ck + i]);
+                        if v > best {
+                            best = v;
+                            p = i;
+                        }
+                    }
+                    // a NaN diagonal entry is a non-finite pivot (as `pivot_search`); a column of NaN leaves best at
+                    // -1 (a NaN modulus never replaces it, so best is never NaN itself)
+                    if rh[ck + k].hypot(ih[ck + k]).is_nan() || best <= 0.0 || !best.is_finite() {
+                        return Err(format!("singular or non-finite pivot at column {k} ({best})"));
+                    }
+                    perm[c] = p;
+                    if p != k {
+                        for j in j0..je {
+                            rh.swap(j * ld + k, j * ld + p);
+                            rl.swap(j * ld + k, j * ld + p);
+                            ih.swap(j * ld + k, j * ld + p);
+                            il.swap(j * ld + k, j * ld + p);
+                        }
+                        // and in the panel's earlier multipliers, as getf2 interchanges the factors' columns
+                        for mc in (0..c).map(|c| c * ld) {
+                            mrh.swap(mc + k, mc + p);
+                            mrl.swap(mc + k, mc + p);
+                            mih.swap(mc + k, mc + p);
+                            mil.swap(mc + k, mc + p);
+                        }
+                        arg += std::f64::consts::PI;
+                    }
+                    let ur = at(&rh, &rl, ck + k);
+                    let ui = at(&ih, &il, ck + k);
+                    let mag = (ur.hi + ur.lo).hypot(ui.hi + ui.lo);
+                    // the pivot's lo parts can be NaN with finite hi parts
+                    if mag <= 0.0 || !mag.is_finite() {
+                        return Err(format!("singular or non-finite pivot at column {k} ({mag})"));
+                    }
+                    // getf2 updates column k at every earlier step whose pivot-row entry (now in rows 0..k) has a
+                    // nonzero hi part; the accumulator leaves no part of such a column -0, so its pivot's zero parts
+                    // are read as +0, which the skipped updates would have made them
+                    let swept =
+                        control != CluControl::SignOfZero && (0..k).any(|i| rh[ck + i] != 0.0 || ih[ck + i] != 0.0);
+                    let yi = if swept {
+                        (ui.hi + 0.0) + (ui.lo + 0.0)
+                    } else {
+                        ui.hi + ui.lo
+                    };
+                    // |u| and its phase to f64 are all ln|u| and arg u need
+                    la += mag.ln();
+                    arg += yi.atan2(ur.hi + ur.lo);
+                    pmin = pmin.min(mag);
+                    pmax = pmax.max(mag);
+                    if k + 1 == n {
+                        break;
+                    }
+                    // The multipliers a_ik / u with u and every a_ik scaled by the same power of two (exact) to bring
+                    // u to order one: 1/u_s = conj(u_s) / |u_s|^2 then neither overflows nor underflows for any
+                    // pivot, and a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a
+                    // subnormal pivot under an ordinary entry). The quotients' significands are those of the
+                    // unscaled formula, so the factors are bitwise the same wherever that one stays in range.
+                    let isc = 1.0 / pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
+                    let (us_r, us_i) = (ur.mul_pwr2(isc), ui.mul_pwr2(isc));
+                    let den = us_r * us_r + us_i * us_i;
+                    let vr = us_r / den;
+                    let vi = -(us_i / den);
+                    let r0 = 8 * ((k + 1) / 8);
+                    let mc = c * ld;
+                    all[c].clear();
+                    nz[c].clear();
+                    let mut i = r0;
+                    while i < ld {
+                        let mut any = false;
+                        for r in i..i + 8 {
+                            let (mut xr, mut xi) = (DD::ZERO, DD::ZERO);
+                            if r > k && r < n {
+                                let ar = at(&rh, &rl, ck + r);
+                                let ai = at(&ih, &il, ck + r);
+                                if ar.hi != 0.0 || ar.lo != 0.0 || ai.hi != 0.0 || ai.lo != 0.0 {
+                                    let (ar, ai) = (ar.mul_pwr2(isc), ai.mul_pwr2(isc));
+                                    xr = ar * vr - ai * vi;
+                                    xi = ar * vi + ai * vr;
+                                    any = true;
+                                }
+                            }
+                            mrh[mc + r] = xr.hi;
+                            mrl[mc + r] = xr.lo;
+                            mih[mc + r] = xi.hi;
+                            mil[mc + r] = xi.lo;
+                        }
+                        all[c].push(i);
+                        if any {
+                            nz[c].push(i);
+                        }
+                        i += 8;
+                    }
+                    let m = (
+                        &mrh[mc..mc + ld],
+                        &mrl[mc..mc + ld],
+                        &mih[mc..mc + ld],
+                        &mil[mc..mc + ld],
+                    );
+                    for (j, d) in dirty.iter_mut().enumerate().take(je).skip(k + 1) {
+                        let o = j * ld;
+                        let col = (
+                            &mut rh[o..o + ld],
+                            &mut rl[o..o + ld],
+                            &mut ih[o..o + ld],
+                            &mut il[o..o + ld],
+                        );
+                        let blocks = if *d { &all[c] } else { &nz[c] };
+                        clu_update::<S>(k, col, m, blocks, d, keep);
+                    }
+                }
+                if je == n {
+                    break;
+                }
+                // the blocks with a nonzero multiplier after the panel's later interchanges
+                for (c, (nzc, allc)) in nz.iter_mut().zip(&all).take(jb).enumerate() {
+                    let mc = c * ld;
+                    nzc.clear();
+                    for &i in allc {
+                        let r = mc + i..mc + i + 8;
+                        let zero = |v: &[f64]| v.iter().all(|&x| x == 0.0);
+                        if !(zero(&mrh[r.clone()]) && zero(&mrl[r.clone()]) && zero(&mih[r.clone()]) && zero(&mil[r])) {
+                            nzc.push(i);
+                        }
+                    }
+                }
+                let ncols = n - je;
+                let (_, trh) = rh.split_at_mut(je * ld);
+                let (_, trl) = rl.split_at_mut(je * ld);
+                let (_, tih) = ih.split_at_mut(je * ld);
+                let (_, til) = il.split_at_mut(je * ld);
+                let (mrh, mrl, mih, mil) = (&mrh, &mrl, &mih, &mil);
+                let (all, nz, perm) = (&all, &nz, &perm);
+                let task = |((((ch, cl), dh), dl), dj): (
+                    (((&mut [f64], &mut [f64]), &mut [f64]), &mut [f64]),
+                    &mut [bool],
+                )| {
+                    S::vectorize(
+                        #[inline(always)]
+                        || {
+                            for (q, d) in dj.iter_mut().enumerate() {
+                                let o = q * ld;
+                                let (h, l) = (&mut ch[o..o + ld], &mut cl[o..o + ld]);
+                                let (x, y) = (&mut dh[o..o + ld], &mut dl[o..o + ld]);
+                                for (c, &p) in perm[..jb].iter().enumerate() {
+                                    if p != j0 + c {
+                                        h.swap(j0 + c, p);
+                                        l.swap(j0 + c, p);
+                                        x.swap(j0 + c, p);
+                                        y.swap(j0 + c, p);
+                                    }
+                                }
+                                for c in 0..jb {
+                                    let mc = c * ld;
+                                    let m = (
+                                        &mrh[mc..mc + ld],
+                                        &mrl[mc..mc + ld],
+                                        &mih[mc..mc + ld],
+                                        &mil[mc..mc + ld],
+                                    );
+                                    let blocks = if *d { &all[c] } else { &nz[c] };
+                                    clu_update::<S>(j0 + c, (&mut *h, &mut *l, &mut *x, &mut *y), m, blocks, d, keep);
+                                }
+                            }
+                        },
+                    )
+                };
+                let td = &mut dirty[je..n];
+                if par && ncols > CW {
+                    trh[..ncols * ld]
+                        .par_chunks_mut(CW * ld)
+                        .zip(trl[..ncols * ld].par_chunks_mut(CW * ld))
+                        .zip(tih[..ncols * ld].par_chunks_mut(CW * ld))
+                        .zip(til[..ncols * ld].par_chunks_mut(CW * ld))
+                        .zip(td.par_chunks_mut(CW))
+                        .for_each(task);
+                } else {
+                    trh[..ncols * ld]
+                        .chunks_mut(CW * ld)
+                        .zip(trl[..ncols * ld].chunks_mut(CW * ld))
+                        .zip(tih[..ncols * ld].chunks_mut(CW * ld))
+                        .zip(til[..ncols * ld].chunks_mut(CW * ld))
+                        .zip(td.chunks_mut(CW))
+                        .for_each(task);
+                }
+                j0 = je;
+            }
+            let two_pi = 2.0 * std::f64::consts::PI;
+            let mut a = arg.rem_euclid(two_pi);
+            if a > std::f64::consts::PI {
+                a -= two_pi;
+            }
+            Ok((la, a, pmin, pmax))
+        },
+    )
+}
+
+/// getf2 as written (`CluControl::Dense`): for each column k its pivot, the row interchange in every column, its
+/// multipliers, and every trailing column's update on every 8-row block from 8 floor((k + 1) / 8)
+#[allow(clippy::type_complexity)]
+fn clu_dense_on<S: Simd>(
     n: usize,
     ld: usize,
     mut rh: Vec<f64>,
@@ -3328,13 +3675,19 @@ struct CluLogdet {
     ih: Vec<f64>,
     il: Vec<f64>,
     par: bool,
+    control: CluControl,
 }
 
 impl Kernel for CluLogdet {
     type Output = Result<(f64, f64, f64, f64), String>;
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
-        clu_logdet_on::<S>(self.n, self.ld, self.rh, self.rl, self.ih, self.il, self.par)
+        let (n, ld, par) = (self.n, self.ld, self.par);
+        if self.control == CluControl::Dense {
+            clu_dense_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par)
+        } else {
+            clu_blocked_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par, self.control)
+        }
     }
 }
 
