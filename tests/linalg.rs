@@ -6,7 +6,8 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::linalg::{
-    clu_logdet, clu_logdet_control, gram, ld_for, CluControl, ColumnGroup, DDLu, StaircaseControl, StaircaseLu,
+    clu_logdet, clu_logdet_control, clu_pivots, clu_pivots_control, gram, ld_for, CluControl, CluPivots, ColumnGroup,
+    DDLu, StaircaseControl, StaircaseLu,
 };
 use multidouble::qd::QD;
 
@@ -1308,6 +1309,142 @@ fn complex_logdet_skipping_is_every_update() {
         ],
         "control: KeepSkipping"
     );
+}
+
+/// the bits of clu_pivots_control's four numbers and records
+#[allow(clippy::type_complexity)]
+fn pivots_bits(
+    n: usize,
+    ld: usize,
+    c: &[Vec<f64>; 4],
+    par: bool,
+    control: CluControl,
+) -> Result<([u64; 4], Vec<u64>, Vec<u64>, Vec<usize>), String> {
+    clu_pivots_control(
+        n,
+        ld,
+        c[0].clone(),
+        c[1].clone(),
+        c[2].clone(),
+        c[3].clone(),
+        par,
+        control,
+    )
+    .map(|(v, p)| {
+        (
+            [v.0.to_bits(), v.1.to_bits(), v.2.to_bits(), v.3.to_bits()],
+            p.ln_abs.iter().map(|x| x.to_bits()).collect(),
+            p.arg.iter().map(|x| x.to_bits()).collect(),
+            p.rows,
+        )
+    })
+}
+
+/// the records summed as clu_logdet sums them: ln|u_kk| in order, and pi before arg u_kk at each interchange, wrapped
+/// into (-pi, pi]
+fn pivots_sums(p: &CluPivots) -> (f64, f64) {
+    let la = p.ln_abs.iter().fold(0.0, |a, x| a + x);
+    let mut arg = 0.0f64;
+    for (k, (&a, &row)) in p.arg.iter().zip(&p.rows).enumerate() {
+        if row != k {
+            arg += std::f64::consts::PI;
+        }
+        arg += a;
+    }
+    let two_pi = 2.0 * std::f64::consts::PI;
+    let mut a = arg.rem_euclid(two_pi);
+    if a > std::f64::consts::PI {
+        a -= two_pi;
+    }
+    (la, a)
+}
+
+/// clu_pivots gives clu_logdet's four numbers, and pivots that are getf2's (`CluControl::Dense`) bit for bit at every
+/// column, serial and parallel, on the skipping cases (sparse, shooting, signed zeros, non-finite entries) and on
+/// random matrices up to n = 300. Summed in elimination order they give ln|det| and arg det bit for bit. Control: the
+/// pivots of `SignOfZero`, which reads the skipped updates' signs of zeros, differ from getf2's on some matrix.
+#[test]
+fn complex_pivots_are_getf2s() {
+    let mut r = Rng(87);
+    let mut cases: Vec<(&str, usize, usize, [Vec<f64>; 4])> = skip_cases();
+    for n in [1usize, 7, 37, 129, 300] {
+        let (ld, c) = cmatrix(n, &mut r);
+        cases.push(("random", n, ld, c));
+    }
+    let mut sign_fired = 0;
+    let mut checked = 0;
+    for (name, n, ld, c) in &cases {
+        let dense = pivots_bits(*n, *ld, c, false, CluControl::Dense);
+        for par in [false, true] {
+            assert_eq!(
+                pivots_bits(*n, *ld, c, par, CluControl::None),
+                dense,
+                "{name}, n {n}, par {par}"
+            );
+        }
+        let plain = clu_logdet(*n, *ld, c[0].clone(), c[1].clone(), c[2].clone(), c[3].clone(), false)
+            .map(|v| [v.0.to_bits(), v.1.to_bits(), v.2.to_bits(), v.3.to_bits()]);
+        assert_eq!(
+            plain,
+            dense.as_ref().map(|d| d.0).map_err(|e| e.clone()),
+            "{name}, n {n}: clu_logdet"
+        );
+        if let Ok(((la, arg, _, _), p)) =
+            clu_pivots(*n, *ld, c[0].clone(), c[1].clone(), c[2].clone(), c[3].clone(), false)
+        {
+            assert_eq!(
+                (p.ln_abs.len(), p.arg.len(), p.rows.len()),
+                (*n, *n, *n),
+                "{name}, n {n}"
+            );
+            let (sl, sa) = pivots_sums(&p);
+            assert_eq!(
+                [sl.to_bits(), sa.to_bits()],
+                [la.to_bits(), arg.to_bits()],
+                "{name}, n {n}: sums"
+            );
+            checked += 1;
+        }
+        sign_fired += (pivots_bits(*n, *ld, c, false, CluControl::SignOfZero) != dense) as usize;
+    }
+    assert!(checked >= 20, "only {checked} matrices factored");
+    assert!(
+        sign_fired > 0,
+        "control: SignOfZero's pivots are getf2's on every matrix"
+    );
+}
+
+/// Control of the pivot comparison: one entry moved by 1e-12 relative changes a recorded pivot. Planted: a diagonal
+/// matrix with decreasing |d_k| has no interchanges and pivots d_k, so ln|u_kk| = ln|d_k| and arg u_kk = arg d_k.
+#[test]
+fn complex_pivots_planted_and_control() {
+    let mut r = Rng(88);
+    let (n, (ld, c)) = (37, cmatrix(37, &mut r));
+    let a = pivots_bits(n, ld, &c, false, CluControl::None).unwrap();
+    let mut moved = c.clone();
+    moved[0][5 * ld + 11] *= 1.0 + 1e-12;
+    let b = pivots_bits(n, ld, &moved, false, CluControl::None).unwrap();
+    assert_ne!(
+        (a.1, a.2),
+        (b.1, b.2),
+        "control: a moved entry left every pivot as it was"
+    );
+
+    let (n, ld) = (12, 16);
+    let mut m: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    let d: Vec<(f64, f64)> = (0..n)
+        .map(|k| (0.5f64.powi(k as i32), -(0.25f64.powi(k as i32))))
+        .collect();
+    for (k, &(re, im)) in d.iter().enumerate() {
+        m[0][k * ld + k] = re;
+        m[2][k * ld + k] = im;
+    }
+    let (_, p) = clu_pivots(n, ld, m[0].clone(), m[1].clone(), m[2].clone(), m[3].clone(), false).unwrap();
+    for (k, &(re, im)) in d.iter().enumerate() {
+        assert!((p.ln_abs[k] - re.hypot(im).ln()).abs() < 1e-15, "k {k}");
+        assert!((p.arg[k] - im.atan2(re)).abs() < 1e-15, "k {k}");
+    }
+    assert_eq!(p.rows, (0..n).collect::<Vec<_>>());
 }
 
 // ---------------------------------------------------------------------------------------------------------------
