@@ -1141,7 +1141,7 @@ fn patterned(
 /// (blocks of m rows coupling node b - 1 and node b), random sparse ones, both complex and real with imaginary parts
 /// -0 (where the sign of a negative real pivot's zero imaginary part is arg +-pi), and the entries skipping must
 /// not pass by: an Inf, a NaN, a non-normalized entry, and an overflow during the elimination (in one panel of the
-/// blocked elimination and across panels)
+/// blocked elimination and across panels), and a non-normalized pivot whose reciprocal is not finite
 #[allow(clippy::type_complexity)]
 fn skip_cases() -> Vec<(&'static str, usize, usize, [Vec<f64>; 4])> {
     let mut r = Rng(86);
@@ -1198,6 +1198,12 @@ fn skip_cases() -> Vec<(&'static str, usize, usize, [Vec<f64>; 4])> {
         c[1][cj * ld + ri] = 2.5;
         out.push(("not normalized", n, ld, c));
     }
+    // a non-normalized pivot, real part (1, -1), whose reciprocal is not finite: getf2 makes the multiplier of a zero
+    // entry 0 NaN, which skipping it would leave zero
+    let ld = ld_for(2);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * 2]);
+    (c[0][0], c[1][0], c[2][0], c[0][ld], c[0][ld + 1]) = (1.0, -1.0, 1.0, 1.0, 1.0);
+    out.push(("non-finite reciprocal", 2, ld, c));
     let n = 24;
     // pivot 1 at (0, 0) with no multipliers under it and a full row 0, over a real matrix with -0 imaginary parts and
     // a negative diagonal, below row 0 diagonal (and with a few entries): step 0 sweeps every column but updates no
@@ -1225,7 +1231,7 @@ fn skip_cases() -> Vec<(&'static str, usize, usize, [Vec<f64>; 4])> {
 /// (`CluControl::Dense`) bit for bit: ln|det|, arg det and the pivot range, or the same error, serial and parallel.
 /// Controls, which must differ from every update on at least one matrix: the pivots' imaginary parts read with the
 /// signs that the skipped updates left (`SignOfZero`, on the real matrices), and skipping kept on past an entry that
-/// is not a finite, normalized double-double (`KeepSkipping`, on each of the eight matrices made for it, and on no
+/// is not a finite, normalized double-double (`KeepSkipping`, on each of the nine matrices made for it, and on no
 /// other).
 #[test]
 fn complex_logdet_skipping_is_every_update() {
@@ -1297,7 +1303,8 @@ fn complex_logdet_skipping_is_every_update() {
             "Inf",
             "NaN",
             "overflow",
-            "not normalized"
+            "not normalized",
+            "non-finite reciprocal"
         ],
         "control: KeepSkipping"
     );

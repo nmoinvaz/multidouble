@@ -3168,7 +3168,8 @@ pub fn clu_logdet(
 /// The elimination of `clu_logdet_control`: `None` is `clu_logdet`'s; `Dense` is getf2 as written, unblocked with
 /// every update, the reference that `None` matches bit for bit; `SignOfZero` and `KeepSkipping` are deliberate breakages of `None`,
 /// for checks that must be able to fail: the pivots' imaginary parts read with the signs of zeros that the skipped
-/// updates left, and the skipping kept on for an entry that is not a finite, normalized double-double.
+/// updates left, and the skipping kept on for an entry that is not a finite, normalized double-double (and for a zero
+/// entry under a pivot whose reciprocal is not finite).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CluControl {
     None,
@@ -3255,7 +3256,8 @@ fn clu_update<S: Simd>(
 /// `clu_logdet`'s elimination: getf2's operations on every entry, in its order, blocked in panels of NB columns
 /// (LAPACK's right-looking getrf), without the updates that cannot change a value. Per panel of columns j0..je:
 ///  1. each column k of the panel in turn: its pivot, the row interchange in the panel's columns, its multipliers
-///     (an exactly zero entry left as it is), and its update of the panel's later columns;
+///     (an exactly zero entry left as it is when the pivot's reciprocal is finite), and its update of the panel's
+///     later columns;
 ///  2. every column right of the panel gets the panel's row interchanges, then the panel's updates k = j0, j0 + 1, ...
 ///     in order, so that it passes through memory once per panel rather than once per k (in parallel over chunks of
 ///     CW columns when par).
@@ -3374,6 +3376,9 @@ fn clu_blocked_on<S: Simd>(
                     let den = us_r * us_r + us_i * us_i;
                     let vr = us_r / den;
                     let vi = -(us_i / den);
+                    // a zero entry's multiplier is a zero (left as it is) only with a finite reciprocal, which a
+                    // non-normalized pivot can fail to have (0 NaN is NaN)
+                    let finite = [vr.hi, vr.lo, vi.hi, vi.lo].iter().all(|x| x.is_finite());
                     let r0 = 8 * ((k + 1) / 8);
                     let mc = c * ld;
                     all[c].clear();
@@ -3386,7 +3391,7 @@ fn clu_blocked_on<S: Simd>(
                             if r > k && r < n {
                                 let ar = at(&rh, &rl, ck + r);
                                 let ai = at(&ih, &il, ck + r);
-                                if ar.hi != 0.0 || ar.lo != 0.0 || ai.hi != 0.0 || ai.lo != 0.0 {
+                                if !(finite || keep) || ar.hi != 0.0 || ar.lo != 0.0 || ai.hi != 0.0 || ai.lo != 0.0 {
                                     let (ar, ai) = (ar.mul_pwr2(isc), ai.mul_pwr2(isc));
                                     xr = ar * vr - ai * vi;
                                     xi = ar * vi + ai * vr;
