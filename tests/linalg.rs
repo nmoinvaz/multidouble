@@ -5,7 +5,9 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::linalg::{clu_logdet, gram, ld_for, ColumnGroup, DDLu, StaircaseControl, StaircaseLu};
+use multidouble::linalg::{
+    clu_logdet, clu_logdet_control, gram, ld_for, CluControl, ColumnGroup, DDLu, StaircaseControl, StaircaseLu,
+};
 use multidouble::qd::QD;
 
 /// a random n x n matrix, column-major with leading dimension ld, made well conditioned by a diagonal shift
@@ -1093,6 +1095,212 @@ fn complex_logdet_reports_nan_pivots() {
         false
     )
     .is_err());
+}
+
+/// A complex matrix with the zero pattern of `zero(i, j)` (exact zeros there), random double-double entries elsewhere
+/// (real ones when `real`, both parts of their imaginary parts the zero `imz`, +0 or -0), and `shift` added to the real part of
+/// each diagonal entry
+fn patterned(
+    n: usize,
+    r: &mut Rng,
+    zero: impl Fn(usize, usize, &mut Rng) -> bool,
+    real: bool,
+    imz: f64,
+    shift: f64,
+) -> (usize, [Vec<f64>; 4]) {
+    let ld = ld_for(n);
+    let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+    for j in 0..n {
+        for i in 0..n {
+            let k = j * ld + i;
+            if zero(i, j, r) {
+                c[2][k] = imz;
+                c[3][k] = imz;
+                continue;
+            }
+            let mut re = DD::new(r.sym(), r.sym() * 1e-17);
+            if i == j {
+                re = re + DD::from_f64(shift);
+            }
+            c[0][k] = re.hi;
+            c[1][k] = re.lo;
+            if real {
+                c[2][k] = imz;
+                c[3][k] = imz;
+            } else {
+                let im = DD::new(r.sym(), r.sym() * 1e-17);
+                c[2][k] = im.hi;
+                c[3][k] = im.lo;
+            }
+        }
+    }
+    (ld, c)
+}
+
+/// the matrices of `complex_logdet_skipping_is_every_update`, by family: block-bidiagonal multiple-shooting layouts
+/// (blocks of m rows coupling node b - 1 and node b), random sparse ones, both complex and real with imaginary parts
+/// -0 (where the sign of a negative real pivot's zero imaginary part is arg +-pi), and the entries skipping must
+/// not pass by: an Inf, a NaN, a non-normalized entry, and an overflow during the elimination (in one panel of the
+/// blocked elimination and across panels)
+#[allow(clippy::type_complexity)]
+fn skip_cases() -> Vec<(&'static str, usize, usize, [Vec<f64>; 4])> {
+    let mut r = Rng(86);
+    let mut out = Vec::new();
+    let shooting = |m: usize| move |i: usize, j: usize, _: &mut Rng| !(j / m == i / m || j / m + 1 == i / m);
+    for (k, m) in [(4usize, 8usize), (6, 12), (9, 16)] {
+        let n = k * m;
+        let (ld, c) = patterned(n, &mut r, shooting(m), false, 0.0, 0.0);
+        out.push(("shooting", n, ld, c));
+        let (ld, c) = patterned(n, &mut r, shooting(m), true, -0.0, -1.5);
+        out.push(("shooting, real, -0", n, ld, c));
+    }
+    for (n, d) in [(9usize, 0.3f64), (40, 0.1), (97, 0.05), (130, 0.03)] {
+        let sparse = move |i: usize, j: usize, r: &mut Rng| i != j && r.unit() > d;
+        let (ld, c) = patterned(n, &mut r, sparse, false, 0.0, 0.5);
+        out.push(("sparse", n, ld, c));
+        for _ in 0..3 {
+            let (ld, c) = patterned(n, &mut r, sparse, true, -0.0, -0.5);
+            out.push(("sparse, real, -0", n, ld, c));
+        }
+    }
+    // Pivot 1 at (0, 0) over the multiplier -1 in row 9, and 4 on the rest of the diagonal. Row 9's entries right of
+    // column 9 are made non-finite: Inf or NaN, or 1e308 under row 0's 1.5e308, whose update at step 0 overflows. At
+    // step 9 they are the pivot row, swept over zero multipliers: every update makes the columns past 9 NaN (0 Inf,
+    // 0 NaN), which skipping would leave finite. A non-normalized entry (2.5, 2.5) under row 0, in a row block with no
+    // multiplier at step 0, is renormalized to 5 by step 0's sweep before its column's pivot search, where its hi part
+    // alone would lose to the diagonal.
+    // n 24 holds one panel of the blocked elimination; n 80 puts the rows in later panels (pivot row 41, the
+    // non-normalized entry at (57, 52)), so that the trailing columns' updates meet them
+    for (n, pr, (ri, cj)) in [(24usize, 9usize, (17usize, 12usize)), (80, 41, (57, 52))] {
+        let base = || {
+            let ld = ld_for(n);
+            let mut c: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0; ld * n]);
+            c[0][0] = 1.0;
+            c[0][pr] = -1.0;
+            for j in 1..n {
+                c[0][j * ld + j] = 4.0;
+            }
+            (ld, c)
+        };
+        for (name, v) in [("Inf", f64::INFINITY), ("NaN", f64::NAN), ("overflow", 1e308)] {
+            let (ld, mut c) = base();
+            for j in pr + 1..n {
+                c[0][j * ld + pr] = v;
+                if name == "overflow" {
+                    c[0][j * ld] = 1.5e308;
+                }
+            }
+            out.push((name, n, ld, c));
+        }
+        let (ld, mut c) = base();
+        c[0][cj * ld] = 1.0;
+        c[0][cj * ld + ri] = 2.5;
+        c[1][cj * ld + ri] = 2.5;
+        out.push(("not normalized", n, ld, c));
+    }
+    let n = 24;
+    // pivot 1 at (0, 0) with no multipliers under it and a full row 0, over a real matrix with -0 imaginary parts and
+    // a negative diagonal, below row 0 diagonal (and with a few entries): step 0 sweeps every column but updates no
+    // block, so every later pivot is swept by row 0 alone, its row block never updated
+    for extra in [0usize, 3] {
+        let few =
+            move |i: usize, j: usize, _: &mut Rng| i != j && !(i == 0 || (extra > 0 && (i * 7 + j).is_multiple_of(23)));
+        let (ld, mut c) = patterned(n, &mut r, few, true, -0.0, -2.0);
+        for i in 1..n {
+            c[0][i] = 0.0;
+            c[1][i] = 0.0;
+        }
+        c[0][0] = 1.0;
+        out.push(("row 0, real, -0", n, ld, c));
+    }
+    // a structured matrix large enough for the parallel path (more than 32768 updated entries per step)
+    let (ld, c) = patterned(256, &mut r, shooting(64), false, 0.0, 0.0);
+    out.push(("shooting, parallel", 256, ld, c));
+    out
+}
+
+/// Pass, written before the first run: on every matrix of `skip_cases` (block-bidiagonal and random sparse ones,
+/// complex and real with -0 imaginary parts, and ones with an Inf, a NaN, a non-normalized entry or an overflow),
+/// `clu_logdet` (skipping the updates that cannot change a value) gives the results of every update
+/// (`CluControl::Dense`) bit for bit: ln|det|, arg det and the pivot range, or the same error, serial and parallel.
+/// Controls, which must differ from every update on at least one matrix: the pivots' imaginary parts read with the
+/// signs that the skipped updates left (`SignOfZero`, on the real matrices), and skipping kept on past an entry that
+/// is not a finite, normalized double-double (`KeepSkipping`, on each of the eight matrices made for it, and on no
+/// other).
+#[test]
+fn complex_logdet_skipping_is_every_update() {
+    let run = |n: usize, ld: usize, c: &[Vec<f64>; 4], par: bool, control: CluControl| {
+        clu_logdet_control(
+            n,
+            ld,
+            c[0].clone(),
+            c[1].clone(),
+            c[2].clone(),
+            c[3].clone(),
+            par,
+            control,
+        )
+        .map(|v| [v.0.to_bits(), v.1.to_bits(), v.2.to_bits(), v.3.to_bits()])
+    };
+    let mut sign_fired = 0;
+    let mut keep_fired = Vec::new();
+    let cases = skip_cases();
+    for (name, n, ld, c) in &cases {
+        let dense = run(*n, *ld, c, false, CluControl::Dense);
+        for par in [false, true] {
+            assert_eq!(
+                run(*n, *ld, c, par, CluControl::None),
+                dense,
+                "{name}, n {n}, par {par}"
+            );
+            assert_eq!(
+                run(*n, *ld, c, par, CluControl::Dense),
+                dense,
+                "{name}, n {n}, par {par}: dense"
+            );
+        }
+        let plain = clu_logdet(
+            n.to_owned(),
+            *ld,
+            c[0].clone(),
+            c[1].clone(),
+            c[2].clone(),
+            c[3].clone(),
+            false,
+        );
+        assert_eq!(
+            plain.map(|v| [v.0.to_bits(), v.1.to_bits(), v.2.to_bits(), v.3.to_bits()]),
+            dense
+        );
+        let sign = run(*n, *ld, c, false, CluControl::SignOfZero) != dense;
+        let keep = run(*n, *ld, c, false, CluControl::KeepSkipping) != dense;
+        println!(
+            "{name:<20} n {n:>3}: {:?}; controls differ: sign {sign}, keep {keep}",
+            dense.as_ref().map(|b| f64::from_bits(b[1]))
+        );
+        sign_fired += sign as usize;
+        if keep {
+            keep_fired.push(*name);
+        }
+    }
+    assert!(
+        sign_fired > 0,
+        "control: SignOfZero matches every update on every matrix"
+    );
+    assert_eq!(
+        keep_fired,
+        [
+            "Inf",
+            "NaN",
+            "overflow",
+            "not normalized",
+            "Inf",
+            "NaN",
+            "overflow",
+            "not normalized"
+        ],
+        "control: KeepSkipping"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------
