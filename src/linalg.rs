@@ -3199,7 +3199,60 @@ pub fn clu_logdet_control(
         il,
         par,
         control,
+        record: false,
     })
+    .map(|(v, _)| v)
+}
+
+/// Every pivot of `clu_logdet`'s elimination, in elimination order: ln|u_kk| and arg u_kk, the f64 summands of its
+/// ln|det| and arg det in that order, and the row each column's pivot came from (k when there was no interchange;
+/// arg det adds pi before arg u_kk when there was one)
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CluPivots {
+    pub ln_abs: Vec<f64>,
+    pub arg: Vec<f64>,
+    pub rows: Vec<usize>,
+}
+
+/// `clu_logdet` with every pivot recorded: its (ln|det|, arg det, min |u_kk|, max |u_kk|) bit for bit, and the pivots
+/// (`CluPivots`), which the blocked elimination forms as getf2 does (`CluControl::Dense`), bit for bit
+#[allow(clippy::type_complexity)]
+pub fn clu_pivots(
+    n: usize,
+    ld: usize,
+    rh: Vec<f64>,
+    rl: Vec<f64>,
+    ih: Vec<f64>,
+    il: Vec<f64>,
+    par: bool,
+) -> Result<((f64, f64, f64, f64), CluPivots), String> {
+    clu_pivots_control(n, ld, rh, rl, ih, il, par, CluControl::None)
+}
+
+/// `clu_pivots` with the elimination `control` selects (`CluControl`)
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub fn clu_pivots_control(
+    n: usize,
+    ld: usize,
+    rh: Vec<f64>,
+    rl: Vec<f64>,
+    ih: Vec<f64>,
+    il: Vec<f64>,
+    par: bool,
+    control: CluControl,
+) -> Result<((f64, f64, f64, f64), CluPivots), String> {
+    simd::dispatch(CluLogdet {
+        n,
+        ld,
+        rh,
+        rl,
+        ih,
+        il,
+        par,
+        control,
+        record: true,
+    })
+    .map(|(v, p)| (v, p.unwrap_or_default()))
 }
 
 /// whether every entry of column j (rows 0..n) in the parts (hi, lo) is a finite, normalized double-double: hi + lo
@@ -3277,7 +3330,8 @@ fn clu_blocked_on<S: Simd>(
     mut il: Vec<f64>,
     par: bool,
     control: CluControl,
-) -> Result<(f64, f64, f64, f64), String> {
+    record: bool,
+) -> CluOutput {
     S::vectorize(
         #[inline(always)]
         move || {
@@ -3292,6 +3346,11 @@ fn clu_blocked_on<S: Simd>(
             let mut arg = 0.0f64;
             let mut pmin = f64::INFINITY;
             let mut pmax = 0.0f64;
+            let mut piv = record.then(|| CluPivots {
+                ln_abs: Vec::with_capacity(n),
+                arg: Vec::with_capacity(n),
+                rows: Vec::with_capacity(n),
+            });
             // the panel's multipliers, column c at offset c ld, zero outside rows k + 1..n; its 8-row blocks from
             // 8 floor((k + 1) / 8) on, all of them and those with a nonzero multiplier
             let (mut mrh, mut mrl, mut mih, mut mil) = (
@@ -3359,8 +3418,14 @@ fn clu_blocked_on<S: Simd>(
                         ui.hi + ui.lo
                     };
                     // |u| and its phase to f64 are all ln|u| and arg u need
-                    la += mag.ln();
-                    arg += yi.atan2(ur.hi + ur.lo);
+                    let (lu, au) = (mag.ln(), yi.atan2(ur.hi + ur.lo));
+                    la += lu;
+                    arg += au;
+                    if let Some(r) = piv.as_mut() {
+                        r.ln_abs.push(lu);
+                        r.arg.push(au);
+                        r.rows.push(p);
+                    }
                     pmin = pmin.min(mag);
                     pmax = pmax.max(mag);
                     if k + 1 == n {
@@ -3508,14 +3573,14 @@ fn clu_blocked_on<S: Simd>(
             if a > std::f64::consts::PI {
                 a -= two_pi;
             }
-            Ok((la, a, pmin, pmax))
+            Ok(((la, a, pmin, pmax), piv))
         },
     )
 }
 
 /// getf2 as written (`CluControl::Dense`): for each column k its pivot, the row interchange in every column, its
 /// multipliers, and every trailing column's update on every 8-row block from 8 floor((k + 1) / 8)
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn clu_dense_on<S: Simd>(
     n: usize,
     ld: usize,
@@ -3524,7 +3589,8 @@ fn clu_dense_on<S: Simd>(
     mut ih: Vec<f64>,
     mut il: Vec<f64>,
     par: bool,
-) -> Result<(f64, f64, f64, f64), String> {
+    record: bool,
+) -> CluOutput {
     S::vectorize(
         #[inline(always)]
         move || {
@@ -3535,6 +3601,11 @@ fn clu_dense_on<S: Simd>(
             let mut arg = 0.0f64;
             let mut pmin = f64::INFINITY;
             let mut pmax = 0.0f64;
+            let mut piv = record.then(|| CluPivots {
+                ln_abs: Vec::with_capacity(n),
+                arg: Vec::with_capacity(n),
+                rows: Vec::with_capacity(n),
+            });
             let mut lrh = vec![0.0f64; ld];
             let mut lrl = vec![0.0f64; ld];
             let mut lih = vec![0.0f64; ld];
@@ -3572,8 +3643,14 @@ fn clu_dense_on<S: Simd>(
                     return Err(format!("singular or non-finite pivot at column {k} ({mag})"));
                 }
                 // |u| and its phase to f64 are all ln|u| and arg u need
-                la += mag.ln();
-                arg += (ui.hi + ui.lo).atan2(ur.hi + ur.lo);
+                let (lu, au) = (mag.ln(), (ui.hi + ui.lo).atan2(ur.hi + ur.lo));
+                la += lu;
+                arg += au;
+                if let Some(r) = piv.as_mut() {
+                    r.ln_abs.push(lu);
+                    r.arg.push(au);
+                    r.rows.push(p);
+                }
                 pmin = pmin.min(mag);
                 pmax = pmax.max(mag);
                 if k + 1 == n {
@@ -3667,7 +3744,7 @@ fn clu_dense_on<S: Simd>(
             if a > std::f64::consts::PI {
                 a -= two_pi;
             }
-            Ok((la, a, pmin, pmax))
+            Ok(((la, a, pmin, pmax), piv))
         },
     )
 }
@@ -3681,17 +3758,21 @@ struct CluLogdet {
     il: Vec<f64>,
     par: bool,
     control: CluControl,
+    record: bool,
 }
 
+/// (ln|det|, arg det, min |u_kk|, max |u_kk|) and, when recorded, the pivots
+type CluOutput = Result<((f64, f64, f64, f64), Option<CluPivots>), String>;
+
 impl Kernel for CluLogdet {
-    type Output = Result<(f64, f64, f64, f64), String>;
+    type Output = CluOutput;
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
-        let (n, ld, par) = (self.n, self.ld, self.par);
+        let (n, ld, par, record) = (self.n, self.ld, self.par, self.record);
         if self.control == CluControl::Dense {
-            clu_dense_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par)
+            clu_dense_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par, record)
         } else {
-            clu_blocked_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par, self.control)
+            clu_blocked_on::<S>(n, ld, self.rh, self.rl, self.ih, self.il, par, self.control, record)
         }
     }
 }
