@@ -315,6 +315,21 @@ pub trait Lane:
         let _ = k;
         *into = *from
     }
+    /// number of tangents carried in the value's arithmetic (`tan_k`, `from_vt_n`): one on a dual lane with a
+    /// tangent of its value's precision, N on `Oun<N>`, none on every other lane (jets; the f64 tangents of `TAN_F64` lanes
+    /// are `NT`'s)
+    const NTD: usize = (Self::TANGENT && !Self::TAN_F64 && Self::NJ == 0) as usize;
+    /// tangent k < NTD rounded to double-double; by default `tan()` for k = 0
+    #[inline(always)]
+    fn tan_k(self, k: usize) -> DV<Self::S> {
+        debug_assert!(k < Self::NTD.max(1), "tan_k: tangent {k} of {}", Self::NTD);
+        self.tan()
+    }
+    /// value v and the tangents t (NTD of them), exactly; by default `from_vt` with t's first (zero when empty)
+    #[inline(always)]
+    fn from_vt_n(v: DV<Self::S>, t: &[DV<Self::S>]) -> Self {
+        Self::from_vt(v, t.first().copied().unwrap_or_else(DV::zero))
+    }
     /// f64 tangent k < NT (TAN_F64 lanes)
     #[inline(always)]
     fn tan64(self, _k: usize) -> V8<Self::S> {
@@ -1103,6 +1118,297 @@ impl<S: Simd> Lane for Ou<S> {
             1 => self.d,
             _ => OV::zero(),
         }
+    }
+}
+
+/// Forward-mode dual number over octo-double lanes with N tangents: value `v` and tangents `d`, all `OV`, so that one
+/// evaluation with a unit tangent on each of N unknowns gives N Jacobian columns, the value's operations done once
+/// for all of them. Each tangent runs `Ou`'s operations on its own (`Ou`'s product, quotient and dot accumulators,
+/// in the same order), so tangent k is bit for bit the tangent of an `Ou` evaluation seeded as tangent k, and the
+/// value bit for bit its value. Constants and inputs enter as double-double as for `Ou`; the octo-double value and
+/// tangents are built and read through `Tangents`.
+#[derive(Clone, Copy, Debug)]
+pub struct Oun<S: Simd, const N: usize> {
+    /// the value
+    pub v: OV<S>,
+    /// the tangents
+    pub d: [OV<S>; N],
+}
+
+impl<S: Simd, const N: usize> Add for Oun<S, N> {
+    type Output = Self;
+    /// value and tangents added
+    #[inline(always)]
+    fn add(self, o: Self) -> Self {
+        Oun {
+            v: self.v + o.v,
+            d: std::array::from_fn(|k| self.d[k] + o.d[k]),
+        }
+    }
+}
+impl<S: Simd, const N: usize> Sub for Oun<S, N> {
+    type Output = Self;
+    /// value and tangents subtracted
+    #[inline(always)]
+    fn sub(self, o: Self) -> Self {
+        Oun {
+            v: self.v - o.v,
+            d: std::array::from_fn(|k| self.d[k] - o.d[k]),
+        }
+    }
+}
+impl<S: Simd, const N: usize> Neg for Oun<S, N> {
+    type Output = Self;
+    /// value and tangents negated
+    #[inline(always)]
+    fn neg(self) -> Self {
+        Oun {
+            v: -self.v,
+            d: self.d.map(|x| -x),
+        }
+    }
+}
+impl<S: Simd, const N: usize> Mul for Oun<S, N> {
+    type Output = Self;
+    /// the product, each tangent v o.d + d o.v through the dot accumulator as `Ou`'s (feature `mutate`:
+    /// `mutate::OU_TAN` drops the term d o.v)
+    #[inline(always)]
+    fn mul(self, o: Self) -> Self {
+        let d = std::array::from_fn(|k| {
+            let mut a = ODotAcc::zero();
+            a.add_prod_mut(&self.v, &o.d[k]);
+            if !mutate::on(mutate::OU_TAN) {
+                a.add_prod_mut(&self.d[k], &o.v);
+            }
+            a.finish()
+        });
+        Oun { v: self.v * o.v, d }
+    }
+}
+impl<S: Simd, const N: usize> Div for Oun<S, N> {
+    type Output = Self;
+    /// the quotient q = v / o.v, each tangent (d - q o.d) / o.v (the quotient rule, whose - and * the lint flags)
+    #[inline(always)]
+    #[allow(clippy::suspicious_arithmetic_impl)]
+    fn div(self, o: Self) -> Self {
+        let q = self.v / o.v;
+        Oun {
+            v: q,
+            d: std::array::from_fn(|k| (self.d[k] - q * o.d[k]) / o.v),
+        }
+    }
+}
+
+impl<S: Simd, const N: usize> Lane for Oun<S, N> {
+    type S = S;
+    type Acc = (ODotAcc<S>, [ODotAcc<S>; N]);
+    dd_param!();
+    const TANGENT: bool = true;
+    const VAL_OD: bool = true;
+    const NTD: usize = N;
+    /// zero value and tangents
+    #[inline(always)]
+    fn zero() -> Self {
+        Oun {
+            v: OV::zero(),
+            d: [OV::zero(); N],
+        }
+    }
+    /// the constant c, exactly, with zero tangents
+    #[inline(always)]
+    fn cst(c: DV<S>) -> Self {
+        Oun {
+            v: OV::from_dv(c),
+            d: [OV::zero(); N],
+        }
+    }
+    /// value and tangents times the constant c
+    #[inline(always)]
+    fn mulc(self, c: DV<S>) -> Self {
+        let c = OV::from_dv(c);
+        Oun {
+            v: self.v * c,
+            d: self.d.map(|x| x * c),
+        }
+    }
+    /// value and tangents times an exact f64
+    #[inline(always)]
+    fn mulf(self, s: f64) -> Self {
+        Oun {
+            v: self.v.mul_f(s),
+            d: self.d.map(|x| x.mul_f(s)),
+        }
+    }
+    /// value and tangents times a power of two, exactly
+    #[inline(always)]
+    fn mul_pwr2(self, s: f64) -> Self {
+        Oun {
+            v: self.v.mul_pwr2(s),
+            d: self.d.map(|x| x.mul_pwr2(s)),
+        }
+    }
+    /// the value plus the constant c
+    #[inline(always)]
+    fn addc(self, c: DV<S>) -> Self {
+        Oun {
+            v: self.v + OV::from_dv(c),
+            d: self.d,
+        }
+    }
+    /// all 8 lanes of value and tangents = lane j
+    #[inline(always)]
+    fn bcast(self, j: usize) -> Self {
+        Oun {
+            v: self.v.bcast(j),
+            d: self.d.map(|x| x.bcast(j)),
+        }
+    }
+    /// the value rounded to double-double
+    #[inline(always)]
+    fn val(self) -> DV<S> {
+        self.v.to_dv()
+    }
+    /// the first tangent rounded to double-double
+    #[inline(always)]
+    fn tan(self) -> DV<S> {
+        self.tan_k(0)
+    }
+    /// tangent k rounded to double-double
+    #[inline(always)]
+    fn tan_k(self, k: usize) -> DV<S> {
+        if k < N {
+            self.d[k].to_dv()
+        } else {
+            DV::zero()
+        }
+    }
+    /// value v and first tangent t, exactly, the other tangents zero
+    #[inline(always)]
+    fn from_vt(v: DV<S>, t: DV<S>) -> Self {
+        let mut x = Self::cst(v);
+        if N > 0 {
+            x.d[0] = OV::from_dv(t);
+        }
+        x
+    }
+    /// value v and tangents t, exactly (zero past t)
+    #[inline(always)]
+    fn from_vt_n(v: DV<S>, t: &[DV<S>]) -> Self {
+        Oun {
+            v: OV::from_dv(v),
+            d: std::array::from_fn(|k| t.get(k).map_or_else(OV::zero, |&x| OV::from_dv(x))),
+        }
+    }
+    /// the empty sums of the value and of the tangents
+    #[inline(always)]
+    fn acc0() -> Self::Acc {
+        (ODotAcc::zero(), [ODotAcc::zero(); N])
+    }
+    /// a + x y: the value's product and each tangent's two, as `Ou`'s
+    #[inline(always)]
+    fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
+        let mut a = a;
+        Self::acc_mut(&mut a, &x, &y);
+        a
+    }
+    /// `acc` in place
+    #[inline(always)]
+    fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
+        a.0.add_prod_mut(&x.v, &y.v);
+        for k in 0..N {
+            a.1[k].add_prod_mut(&x.v, &y.d[k]);
+            a.1[k].add_prod_mut(&x.d[k], &y.v);
+        }
+    }
+    /// a + x c, c a constant lane vector
+    #[inline(always)]
+    fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
+        let c = OV::from_dv(c);
+        let mut a = a;
+        a.0.add_prod_mut(&x.v, &c);
+        for k in 0..N {
+            a.1[k].add_prod_mut(&x.d[k], &c);
+        }
+        a
+    }
+    /// a + x
+    #[inline(always)]
+    fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
+        (a.0.add(x.v), std::array::from_fn(|k| a.1[k].add(x.d[k])))
+    }
+    /// the sums of the value and of the tangents
+    #[inline(always)]
+    fn fin(a: Self::Acc) -> Self {
+        Oun {
+            v: a.0.finish(),
+            d: a.1.map(|x| x.finish()),
+        }
+    }
+    /// the value (k = 0) and tangent k - 1 (k = 1..=N) rounded to quad-double, zero past them
+    #[inline(always)]
+    fn coef_qd(self, k: usize) -> QV<S> {
+        self.coef_od(k).to_qv()
+    }
+    /// the octo-double value (k = 0) and tangent k - 1 (k = 1..=N), zero past them
+    #[inline(always)]
+    fn coef_od(self, k: usize) -> OV<S> {
+        match k {
+            0 => self.v,
+            k if k <= N => self.d[k - 1],
+            _ => OV::zero(),
+        }
+    }
+}
+
+/// A dual lane whose value and tangents are in one lane type `V` (octo-double for `Ou` and `Oun<N>`): built from them
+/// exactly and read back exactly, for code that seeds several tangents at once (a Jacobian's columns)
+pub trait Tangents: Lane {
+    /// the lane type of the value and of each tangent
+    type V: Lane<S = Self::S>;
+    /// value v and tangents t (`NTD` of them, zero past t), exactly
+    fn from_tangents(v: Self::V, t: &[Self::V]) -> Self;
+    /// the value
+    fn value(&self) -> Self::V;
+    /// tangent k < `NTD`
+    fn tangent(&self, k: usize) -> Self::V;
+}
+
+impl<S: Simd> Tangents for Ou<S> {
+    type V = OV<S>;
+    #[inline(always)]
+    fn from_tangents(v: OV<S>, t: &[OV<S>]) -> Self {
+        Ou {
+            v,
+            d: t.first().copied().unwrap_or_else(OV::zero),
+        }
+    }
+    #[inline(always)]
+    fn value(&self) -> OV<S> {
+        self.v
+    }
+    #[inline(always)]
+    fn tangent(&self, k: usize) -> OV<S> {
+        debug_assert_eq!(k, 0, "Ou has one tangent");
+        self.d
+    }
+}
+
+impl<S: Simd, const N: usize> Tangents for Oun<S, N> {
+    type V = OV<S>;
+    #[inline(always)]
+    fn from_tangents(v: OV<S>, t: &[OV<S>]) -> Self {
+        Oun {
+            v,
+            d: std::array::from_fn(|k| t.get(k).copied().unwrap_or_else(OV::zero)),
+        }
+    }
+    #[inline(always)]
+    fn value(&self) -> OV<S> {
+        self.v
+    }
+    #[inline(always)]
+    fn tangent(&self, k: usize) -> OV<S> {
+        self.d[k]
     }
 }
 

@@ -89,6 +89,7 @@ pub mod native {
     pub type Du = crate::dual::Du<Native>;
     pub type Qu = crate::dual::Qu<Native>;
     pub type Ou = crate::dual::Ou<Native>;
+    pub type Oun<const N: usize> = crate::dual::Oun<Native, N>;
     pub type Dc = crate::dual::Dc<Native>;
     pub type F8 = crate::dual::F8<Native>;
     pub type Fu = crate::dual::Fu<Native>;
