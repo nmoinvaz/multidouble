@@ -1022,6 +1022,72 @@ fn od_accumulator() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
+/// the largest |x_(i+1)| / ulp(x_i) over x's nonzero parts and their successors, infinite when a nonzero part follows a
+/// zero one, zero for a non-finite value: at most 1/2 for parts that do not overlap, at most 1 for ulp-nonoverlapping
+/// ones
+fn overlap(x: OD) -> f64 {
+    if x.x.iter().any(|p| !p.is_finite()) {
+        return 0.0;
+    }
+    let mut w = 0.0f64;
+    for i in 0..7 {
+        if x.x[i] == 0.0 {
+            return if x.x[i + 1..].iter().all(|&p| p == 0.0) {
+                w
+            } else {
+                f64::INFINITY
+            };
+        }
+        w = w.max(Dy::from_f64(x.x[i + 1]).abs().ratio(&ulp(x.x[i])));
+    }
+    w
+}
+
+/// Pass, set after a first run against `od`'s earlier statement (every part at most half the ulp of the one above it
+/// for every operation), which the adds miss after cancellation: on `od_accuracy`'s inputs (OD_N per operation and
+/// category, scalar and lanes), every finite result of the multiply, od x f64, the divide and the square root has
+/// |x_(i+1)| <= ulp(x_i)/2, and of the adds (od + od, od + f64) |x_(i+1)| <= ulp(x_i), with no nonzero part after a
+/// zero one. Controls: a value whose second part is twice the first's ulp fails both, one whose second part is a
+/// whole ulp fails the half-ulp bound only, and one with a nonzero part after a zero one fails both.
+#[test]
+fn od_results_do_not_overlap() {
+    let n = env_usize("OD_N", 2000) / 8 * 8;
+    let seed = env_usize("OD_SEED", 1) as u64;
+    let mut bad = Vec::new();
+    for op in OPS {
+        let bound = if op_cray(op) { 1.0 } else { 0.5 };
+        let (mut worst, mut past_half, mut count) = (0.0f64, 0usize, 0usize);
+        for cat in CATS {
+            let (rs, rv) = results(op, &inputs(op, cat, n, seed));
+            for x in rs.iter().chain(&rv) {
+                let w = overlap(*x);
+                count += 1;
+                past_half += (w > 0.5) as usize;
+                worst = worst.max(w);
+            }
+        }
+        println!(
+            "{}: worst |x_(i+1)| / ulp(x_i) {worst:.4}, {past_half} of {count} past 1/2 (bound {bound})",
+            op_name(op)
+        );
+        if worst > bound {
+            bad.push((op_name(op), worst));
+        }
+    }
+    let part = |x1: f64, x2: f64| {
+        let mut x = [0.0; 8];
+        (x[0], x[1], x[2]) = (1.0, x1, x2);
+        overlap(OD { x })
+    };
+    let controls = [part(2.0 * f64::EPSILON, 0.0), part(f64::EPSILON, 0.0), part(0.0, 1e-40)];
+    println!("controls (twice the ulp, a whole ulp, a gap): {controls:?}");
+    assert!(bad.is_empty(), "results past their bound: {bad:?}");
+    assert!(
+        controls[0] > 1.0 && controls[1] > 0.5 && controls[1] <= 1.0 && controls[2] > 1.0,
+        "{controls:?}"
+    );
+}
+
 /// decimal input and output, the conversions and the order, exactly
 #[test]
 fn od_decimal_io_conversions_and_order() {

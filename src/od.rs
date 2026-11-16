@@ -1,6 +1,9 @@
 //! Scalar octo-double: an unevaluated sum x0 + x1 + ... + x7 of eight f64, renormalized so that the parts do not
-//! overlap (|x_{i+1}| <= ulp(x_i)/2), about 126 significant digits (2^-418 relative, `OD::EPS`). The 8-lane
-//! `ov::OV` runs the same algorithms with bitwise the same results.
+//! overlap, about 126 significant digits (2^-418 relative, `OD::EPS`). A product, a quotient or a square root has
+//! |x_{i+1}| <= ulp(x_i)/2; a sum (od + od, od + f64) |x_{i+1}| <= ulp(x_i), since after cancelling operands its
+//! renormalization can leave a part past half the ulp of the one above, up to 0.74 ulp in the tests
+//! (`od_tests::od_results_do_not_overlap`; ulp-nonoverlapping in the sense of Joldes, Muller and Popescu, below). The
+//! 8-lane `ov::OV` runs the same algorithms with bitwise the same results.
 //!
 //! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the
 //! scalar type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double
