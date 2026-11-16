@@ -316,6 +316,72 @@ fn quotient_residuals_are_octo_double() {
     })
 }
 
+/// the jet's coefficients rounded to quad-double, the product or quotient formed by the quad-double jet, and the
+/// result widened back exactly: the control of `products_and_quotients_within_their_bounds`
+fn via_qjet<const N: usize>(a: OJet<N>, b: OJet<N>, div: bool) -> OJet<N> {
+    let q = |x: OJet<N>| QJet::<N>::from_coeffs(std::array::from_fn(|k| x.c[k].to_qv()));
+    let r = if div { q(a) / q(b) } else { q(a) * q(b) };
+    OJet::from_coeffs(std::array::from_fn(|k| OV::from_qv(r.c[k])))
+}
+
+/// The worst ratio of error to bound over 20 random pairs of `OJet<16>` (all lanes, all coefficients): coefficient k of
+/// the product against the exact sum of its k + 1 terms, relative to the sum of their magnitudes, over the dot
+/// accumulator's bound (8 + k + 1)/8 units of 2^-418 (its k + 1 products, `od_tests`); and the quotient's residual
+/// a_k - sum_{i<=k} b_i q_{k-i}, exactly, relative to |a_k| + sum |b_i q_{k-i}|, over (8 + k)/8 + 3 units (the
+/// accumulator's k products, one add and one divide). (product, quotient)
+fn bound_ratios(
+    mul: impl Fn(OJet<16>, OJet<16>) -> OJet<16>,
+    div: impl Fn(OJet<16>, OJet<16>) -> OJet<16>,
+) -> (f64, f64) {
+    let u = OD::EPS;
+    let mut r = Rng(97);
+    let (mut wp, mut wq) = (0.0f64, 0.0f64);
+    for _ in 0..20 {
+        let (x, y, d) = (
+            ojet::<16>(&mut r, false),
+            ojet::<16>(&mut r, false),
+            ojet::<16>(&mut r, true),
+        );
+        let (p, q) = (mul(x, y), div(x, d));
+        for j in 0..8 {
+            for k in 0..16 {
+                let (mut s, mut scale) = (Dy::zero(), Dy::zero());
+                for i in 0..=k {
+                    let t = x.c[i].lane(j).exact().mul(&y.c[k - i].lane(j).exact());
+                    s = s.add(&t);
+                    scale = scale.add(&t.abs());
+                }
+                wp = wp.max(err(&p.c[k].lane(j).exact(), &s, &scale) / ((8 + k + 1) as f64 / 8.0 * u));
+                let xk = x.c[k].lane(j).exact();
+                let (mut s, mut scale) = (Dy::zero(), xk.abs());
+                for i in 0..=k {
+                    let t = d.c[i].lane(j).exact().mul(&q.c[k - i].lane(j).exact());
+                    s = s.add(&t);
+                    scale = scale.add(&t.abs());
+                }
+                wq = wq.max(err(&s, &xk, &scale) / ((8 + k) as f64 / 8.0 + 3.0) / u);
+            }
+        }
+    }
+    (wp, wq)
+}
+
+/// Pass, fixed before the first run: on random `OJet<16>`, every product coefficient is within the dot accumulator's
+/// bound for its terms, (8 + k + 1)/8 units of 2^-418 relative to the sum of their magnitudes, and every quotient
+/// residual within (8 + k)/8 + 3 units relative to its terms' magnitudes (ratios to the bounds at most 1). Control:
+/// the same products and quotients formed by the quad-double jet miss both bounds by its rounding, about 2^209 units
+/// (ratios above 1e50).
+#[test]
+fn products_and_quotients_within_their_bounds() {
+    big_stack(|| {
+        let (p, q) = bound_ratios(|a, b| a * b, |a, b| a / b);
+        let (cp, cq) = bound_ratios(|a, b| via_qjet(a, b, false), |a, b| via_qjet(a, b, true));
+        println!("OJet<16>: worst error / bound, products {p:.2e}, quotients {q:.2e}; control (quad-double jet) {cp:.1e}, {cq:.1e}");
+        assert!(p <= 1.0 && q <= 1.0, "products {p}, quotients {q}");
+        assert!(cp > 1e50 && cq > 1e50, "control did not fire: {cp:e}, {cq:e}");
+    })
+}
+
 /// f(x, y) = (x^3 + 2 x y) / (x + 3), written over `Lane`
 fn f<T: Lane>(x: T, y: T) -> T {
     (x * x * x + (x * y).mulf(2.0)) / x.addc(DV::splat_f(3.0))
