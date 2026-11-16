@@ -9,7 +9,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{Lane, Param};
+use multidouble::dual::{Counted, Lane, Param};
 use multidouble::field::{cs, cs_at, cs_range, cs_range_at, cs_w, cs_w_at, Fl};
 use multidouble::native::{Jet, OJet, QJet, OV};
 use multidouble::od::OD;
@@ -67,6 +67,11 @@ fn fbits<T: Lane<S = Native>>(x: &Fl<T, B>, k: usize) -> Vec<u64> {
     x.0.iter().flat_map(|l| bits(l, k)).collect()
 }
 
+/// whether out holds want's coefficient k and bg's others, bit for bit
+fn set_at<T: Lane<S = Native>>(out: &T, want: &T, bg: &T, k: usize) -> bool {
+    (0..T::NJ).all(|i| bits(out, i) == bits(if i == k { want } else { bg }, i))
+}
+
 /// (mismatches, control differences) of the lane operations at every order
 fn lane_ops<T: Lane<S = Native>>(r: &mut Rng) -> (usize, usize) {
     let (x, y, d, e) = (
@@ -78,26 +83,28 @@ fn lane_ops<T: Lane<S = Native>>(r: &mut Rng) -> (usize, usize) {
     let p = param::<T>(r);
     let (xy, xd, xp) = (x * y, x / d, x.mulp(p));
     let sum = T::fin(T::acc(T::acc(T::acc0(), x, y), e, d));
+    // the outputs start from bg, whose coefficients other than k must stay as they are
+    let bg = lane::<T>(r, false);
     let (mut bad, mut control) = (0, 0);
     let mut q = T::zero();
     for k in 0..T::NJ {
-        let mut m = T::zero();
+        let mut m = bg;
         T::mul_at(&x, &y, k, &mut m);
-        bad += (bits(&m, k) != bits(&xy, k)) as usize;
-        let mut mp = T::zero();
+        bad += !set_at(&m, &xy, &bg, k) as usize;
+        let mut mp = bg;
         T::mulp_at(&x, &p, k, &mut mp);
-        bad += (bits(&mp, k) != bits(&xp, k)) as usize;
+        bad += !set_at(&mp, &xp, &bg, k) as usize;
         T::div_at(&x, &d, k, &mut q);
         bad += (bits(&q, k) != bits(&xd, k)) as usize;
         let mut a = T::acc0();
         T::acc_at(&mut a, &x, &y, k);
         T::acc_at(&mut a, &e, &d, k);
-        let mut f = T::zero();
+        let mut f = bg;
         T::fin_at(&a, k, &mut f);
-        bad += (bits(&f, k) != bits(&sum, k)) as usize;
-        let mut c = T::zero();
+        bad += !set_at(&f, &sum, &bg, k) as usize;
+        let mut c = bg;
         T::copy_at(&x, k, &mut c);
-        bad += (bits(&c, k) != bits(&x, k)) as usize;
+        bad += !set_at(&c, &x, &bg, k) as usize;
         // the control: the quotient's order k from zero lower coefficients
         let mut z = T::zero();
         T::div_at(&x, &d, k, &mut z);
@@ -112,6 +119,7 @@ fn field_sums<T: Lane<S = Native>>(r: &mut Rng) -> usize {
     let xs: Vec<Fl<T, B>> = (0..J).map(|_| field::<T>(r, false)).collect();
     let ys: Vec<Fl<T, B>> = (0..J).map(|_| field::<T>(r, false)).collect();
     let w = |i: usize| (i + 1) as f64;
+    let bg = field::<T>(r, false);
     let mut bad = 0;
     for j in 0..J {
         let full = [
@@ -120,11 +128,14 @@ fn field_sums<T: Lane<S = Native>>(r: &mut Rng) -> usize {
             cs_w(&xs, &ys, j, 0, j, w),
         ];
         for k in 0..T::NJ {
-            let mut o = [Fl::<T, B>::zero(); 3];
+            let mut o = [bg; 3];
             cs_at(&mut o[0], &xs, &ys, j, k);
             cs_range_at(&mut o[1], &xs, &ys, j, j / 2, j, k);
             cs_w_at(&mut o[2], &xs, &ys, j, 0, j, w, k);
-            bad += (0..3).filter(|&i| fbits(&o[i], k) != fbits(&full[i], k)).count();
+            let kept = |f: &Fl<T, B>| (0..T::NJ).all(|i| i == k || fbits(f, i) == fbits(&bg, i));
+            bad += (0..3)
+                .filter(|&i| fbits(&o[i], k) != fbits(&full[i], k) || !kept(&o[i]))
+                .count();
         }
     }
     bad
@@ -196,11 +207,12 @@ fn recursion<T: Lane<S = Native>>(r: &mut Rng) -> (usize, usize) {
     )
 }
 
-/// Pass, written before the first run: on `Jet<12>`, `QJet<12>` and `OJet<12>`, every order-k lane operation is the
-/// full operation's coefficient k bit for bit (0 mismatches), every order-k Cauchy sum is `cs`'s, `cs_range`'s and
-/// `cs_w`'s coefficient k for j < 6, and the recursion formed one order at a time is the full recursion at every
-/// x-order and jet order. Controls: the quotient from zero lower coefficients differs at every order k >= 1 (11 of
-/// 12), and the recursion with its kept series cleared differs.
+/// Pass, written before the first run: on `Jet<12>`, `QJet<12>`, `OJet<12>` and the counting lane over `OJet<12>`,
+/// every order-k lane operation is the full operation's coefficient k bit for bit and leaves the output's other
+/// coefficients as they were (0 mismatches), every order-k Cauchy sum is `cs`'s, `cs_range`'s and `cs_w`'s
+/// coefficient k for j < 6 and keeps the others, and the recursion formed one order at a time is the full recursion at
+/// every x-order and jet order. Controls: the quotient from zero lower coefficients differs at every order k >= 1 (11
+/// of 12), and the recursion with its kept series cleared differs.
 #[test]
 fn orders_one_at_a_time_match_the_jets() {
     fn run<T: Lane<S = Native>>(name: &str, seed: u64) {
@@ -229,4 +241,5 @@ fn orders_one_at_a_time_match_the_jets() {
     run::<Jet<12>>("Jet<12>", 1);
     run::<QJet<12>>("QJet<12>", 2);
     run::<OJet<12>>("OJet<12>", 3);
+    run::<Counted<OJet<12>>>("Counted<OJet<12>>", 4);
 }

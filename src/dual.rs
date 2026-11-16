@@ -2031,6 +2031,41 @@ impl<L: Lane> Lane for Counted<L> {
         count(op::FIN);
         Counted(L::fin(a))
     }
+    /// counted as `acc`
+    #[inline(always)]
+    fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
+        count(op::ACC);
+        L::acc_at(a, &x.0, &y.0, k)
+    }
+    /// counted as `fin`
+    #[inline(always)]
+    fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
+        count(op::FIN);
+        L::fin_at(a, k, &mut into.0)
+    }
+    /// counted as `*`
+    #[inline(always)]
+    fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        count(op::MUL);
+        L::mul_at(&x.0, &y.0, k, &mut into.0)
+    }
+    /// counted as `/`
+    #[inline(always)]
+    fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        count(op::DIV);
+        L::div_at(&x.0, &y.0, k, &mut into.0)
+    }
+    /// counted as `mulp`
+    #[inline(always)]
+    fn mulp_at(x: &Self, p: &L::P, k: usize, into: &mut Self) {
+        count(op::MULC);
+        L::mulp_at(&x.0, p, k, &mut into.0)
+    }
+    /// not counted, as `coef` and `set_coef`
+    #[inline(always)]
+    fn copy_at(from: &Self, k: usize, into: &mut Self) {
+        L::copy_at(&from.0, k, &mut into.0)
+    }
     #[inline(always)]
     fn tan64(self, k: usize) -> V8<Self::S> {
         self.0.tan64(k)
