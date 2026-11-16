@@ -390,6 +390,51 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
         }
         Jet { c }
     }
+    /// `acc`'s products of order k alone, into accumulator k
+    #[inline(always)]
+    fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
+        for i in 0..=k {
+            a[k] = a[k].add_prod(x.c[i], y.c[k - i]);
+        }
+    }
+    /// coefficient k copied
+    #[inline(always)]
+    fn copy_at(from: &Self, k: usize, into: &mut Self) {
+        into.c[k] = from.c[k];
+    }
+    /// accumulator k's sum into coefficient k
+    #[inline(always)]
+    fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
+        into.c[k] = a[k].finish();
+    }
+    /// `mul`'s coefficient k
+    #[inline(always)]
+    fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        into.c[k] = Self::conv(&x.c, &y.c, k).finish();
+    }
+    /// `div`'s coefficient k, from the quotient's lower coefficients in `into`
+    #[inline(always)]
+    fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        let r = y.c[0].hi.divisor();
+        if k == 0 {
+            into.c[0] = x.c[0].div_by(y.c[0], r);
+            return;
+        }
+        let mut a = DotAcc::zero();
+        for i in 1..=k {
+            a = a.add_prod(y.c[i], into.c[k - i]);
+        }
+        into.c[k] = (x.c[k] - a.finish()).div_by(y.c[0], r);
+    }
+    /// `mulp`'s coefficient k
+    #[inline(always)]
+    fn mulp_at(x: &Self, p: &Series<N>, k: usize, into: &mut Self) {
+        let mut a = DotAcc::zero();
+        for i in 0..=k {
+            a = a.add_prod(x.c[i], DV::splat(p.c[k - i]));
+        }
+        into.c[k] = a.finish();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -797,6 +842,51 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
             c[k] = a[k].finish();
         }
         QJet { c }
+    }
+    /// `acc`'s products of order k alone, into accumulator k
+    #[inline(always)]
+    fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
+        for i in 0..=k {
+            a[k] = a[k].add_prod(x.c[i], y.c[k - i]);
+        }
+    }
+    /// coefficient k copied
+    #[inline(always)]
+    fn copy_at(from: &Self, k: usize, into: &mut Self) {
+        into.c[k] = from.c[k];
+    }
+    /// accumulator k's sum into coefficient k
+    #[inline(always)]
+    fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
+        into.c[k] = a[k].finish();
+    }
+    /// `mul`'s coefficient k
+    #[inline(always)]
+    fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        into.c[k] = Self::conv(&x.c, &y.c, k).finish();
+    }
+    /// `div`'s coefficient k, from the quotient's lower coefficients in `into`
+    #[inline(always)]
+    fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        let r = y.c[0].c[0].divisor();
+        if k == 0 {
+            into.c[0] = x.c[0].div_by(y.c[0], r);
+            return;
+        }
+        let mut a = QDotAcc::zero();
+        for i in 1..=k {
+            a = a.add_prod(y.c[i], into.c[k - i]);
+        }
+        into.c[k] = (x.c[k] - a.finish()).div_by(y.c[0], r);
+    }
+    /// `mulp`'s coefficient k
+    #[inline(always)]
+    fn mulp_at(x: &Self, p: &QSeries<N>, k: usize, into: &mut Self) {
+        let mut a = QDotAcc::zero();
+        for i in 0..=k {
+            a = a.add_prod(x.c[i], QV::splat(p.c[k - i]));
+        }
+        into.c[k] = a.finish();
     }
 }
 
@@ -1243,5 +1333,50 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
             c[k] = a[k].finish();
         }
         OJet { c }
+    }
+    /// `acc`'s products of order k alone, into accumulator k
+    #[inline(always)]
+    fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
+        for i in 0..=k {
+            a[k].add_prod_mut(&x.c[i], &y.c[k - i]);
+        }
+    }
+    /// coefficient k copied
+    #[inline(always)]
+    fn copy_at(from: &Self, k: usize, into: &mut Self) {
+        into.c[k] = from.c[k];
+    }
+    /// accumulator k's sum into coefficient k
+    #[inline(always)]
+    fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
+        into.c[k] = a[k].finish();
+    }
+    /// `mul`'s coefficient k
+    #[inline(always)]
+    fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        into.c[k] = Self::conv(&x.c, &y.c, k).finish();
+    }
+    /// `div`'s coefficient k, from the quotient's lower coefficients in `into`
+    #[inline(always)]
+    fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        let r = y.c[0].c[0].divisor();
+        if k == 0 {
+            into.c[0] = x.c[0].div_by(y.c[0], r);
+            return;
+        }
+        let mut a = ODotAcc::zero();
+        for i in 1..=k {
+            a.add_prod_mut(&y.c[i], &into.c[k - i]);
+        }
+        into.c[k] = (x.c[k] - a.finish()).div_by(y.c[0], r);
+    }
+    /// `mulp`'s coefficient k
+    #[inline(always)]
+    fn mulp_at(x: &Self, p: &OSeries<N>, k: usize, into: &mut Self) {
+        let mut a = ODotAcc::zero();
+        for i in 0..=k {
+            a.add_prod_mut(&x.c[i], &OV::splat(p.c[k - i]));
+        }
+        into.c[k] = a.finish();
     }
 }
