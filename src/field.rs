@@ -142,6 +142,43 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
+    /// coefficient k of every lane of `from` into this field's, the others unchanged (`Lane::copy_at`)
+    #[inline(always)]
+    pub fn copy_at(&mut self, from: &Self, k: usize) {
+        for b in 0..B {
+            T::copy_at(&from.0[b], k, &mut self.0[b]);
+        }
+    }
+    /// coefficient k of `self * o` into coefficient k of every lane of `out`, the others unchanged (`Lane::mul_at`):
+    /// one order of a product whose lower orders `out` keeps
+    #[inline(always)]
+    pub fn mul_at(&self, o: &Self, k: usize, out: &mut Self) {
+        for b in 0..B {
+            T::mul_at(&self.0[b], &o.0[b], k, &mut out.0[b]);
+        }
+    }
+    /// coefficient k of `self.mul_t(s)` into coefficient k of every lane of `out` (`Lane::mul_at`)
+    #[inline(always)]
+    pub fn mul_t_at(&self, s: &T, k: usize, out: &mut Self) {
+        for b in 0..B {
+            T::mul_at(&self.0[b], s, k, &mut out.0[b]);
+        }
+    }
+    /// coefficient k of `self / o` into coefficient k of every lane of `out`, from the quotient's coefficients
+    /// 0..k - 1 already in `out` (`Lane::div_at`)
+    #[inline(always)]
+    pub fn div_at(&self, o: &Self, k: usize, out: &mut Self) {
+        for b in 0..B {
+            T::div_at(&self.0[b], &o.0[b], k, &mut out.0[b]);
+        }
+    }
+    /// coefficient k of `self.mulp(p)` into coefficient k of every lane of `out` (`Lane::mulp_at`)
+    #[inline(always)]
+    pub fn mulp_at(&self, p: &T::P, k: usize, out: &mut Self) {
+        for b in 0..B {
+            T::mulp_at(&self.0[b], p, k, &mut out.0[b]);
+        }
+    }
     /// plus a parameter constant (`Lane::addp`)
     pub fn addp(self, p: T::P) -> Self {
         let mut r = self.0;
@@ -383,6 +420,66 @@ impl<S: Simd, const B: usize> Fl<OV<S>, B> {
     /// value j as a scalar octo-double
     pub fn get(&self, j: usize) -> OD {
         self.0[j / 8].lane(j % 8)
+    }
+}
+
+/// Coefficient k (in the jet variable) of `cs(x, y, j)` into coefficient k of every lane of `out`, the others
+/// unchanged: on jets the terms' products of order k alone (`Lane::acc_at`), in `cs`'s order, so bit for bit `cs`'s
+/// coefficient k when x and y hold their coefficients 0..=k. A series in the jet variable is then formed one order at
+/// a time from the lower orders kept, at k + 1 products per term instead of a jet product's (N + 1) N / 2. On every
+/// other lane `out` is `cs(x, y, j)`.
+#[inline(always)]
+pub fn cs_at<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y: &[Fl<T, B>], j: usize, k: usize) {
+    cs_range_at(out, x, y, j, 0, j, k)
+}
+
+/// `cs_range(x, y, j, lo, hi)`'s coefficient k into `out`, as `cs_at`
+#[inline(always)]
+pub fn cs_range_at<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    k: usize,
+) {
+    if T::NJ == 0 {
+        *out = cs_range(x, y, j, lo, hi);
+        return;
+    }
+    for b in 0..B {
+        let mut a = T::acc0();
+        for i in lo..=hi {
+            T::acc_at(&mut a, &x[i].0[b], &y[j - i].0[b], k);
+        }
+        T::fin_at(&a, k, &mut out.0[b]);
+    }
+}
+
+/// `cs_w(x, y, j, lo, hi, w)`'s coefficient k into `out`, as `cs_at`
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn cs_w_at<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+    k: usize,
+) {
+    if T::NJ == 0 {
+        *out = cs_w(x, y, j, lo, hi, w);
+        return;
+    }
+    for b in 0..B {
+        let mut a = T::acc0();
+        for i in lo..=hi {
+            T::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[j - i].0[b], k);
+        }
+        T::fin_at(&a, k, &mut out.0[b]);
     }
 }
 

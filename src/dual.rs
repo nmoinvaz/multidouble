@@ -272,6 +272,49 @@ pub trait Lane:
     /// a + x
     fn acc1(a: Self::Acc, x: Self) -> Self::Acc;
     fn fin(a: Self::Acc) -> Self;
+    /// `acc_mut` for the coefficient of order k alone: on a jet the products x_i y_(k-i), i = 0..=k, added into
+    /// accumulator k in `acc`'s order, so that `fin_at` gives coefficient k of `fin` bit for bit; the other
+    /// accumulators are left as they are. On every other lane, `acc_mut`. The order-k operations (`acc_at`, `fin_at`,
+    /// `mul_at`, `div_at`, `mulp_at`) form a series one order at a time, its lower orders kept from the calls before.
+    #[inline(always)]
+    fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
+        let _ = k;
+        Self::acc_mut(a, x, y)
+    }
+    /// coefficient k of `fin(a)` into coefficient k of `into`, its other coefficients unchanged (jets); on every other
+    /// lane `fin(a)`
+    #[inline(always)]
+    fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
+        let _ = k;
+        *into = Self::fin(*a)
+    }
+    /// coefficient k of x y into coefficient k of `into`, bit for bit that of `x * y`, the other coefficients
+    /// unchanged (jets); on every other lane `x * y`
+    #[inline(always)]
+    fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        let _ = k;
+        *into = *x * *y
+    }
+    /// coefficient k of x / y into coefficient k of `into`, from the quotient's coefficients 0..k - 1 already in
+    /// `into`: bit for bit that of `x / y` when they are its (jets). On every other lane `x / y`.
+    #[inline(always)]
+    fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
+        let _ = k;
+        *into = *x / *y
+    }
+    /// coefficient k of `x.mulp(p)` into coefficient k of `into`, bit for bit, the other coefficients unchanged
+    /// (jets); on every other lane `x.mulp(p)`
+    #[inline(always)]
+    fn mulp_at(x: &Self, p: &Self::P, k: usize, into: &mut Self) {
+        let _ = k;
+        *into = x.mulp(*p)
+    }
+    /// coefficient k of `from` into coefficient k of `into`, the others unchanged (jets); on every other lane `from`
+    #[inline(always)]
+    fn copy_at(from: &Self, k: usize, into: &mut Self) {
+        let _ = k;
+        *into = *from
+    }
     /// f64 tangent k < NT (TAN_F64 lanes)
     #[inline(always)]
     fn tan64(self, _k: usize) -> V8<Self::S> {
