@@ -8,7 +8,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dual::{Lane, Param, Tangents};
+use multidouble::dual::{Counted, Lane, Param, Tangents};
 use multidouble::field::{cs, cs_w, horner, DMat, FieldSolve, Fl};
 use multidouble::linalg::{ld_for, DDLu};
 use multidouble::native::{Dtn, Du, OJet, Ou, Oun, Qu, DV, OV};
@@ -150,19 +150,32 @@ fn oun_tangents_are_ou_bitwise() {
     assert_eq!(control, many.len() * N, "the control did not differ in every output");
 }
 
-/// `Lane::NTD`, `tan_k`, `from_vt_n` and `Tangents` on the dual lanes: Oun<4> carries four tangents, Ou, Qu and Du one,
-/// the f64-tangent `Dtn`, the jets and the value lanes none; `from_vt_n` and `tan_k` round-trip a double-double
-/// value and tangents exactly, and `from_tangents`, `value` and `tangent` an octo-double one.
+/// whether two double-double lane vectors have the same bits
+fn same(a: DV, b: DV) -> bool {
+    a.hi.to_array() == b.hi.to_array() && a.lo.to_array() == b.lo.to_array()
+}
+
+/// whether a lane holds the value v and the tangents t, bit for bit (`Lane::val`, `Lane::tan_k`)
+fn holds<T: Lane<S = Native>>(x: T, v: DV, t: &[DV]) -> bool {
+    same(x.val(), v) && t.iter().enumerate().all(|(k, &tk)| same(x.tan_k(k), tk))
+}
+
+/// Pass, written before the first run: `Lane::NTD` is four on Oun<4> and on the counting lane over it, one on Ou, Qu
+/// and Du, and none on the f64-tangent `Dtn`, the jets and the value lanes; `from_vt_n` and `tan_k` round-trip a
+/// double-double value and four tangents exactly on Oun<4> and on Counted<Oun<4>>, and `from_tangents`, `value` and
+/// `tangent` an octo-double one. Controls: the round-trip predicates reject a lane whose value, or one of whose
+/// tangents, was moved by one unit in the last place.
 #[test]
 fn tangent_counts_and_round_trips() {
     assert_eq!(
         [
             <Oun<N> as Lane>::NTD,
+            <Counted<Oun<N>> as Lane>::NTD,
             <Ou as Lane>::NTD,
             <Qu as Lane>::NTD,
             <Du as Lane>::NTD
         ],
-        [4, 1, 1, 1]
+        [4, 4, 1, 1, 1]
     );
     assert_eq!(
         [
@@ -182,9 +195,22 @@ fn tangent_counts_and_round_trips() {
     };
     let v = dv(&mut r);
     let t: Vec<DV> = (0..N).map(|_| dv(&mut r)).collect();
+    assert!(holds(Oun::<N>::from_vt_n(v, &t), v, &t), "Oun's round trip");
+    assert!(
+        holds(Counted::<Oun<N>>::from_vt_n(v, &t), v, &t),
+        "Counted<Oun>'s round trip"
+    );
+    // controls: one ulp moved in the value, then in the last tangent
+    let ulp = |x: DV| {
+        let mut hi = x.hi.to_array();
+        hi[3] = f64::from_bits(hi[3].to_bits() + 1);
+        DV::load(&hi, &x.lo.to_array())
+    };
     let x = Oun::<N>::from_vt_n(v, &t);
-    let same = |a: DV, b: DV| a.hi.to_array() == b.hi.to_array() && a.lo.to_array() == b.lo.to_array();
-    assert!(same(x.val(), v) && (0..N).all(|k| same(x.tan_k(k), t[k])));
+    let mut t_moved = t.clone();
+    t_moved[N - 1] = ulp(t[N - 1]);
+    assert!(!holds(x, ulp(v), &t), "control: a moved value passed");
+    assert!(!holds(x, v, &t_moved), "control: a moved tangent passed");
     let lane = |r: &mut Rng| {
         OV::from_lanes(&std::array::from_fn(|_| {
             let h = r.sym();

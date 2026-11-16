@@ -2372,6 +2372,17 @@ impl<L: Lane> Lane for Counted<L> {
     fn copy_at(from: &Self, k: usize, into: &mut Self) {
         L::copy_at(&from.0, k, &mut into.0)
     }
+    const NTD: usize = L::NTD;
+    /// not counted, as `tan`
+    #[inline(always)]
+    fn tan_k(self, k: usize) -> DV<Self::S> {
+        self.0.tan_k(k)
+    }
+    /// not counted, as `from_vt`
+    #[inline(always)]
+    fn from_vt_n(v: DV<Self::S>, t: &[DV<Self::S>]) -> Self {
+        Counted(L::from_vt_n(v, t))
+    }
     #[inline(always)]
     fn tan64(self, k: usize) -> V8<Self::S> {
         self.0.tan64(k)
