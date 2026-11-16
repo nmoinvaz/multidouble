@@ -13,7 +13,7 @@
 //! long jet sums (`cs_splits`), bitwise the same. A matrix product is `MatLane::dmat_apply`: the
 //! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
-use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
+use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
 use crate::dv::{DotAcc, DV};
 use crate::jet::{Jet, OJet, QJet};
 use crate::linalg::DDLu;
@@ -242,6 +242,17 @@ impl<T: Lane, const B: usize> Fl<T, B> {
             r[b] = T::from_vt(v.0[b], t.0[b]);
         }
         Fl(r)
+    }
+    /// tangent k of every lane rounded to double-double (`Lane::tan_k`)
+    pub fn tan_k(&self, k: usize) -> Fl<Dv<T>, B> {
+        Fl(std::array::from_fn(|b| self.0[b].tan_k(k)))
+    }
+    /// value v and tangents t of every lane, exactly (`Lane::from_vt_n`)
+    pub fn from_vt_n(v: &Fl<Dv<T>, B>, t: &[Fl<Dv<T>, B>]) -> Self {
+        Fl(std::array::from_fn(|b| {
+            let tb: Vec<Dv<T>> = t.iter().map(|f| f.0[b]).collect();
+            T::from_vt_n(v.0[b], &tb)
+        }))
     }
     /// f64 tangent k of every value, as an `F8` field (the `TAN_F64` lane types)
     pub fn tan64(&self, k: usize) -> Fl<F8<T::S>, B> {
@@ -802,6 +813,24 @@ pub fn horner<T: Lane, const B: usize>(s: &[Fl<T, B>], h: DD) -> Fl<T, B> {
     out
 }
 
+impl<T: Tangents, const B: usize> Fl<T, B> {
+    /// the field with values v and tangents t (`Tangents::from_tangents`, lane by lane, exactly)
+    pub fn from_tangents(v: &Fl<T::V, B>, t: &[Fl<T::V, B>]) -> Self {
+        Fl(std::array::from_fn(|b| {
+            let tb: Vec<T::V> = t.iter().map(|f| f.0[b]).collect();
+            T::from_tangents(v.0[b], &tb)
+        }))
+    }
+    /// every lane's value (`Tangents::value`)
+    pub fn value(&self) -> Fl<T::V, B> {
+        Fl(std::array::from_fn(|b| self.0[b].value()))
+    }
+    /// every lane's tangent k (`Tangents::tangent`)
+    pub fn tangent(&self, k: usize) -> Fl<T::V, B> {
+        Fl(std::array::from_fn(|b| self.0[b].tangent(k)))
+    }
+}
+
 /// A constant (8 B) x (8 B) double-double matrix stored by columns (column j as a field over the rows), with a copy
 /// of the columns' hi parts for the f64 lanes.
 #[derive(Clone)]
@@ -869,6 +898,7 @@ impl<S: Simd> MatLane for QV<S> {}
 impl<S: Simd> MatLane for OV<S> {}
 impl<S: Simd> MatLane for Qu<S> {}
 impl<S: Simd> MatLane for Ou<S> {}
+impl<S: Simd, const N: usize> MatLane for Oun<S, N> {}
 impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for OJet<S, N> {}
@@ -1039,7 +1069,8 @@ pub trait FieldSolve {
     /// differentiated system (rhs_d - A_d x_v - A x_d, with the caller's A_d). The first solve of a tangent ignores
     /// A_d (its right-hand side is rhs's tangent), so a tangent takes one step more than a value to reach the same
     /// precision. Without a tangent (`Lane::TANGENT` false) it is `solve_lanes_refine`, bitwise. A complex tangent
-    /// (`Dc`) is carried by its real part only (`Lane::tan`).
+    /// (`Dc`) is carried by its real part only (`Lane::tan`). A lane with several tangents (`Lane::NTD` > 1, `Oun`)
+    /// has each solved as the one tangent of `Ou` is (`Lane::tan_k`, `Lane::from_vt_n`).
     ///
     /// A jet (`Lane::NJ` > 0) panics. `Lane::from_vt` sets only its orders 0 and 1, so the orders past 1 would come
     /// back zero, and `solve_lanes_jet` and `solve_lanes_jet_refine` solve a jet order by order instead.
@@ -1241,6 +1272,17 @@ impl FieldSolve for DDLu {
             "FieldSolve::solve_lanes_refine_t refines one tangent: a jet would lose its orders past 1 (solve_lanes_jet)"
         );
         let z = Fl::<Dv<T>, B>::zero();
+        if T::NTD > 1 {
+            // each tangent solved as `Ou`'s one is
+            let tsolve_n =
+                |r: &Fl<T, B>| -> Vec<Fl<Dv<T>, B>> { (0..T::NTD).map(|k| lu_t.solve_lanes(&r.tan_k(k))).collect() };
+            let mut x = Fl::<T, B>::from_vt_n(&self.solve_lanes(&rhs.val()), &tsolve_n(rhs));
+            for _ in 0..steps {
+                let r = resid(&x);
+                x = x + Fl::<T, B>::from_vt_n(&self.solve_lanes(&r.val()), &tsolve_n(&r));
+            }
+            return x;
+        }
         let tsolve = |r: &Fl<T, B>| if T::TANGENT { lu_t.solve_lanes(&r.tan()) } else { z };
         let mut x = Fl::<T, B>::from_vt(&self.solve_lanes(&rhs.val()), &tsolve(rhs));
         for _ in 0..steps {
