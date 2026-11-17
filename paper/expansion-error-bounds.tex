@@ -50,9 +50,9 @@
 \begin{abstract}
 A floating-point expansion stores a number as an unevaluated sum of $n$ machine numbers, which gives about $n$ times
 the precision of the hardware format. The quad-double algorithms of Hida, Li and Bailey are the most widely used way
-to add, multiply, divide and take square roots of such sums, and they extend from four parts to any $n$. We found no
-proven error bound for them in the literature, even at four parts. We prove that the sum and the product of two
-$n$-part expansions err by at most $u^n$ times the exact result, where $u$ is the unit roundoff of the hardware
+to add, multiply, divide and take square roots of such sums, and they extend from four parts to any $n$. Bounds were known for
+variants of them at any $n$, with leading constants that grow like $2^n$. We prove that, for the algorithms
+themselves, the sum and the product of two $n$-part expansions err by at most $u^n$ times the exact result, where $u$ is the unit roundoff of the hardware
 format. This is the bound of rounding to a format with $n$ times the precision. A second, much smaller term is added,
 at most $2^{-15}$ of the first at eight parts in binary64, and measured against the operands' size for sums. Division
 has the same bound, and the square root three times it. Simple
@@ -78,8 +78,10 @@ octo-double arithmetic of the multidouble library uses it at $n = 8$~\cite{md}.
 
 How accurate is the result? The QD paper bounds its addition under the assumption that the renormalization works, and
 notes that this remains to be proven. Joldes, Marty, Muller and Popescu~\cite{JMMP16} proved properties of a different
-renormalization for expansions of any length, and state that no error bound is known for QD's division. Proven bounds
-exist for other algorithms: a bin-based multiplication of any length~\cite{MPT16}, triple-word
+renormalization for expansions of any length, and state that no error bound is known for QD's division.
+Popescu~\cite{Popescu17} proved bounds for generalizations of QD's addition and multiplication to any number of parts,
+which sum each level with VecSum and use a different renormalization. Their leading terms are $24 \cdot 2^n u^n(|a| +
+|b|)$ and $2^n u^n |a_0b_0|$ (Theorems 3.3.4 and 3.4.5 there). Proven bounds exist for other algorithms: a bin-based multiplication of any length~\cite{MPT16}, triple-word
 arithmetic~\cite{FMP19}, double-word arithmetic~\cite{JMP17}, and machine-verified networks for two to four
 parts~\cite{Zhang25}.
 
@@ -87,7 +89,8 @@ parts~\cite{Zhang25}.
 We give proven bounds for the QD-style algorithms themselves, for every $n$:
 \begin{itemize}
 \item addition and multiplication of two expansions, and of an expansion and a floating-point number, are accurate to
-  $u^n$ relative, plus a small second term (Theorem~\ref{thm:main});
+  $u^n$ relative, plus a small second term (Theorem~\ref{thm:main}), a leading constant of 1 against $2^n$ and more
+  for the variants;
 \item division is accurate to $u^n$, and the square root to $3u^n$ at $n = 8$ (Theorem~\ref{thm:divsqrt});
 \item simple inputs reach the bound $u^n$, so it cannot be improved (Section~\ref{sec:example});
 \item the renormalization is exact until its last step, whatever the order of its input terms
@@ -272,7 +275,7 @@ the operation and on $n$.
 
 The first term is the bound of rounding $Z$ to a format with $np$ bits. The second term is a correction. For a product,
 $M$ is within a factor of about $1 + 4u$ of $|Z|$, so the whole bound is relative. For a sum, $M$ is the size of the operands,
-and after cancellation it can be much larger than $|Z|$, as for any floating-point addition. Table~\ref{tab:summary}
+and after cancellation it can be much larger than $|Z|$, the form of QD's own addition bound~\cite{HLB01}. Table~\ref{tab:summary}
 gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the correction grows with $n$.
 
 \nopagebreak
@@ -459,6 +462,8 @@ evaluation. arXiv:2609.35844, 2026.
 floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
 \bibitem{ORO05} T. Ogita, S. M. Rump, S. Oishi. Accurate sum and dot product. \emph{SIAM J. Sci. Comput.} 26(6),
 1955--1988, 2005. doi:10.1137/030601818.
+\bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
+de Lyon, 2017. HAL tel-01534090.
 \bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
 132--143, 1991. doi:10.1109/ARITH.1991.145549.
 \bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request
