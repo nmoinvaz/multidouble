@@ -5,43 +5,116 @@
 [![codecov](https://codecov.io/gh/nmoinvaz/multidouble/graph/badge.svg)](https://codecov.io/gh/nmoinvaz/multidouble)
 
 Double-double, quad-double and octo-double floating-point arithmetic for Rust, scalar and on 8-lane SIMD vectors, with
-**bitwise the same results on AVX-512, AVX2, SSE2, NEON and portable builds**. It also has forward-mode dual numbers over
-these lanes and dense LU factorizations in double-double, quad-double and octo-double.
+**bitwise the same results on AVX-512, AVX2, SSE2, NEON and portable builds**. It also has forward-mode dual numbers,
+truncated power series and dense LU factorizations in all three precisions.
 
 A double-double is an unevaluated sum `hi + lo` of two `f64`, about 32 significant digits. A quad-double is a sum of four,
 about 64 digits, and an octo-double a sum of eight, about 126 digits. All are built from error-free transformations
 (two-sum, FMA two-product), so they run at hardware speed, with no allocation and no arbitrary-precision library.
-The paper [Error bounds for quad-double style arithmetic on floating-point expansions of any
-length](paper/expansion-error-bounds.pdf) proves the octo-double arithmetic's error bounds, for its algorithms at any
-number of parts.
+
+The octo-double add, multiply, divide and square root have proven error bounds. The paper [Error bounds for quad-double
+style arithmetic on floating-point expansions of any length](paper/expansion-error-bounds.pdf) proves them for the same
+algorithms at any number of parts, and shows that simple inputs reach the bounds of the add, multiply and divide.
+
+## Types
+
+### Numbers
 
 | Type | What it is |
 |---|---|
-| `v8::V8` | 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout; `divisor` and `div_by` for several divisions by one vector, on AVX-512 by its reciprocal (`rcp14`, Newton steps and one correction), bitwise the same as `div` |
-| `dd::DD`, `dv::DV` | double-double, scalar and 8-lane; `DV::div_by` for several divisions by one b through `b.hi.divisor()`, bitwise the same as `/`; `dv::DotAcc` accumulates sums of products; `dd::split` and `dd::join` between slices of double-doubles and their hi and lo arrays |
-| `qd::QD`, `qv::QV` | quad-double, scalar and 8-lane; exact decimal parsing and printing; `QV::div_by` for several divisions by one b through `b.c[0].divisor()`, bitwise the same as `/`; `QdAcc`, `QDotAcc` accumulators (`QDotAcc::add_prod_mut` adds a product in place); `qv::axpy_parts`, y + a x on quad-double vectors kept as four part arrays; `qd::to_parts` and `qd::from_parts` between slices of quad-doubles and their four part arrays |
-| `od::OD`, `ov::OV` | octo-double, scalar and 8-lane: the quad-double algorithms carried to eight parts and written once for both, add, multiply, divide (also by a shared divisor), square root, comparisons, exact decimal parsing and printing; `OdAcc`, `ODotAcc` accumulators; `OV` is a `dual::Lane` (`Lane::VAL_OD`), so code written over the trait runs in octo-double and `solve_lanes_refine` refines a double-double LU's solve to octo-double; `OV::new` renormalizes eight parts on the lanes, and `ov::axpy_parts` is y + a x on octo-double vectors kept as eight part arrays |
-| `dual::Du`, `dual::Dtn<N>`, `dual::Fu`, `dual::Fun<N>`, `dual::Qu`, `dual::Ou`, `dual::Dc` | forward-mode dual lanes: a double-double value with a double-double tangent or N f64 tangents, f64 versions, a quad-double value with a quad-double tangent, an octo-double value with an octo-double tangent (`Fl::from_vt_od` seeds a field of them), and a double-double value with a complex tangent, behind the `dual::Lane` trait |
-| `jet::Jet<N>` | a truncated power series lane: N double-double coefficients in one variable, Cauchy products and series quotients, so a computation written over `dual::Lane` gives its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a high-order Taylor continuation of a branch); `jet::Series<N>` is its scalar parameter arithmetic (`Lane::P`, double-double on every other lane, so constants formed from the parameter stay bit for bit what they were) |
-| `jet::QJet<N>` | the same in quad-double, with `jet::QSeries<N>` its parameter arithmetic: Taylor coefficients to quad-double accuracy where cancellation in the computation amplifies double-double rounding; `Lane::coef_qd` and `set_coef_qd` read and set them without rounding to double-double |
-| `jet::OJet<N>` | the same in octo-double, with `jet::OSeries<N>` its parameter arithmetic, for when the amplification exceeds even quad-double; `Lane::coef_od` and `set_coef_od` read and set its coefficients in octo-double, and its sums accumulate in place (`ODotAcc::add_prod_mut`) |
-| `dual::Counted<L>` | any lane type with every operation counted by kind (`dual::take_counts`, indexed by `dual::op`), the results bitwise L's: operation counts of code written over `dual::Lane` |
-| `field::Fl<T, B>` | 8 B values of a lane type as B lane vectors, with f64 tangents set and unit tangents seeded (`set_tan64`, `unit`, `unit_tangent`), and quad-double and octo-double values as part arrays (`load_parts`, `store_parts`, `load_parts_od`, `store_parts_od`): the arithmetic of power-series methods, for every lane type |
-| `field::cs`, `field::cs_range`, `field::cs_w` | Cauchy products, and Horner evaluation (`horner`). The same sums, bitwise, run in place (`cs_into`, `cs_range_into`, `cs_w_into`), one lane vector at a time (`cs_lane_into`, `cs_w_lane_into`), or for a long jet sum with its lane vectors on separate threads (`cs_par`, `cs_range_par`, `cs_w_par`). The in-place sums go through `Lane::acc_mut`, which saves a jet's sums the copy of its kilobytes per term. One coefficient of the jet variable at a time (`cs_at`, `cs_range_at`, `cs_w_at`, and the lane's `acc_at`, `mul_at`, `div_at`, `mulp_at`, `copy_at`), bit for bit the full operations' coefficient, forms a series in the jet variable order by order from the lower orders kept: k + 1 products per term at order k instead of a jet product's N (N + 1) / 2 |
+| `v8::V8` | 8 `f64` lanes: one AVX-512 register, two AVX2 registers, four SSE2 or NEON registers, or a plain array, with fused multiply-add throughout |
+| `dd::DD`, `dv::DV` | double-double, scalar and on 8 lanes |
+| `qd::QD`, `qv::QV` | quad-double, scalar and on 8 lanes, with exact decimal parsing and printing |
+| `od::OD`, `ov::OV` | octo-double, scalar and on 8 lanes, with exact decimal parsing and printing: the quad-double algorithms carried to eight parts and written once for both |
+
+- For several divisions by one divisor there are `V8::divisor` and `div_by` (on AVX-512 by its reciprocal, with
+  `rcp14`, Newton steps and one correction), `DV::div_by` through `b.hi.divisor()`, `QV::div_by` through
+  `b.c[0].divisor()`, and the octo-double division by a shared divisor. Each is bitwise the same as plain division.
+- Sums of products have accumulators: `dv::DotAcc`, `qd::QdAcc` and `qv::QDotAcc` (`QDotAcc::add_prod_mut` adds a
+  product in place), and `od::OdAcc` and `ov::ODotAcc`.
+- Values kept as one array per part convert with `dd::split` and `dd::join` (hi and lo arrays) and `qd::to_parts` and
+  `qd::from_parts` (four arrays). `qv::axpy_parts` and `ov::axpy_parts` compute y + a x on four or eight part arrays,
+  and `OV::new` renormalizes eight parts on the lanes.
+- `OV` is a `dual::Lane` (`Lane::VAL_OD`), so code written over the trait runs in octo-double, and
+  `solve_lanes_refine` refines a double-double LU's solve to octo-double.
+- Every number and lane type has `mul_pwr2`, a scaling by a power of two (every part, tangents included), exact
+  barring overflow and underflow, for computing in a variable rescaled by 2^k, such as a power series whose
+  coefficients would overflow in the original variable. `dd::pow2_near` gives the power of two nearest to a scale in
+  the logarithm, within a factor of √2.
+
+### Derivatives and power series
+
+| Type | What it is |
+|---|---|
+| `dual::Du`, `dual::Dtn<N>` | a double-double value with a double-double tangent, or with N `f64` tangents |
+| `dual::Fu`, `dual::Fun<N>` | the `f64` versions |
+| `dual::Qu`, `dual::Ou` | a quad-double value with a quad-double tangent, an octo-double value with an octo-double tangent |
+| `dual::Dc` | a double-double value with a complex tangent |
+| `jet::Jet<N>`, `jet::QJet<N>`, `jet::OJet<N>` | a truncated power series in one variable, with N coefficients in double-double, quad-double or octo-double |
+| `dual::Counted<L>` | any lane type with every operation counted by kind |
+
+- All of them are lanes behind the `dual::Lane` trait. A computation written once over the trait gives values,
+  derivatives, or its own Taylor coefficients in a parameter entered as `Lane::var` (the right-hand sides of a
+  high-order Taylor continuation of a branch). `Fl::from_vt_od` seeds a field of `Ou`.
+- A jet's parameter arithmetic, its `Lane::P`, is `jet::Series<N>`, `jet::QSeries<N>` or `jet::OSeries<N>`. On every
+  other lane `Lane::P` is double-double, so constants formed from the parameter stay bit for bit what they were.
+- The quad-double jet gives Taylor coefficients to quad-double accuracy where cancellation in the computation
+  amplifies double-double rounding, and the octo-double jet where the amplification exceeds even quad-double.
+  `Lane::coef_qd`, `set_coef_qd`, `coef_od` and `set_coef_od` read and set the coefficients without rounding to
+  double-double, and the octo-double jet's sums accumulate in place (`ODotAcc::add_prod_mut`).
+- `dual::Counted<L>` returns L's results bit for bit and counts every operation (`dual::take_counts`, indexed by
+  `dual::op`), for operation counts of code written over `dual::Lane`.
+
+### Fields and linear algebra
+
+| Type | What it is |
+|---|---|
+| `field::Fl<T, B>` | 8 B values of a lane type as B lane vectors: the arithmetic of power-series methods, for every lane type |
+| `field::cs`, `field::cs_range`, `field::cs_w` | Cauchy products, and Horner evaluation (`horner`) |
 | `field::DMat` | a constant double-double matrix applied to a field (`MatLane::dmat_apply`) |
-| `field::FieldSolve` | solves with a `DDLu`. `solve_lanes_refine` refines in the lane type, to quad-double for `QV`. `solve_lanes_refine_t` solves value and tangent together, takes a complex tangent by its real part, and refuses a jet. `solve_lanes_jet`, `solve_lanes_jet_refine` and `solve_lanes_jet_refine_od` solve a jet's system order by order with the LU at the values, in double-double or with each order refined to quad-double or octo-double |
-| `field::TangentTail` | an early end of a series once its tangent terms have stayed below a tolerance, relative to their largest so far, for a run of orders |
-| `linalg::DDLu`, `linalg::clu_logdet`, `linalg::clu_pivots` | dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), solves, transpose solves, many right-hand sides, solves refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices, the determinant; ln\|det\| and arg det of a complex double-double matrix by the same LU (`clu_logdet`), with every pivot (`clu_pivots`) |
-| `linalg::QDLu` | dense LU with partial pivoting in quad-double (8-row `QV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in quad-double: for systems too ill-conditioned for double-double |
-| `linalg::ODLu` | dense LU with partial pivoting in octo-double (8-row `OV` lanes, the trailing update in parallel, zero updates skipped), solves and transpose solves in octo-double: for systems too ill-conditioned for quad-double, to about cond(A) 2^-418 |
-| `linalg::lu_rect_f64` | the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur complement: the step of a block (staircase) LU |
-| `linalg::StaircaseLu` | the f64 LU with partial pivoting of a staircase (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without the dense matrix; solves and transpose solves in double-double |
-| `precision::Precision`, `precision::Double`, `precision::Quad`, `precision::Octo` | one trait over double-double, quad-double and octo-double: the scalar, lane, dual, jet and LU types of one precision, and the operations whose names or arity differ between them (`new`, `load_field`, `coef`, `field_dual`, `lu_factor`, `dot`, ...), each delegating to the precision's own, so code written once over `Precision` gives bitwise the results of the code written for one precision |
+| `field::FieldSolve` | solves with a `DDLu`, refined in the lane type |
+| `field::TangentTail` | an early end of a series once its tangent terms stay small |
+| `linalg::DDLu`, `linalg::clu_logdet`, `linalg::clu_pivots` | dense LU with partial pivoting in double-double, and the log-determinant and pivots of a complex double-double matrix |
+| `linalg::QDLu`, `linalg::ODLu` | dense LU with partial pivoting in quad-double and octo-double |
+| `linalg::lu_rect_f64`, `linalg::StaircaseLu` | f64 LU of a block of columns, and of a staircase system |
+
+- `Fl` sets `f64` tangents and seeds unit tangents (`set_tan64`, `unit`, `unit_tangent`), and loads and stores
+  quad-double and octo-double values as part arrays (`load_parts`, `store_parts`, `load_parts_od`, `store_parts_od`).
+- The Cauchy sums also run in place, bitwise the same (`cs_into`, `cs_range_into`, `cs_w_into`), one lane vector at a
+  time (`cs_lane_into`, `cs_w_lane_into`), or for a long jet sum with its lane vectors on separate threads (`cs_par`,
+  `cs_range_par`, `cs_w_par`). The in-place sums go through `Lane::acc_mut`, which saves a jet's sums the copy of its
+  kilobytes per term.
+- One coefficient of the jet variable at a time (`cs_at`, `cs_range_at`, `cs_w_at`, and the lane's `acc_at`, `mul_at`,
+  `div_at`, `mulp_at`, `copy_at`), bit for bit the full operations' coefficient, forms a series order by order from the
+  lower orders kept: k + 1 products per term at order k instead of a jet product's N (N + 1) / 2.
+- `FieldSolve::solve_lanes_refine` refines in the lane type, to quad-double for `QV`. `solve_lanes_refine_t` solves
+  value and tangent together, takes a complex tangent by its real part, and refuses a jet. `solve_lanes_jet`,
+  `solve_lanes_jet_refine` and `solve_lanes_jet_refine_od` solve a jet's system order by order with the LU at the
+  values, in double-double or with each order refined to quad-double or octo-double.
+- `TangentTail` ends a series once its tangent terms have stayed below a tolerance, relative to their largest so far,
+  for a run of orders.
+- `DDLu` is also blocked in `f64` for mixed precision. It gives solves, transpose solves, many right-hand sides, solves
+  refined to quad-double (`solve_refine_qd`, the residual in quad-double), Gram matrices and the determinant.
+  `clu_logdet` gives ln|det| and arg det of a complex double-double matrix by the same LU, and `clu_pivots` every
+  pivot.
+- `QDLu` and `ODLu` run on 8-row `QV` and `OV` lanes, the trailing update in parallel with zero updates skipped, and
+  solve and transpose-solve in their own precision. `QDLu` is for systems too ill-conditioned for double-double, and
+  `ODLu` for those too ill-conditioned for quad-double, to about cond(A) 2^-418.
+- `lu_rect_f64` is the f64 partial-pivoting LU of the first columns of a rectangular block, leaving the Schur
+  complement: the step of a block (staircase) LU. `StaircaseLu` is the f64 LU with partial pivoting of a staircase
+  (almost block diagonal) system with one global parameter, as multiple shooting gives, built block by block without
+  the dense matrix, with solves and transpose solves in double-double.
+
+### Generic code
+
+| Type | What it is |
+|---|---|
+| `precision::Precision`, `precision::Double`, `precision::Quad`, `precision::Octo` | one trait over double-double, quad-double and octo-double |
 | `exact` | exact dyadic and decimal arithmetic, the reference the tests compare against |
 
-Every number and lane type has `mul_pwr2`, an exact scaling by a power of two (every part, tangents included), for
-computing in a variable rescaled by 2^k, such as a power series whose coefficients would overflow in the original variable;
-`dd::pow2_near` gives the power of two nearest to a scale in the logarithm (within a factor of √2).
+`Precision` gathers one precision's scalar, lane, dual, jet and LU types, and the operations whose names or arity
+differ between them (`new`, `load_field`, `coef`, `field_dual`, `lu_factor`, `dot`, ...), each delegating to the
+precision's own. Code written once over `Precision` gives bitwise the results of the code written for one precision.
 
 ## Installation
 
@@ -55,8 +128,10 @@ or as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-multidouble = "1.0"
+multidouble = "4.8"
 ```
+
+It needs Rust 1.89 or later, the version in which the AVX-512 intrinsics became stable.
 
 ## Usage
 
@@ -232,8 +307,6 @@ every runner, not only on ARM. CI runs the whole suite on:
 - nightly Rust with the feature `f128`, on x86-64 and ARM64 Linux.
 
 It also runs coverage, clippy on each backend, and a library check at the minimum Rust version.
-
-The minimum Rust version is 1.89, where the AVX-512 intrinsics became stable.
 
 ## Origin
 
