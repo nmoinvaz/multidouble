@@ -1,0 +1,7 @@
+p=6 n=3: 186 pairs of R_n fixed points; largest |Z - x|/|Z| = 0 = 0 u^n = 0 u
+p=6 n=4: 341 pairs of R_n fixed points; largest |Z - x|/|Z| = 0 = 0 u^n = 0 u
+p=6 n=5: 482 pairs of R_n fixed points; largest |Z - x|/|Z| = 0 = 0 u^n = 0 u
+p=6 n=3: 5683 inputs; largest |Z - x|/|Z| = 0 = 2^0x0.0p+0 = 0 u^n; results 0 with Z != 0: 0
+p=6 n=4: 17 inputs; largest |Z - x|/|Z| = 0.00141 = 2^0x1.7187785041d28p-10 = 2.365e+04 u^n; results 0 with Z != 0: 0
+p=6 n=2: largest |Z - x|/|Z| = 0.0002403 = 0.9844 u^n, |Z|/M = 0.97 = 2.54e+05 u^(n+1)
+p=53 n=4 J=3: largest error = 0.468750 u^n sqrt(x) at x = ['

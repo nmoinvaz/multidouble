@@ -44,6 +44,15 @@ def ulpno(v, p):
 
 LIM = None
 RENORM = False
+NOMERGE = False
+
+
+def nomerge(v):
+    """no two consecutive nonzero parts whose sum is a floating-point number (as the parts R_n emits)"""
+    for i in range(len(v) - 1):
+        if v[i][0] and v[i + 1][0] and F.two_sum(v[i], v[i + 1])[1][0] == 0:
+            return False
+    return True
 
 
 def run(p, trials, seed, n=3, show=2):
@@ -75,6 +84,8 @@ def run(p, trials, seed, n=3, show=2):
             if a[0][0] == 0 or b[0][0] == 0 or not (ladder(a, p) and ladder(b, p)):
                 continue
         if LIM is not None and (ulpno(a, p) > LIM or ulpno(b, p) > LIM):
+            continue
+        if NOMERGE and not (nomerge(a) and nomerge(b)):
             continue
         tested += 1
         Z = sum(A.val(t) for t in a + b)
@@ -111,5 +122,6 @@ if __name__ == '__main__':
     DUMP = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] != '-' else None
     LIM = float(sys.argv[6]) if len(sys.argv) > 6 and sys.argv[6] != '-' else None
     RENORM = len(sys.argv) > 7 and sys.argv[7] == 'renorm'
+    NOMERGE = len(sys.argv) > 7 and sys.argv[7] == 'nomerge'
     n = int(sys.argv[4]) if len(sys.argv) > 4 else 3
     run(p, trials, seed, n)
