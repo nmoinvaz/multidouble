@@ -14,3 +14,15 @@ dd df_add p=53 seed=1 steps=279527 max_rel_err=1.19364 u^2  time=30s
 dd boost_add p=8 seed=1 steps=299220 max_rel_err=2.61700 u^2  time=20s
 dd boost_add p=53 seed=1 steps=367416 max_rel_err=1.19397 u^2  time=30s
 dd df_mul p=8 seed=1 steps=287378 max_rel_err=4.40009 u^2  time=20s
+dd df_mul p=53 seed=1 steps=315028 max_rel_err=4.30382 u^2  time=30s
+dd boost_mul p=8 seed=1 steps=267996 max_rel_err=4.70374 u^2  time=20s
+dd boost_mul p=53 seed=1 steps=262781 max_rel_err=4.94212 u^2  time=30s
+dd jmp_div_dw2 p=8 seed=1 steps=131334 max_rel_err=6.50009 u^2  time=20s
+dd jmp_div_dw2 p=53 seed=1 steps=329567 max_rel_err=7.14596 u^2  time=30s
+dd df_div p=8 seed=1 steps=321930 max_rel_err=7.32516 u^2  time=20s
+dd df_div p=53 seed=1 steps=389450 max_rel_err=7.69183 u^2  time=30s
+dd boost_div p=8 seed=1 steps=292843 max_rel_err=7.32516 u^2  time=20s
+dd boost_div p=53 seed=1 steps=330052 max_rel_err=7.08750 u^2  time=30s
+dd boost_sqrt p=8 seed=1 steps=267453 max_rel_err=2.96264 u^2  time=20s
+dd boost_sqrt p=53 seed=1 steps=282955 max_rel_err=3.01246 u^2  time=30s
+MASTER-DONE
