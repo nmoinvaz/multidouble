@@ -1,0 +1,4 @@
+dd boost_div p=53 seed=7 steps=708597 max_rel_err=7.60589 u^2  time=90s
+dd df_div p=53 seed=7 steps=727646 max_rel_err=7.60589 u^2  time=60s
+dd boost_mul p=53 seed=7 steps=489584 max_rel_err=6.14574 u^2  time=45s
+FOLLOWUP3-DONE
