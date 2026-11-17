@@ -1,0 +1,2 @@
+climb qd_ieee_add_fixed p=53 seed=1 steps=400145 restarts=134 best_ratio=0.116566 (log2 -3) time=150s
+climb qd_ieee_add_fixed p=8 seed=2 steps=298286 restarts=100 best_ratio=0.467583 (log2 -2) time=90s

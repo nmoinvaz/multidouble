@@ -51,6 +51,21 @@ def _(a, b):
     return X.qd_ieee_add_fix2(a, b)
 
 
+@op('l3_bf_add', 4, 'rel', 2, 'add')  # libQD3 QD_BF addition; eps_qd |Z| for reference (no bound stated)
+def _(a, b):
+    return X.l3_bf_add(a, b)
+
+
+@op('l3_bf_add_M', 4, 'cray', 2, 'add')  # the same, against QD's Cray-style addition bound
+def _(a, b):
+    return X.l3_bf_add(a, b)
+
+
+@op('l3_bf_mul', 4, 'rel', 2, 'mul')  # libQD3 QD_BF multiplication; eps_qd |Z| for reference
+def _(a, b):
+    return X.l3_bf_mul(a, b)
+
+
 @op('qd_accurate_mul', 4, 'rel', 2, 'mul')
 def _(a, b):
     return X.qd_accurate_mul(a, b)

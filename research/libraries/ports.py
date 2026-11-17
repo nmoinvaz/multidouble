@@ -675,3 +675,47 @@ def qd_ieee_add_fix2(a, b):
             x.append(s)
     terms = x + [u, v] + list(a[i:]) + list(b[j:])
     return F.renorm(terms, 4, 'two')
+
+
+# ------------------------------------------------------------------------------------------------------------
+# libQD3 1.6.0 (github.com/nakatamaho/libQD3 @ 93ee743), include/qd/qd_inline.h: the branch-free quad-double add
+# and mul selected by QD_BF (MPLAPACK builds libQD3 with -DQD_ENABLE_BF=ON). They transcribe Kouya's Algorithms 13
+# and 14 (arXiv:2603.14926v2), which transcribe Zhang and Aiken's networks.
+# ------------------------------------------------------------------------------------------------------------
+
+def l3_bf_add(a, b):  # qd_inline.h:415-450
+    TS, QTS = qd_two_sum, qd_quick_two_sum
+    a1, b1 = TS(a[0], b[0]); c1, d1 = TS(a[1], b[1]); e1, f1 = TS(a[2], b[2]); g1, h1 = TS(a[3], b[3])
+    a2, c2 = QTS(a1, c1); b2 = add(b1, h1); d2, e2 = TS(d1, e1); f2, g2 = TS(f1, g1)
+    b3, g3 = TS(b2, g2); c3, d3 = QTS(c2, d2); e3, f3 = TS(e2, f2)
+    a4, c4 = QTS(a2, c3); d4, e4 = QTS(d3, e3)
+    b5, d5 = TS(b3, d4); e5 = add(e4, f3)
+    b6, c6 = TS(b5, c4); d6, e6 = TS(d5, e5)
+    a7, b7 = QTS(a4, b6); c7, d7 = QTS(c6, d6)
+    e8 = add(e6, g3); b8, c8 = QTS(b7, c7)
+    d9 = add(d7, e8); c0, b10 = QTS(a7, b8)
+    c10, d10 = QTS(c8, d9); c1o, c11 = QTS(b10, c10)
+    c2o, c3o = QTS(c11, d10)
+    return [c0, c1o, c2o, c3o]
+
+
+def l3_bf_mul(a, b):  # qd_inline.h:710-756
+    TS, QTS, TP = qd_two_sum, qd_quick_two_sum, qd_two_prod
+    a0, b0 = TP(a[0], b[0]); c0, e0 = TP(a[0], b[1]); d0, f0 = TP(a[1], b[0])
+    g0, j0 = TP(a[0], b[2]); h0, k0 = TP(a[1], b[1]); i0, l0 = TP(a[2], b[0])
+    m0 = mul(a[0], b[3]); n0 = mul(a[1], b[2]); o0 = mul(a[2], b[1]); p0 = mul(a[3], b[0])
+    c1, d1 = TS(c0, d0); e1, f1 = TS(e0, f0); g1, i1 = TS(g0, i0)
+    j1 = add(j0, l0); m1 = add(m0, p0); n1 = add(n0, o0)
+    b2, c2 = TS(b0, c1); e2, h2 = TS(e1, h0); f2 = add(f1, j1); i2 = add(i1, k0); m2 = add(m1, n1)
+    a3, b3 = QTS(a0, b2); c3, d3 = QTS(c2, d1); e3, g3 = TS(e2, g1)
+    f3 = add(f2, m2); h3 = add(h2, i2)
+    c4, e4 = TS(c3, e3); d4 = add(d3, h3); f4 = add(f3, g3)
+    d5 = add(d4, e4)
+    c6, d6 = TS(c4, d5)
+    b7, c7 = TS(b3, c6)
+    d7 = add(d6, f4)
+    c0o, b8 = QTS(a3, b7)
+    c8, d8 = TS(c7, d7)
+    c1o, c9 = TS(b8, c8)
+    c2o, c3o = QTS(c9, d8)
+    return [c0o, c1o, c2o, c3o]
