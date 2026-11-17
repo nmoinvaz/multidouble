@@ -290,9 +290,10 @@ pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     let mut k = 0;
     let mut acc = c[0];
     for &ci in &c[1..] {
-        // two-sum, exact in any order: VecSum's output can be out of magnitude order (a product of a value with a
-        // part far below the one above it), where a quick-two-sum would drop a term
-        let (t, e) = if mutate::on(mutate::RENORM_FAST) {
+        // exact in any order: VecSum's output can be out of magnitude order (a product of a value with a part far
+        // below the one above it). A quick-two-sum is exact when |acc| >= |c_i| and then gives the two-sum's bits; the
+        // scalar type branches to it (an od + od about 1.2x faster), the lanes take the two-sum throughout
+        let (t, e) = if mutate::on(mutate::RENORM_FAST) || acc.abs() >= ci.abs() {
             quick_two_sum(acc, ci)
         } else {
             two_sum(acc, ci)
