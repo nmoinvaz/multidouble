@@ -1,80 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="952" height="146" viewBox="0 0 952 146" font-family="system-ui, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="936" height="176" viewBox="0 0 936 176" font-family="system-ui, sans-serif">
 <style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
-<rect width="952" height="146" fill="#fcfcfb"/>
-<text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">Values back to back in 64-bit words</text>
-<text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">Value i starts at bit 463·i, so get(i) reads any value alone; values straddle word boundaries.</text>
-<rect x="40.0" y="68.0" width="39.7" height="26.0" fill="#2a78d6"><title>value 0: x0, 64 bits</title></rect>
-<rect x="79.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x1, 57 bits</title></rect>
-<rect x="115.0" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x2, 57 bits</title></rect>
-<rect x="150.4" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x3, 57 bits</title></rect>
-<rect x="185.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x4, 57 bits</title></rect>
-<rect x="221.0" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x5, 57 bits</title></rect>
-<rect x="256.4" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x6, 57 bits</title></rect>
-<rect x="291.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x7, 57 bits</title></rect>
-<rect x="40.0" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
-<text x="183.5" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 0</text>
-<text x="40.0" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 0</text>
-<rect x="327.1" y="68.0" width="39.7" height="26.0" fill="#eb6834"><title>value 1: x0, 64 bits</title></rect>
-<rect x="366.7" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x1, 57 bits</title></rect>
-<rect x="402.1" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x2, 57 bits</title></rect>
-<rect x="437.4" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x3, 57 bits</title></rect>
-<rect x="472.8" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x4, 57 bits</title></rect>
-<rect x="508.1" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x5, 57 bits</title></rect>
-<rect x="543.4" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x6, 57 bits</title></rect>
-<rect x="578.8" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x7, 57 bits</title></rect>
-<rect x="327.1" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
-<text x="470.6" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 1</text>
-<text x="327.1" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 463</text>
-<rect x="614.1" y="68.0" width="39.7" height="26.0" fill="#1baf7a"><title>value 2: x0, 64 bits</title></rect>
-<rect x="653.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x1, 57 bits</title></rect>
-<rect x="689.1" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x2, 57 bits</title></rect>
-<rect x="724.5" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x3, 57 bits</title></rect>
-<rect x="759.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x4, 57 bits</title></rect>
-<rect x="795.2" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x5, 57 bits</title></rect>
-<rect x="830.5" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x6, 57 bits</title></rect>
-<rect x="865.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x7, 57 bits</title></rect>
-<rect x="614.1" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
-<text x="757.6" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 2</text>
-<text x="614.1" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 926</text>
-<rect x="40.0" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="59.8" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w0</text>
-<rect x="79.7" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="119.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="139.2" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w2</text>
-<rect x="159.0" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="198.7" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="218.6" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w4</text>
-<rect x="238.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="278.1" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="297.9" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w6</text>
-<rect x="317.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="357.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="377.3" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w8</text>
-<rect x="397.1" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="436.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="456.6" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w10</text>
-<rect x="476.5" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="516.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="536.0" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w12</text>
-<rect x="555.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="595.5" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="615.4" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w14</text>
-<rect x="635.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="674.9" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="694.7" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w16</text>
-<rect x="714.6" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="754.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="774.1" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w18</text>
-<rect x="793.9" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="833.6" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="853.4" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w20</text>
-<rect x="873.3" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<text x="32.0" y="119.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="normal">words</text>
-<rect x="901.2" y="68.0" width="11.8" height="26.0" fill="#e7e6e2"><title>unused bits of the last word, zero</title></rect>
-<line x1="901.2" y1="68.0" x2="901.2" y2="68.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="901.2" y1="75.0" x2="908.2" y2="68.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="901.2" y1="82.0" x2="913.0" y2="70.2" stroke="#52514e" stroke-width="0.6"/>
-<line x1="901.2" y1="89.0" x2="913.0" y2="77.2" stroke="#52514e" stroke-width="0.6"/>
-<line x1="903.2" y1="94.0" x2="913.0" y2="84.2" stroke="#52514e" stroke-width="0.6"/>
-<line x1="910.2" y1="94.0" x2="913.0" y2="91.2" stroke="#52514e" stroke-width="0.6"/>
+<rect width="936" height="176" fill="#fcfcfb"/>
+<text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">Blocks of 8 values</text>
+<text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">A block holds the 8 leading parts, then for each lower part the 8 fields and a byte of their signs. get(i) reads block i/8; SIMD decodes a block with byte shuffles.</text>
+<rect x="40.0" y="84.0" width="14.2" height="30.0" fill="#2a78d6"><title>value 0: x0, raw f64, 8 bytes</title></rect>
+<rect x="54.8" y="84.0" width="14.2" height="30.0" fill="#eb6834"><title>value 1: x0, raw f64, 8 bytes</title></rect>
+<rect x="69.6" y="84.0" width="14.2" height="30.0" fill="#1baf7a"><title>value 2: x0, raw f64, 8 bytes</title></rect>
+<rect x="84.4" y="84.0" width="14.2" height="30.0" fill="#eda100"><title>value 3: x0, raw f64, 8 bytes</title></rect>
+<rect x="99.2" y="84.0" width="14.2" height="30.0" fill="#e87ba4"><title>value 4: x0, raw f64, 8 bytes</title></rect>
+<rect x="114.0" y="84.0" width="14.2" height="30.0" fill="#008300"><title>value 5: x0, raw f64, 8 bytes</title></rect>
+<rect x="128.8" y="84.0" width="14.2" height="30.0" fill="#4a3aa7"><title>value 6: x0, raw f64, 8 bytes</title></rect>
+<rect x="143.6" y="84.0" width="14.2" height="30.0" fill="#e34948"><title>value 7: x0, raw f64, 8 bytes</title></rect>
+<rect x="40.0" y="84.0" width="118.4" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="99.2" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x0 ×8</text>
+<rect x="158.4" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x1, 7-byte field</title></rect>
+<rect x="171.3" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x1, 7-byte field</title></rect>
+<rect x="184.3" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x1, 7-byte field</title></rect>
+<rect x="197.2" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x1, 7-byte field</title></rect>
+<rect x="210.2" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x1, 7-byte field</title></rect>
+<rect x="223.2" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x1, 7-byte field</title></rect>
+<rect x="236.1" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x1, 7-byte field</title></rect>
+<rect x="249.1" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x1, 7-byte field</title></rect>
+<rect x="262.0" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x1: the 8 values' signs, 1 byte</title></rect>
+<rect x="158.4" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="211.1" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x1 ×8 + signs</text>
+<rect x="263.9" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x2, 7-byte field</title></rect>
+<rect x="276.8" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x2, 7-byte field</title></rect>
+<rect x="289.8" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x2, 7-byte field</title></rect>
+<rect x="302.7" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x2, 7-byte field</title></rect>
+<rect x="315.7" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x2, 7-byte field</title></rect>
+<rect x="328.6" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x2, 7-byte field</title></rect>
+<rect x="341.6" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x2, 7-byte field</title></rect>
+<rect x="354.5" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x2, 7-byte field</title></rect>
+<rect x="367.5" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x2: the 8 values' signs, 1 byte</title></rect>
+<rect x="263.9" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="316.6" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x2 ×8 + signs</text>
+<rect x="369.3" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x3, 7-byte field</title></rect>
+<rect x="382.2" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x3, 7-byte field</title></rect>
+<rect x="395.2" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x3, 7-byte field</title></rect>
+<rect x="408.2" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x3, 7-byte field</title></rect>
+<rect x="421.1" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x3, 7-byte field</title></rect>
+<rect x="434.1" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x3, 7-byte field</title></rect>
+<rect x="447.0" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x3, 7-byte field</title></rect>
+<rect x="460.0" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x3, 7-byte field</title></rect>
+<rect x="472.9" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x3: the 8 values' signs, 1 byte</title></rect>
+<rect x="369.3" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="422.0" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x3 ×8 + signs</text>
+<rect x="474.8" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x4, 7-byte field</title></rect>
+<rect x="487.7" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x4, 7-byte field</title></rect>
+<rect x="500.6" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x4, 7-byte field</title></rect>
+<rect x="513.6" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x4, 7-byte field</title></rect>
+<rect x="526.5" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x4, 7-byte field</title></rect>
+<rect x="539.5" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x4, 7-byte field</title></rect>
+<rect x="552.5" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x4, 7-byte field</title></rect>
+<rect x="565.4" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x4, 7-byte field</title></rect>
+<rect x="578.4" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x4: the 8 values' signs, 1 byte</title></rect>
+<rect x="474.8" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="527.5" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x4 ×8 + signs</text>
+<rect x="580.2" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x5, 7-byte field</title></rect>
+<rect x="593.2" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x5, 7-byte field</title></rect>
+<rect x="606.1" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x5, 7-byte field</title></rect>
+<rect x="619.1" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x5, 7-byte field</title></rect>
+<rect x="632.0" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x5, 7-byte field</title></rect>
+<rect x="645.0" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x5, 7-byte field</title></rect>
+<rect x="657.9" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x5, 7-byte field</title></rect>
+<rect x="670.9" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x5, 7-byte field</title></rect>
+<rect x="683.8" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x5: the 8 values' signs, 1 byte</title></rect>
+<rect x="580.2" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="632.9" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x5 ×8 + signs</text>
+<rect x="685.6" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x6, 7-byte field</title></rect>
+<rect x="698.6" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x6, 7-byte field</title></rect>
+<rect x="711.5" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x6, 7-byte field</title></rect>
+<rect x="724.5" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x6, 7-byte field</title></rect>
+<rect x="737.4" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x6, 7-byte field</title></rect>
+<rect x="750.4" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x6, 7-byte field</title></rect>
+<rect x="763.4" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x6, 7-byte field</title></rect>
+<rect x="776.3" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x6, 7-byte field</title></rect>
+<rect x="789.2" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x6: the 8 values' signs, 1 byte</title></rect>
+<rect x="685.6" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="738.4" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x6 ×8 + signs</text>
+<rect x="791.1" y="84.0" width="12.4" height="30.0" fill="#2a78d6"><title>value 0: x7, 7-byte field</title></rect>
+<rect x="804.1" y="84.0" width="12.4" height="30.0" fill="#eb6834"><title>value 1: x7, 7-byte field</title></rect>
+<rect x="817.0" y="84.0" width="12.4" height="30.0" fill="#1baf7a"><title>value 2: x7, 7-byte field</title></rect>
+<rect x="830.0" y="84.0" width="12.4" height="30.0" fill="#eda100"><title>value 3: x7, 7-byte field</title></rect>
+<rect x="842.9" y="84.0" width="12.4" height="30.0" fill="#e87ba4"><title>value 4: x7, 7-byte field</title></rect>
+<rect x="855.9" y="84.0" width="12.4" height="30.0" fill="#008300"><title>value 5: x7, 7-byte field</title></rect>
+<rect x="868.8" y="84.0" width="12.4" height="30.0" fill="#4a3aa7"><title>value 6: x7, 7-byte field</title></rect>
+<rect x="881.8" y="84.0" width="12.4" height="30.0" fill="#e34948"><title>value 7: x7, 7-byte field</title></rect>
+<rect x="894.7" y="84.0" width="1.9" height="30.0" fill="#7a7668"><title>x7: the 8 values' signs, 1 byte</title></rect>
+<rect x="791.1" y="84.0" width="105.5" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="843.8" y="78.0" font-size="10" fill="#0b0b0b" text-anchor="middle" font-weight="normal">x7 ×8 + signs</text>
+<line x1="40.0" y1="124.0" x2="896.6" y2="124.0" stroke="#52514e" stroke-width="1"/>
+<line x1="40.0" y1="120.0" x2="40.0" y2="128.0" stroke="#52514e" stroke-width="1"/>
+<line x1="896.6" y1="120.0" x2="896.6" y2="128.0" stroke="#52514e" stroke-width="1"/>
+<text x="468.3" y="140.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">463 bytes: 8 values × 463 bits</text>
+<text x="40.0" y="160.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">Colors mark the 8 values of the block; gray is the sign byte of each lower part.</text>
 </svg>

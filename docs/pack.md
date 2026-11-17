@@ -12,18 +12,21 @@ part's exponent is almost known in advance and carries about 2 bits of informati
 ## One lower part
 
 The leading part stays a raw `f64`. Each lower part keeps its sign and 52 fraction bits, and its exponent becomes a
-4-bit code.
+4-bit code. The sign is stored in a byte shared by 8 values, and the code and fraction in a 7-byte field.
 
 ![One lower part, raw and packed](pack-field.svg)
 
 The drop is counted from the last nonzero part above, so zero parts between nonzero ones cost nothing extra.
 
-## Values in a stream
+## Blocks of 8
 
-Values sit back to back in one array of 64-bit words, so value `i` starts at bit `463 i` and `get(i)` reads it alone,
-without decoding the values before it.
+Values sit in blocks of 8, each `64 + 57 (N − 1)` bytes, so a value still takes 121, 235 or 463 bits. A block holds the
+8 leading parts raw, then for each lower part the 8 values' 7-byte fields and one byte of their signs. `get(i)` reads
+value `i` alone from block `i / 8`, and a SIMD decoder reads a whole block with a few byte shuffles: decoding a part is
+one add, the field under a constant top byte `0xfc` plus the exponent above. `unpack_into` and `dot` decode 8 values at
+a time on NEON, AVX2 or AVX-512, with bitwise the same results as plain code.
 
-![Values back to back in 64-bit words](pack-stream.svg)
+![A block of 8 octo-doubles](pack-stream.svg)
 
 ## The side table
 
@@ -37,9 +40,11 @@ payloads. In practice it is rare:
 
 | data | values | escaped | bits per value |
 |---|---|---|---|
-| octo-double arithmetic results (`tests/pack.rs`) | 20,000 | 16 | 463.4 |
-| octo-double Taylor coefficients of a numerical continuation | 6,921 | 7 | 463.5 |
-| an octo-double solution state of the same continuation | 769 | 0 | 463.1 |
+| octo-double arithmetic results (`tests/pack.rs`) | 20,000 | 69 | 464.5 |
+| octo-double Taylor coefficients of a numerical continuation | 6,921 | 20 | 464.8 |
+| an octo-double solution state of the same continuation | 769 | 2 | 468.4 |
+
+The state's 769 values leave 7 places of padding in their last block, which costs 3.9 bits per value.
 
 ## Size against general compressors
 
@@ -56,19 +61,21 @@ exponent-delta row, which shuffles each part's array separately (`scripts/pack_s
 
 ## Speed
 
-Packing does not make arithmetic faster: values are unpacked to `f64` parts before any operation. In memory it is much
-slower than a plain copy. On 2²⁰ octo-doubles (64 MiB) on an Apple M5, from `cargo bench --bench pack`:
+Packing does not make arithmetic faster: values are unpacked to `f64` parts before any operation. In memory it is slower
+than a plain copy. On 2²⁰ octo-doubles (64 MiB) on an Apple M5, from `cargo bench --bench pack`, with other work
+running (load average 5 to 10), so the figures vary between runs:
 
 | operation | time per value | throughput of raw values |
 |---|---|---|
-| copy the raw values | 3.2 ns | 18.8 GiB/s |
-| `get(i)` for every `i` | 21 ns | 2.9 GiB/s |
-| `unpack` | 23 ns | 2.6 GiB/s |
-| `pack` | 32 ns | 1.9 GiB/s |
+| copy the raw values | 2.5 ns | 23.9 GiB/s |
+| `unpack` | 7.2 ns | 8.3 GiB/s |
+| `get(i)` for every `i` | 18 ns | 3.4 GiB/s |
+| `pack` | 38 ns | 1.6 GiB/s |
 
-So packing pays off only where values move through something slower than about 2 GiB/s: files, networks and
-checkpoints. There it saves 9.6% of the bytes. The current code is scalar and reads each field bit by bit, so a bulk or
-SIMD unpack could be several times faster, but the most any packing of this kind can save is about 12%.
+A double-double dot product reading packed vectors runs at about half the speed of one reading raw vectors on one core
+(`cargo bench --bench pack_simd`), because the raw one is limited by arithmetic, not memory. Packing pays off where
+values move through something slower than its decoding: files, networks and checkpoints, and, by estimate,
+many cores sharing one memory bus. There it saves 9.6% of the bytes, and the most any packing of this kind can save is about 12%.
 
 ## Use
 
@@ -90,4 +97,5 @@ assert_eq!(q, p);
 python3 scripts/pack_graphs.py                 # the diagrams and the size chart, docs/pack-*.svg
 python3 scripts/pack_sizes.py values.bin ...   # the chart's compressor sizes, from octo-doubles as 8 f64 each (numpy)
 cargo bench --bench pack                       # the speed table
+cargo bench --bench pack_simd                  # bulk decoding and dot products against raw values
 ```

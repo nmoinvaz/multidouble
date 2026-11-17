@@ -115,5 +115,5 @@
 <rect x="40.0" y="150.0" width="716.8" height="28.0" fill="none" stroke="#52514e" stroke-width="1"/>
 <line x1="190.4" y1="98.0" x2="190.4" y2="136.0" stroke="#52514e" stroke-width="1.2"/>
 <polygon points="190.4,137.0 186.4,129.0 194.4,129.0" fill="#52514e"/>
-<text x="40.0" y="200.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">Used for a part 52 or more than 66 places down, a subnormal, infinite or NaN lower part, or a nonzero lower part under a non-normal x0.</text>
+<text x="40.0" y="200.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">Used for a part 52 or more than 64 places down, a subnormal, infinite or NaN lower part, or a nonzero lower part under a non-normal x0.</text>
 </svg>
