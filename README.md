@@ -161,21 +161,25 @@ two repairs found by these tests:
 Quad-double costs 8–29 times double-double per operation, and 14–17 times in sums of products.
 
 The octo-double operations are checked the same way, against exact arithmetic on random, cancelling, near-overflow,
-near-underflow, near-power-of-two, sparse and computed inputs. In units of 2⁻⁴¹⁸ (relative to |a| + |b| for the adds):
+near-underflow, near-power-of-two, sparse, computed, gapped and ladder inputs. In units of 2⁻⁴¹⁸ (relative to |a| + |b|
+for the adds):
 
 | Operation | Bound checked | Worst seen (2,000 inputs per kind) |
 |---|---|---|
-| add, subtract, + f64 | 1 | 1.1×10⁻⁴ |
-| multiply, × f64 | 1 | 9.5×10⁻⁵ |
+| add, subtract, + f64 | 1, and the proven 1/64 | 1.1×10⁻⁴ |
+| multiply, × f64 | 1, and the proven 1/64 | 9.5×10⁻⁵ |
 | divide | 2 | 1.1×10⁻⁴ |
 | square root | 2 | 1.1×10⁻⁴ |
 | dot products of 1 to 64 terms (relative to Σ \|aᵢbᵢ\|) | (8 + n)/8 | 9.8×10⁻⁵ |
 
 Octo-double costs 4–8 times quad-double per operation on the NEON lanes (add 3.7, multiply 5.3, divide 7.6) and about 14
 times in sums of products, whose quad-double accumulator drops the smallest partial products where this one keeps them.
-The worst error, about 2⁻⁴³¹, is the rounding of the result to eight parts. The near-underflow inputs are checked with
-an absolute allowance of 16×2⁻¹⁰⁷⁴, as for quad-double: full precision needs every part to be a normal `f64`, so values
-above about 2⁻⁶⁰⁰. `ODLu` solves to about 10⁻¹³³ cond(A) against planted solutions, 2⁻²²⁰ times the quad-double LU's
+The error is the rounding of the result to eight parts: about 2⁻⁴³¹ on random inputs, and 2⁻⁴²⁴ on the inputs of
+`od_worst_case_inputs`, where the adds, the multiply, × f64 and the divide reach their proven bounds. The proven bound
+of the adds, the multiply and × f64, (1 + 2⁻¹⁴)/64 units, is checked on every input whose parts satisfy
+|aᵢ| ≤ 2⁻⁵²ⁱ|a₀| without underflow, and it catches a dropped term that the 1-unit bound misses. The near-underflow
+inputs are checked with an absolute allowance of 16×2⁻¹⁰⁷⁴, as for quad-double: full precision needs every part to be a
+normal `f64`, so values above about 2⁻⁶⁰⁰. `ODLu` solves to about 10⁻¹³³ cond(A) against planted solutions, 2⁻²²⁰ times the quad-double LU's
 error on the same systems, for condition numbers from 1 to 10³⁰.
 
 The octo-double jet's coefficients are checked against exact arithmetic too (`tests/ojet.rs`). Polynomials,

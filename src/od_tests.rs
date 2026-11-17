@@ -11,6 +11,11 @@
 //! 1 for the adds (relative to |a| + |b|, Cray-style, as QD's `+`), the multiply and od x f64, 2 for the divide and
 //! the square root, and (8 + n)/8 relative to sum |a_i b_i| for dot products of n terms: the quad-double tests'
 //! (`qd_tests`) thresholds of the accurate operations.
+//!
+//! The adds, the multiply and od x f64 have a proven bound, u^8 (1 + 2^-14) with u = 2^-53, which is 1/64 unit and
+//! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`). Every input within those
+//! hypotheses is checked against it too (`PROVEN_THR`), and `od_worst_case_inputs` reaches it. Random inputs stay
+//! near 10^-4 units, the ladder category's inputs included, because the error is set by the result's parts.
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::{ODotAcc, OV, V8};
@@ -155,6 +160,7 @@ enum Cat {
     Sparse,
     Computed,
     Gap,
+    Ladder,
 }
 
 /// the categories whose results' bits `OD_DIGEST` pins and whose results' parts do not overlap
@@ -168,8 +174,9 @@ const CATS: [Cat; 7] = [
     Cat::Computed,
 ];
 
-/// every category of the accuracy checks: `CATS` and the gap category, whose results' bits `GAP_DIGEST` pins
-const ALL_CATS: [Cat; 8] = [
+/// every category of the accuracy checks: `CATS`, and the gap and ladder categories, whose results' bits `GAP_DIGEST`
+/// and `LADDER_DIGEST` pin
+const ALL_CATS: [Cat; 9] = [
     Cat::Wide,
     Cat::Cancel,
     Cat::Overflow,
@@ -178,6 +185,7 @@ const ALL_CATS: [Cat; 8] = [
     Cat::Sparse,
     Cat::Computed,
     Cat::Gap,
+    Cat::Ladder,
 ];
 
 /// the category's name in the tables
@@ -191,6 +199,7 @@ fn cat_name(c: Cat) -> &'static str {
         Cat::Sparse => "sparse",
         Cat::Computed => "computed",
         Cat::Gap => "gap",
+        Cat::Ladder => "ladder",
     }
 }
 
@@ -212,11 +221,38 @@ fn gapped(r: &mut Rng) -> OD {
     OD { x }
 }
 
+/// A value whose parts sit near the top of the ladder that the proven bounds allow, |x_i| from 1/2 to 1 ulp of the
+/// part above, signs at random. Greedy parts sit about 2^-8 lower over eight parts, so their products' order-8
+/// terms are far below u^8 |ab|, where this value's are a few u^8 |ab|, as in the worst case.
+fn topped(r: &mut Rng) -> OD {
+    let mut x = [0.0; 8];
+    let e = r.int(-20, 20);
+    x[0] = rand_dy(r, e).to_f64();
+    for i in 1..8 {
+        // m in [1/2, 1) with 53 bits, or 1 (a part of a whole ulp) one time in eight
+        let m = if r.int(0, 7) == 0 {
+            1.0
+        } else {
+            0.5 + (r.next() >> 12) as f64 * 2f64.powi(-53)
+        };
+        let s = if coin(r) { -m } else { m };
+        x[i] = s * ulp(x[i - 1]).to_f64();
+    }
+    OD { x }
+}
+
 /// one input pair (a, b) for an operation of the given kind (b unused by sqrt)
 fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
     use Cat::*;
     use Kind::*;
     let one = Dy::from_f64(1.0);
+    if cat == Ladder {
+        let a = topped(r);
+        return match kind {
+            Sqrt => (a.abs(), OD::ONE),
+            _ => (a, topped(r)),
+        };
+    }
     if cat == Gap {
         // a product of a gapped value sends the levels to the renormalization out of magnitude order; a (1/a)
         // nearly cancels them (the square root's last Newton step forms such a product)
@@ -335,7 +371,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
             let (e, f) = (r.int(-30, 30), r.int(-30, 30));
             (sparse_dy(r, e), sparse_dy(r, f))
         }
-        (Computed, _) | (Gap, _) => unreachable!(),
+        (Computed, _) | (Gap, _) | (Ladder, _) => unreachable!(),
     };
     (od_of(&a), od_of(&b))
 }
@@ -388,6 +424,54 @@ fn op_thr(op: Op) -> f64 {
     match op {
         Op::Add | Op::AddF | Op::Mul | Op::MulF => 1.0,
         Op::Div | Op::Sqrt => 2.0,
+    }
+}
+
+/// The proven bound of add, od + f64, mul and od x f64, in units of 2^-418: u^8 (1 + 2^-14) with u = 2^-53, relative
+/// to |ab| for the products and to |a| + |b| for the adds. It holds for operands within `proven`'s hypotheses.
+const PROVEN_THR: f64 = (1.0 + 1.0 / 16384.0) / 64.0;
+
+/// exponent of the last bit of a finite nonzero x
+fn lsb(x: f64) -> i64 {
+    let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
+    if e == 0 {
+        -1074
+    } else {
+        e - 1075
+    }
+}
+
+/// |a_i| <= 2^(-52 i) |a_0| for every part, exactly: the ladder that every ulp-nonoverlapping value has
+fn ladder(a: &OD) -> bool {
+    let a0 = Dy::from_f64(a.x[0]);
+    (1..8).all(|i| Dy::from_f64(a.x[i]).cmp_abs(&a0.ldexp(-52 * i as i64)) != Ordering::Greater)
+}
+
+/// every product of parts that the operation forms is a multiple of 2^-1074, so that a rounding below 2^-1022 is
+/// exact and two-product is error-free (|e_a + e_b| >= -970 in exponents)
+fn products_fit(a: &[f64], b: &[f64], max_order: usize) -> bool {
+    a.iter().enumerate().all(|(i, &x)| {
+        b.iter()
+            .enumerate()
+            .all(|(j, &y)| i + j > max_order || x == 0.0 || y == 0.0 || lsb(x) + lsb(y) >= -1074)
+    })
+}
+
+/// The operands are within the hypotheses of the proven bound: finite, both octo-double operands on the ladder, every
+/// rounding either normal or exact, and the leading parts well below overflow. Only the operation's inputs are
+/// read, so the runs of division and the square root, whose intermediate quotients these do not bound, are left out.
+fn proven(op: Op, a: OD, b: OD) -> bool {
+    let fin = |x: &OD| x.x.iter().all(|v| v.is_finite());
+    let big = |x: f64| x.abs() >= 2f64.powi(500);
+    if !fin(&a) || !fin(&b) || !ladder(&a) {
+        return false;
+    }
+    match op {
+        Op::Add => ladder(&b) && !big(a.x[0]) && !big(b.x[0]),
+        Op::AddF => !big(a.x[0]) && !big(b.x[0]),
+        Op::Mul => ladder(&b) && products_fit(&a.x, &b.x, 8) && !big(a.x[0]) && !big(b.x[0]),
+        Op::MulF => products_fit(&a.x, &b.x[..1], 7) && !big(a.x[0]) && !big(b.x[0]),
+        Op::Div | Op::Sqrt => false,
     }
 }
 
@@ -509,12 +593,22 @@ struct Res {
     /// lanes whose 8-lane result differs from the scalar one in any bit
     mism: usize,
     digest: u64,
+    /// the samples within the proven bound's hypotheses, checked against `PROVEN_THR`
+    proven: Proven,
+}
+
+/// samples within the proven bound's hypotheses: their number, the worst measure in units of 2^-418, those outside
+#[derive(Clone, Debug, Default)]
+struct Proven {
+    n: usize,
+    max: f64,
+    fails: usize,
 }
 
 impl Res {
-    /// no sample outside the bound and no lane different from the scalar result
+    /// no sample outside the bounds and no lane different from the scalar result
     fn ok(&self) -> bool {
-        self.fails == 0 && self.mism == 0
+        self.fails == 0 && self.proven.fails == 0 && self.mism == 0
     }
 }
 
@@ -544,12 +638,12 @@ fn fmt_u(x: f64) -> String {
 fn print_table(title: &str, rs: &[Res]) {
     println!("{title}");
     println!(
-        "  {:<14} {:<10} {:>6} {:>10} {:>10} {:>10} {:>6} {:>6} {:>6}",
-        "operation", "inputs", "n", "max", "99.9%", "max rel", "thr", "fails", "lanes"
+        "  {:<14} {:<10} {:>6} {:>10} {:>10} {:>10} {:>6} {:>6} {:>6} {:>7} {:>10} {:>7}",
+        "operation", "inputs", "n", "max", "99.9%", "max rel", "thr", "fails", "lanes", "proven", "max", "fails"
     );
     for r in rs {
         println!(
-            "  {:<14} {:<10} {:>6} {:>10} {:>10} {:>10} {:>6} {:>6} {:>6}",
+            "  {:<14} {:<10} {:>6} {:>10} {:>10} {:>10} {:>6} {:>6} {:>6} {:>7} {:>10} {:>7}",
             r.what,
             r.cat,
             r.n,
@@ -558,7 +652,10 @@ fn print_table(title: &str, rs: &[Res]) {
             fmt_u(r.rel_max),
             fmt_u(r.thr),
             r.fails,
-            r.mism
+            r.mism,
+            r.proven.n,
+            fmt_u(r.proven.max),
+            r.proven.fails
         );
     }
 }
@@ -598,6 +695,7 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
             let under = cat == Cat::Underflow;
             let (mut ms, mut fails, mut mism, mut rel_max) = (Vec::with_capacity(n), 0, 0, 0f64);
             let mut digest = 0xcbf29ce484222325u64;
+            let mut pr = Proven::default();
             for (k, &(a, b)) in inp.iter().enumerate() {
                 let r = rs[k];
                 fnv(&mut digest, r);
@@ -612,6 +710,13 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 let (err, scale, rel, allow) = exact_err(op, a, b, r, under);
                 if !within(&err, &scale, op_thr(op), &allow) {
                     fails += 1;
+                }
+                if proven(op, a, b) {
+                    pr.n += 1;
+                    pr.max = pr.max.max(err.ratio(&scale) / unit());
+                    if !within(&err, &scale, PROVEN_THR, &Dy::zero()) {
+                        pr.fails += 1;
+                    }
                 }
                 ms.push(err.ratio(&scale) / unit());
                 rel_max = rel_max.max(rel / unit());
@@ -629,6 +734,7 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 fails,
                 mism,
                 digest,
+                proven: pr,
             });
         }
     }
@@ -732,6 +838,7 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 fails,
                 mism,
                 digest,
+                proven: Proven::default(),
             });
         }
     }
@@ -781,6 +888,7 @@ fn row(what: &str, cat: &'static str, n: usize, fails: usize, mism: usize) -> Re
         fails,
         mism,
         digest: 0,
+        proven: Proven::default(),
     }
 }
 
@@ -1028,26 +1136,38 @@ fn od_accuracy() {
     println!("od digest {digest:016x} (n {n}, seed {seed}, isa {})", V8::ISA);
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
-    if (n, seed) == (2000, 1) {
-        let gap = digest_gap(&rs);
-        println!("od gap digest {gap:016x}");
+    // the proven bound is checked on most inputs of the four operations it covers, not on a few
+    for op in [Op::Add, Op::AddF, Op::Mul, Op::MulF] {
+        let covered: usize = rs.iter().filter(|r| r.what == op_name(op)).map(|r| r.proven.n).sum();
         assert!(
-            digest == OD_DIGEST && gap == GAP_DIGEST,
-            "the results' bits changed: digests {digest:#018x}, {gap:#018x}, pinned {:#018x}, {:#018x}",
+            covered >= 5 * n,
+            "{}: {covered} inputs within the proven bound's hypotheses",
+            op_name(op)
+        );
+    }
+    if (n, seed) == (2000, 1) {
+        let gap = digest_cat(&rs, "gap");
+        let ladder = digest_cat(&rs, "ladder");
+        println!("od gap digest {gap:016x}, ladder digest {ladder:016x}");
+        assert!(
+            digest == OD_DIGEST && gap == GAP_DIGEST && ladder == LADDER_DIGEST,
+            "the results' bits changed: digests {digest:#018x}, {gap:#018x}, {ladder:#018x}, pinned {:#018x}, {:#018x}, \
+             {:#018x}",
             OD_DIGEST,
-            GAP_DIGEST
+            GAP_DIGEST,
+            LADDER_DIGEST
         );
     }
 }
 
 /// the digest of the results (`Res::digest`) of every row in `CATS`, in order
 fn digest(rs: &[Res]) -> u64 {
-    fold_digest(rs.iter().filter(|r| r.cat != "gap"))
+    fold_digest(rs.iter().filter(|r| CATS.iter().any(|&c| cat_name(c) == r.cat)))
 }
 
-/// the digest of the results of the gap category's rows, in order
-fn digest_gap(rs: &[Res]) -> u64 {
-    fold_digest(rs.iter().filter(|r| r.cat == "gap"))
+/// the digest of the results of one category's rows, in order
+fn digest_cat(rs: &[Res], cat: &str) -> u64 {
+    fold_digest(rs.iter().filter(|r| r.cat == cat))
 }
 
 fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
@@ -1062,6 +1182,9 @@ const OD_DIGEST: u64 = 0x6ff0_7dec_6a4e_4e28;
 /// The digest of the gap category's results at the same size and seed, recorded with 4.8.1, whose renormalization's
 /// second pass by two-sums made them correct.
 const GAP_DIGEST: u64 = 0xd7a7_6d83_c65e_67d7;
+
+/// The digest of the ladder category's results at the same size and seed, recorded with 4.8.2.
+const LADDER_DIGEST: u64 = 0xcfaf_1ebd_dc50_f177;
 
 /// Control for the pinned digest: with the order-6 term a2 b3 of the product dropped
 /// (`mutate::MUL_E23`), the results' digest is not the pinned one.
@@ -1151,6 +1274,90 @@ fn od_results_do_not_overlap() {
         controls[0] > 1.0 && controls[1] > 0.5 && controls[1] <= 1.0 && controls[2] > 1.0,
         "{controls:?}"
     );
+}
+
+/// Inputs on which the add, od + f64, mul, od x f64 and the divide reach their proven bounds, u^8 times the measure to
+/// within a factor 1 - O(u). The products and quotients come out as (1, u, ..., u^7) up to sign, and the order-8 term
+/// that the renormalization drops is the error. For od x f64, 3 g = 2^53 + 1 makes a_0 b = 1 + u. Pass: each
+/// measure between 0.99 u^8 and its bound, scalar and lanes alike, and the four operations' operands within
+/// `proven`'s hypotheses.
+#[test]
+fn od_worst_case_inputs() {
+    let u = 2f64.powi(-53);
+    let ladder_to = |k: usize| -> OD {
+        let mut x = [0.0; 8];
+        for (i, p) in x.iter_mut().enumerate().take(k) {
+            *p = u.powi(i as i32);
+        }
+        OD { x }
+    };
+    let mut b_mul = [0.0; 8];
+    b_mul[0] = 1.0;
+    b_mul[7] = u.powi(7);
+    let mut c = [0.0; 8];
+    c[0] = u.powi(8);
+    let mut a_mulf = [0.0; 8];
+    for i in [0, 2, 4, 6] {
+        a_mulf[i] = 1.5 * u.powi(i as i32);
+    }
+    a_mulf[7] = 1.5 * u.powi(8);
+    let g = 3002399751580331.0 * 2f64.powi(-52);
+    let mut d = [0.0; 8];
+    d[0] = -1.0;
+    d[1] = u;
+    // the divide's runs are within the hypotheses too: its remainders are (u^k, 0, ...) and its quotient terms -u^k,
+    // so every product is exact; its bound is u^8 (1 + 2^-25) relative
+    let div_thr = (1.0 + 2f64.powi(-25)) / 64.0;
+    let cases = [
+        (Op::Mul, ladder_to(7), OD { x: b_mul }, PROVEN_THR),
+        (Op::Add, ladder_to(8), OD { x: c }, PROVEN_THR),
+        (Op::AddF, ladder_to(8), OD::from_f64(u.powi(8)), PROVEN_THR),
+        (Op::MulF, OD { x: a_mulf }, OD::from_f64(g), PROVEN_THR),
+        (Op::Div, OD::ONE, OD { x: d }, div_thr),
+    ];
+    assert_eq!(3 * 3002399751580331u64, (1u64 << 53) + 1);
+    for (op, a, b, thr) in cases {
+        assert!(
+            op == Op::Div || proven(op, a, b),
+            "{}: operands outside the hypotheses",
+            op_name(op)
+        );
+        let (rs, rv) = results(op, &[(a, b)]);
+        assert!(
+            same(rs[0], rv[0]),
+            "{}: lanes differ from the scalar result",
+            op_name(op)
+        );
+        let (err, scale, _, _) = exact_err(op, a, b, rs[0], false);
+        let m = err.ratio(&scale) / unit();
+        println!("{:<9} error {m:.10} units of 2^-418, bound {thr:.10}", op_name(op));
+        assert!(
+            within(&err, &scale, thr, &Dy::zero()),
+            "{}: {m} units, past the proven bound",
+            op_name(op)
+        );
+        assert!(m >= 0.99 / 64.0, "{}: {m} units, below 0.99 u^8", op_name(op));
+    }
+}
+
+/// The proven bound catches what the 1-unit thresholds miss: with the products of order 8 dropped, an error of a few
+/// u^8 |ab| on the ladder category's inputs. Pass, set after a first run (2 of 400 past 1 unit, 348 past the
+/// proven bound): the proven bound fails more than half of the ladder row's samples and more than ten times as many as
+/// the thresholds.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_proven_bound_control() {
+    let n = env_usize("OD_N", 400) / 8 * 8;
+    let rs = run_ops(n, 7, mutate::MUL_L8);
+    let row = rs
+        .iter()
+        .find(|r| r.what == op_name(Op::Mul) && r.cat == "ladder")
+        .unwrap();
+    println!(
+        "mul without order 8, ladder inputs: {} of {n} past 1 unit, {} past the proven bound, worst {:.4} units",
+        row.fails, row.proven.fails, row.proven.max
+    );
+    assert!(row.proven.fails * 2 > n && row.proven.fails > 10 * row.fails, "{row:?}");
 }
 
 /// Inputs whose results missed their bounds by 1e10 to 1e28 units when the renormalization's second pass was by
