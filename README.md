@@ -11,6 +11,9 @@ these lanes and dense LU factorizations in double-double, quad-double and octo-d
 A double-double is an unevaluated sum `hi + lo` of two `f64`, about 32 significant digits. A quad-double is a sum of four,
 about 64 digits, and an octo-double a sum of eight, about 126 digits. All are built from error-free transformations
 (two-sum, FMA two-product), so they run at hardware speed, with no allocation and no arbitrary-precision library.
+The paper [Error bounds for quad-double style arithmetic on floating-point expansions of any
+length](paper/expansion-error-bounds.pdf) proves the octo-double arithmetic's error bounds, for its algorithms at any
+number of parts.
 
 | Type | What it is |
 |---|---|
