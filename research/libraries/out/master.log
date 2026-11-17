@@ -1,2 +1,10 @@
 climb qd_ieee_add_fixed p=53 seed=1 steps=400145 restarts=134 best_ratio=0.116566 (log2 -3) time=150s
 climb qd_ieee_add_fixed p=8 seed=2 steps=298286 restarts=100 best_ratio=0.467583 (log2 -2) time=90s
+climb qd_ieee_add_fixed p=10 seed=3 steps=245979 restarts=82 best_ratio=4.00061 (log2 2) time=60s
+qd_ieee_add_fixed p=53 seed=4 trials=121798 worst_ratio=0.03056 (log2 -5.00) over_bound=0 nonoverlap_violations=0 time=40.0s
+climb gqd_mul_d p=53 seed=1 steps=247996 restarts=83 best_ratio=0.123359 (log2 -4) time=60s
+climb gqd_add_d p=53 seed=1 steps=177424 restarts=60 best_ratio=0.498143 (log2 -1) time=45s
+mul_cancel qd_accurate_mul p=53 seed=3 valid_trials=23732 over_bound=0 worst_ratio=0.06194 (log2 -5)
+mul_cancel qd_sloppy_mul p=53 seed=3 valid_trials=23732 over_bound=22 worst_ratio=1.878 (log2 0)
+mul_cancel cp_bailey_mul_renorm p=53 seed=3 valid_trials=23732 over_bound=0 worst_ratio=0.007743 (log2 -7)
+mul_cancel gqd_mul p=53 seed=3 valid_trials=23732 over_bound=22 worst_ratio=1.878 (log2 0)

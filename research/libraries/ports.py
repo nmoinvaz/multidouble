@@ -719,3 +719,82 @@ def l3_bf_mul(a, b):  # qd_inline.h:710-756
     c1o, c9 = TS(b8, c8)
     c2o, c3o = QTS(c9, d8)
     return [c0o, c1o, c2o, c3o]
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Triple-double td_real, BL-highprecision/QD @ 92d99c8, include/qd/td_inline.h (the same code is in libQD3 1.6.0)
+# ------------------------------------------------------------------------------------------------------------
+
+def td_renorm4(c0, c1, c2, c3):  # td_inline.h:69-101, four terms to three parts
+    s2 = Z
+    s0, c3 = qd_quick_two_sum(c2, c3)
+    s0, c2 = qd_quick_two_sum(c1, s0)
+    c0, c1 = qd_quick_two_sum(c0, s0)
+    s0, s1 = c0, c1
+    if s1[0] != 0:
+        s1, s2 = qd_quick_two_sum(s1, c2)
+        if s2[0] != 0:
+            s2 = add(s2, c3)
+        else:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+    else:
+        s0, s1 = qd_quick_two_sum(s0, c2)
+        if s1[0] != 0:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+        else:
+            s0, s1 = qd_quick_two_sum(s0, c3)
+    return [s0, s1, s2]
+
+
+def td_ieee_add(a, b):  # td_inline.h:271-312
+    i = j = k = 0
+    x = [Z, Z, Z, Z]
+    if fabs_gt(a[i], b[j]):
+        u = a[i]; i += 1
+    else:
+        u = b[j]; j += 1
+    if i >= 3:
+        v = b[j]; j += 1
+    elif j >= 3:
+        v = a[i]; i += 1
+    elif fabs_gt(a[i], b[j]):
+        v = a[i]; i += 1
+    else:
+        v = b[j]; j += 1
+    u, v = qd_quick_two_sum(u, v)
+    while k < 3:
+        if i >= 3 and j >= 3:
+            x[k] = u
+            if k < 2:
+                k += 1
+                x[k] = v
+            else:
+                x[3] = add(x[3], v)
+            break
+        if i >= 3:
+            t = b[j]; j += 1
+        elif j >= 3:
+            t = a[i]; i += 1
+        elif fabs_gt(a[i], b[j]):
+            t = a[i]; i += 1
+        else:
+            t = b[j]; j += 1
+        s, u, v = qd_quick_three_accum(u, v, t)
+        if s[0] != 0:
+            x[k] = s
+            k += 1
+    for kk in range(i, 3):
+        x[3] = add(x[3], a[kk])
+    for kk in range(j, 3):
+        x[3] = add(x[3], b[kk])
+    return td_renorm4(*x)
+
+
+def td_sloppy_add(a, b):  # td_inline.h:252-266
+    s0, t0 = qd_two_sum(a[0], b[0])
+    s1, t1 = qd_two_sum(a[1], b[1])
+    s2, t2 = qd_two_sum(a[2], b[2])
+    s1, t0 = qd_two_sum(s1, t0)
+    s2 = add(s2, add(t0, t1))
+    t0 = t2
+    return td_renorm4(s0, s1, s2, t0)

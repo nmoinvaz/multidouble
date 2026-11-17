@@ -66,6 +66,11 @@ def _(a, b):
     return X.l3_bf_mul(a, b)
 
 
+@op('td_ieee_add', 3, 'rel', 4, 'add')  # td_real::ieee_add against td_real::_eps = 2^-157 = 4u^3, relative
+def _(a, b):
+    return X.td_ieee_add(a, b)
+
+
 @op('qd_accurate_mul', 4, 'rel', 2, 'mul')
 def _(a, b):
     return X.qd_accurate_mul(a, b)

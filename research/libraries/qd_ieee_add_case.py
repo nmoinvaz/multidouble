@@ -1,8 +1,9 @@
 """QD 2.3.24's IEEE-style quad-double addition (qd_real::ieee_add, include/qd/qd_inline.h:286-336) against the bound
 its authors state for it, |delta| <= 2 eps_qd "or so" with eps_qd = 2^-211 (Hida, Li and Bailey 2001, Sec. 3.2).
 
-The default build uses sloppy_add; ieee_add is selected by --enable-ieee-add (QD_IEEE_ADD), and MPLAPACK builds its
-QD (libQD3 1.6.0) with QD_ENABLE_IEEE_ADD=ON.
+The default build uses sloppy_add; ieee_add is operator+ when QD is configured with --enable-ieee-add (QD_IEEE_ADD)
+and is callable directly as qd_real::ieee_add. libQD3 1.6.0 carries the same 2.3.24 code; MPLAPACK builds libQD3 with
+QD_ENABLE_IEEE_ADD=ON but also QD_ENABLE_BF=ON, and QD_BF_ADD takes precedence in operator+.
 
 Checks, each of which must hold (exit status 1 otherwise):
   1. on the input below, ieee_add's relative error exceeds 4u^4 = 2^-210 (the bound fires);
