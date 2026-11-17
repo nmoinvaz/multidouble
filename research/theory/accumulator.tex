@@ -61,9 +61,10 @@ $E_{\rm prod} = (R + \Delta)u^{n+1}W$ with the $R$, $\Delta$ of MUL ($0$ if all 
 \]
 with $E_{\rm lev}$ the bound of Lemma~\ref{lem:acc}(b) and $\Phi = \sum_{j=1}^{n}(u^n + u^{n+1-j})V_j$ the bound of
 Lemma~\ref{lem:g}(a) for the last ADDF of FINISH, its part bounds obtained by Lemma~\ref{lem:g}(b) along FINISH from
-$|s_m| \le S_m(K)$. In particular
+$|s_m| \le S_m(K)$. In particular, for $Ku$ bounded away from $1/(n+1)$,
 \[
-\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + \bigl((1+u)\,u\,K^{(n+1)} + O(K^nu) + O(1)\bigr)\,u^nW .
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + \bigl(\tau_0\beta^{n+1}u\,K^{(n+1)} + O(K^nu) + O(1)\bigr)\,u^nW, \qquad \tau_0 \le
+1 + u.
 \]
 \end{theorem}
 
@@ -80,7 +81,8 @@ s_l)$ is exact for $l \le n-1$ (for $l = n-1$, a loss would need $v_n \ne 0$, wh
 zero), and FINISH's result is $R_n$ of the levels of the last ADDF, whose exact sum is $S$. Theorem~\ref{thm:t1}(b) with
 $k = 0$, and $|v_0| \le |S| + \sum_{j \ge 1}|v_j|$, give $|S - \sum x| \le u^n|S| + \Phi$, the $V_j$ bounding
 $|v_j|$ as in Lemma~\ref{lem:g}. Then $|Z - \sum x| \le |Z - S| + u^n|S| + \Phi$ and $|S| \le |Z| + E_{\rm lev} +
-E_{\rm prod}$. The asymptotic form is the $l = 0$ term of $E_{\rm lev}$, with $\tau_0 = 1 + u$.
+E_{\rm prod}$. The asymptotic form is the $l = 0$ term of $E_{\rm lev}$ ($\tau_0 = 1 + u$ for MUL by
+Theorem~\ref{thm:t2}, $1$ for ADDX); the other terms carry at most $K^{(n)}$, and $E_{\rm prod}$ and $\Phi$ are $O(u^{n+1}W)$.
 \end{proof}
 
 At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is $2^{-14.9}$ for $K = 1$ (Theorem~\ref{thm:t3}
@@ -93,7 +95,8 @@ grows like $(Ku)^{9}W$, and the growth is real.
 At $p = 53$ and $n = 8$ there are $K = 2048$ terms, $1$ and $2047$ positive octo-doubles of size about $u$ with
 $|a_{m+1}| \le \frac12\ulp(a_m)$, on which the accumulator errs by $1.4676 \cdot 10^7\,u^8|Z| = 2^{23.81}u^8|Z|$, with
 $W = |Z|(1 + 2^{-96})$. Its first $256$, $512$ and $1024$ terms give errors of about $0.10$, $36$ and $1.2 \cdot 10^4$
-times $u^8|Z|$. In particular no bound $C\,K\,u^nW$ with $C$ independent of $K$ holds.
+times $u^8|Z|$: doubling $K$ from $1024$ to $2048$ multiplies the error by $2^{10.3}$, and at $K = 2048$ it is
+about $900$ times the threshold $8(8 + K)\,u^8W$ of multidouble's accumulator test, which runs $K \le 64$.
 \end{proposition}
 
 \begin{proof}
