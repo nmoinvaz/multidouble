@@ -1,0 +1,6 @@
+control qd_sloppy_add with bad algorithm known-bad: worst ratio 2.25e+15, fired=True, OK
+control qd_sloppy_add with good algorithm certifiedAdd: worst ratio 0.0612, fired=False, OK
+control qd_accurate_mul with bad algorithm known-bad: worst ratio 9.72e+14, fired=True, OK
+control qd_accurate_mul with good algorithm certifiedAdd: worst ratio 0.0501, fired=False, OK
+control cp_bailey_add_renorm with good algorithm certifiedAdd: worst ratio 0.000313, fired=False, OK
+control cp_bailey_add_renorm with good algorithm certifiedAdd: worst ratio 0.000447, fired=False, OK

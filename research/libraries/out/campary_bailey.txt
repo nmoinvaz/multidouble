@@ -1,0 +1,7 @@
+baileyAdd_renorm out: [7.52316384526264e-37, 4.241447904199042e-53, 1.448908652612274e-70, 0.0]
+exact sum Z = 7.52316384526264e-37  err = 4.909093465297727e-91  = 2^-300
+bound 24*2^-208*|Z| = 4.389071582523936e-98  ratio err/bound = 1.118e+07 (2^23.4)
+certifiedAdd err = 0.0
+Cray-style reading: err / (24*2^-208*max(|x|,|y|)) = 8.41e-30
+non-cancelling control err = 0.0
+PASS
