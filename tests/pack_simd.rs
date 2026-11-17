@@ -88,7 +88,8 @@ fn values<const N: usize>(r: &mut Rng, n: usize) -> Vec<[f64; N]> {
                             53 + (r.next_u64() % 12) as i32
                         };
                         let m = 1.0 + r.unit();
-                        let ex = last.abs().log2().floor() as i32 - drop;
+                        // a part that underflowed to zero gives log2 = -inf, and the parts below it are zero too
+                        let ex = (last.abs().log2().floor() as i32).saturating_sub(drop);
                         x[k] = m * 2f64.powi(ex) * if r.next_u64() & 1 == 0 { 1.0 } else { -1.0 };
                         last = x[k];
                     }
