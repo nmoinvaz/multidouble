@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="790" height="338" viewBox="0 0 790 338" font-family="system-ui, sans-serif">
+<style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
+<rect width="790" height="338" fill="#fcfcfb"/>
+<text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">Bits per octo-double</text>
+<text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">Blue formats read any value alone; orange ones decode a block or the whole stream.</text>
+<line x1="250.0" y1="68.0" x2="250.0" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="250.0" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">400</text>
+<line x1="321.7" y1="68.0" x2="321.7" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="321.7" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">420</text>
+<line x1="393.3" y1="68.0" x2="393.3" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="393.3" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">440</text>
+<line x1="465.0" y1="68.0" x2="465.0" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="465.0" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">460</text>
+<line x1="536.7" y1="68.0" x2="536.7" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="536.7" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">480</text>
+<line x1="608.3" y1="68.0" x2="608.3" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="608.3" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">500</text>
+<line x1="680.0" y1="68.0" x2="680.0" y2="250.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="680.0" y="265.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">520</text>
+<path d="M250.0 72.0 h397.3 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-397.3 z" fill="#2a78d6"><title>raw parts: 512.0 bits</title></path>
+<text x="242.0" y="85.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">raw parts</text>
+<text x="657.3" y="85.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">512</text>
+<path d="M250.0 98.0 h338.2 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-338.2 z" fill="#eb6834"><title>lzma on the raw parts: 495.5 bits</title></path>
+<text x="242.0" y="111.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">lzma on the raw parts</text>
+<text x="598.2" y="111.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">496  -3.2%</text>
+<path d="M250.0 124.0 h233.9 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-233.9 z" fill="#eb6834"><title>Blosc-style bit shuffle + zlib: 466.4 bits</title></path>
+<text x="242.0" y="137.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">Blosc-style bit shuffle + zlib</text>
+<text x="493.9" y="137.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">466  -8.9%</text>
+<path d="M250.0 150.0 h223.4 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-223.4 z" fill="#2a78d6"><title>pack::PackedOD: 463.5 bits</title></path>
+<text x="242.0" y="163.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">pack::PackedOD</text>
+<circle cx="477.4" cy="159.0" r="10" fill="none" stroke="#0b0b0b" stroke-width="1.5"/>
+<line x1="487.4" y1="159.0" x2="503.4" y2="159.0" stroke="#0b0b0b" stroke-width="1"/>
+<text x="507.4" y="163.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">463  -9.5%, read by index</text>
+<path d="M250.0 176.0 h189.5 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-189.5 z" fill="#eb6834"><title>Blosc-style byte shuffle + lzma: 454.0 bits</title></path>
+<text x="242.0" y="189.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">Blosc-style byte shuffle + lzma</text>
+<text x="449.5" y="189.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">454  -11.3%</text>
+<path d="M250.0 202.0 h173.0 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-173.0 z" fill="#eb6834"><title>variable-length gap code: 449.4 bits</title></path>
+<text x="242.0" y="215.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">variable-length gap code</text>
+<text x="433.0" y="215.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">449  -12.2%</text>
+<path d="M250.0 228.0 h153.0 a4 4 0 0 1 4 4 v10.0 a4 4 0 0 1 -4 4 h-153.0 z" fill="#eb6834"><title>exponent delta, byte shuffle, lzma: 443.8 bits</title></path>
+<text x="242.0" y="241.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">exponent delta, byte shuffle, lzma</text>
+<text x="413.0" y="241.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">444  -13.3%</text>
+<line x1="250.0" y1="250.0" x2="680.0" y2="250.0" stroke="#52514e" stroke-width="1"/>
+<text x="465.0" y="284.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="normal">bits per value (x axis starts at 400)</text>
+<g opacity="0.35"><line x1="756.0" y1="250.0" x2="698.0" y2="250.0" stroke="#52514e" stroke-width="2"/><polygon points="692.0,250.0 701.0,246.0 701.0,254.0" fill="#52514e"/><text x="724.0" y="243.0" font-size="11" fill="#52514e" text-anchor="middle" transform="rotate(360.0 724.0 250.0)">smaller</text></g>
+<text x="780.0" y="50.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">block or stream</text>
+<circle cx="674.3" cy="46" r="4.5" fill="#eb6834"/>
+<text x="658.3" y="50.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">read by index</text>
+<circle cx="565.4" cy="46" r="4.5" fill="#2a78d6"/>
+<text x="16.0" y="326.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">Apple M5, 32 GB, macOS 27.0.1</text>
+<text x="16.0" y="312.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">data: 6,921 octo-double Taylor coefficients of a numerical continuation  ·  zlib, lzma: Python 3.13 stdlib  ·  shuffles simulated in numpy  ·  multidouble pack</text>
+<a href="https://github.com/nmoinvaz/multidouble"><text x="774" y="326" font-size="10" fill="#52514e" text-anchor="end" text-decoration="underline">github.com/nmoinvaz/multidouble</text></a>
+</svg>

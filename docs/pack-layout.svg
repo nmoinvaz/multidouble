@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="996" height="222" viewBox="0 0 996 222" font-family="system-ui, sans-serif">
+<style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
+<rect width="996" height="222" fill="#fcfcfb"/>
+<text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">An octo-double, raw and packed</text>
+<text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">Eight f64 parts take 512 bits. Packed, the leading part stays raw and each lower part drops 7 exponent bits: 463 bits.</text>
+<text x="62.0" y="87.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">raw</text>
+<rect x="70.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x0: sign, 1 bit</title></rect>
+<rect x="71.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x0: exponent, 11 bits</title></rect>
+<rect x="91.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x0: fraction, 52 bits</title></rect>
+<text x="136.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x0</text>
+<rect x="70.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="182.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x1: sign, 1 bit</title></rect>
+<rect x="183.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x1: exponent, 11 bits</title></rect>
+<rect x="203.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x1: fraction, 52 bits</title></rect>
+<text x="248.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x1</text>
+<rect x="182.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="294.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x2: sign, 1 bit</title></rect>
+<rect x="295.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x2: exponent, 11 bits</title></rect>
+<rect x="315.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x2: fraction, 52 bits</title></rect>
+<text x="360.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x2</text>
+<rect x="294.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="406.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x3: sign, 1 bit</title></rect>
+<rect x="407.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x3: exponent, 11 bits</title></rect>
+<rect x="427.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x3: fraction, 52 bits</title></rect>
+<text x="472.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x3</text>
+<rect x="406.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="518.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x4: sign, 1 bit</title></rect>
+<rect x="519.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x4: exponent, 11 bits</title></rect>
+<rect x="539.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x4: fraction, 52 bits</title></rect>
+<text x="584.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x4</text>
+<rect x="518.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="630.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x5: sign, 1 bit</title></rect>
+<rect x="631.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x5: exponent, 11 bits</title></rect>
+<rect x="651.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x5: fraction, 52 bits</title></rect>
+<text x="696.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x5</text>
+<rect x="630.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="742.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x6: sign, 1 bit</title></rect>
+<rect x="743.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x6: exponent, 11 bits</title></rect>
+<rect x="763.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x6: fraction, 52 bits</title></rect>
+<text x="808.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x6</text>
+<rect x="742.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="854.0" y="68.0" width="1.8" height="30.0" fill="#eda100"><title>x7: sign, 1 bit</title></rect>
+<rect x="855.8" y="68.0" width="19.2" height="30.0" fill="#eb6834"><title>x7: exponent, 11 bits</title></rect>
+<rect x="875.0" y="68.0" width="91.0" height="30.0" fill="#2a78d6"><title>x7: fraction, 52 bits</title></rect>
+<text x="920.5" y="86.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x7</text>
+<rect x="854.0" y="68.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="966.0" y="62.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">512 bits</text>
+<text x="62.0" y="151.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">packed</text>
+<rect x="70.0" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x0: sign, 1 bit</title></rect>
+<rect x="71.8" y="132.0" width="19.2" height="30.0" fill="#eb6834"><title>x0: exponent, 11 bits</title></rect>
+<rect x="91.0" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x0: fraction, 52 bits</title></rect>
+<text x="136.5" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x0</text>
+<rect x="70.0" y="132.0" width="112.0" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="182.0" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x1: sign, 1 bit</title></rect>
+<rect x="183.8" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x1: exponent code, 4 bits</title></rect>
+<rect x="190.8" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x1: fraction, 52 bits</title></rect>
+<text x="236.2" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x1</text>
+<rect x="182.0" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="281.8" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x2: sign, 1 bit</title></rect>
+<rect x="283.5" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x2: exponent code, 4 bits</title></rect>
+<rect x="290.5" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x2: fraction, 52 bits</title></rect>
+<text x="336.0" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x2</text>
+<rect x="281.8" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="381.5" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x3: sign, 1 bit</title></rect>
+<rect x="383.2" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x3: exponent code, 4 bits</title></rect>
+<rect x="390.2" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x3: fraction, 52 bits</title></rect>
+<text x="435.8" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x3</text>
+<rect x="381.5" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="481.2" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x4: sign, 1 bit</title></rect>
+<rect x="483.0" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x4: exponent code, 4 bits</title></rect>
+<rect x="490.0" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x4: fraction, 52 bits</title></rect>
+<text x="535.5" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x4</text>
+<rect x="481.2" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="581.0" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x5: sign, 1 bit</title></rect>
+<rect x="582.8" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x5: exponent code, 4 bits</title></rect>
+<rect x="589.8" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x5: fraction, 52 bits</title></rect>
+<text x="635.2" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x5</text>
+<rect x="581.0" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="680.8" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x6: sign, 1 bit</title></rect>
+<rect x="682.5" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x6: exponent code, 4 bits</title></rect>
+<rect x="689.5" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x6: fraction, 52 bits</title></rect>
+<text x="735.0" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x6</text>
+<rect x="680.8" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="780.5" y="132.0" width="1.8" height="30.0" fill="#eda100"><title>x7: sign, 1 bit</title></rect>
+<rect x="782.2" y="132.0" width="7.0" height="30.0" fill="#1baf7a"><title>x7: exponent code, 4 bits</title></rect>
+<rect x="789.2" y="132.0" width="91.0" height="30.0" fill="#2a78d6"><title>x7: fraction, 52 bits</title></rect>
+<text x="834.8" y="150.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">x7</text>
+<rect x="780.5" y="132.0" width="99.8" height="30.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="880.2" y="132.0" width="85.8" height="30.0" fill="#e7e6e2"><title>saved: 49 bits</title></rect>
+<line x1="880.2" y1="132.0" x2="880.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="880.2" y1="139.0" x2="887.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="880.2" y1="146.0" x2="894.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="880.2" y1="153.0" x2="901.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="880.2" y1="160.0" x2="908.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="885.2" y1="162.0" x2="915.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="892.2" y1="162.0" x2="922.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="899.2" y1="162.0" x2="929.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="906.2" y1="162.0" x2="936.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="913.2" y1="162.0" x2="943.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="920.2" y1="162.0" x2="950.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="927.2" y1="162.0" x2="957.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="934.2" y1="162.0" x2="964.2" y2="132.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="941.2" y1="162.0" x2="966.0" y2="137.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="948.2" y1="162.0" x2="966.0" y2="144.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="955.2" y1="162.0" x2="966.0" y2="151.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="962.2" y1="162.0" x2="966.0" y2="158.2" stroke="#52514e" stroke-width="0.6"/>
+<text x="876.2" y="176.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">463 bits</text>
+<text x="923.1" y="176.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal">49 saved</text>
+<text x="966.0" y="204.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">fraction</text>
+<circle cx="905.0" cy="200" r="4.5" fill="#2a78d6"/>
+<text x="889.0" y="204.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">4-bit exponent code</text>
+<circle cx="757.7" cy="200" r="4.5" fill="#1baf7a"/>
+<text x="741.7" y="204.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">exponent</text>
+<circle cx="680.7" cy="200" r="4.5" fill="#eb6834"/>
+<text x="664.7" y="204.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">sign</text>
+<circle cx="629.2" cy="200" r="4.5" fill="#eda100"/>
+</svg>
