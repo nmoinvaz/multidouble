@@ -69,6 +69,7 @@ pub mod jet;
 pub mod linalg;
 pub mod od;
 pub mod ov;
+pub mod pack;
 pub mod precision;
 pub mod qd;
 pub mod qv;
