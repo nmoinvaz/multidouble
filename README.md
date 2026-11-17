@@ -48,10 +48,14 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 |---|---|
 | `pack::PackedDD`, `pack::PackedQD`, `pack::PackedOD` | values packed in 121, 235 and 463 bits instead of 128, 256 and 512, restored bit for bit |
 
-A lower part keeps its sign and fraction but only a 4-bit code for its exponent, which in a renormalized value lies 53 or
-more binary places below the part above it. Values are stored back to back, so `get(i)` reads any one of them alone. A
-value whose parts do not fit the codes, under 0.1% of the octo-double arithmetic's results in the tests, keeps its lower
-parts raw in a side table. `words` and `side` give the storage, and `from_raw` checks and restores it.
+A lower part keeps its sign and fraction but only a 4-bit code for its exponent, which in a renormalized value lies 53
+or more binary places below the part above it. Values are stored back to back, so `get(i)` reads any one of them alone.
+A value whose parts do not fit the codes, under 0.1% of the octo-double arithmetic's results in the tests, keeps its
+lower parts raw in a side table. `words` and `side` give the storage, and `from_raw` checks and restores it.
+
+![An octo-double, raw and packed](docs/pack-layout.svg)
+
+[docs/pack.md](docs/pack.md) describes the format with diagrams, its size against general compressors, and its speed.
 
 ### Derivatives and power series
 

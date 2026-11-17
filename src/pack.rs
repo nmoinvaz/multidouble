@@ -1,10 +1,11 @@
 //! Packed storage of double-double, quad-double and octo-double values, lossless and in fewer bits.
 //!
 //! A value of N parts keeps its leading part as a raw `f64`. Each lower part takes 57 bits instead of 64: its sign, a
-//! 4-bit code for its exponent and its 52 fraction bits. In a renormalized value each part lies 53 or more binary places
-//! below the last nonzero part above it, so the 11 exponent bits of a lower part carry about 2 bits of information. A
-//! value takes `64 + 57 (N - 1)` bits, 121 for a double-double, 235 for a quad-double and 463 for an octo-double (9.6%
-//! less than 512). Values are stored back to back, so value i starts at bit `i * BITS` and any value is read alone.
+//! 4-bit code for its exponent and its 52 fraction bits. In a renormalized value each part lies 53 or more binary
+//! places below the last nonzero part above it, so the 11 exponent bits of a lower part carry about 2 bits of
+//! information. A value takes `64 + 57 (N - 1)` bits, 121 for a double-double, 235 for a quad-double and 463 for an
+//! octo-double (9.6% less than 512). Values are stored back to back, so value i starts at bit `i * BITS` and any value
+//! is read alone.
 //!
 //! The 4-bit code of a lower part:
 //! * 0 to 13: a normal `f64` whose biased exponent is 53 + code below that of the last nonzero part above it;
@@ -12,8 +13,11 @@
 //! * 15: the value is in the side table, at the index held in this field's fraction bits.
 //!
 //! A value whose parts do not fit the codes (a part 52 or more than 66 places below the last nonzero one, a subnormal,
-//! infinite or NaN lower part, or a nonzero lower part below a leading part that is not a normal number) keeps its lower
-//! parts raw in the side table. Every value is restored bit for bit, signed zeros and NaN payloads included.
+//! infinite or NaN lower part, or a nonzero lower part below a leading part that is not a normal number) keeps its
+//! lower parts raw in the side table. Every value is restored bit for bit, signed zeros and NaN payloads included.
+//!
+//! The format, with diagrams, its size against general compressors and its speed:
+//! <https://github.com/nmoinvaz/multidouble/blob/main/docs/pack.md>.
 use crate::dd::DD;
 use crate::od::OD;
 use crate::qd::QD;

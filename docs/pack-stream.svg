@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="952" height="146" viewBox="0 0 952 146" font-family="system-ui, sans-serif">
+<style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
+<rect width="952" height="146" fill="#fcfcfb"/>
+<text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">Values back to back in 64-bit words</text>
+<text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">Value i starts at bit 463·i, so get(i) reads any value alone; values straddle word boundaries.</text>
+<rect x="40.0" y="68.0" width="39.7" height="26.0" fill="#2a78d6"><title>value 0: x0, 64 bits</title></rect>
+<rect x="79.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x1, 57 bits</title></rect>
+<rect x="115.0" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x2, 57 bits</title></rect>
+<rect x="150.4" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x3, 57 bits</title></rect>
+<rect x="185.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x4, 57 bits</title></rect>
+<rect x="221.0" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x5, 57 bits</title></rect>
+<rect x="256.4" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x6, 57 bits</title></rect>
+<rect x="291.7" y="68.0" width="34.7" height="26.0" fill="#2a78d6"><title>value 0: x7, 57 bits</title></rect>
+<rect x="40.0" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
+<text x="183.5" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 0</text>
+<text x="40.0" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 0</text>
+<rect x="327.1" y="68.0" width="39.7" height="26.0" fill="#eb6834"><title>value 1: x0, 64 bits</title></rect>
+<rect x="366.7" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x1, 57 bits</title></rect>
+<rect x="402.1" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x2, 57 bits</title></rect>
+<rect x="437.4" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x3, 57 bits</title></rect>
+<rect x="472.8" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x4, 57 bits</title></rect>
+<rect x="508.1" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x5, 57 bits</title></rect>
+<rect x="543.4" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x6, 57 bits</title></rect>
+<rect x="578.8" y="68.0" width="34.7" height="26.0" fill="#eb6834"><title>value 1: x7, 57 bits</title></rect>
+<rect x="327.1" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
+<text x="470.6" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 1</text>
+<text x="327.1" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 463</text>
+<rect x="614.1" y="68.0" width="39.7" height="26.0" fill="#1baf7a"><title>value 2: x0, 64 bits</title></rect>
+<rect x="653.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x1, 57 bits</title></rect>
+<rect x="689.1" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x2, 57 bits</title></rect>
+<rect x="724.5" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x3, 57 bits</title></rect>
+<rect x="759.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x4, 57 bits</title></rect>
+<rect x="795.2" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x5, 57 bits</title></rect>
+<rect x="830.5" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x6, 57 bits</title></rect>
+<rect x="865.8" y="68.0" width="34.7" height="26.0" fill="#1baf7a"><title>value 2: x7, 57 bits</title></rect>
+<rect x="614.1" y="68.0" width="287.1" height="26" fill="none" stroke="#0b0b0b" stroke-width="1.2"/>
+<text x="757.6" y="85.0" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">value 2</text>
+<text x="614.1" y="62.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">bit 926</text>
+<rect x="40.0" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="59.8" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w0</text>
+<rect x="79.7" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="119.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="139.2" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w2</text>
+<rect x="159.0" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="198.7" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="218.6" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w4</text>
+<rect x="238.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="278.1" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="297.9" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w6</text>
+<rect x="317.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="357.4" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="377.3" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w8</text>
+<rect x="397.1" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="436.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="456.6" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w10</text>
+<rect x="476.5" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="516.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="536.0" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w12</text>
+<rect x="555.8" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="595.5" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="615.4" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w14</text>
+<rect x="635.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="674.9" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="694.7" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w16</text>
+<rect x="714.6" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="754.2" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="774.1" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w18</text>
+<rect x="793.9" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="833.6" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="853.4" y="119.0" font-size="9" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">w20</text>
+<rect x="873.3" y="106.0" width="39.7" height="18.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<text x="32.0" y="119.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="normal">words</text>
+<rect x="901.2" y="68.0" width="11.8" height="26.0" fill="#e7e6e2"><title>unused bits of the last word, zero</title></rect>
+<line x1="901.2" y1="68.0" x2="901.2" y2="68.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="901.2" y1="75.0" x2="908.2" y2="68.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="901.2" y1="82.0" x2="913.0" y2="70.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="901.2" y1="89.0" x2="913.0" y2="77.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="903.2" y1="94.0" x2="913.0" y2="84.2" stroke="#52514e" stroke-width="0.6"/>
+<line x1="910.2" y1="94.0" x2="913.0" y2="91.2" stroke="#52514e" stroke-width="0.6"/>
+</svg>

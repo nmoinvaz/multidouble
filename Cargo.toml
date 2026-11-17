@@ -60,3 +60,7 @@ harness = false
 [[bench]]
 name = "jet"
 harness = false
+
+[[bench]]
+name = "pack"
+harness = false
