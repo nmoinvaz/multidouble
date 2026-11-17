@@ -218,66 +218,45 @@ multiple of another (`od_add_dd`, `od_axpy`), and numpy versions of the error-fr
 
 ## Accuracy
 
-The tests compare against exact arithmetic (`exact`), which shares no code with the algorithms under test. Errors are
-relative to the exact result. Here u = 2⁻⁵³, so u² = 2⁻¹⁰⁶ is the double-double unit.
+Every operation is tested against exact arithmetic (`exact`), which shares no code with the algorithms. With u = 2⁻⁵³,
+the parts of an n-part type hold 53n significand bits, and the natural target is an error of uⁿ times the result, the
+rounding error of a format with 53n bits. The table gives each operation's error bound in those units, with the bits it
+gives up in parentheses.
 
-| Operation | Bound checked | Worst seen (20,000 random inputs) |
-|---|---|---|
-| double-double add, subtract (including near-cancelling pairs) | 3 u² (Joldes, Muller and Popescu, 2017) | 1.66 u² |
-| double-double multiply | 5 u² | 3.12 u² |
-| double-double divide (residual of the quotient) | 8 u² | 1.54 u² |
-| two-sum, quick-two-sum, two-product | exact | exact |
+| Operation | double-double (106 bits) | quad-double (212 bits) | octo-double (424 bits) |
+|---|---|---|---|
+| add, subtract | 3 u² (1.6), proven | 8 u⁴ (3) | u⁸ (0), proven |
+| multiply | 5 u² (2.3) | 16 u⁴ (4) | u⁸ (0), proven |
+| divide | 8 u² (3) | 32 u⁴ (5) | u⁸ (0), proven |
+| square root | | 32 u⁴ (5) | 3 u⁸ (1.6), proven |
 
-For the quad-double types, the tests check every operation against exact arithmetic. They also check the scalar and 8-lane
-results bit for bit, and decimal input and output round trips. Against exact arithmetic the quad-double operations err by
-at most 2.1×2⁻²⁰⁹, about 63 digits. They use the algorithms of the QD library (Hida, Li and Bailey, ARITH-15, 2001), with
-two repairs found by these tests:
+A proven bound holds for every input. The double-double add's is Theorem 3.1 of Joldes, Muller and Popescu (2017). The
+octo-double ones are in [the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵ of the
+first. The other bounds are the thresholds the tests check.
 
-- **The accurate add.** It lost a term when all parts are read with three emitted.
-- **The square root.** It lost accuracy far from 1. It now scales its argument by a power of four first.
+- The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
+  promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
+  measured on the residual of its quotient.
+- The octo-double add, multiply and divide reach their bounds on the paper's worst-case inputs (`od_worst_case_inputs`),
+  and the tests check the proven bounds of the add and multiply on every input that meets the paper's hypotheses.
+  Random inputs stay far inside: below 0.01 u⁸ for every octo-double operation, and up to 1.66 u², 3.12 u² and 1.54 u²
+  for the double-double add, multiply and divide.
+- The quad-double column is for the default operators `+`, `*` and `/`. The more accurate `ieee_add`, `accurate_mul` and
+  `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴. The quad-double types use the QD library's algorithms (Hida, Li and Bailey,
+  ARITH-15, 2001) with two repairs found by these tests: the accurate add lost a term when all parts are read with three
+  emitted, and the square root, which lost accuracy far from 1, now scales its argument by a power of four.
+- Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked to within
+  8(8 + n) u⁸ of Σ|aᵢbᵢ|. Full precision needs every part to be a normal `f64`, so octo-double values above about
+  2⁻⁶⁰⁰; near underflow the tests allow an absolute 16×2⁻¹⁰⁷⁴.
+- `ODLu` solves to about 10⁻¹³³ cond(A) for condition numbers up to 10³⁰, 2⁻²²⁰ times the quad-double LU's error. `OJet`
+  coefficients are within 10⁻¹²³ of the sum of their terms' magnitudes, where the quad-double jet errs by 2×10⁻⁶⁴, and
+  its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps. `Ou` gives derivatives
+  within 10⁻¹²³, and its value is `OV`'s bit for bit.
 
-Quad-double costs 8–29 times double-double per operation, and 14–17 times in sums of products.
-
-The octo-double operations are checked the same way, against exact arithmetic on random, cancelling, near-overflow,
-near-underflow, near-power-of-two, sparse, computed, gapped and ladder inputs. In units of 2⁻⁴¹⁸ (relative to |a| + |b|
-for the adds):
-
-| Operation | Bound checked | Worst seen (2,000 inputs per kind) |
-|---|---|---|
-| add, subtract, + f64 | 1, and the proven 1/64 | 1.1×10⁻⁴ |
-| multiply, × f64 | 1, and the proven 1/64 | 9.5×10⁻⁵ |
-| divide | 2 | 1.1×10⁻⁴ |
-| square root | 2 | 1.1×10⁻⁴ |
-| dot products of 1 to 64 terms (relative to Σ \|aᵢbᵢ\|) | (8 + n)/8 | 9.8×10⁻⁵ |
-
-Octo-double costs 4–8 times quad-double per operation on the NEON lanes (add 3.7, multiply 5.3, divide 7.6) and about 14
-times in sums of products, whose quad-double accumulator drops the smallest partial products where this one keeps them.
-The error is the rounding of the result to eight parts: about 2⁻⁴³¹ on random inputs, and 2⁻⁴²⁴ on the inputs of
-`od_worst_case_inputs`, where the adds, the multiply, × f64 and the divide reach their proven bounds. The proven bound
-of the adds, the multiply and × f64, (1 + 2⁻¹⁴)/64 units, is checked on every input whose parts satisfy
-|aᵢ| ≤ 2⁻⁵²ⁱ|a₀| without underflow, and it catches a dropped term that the 1-unit bound misses. The near-underflow
-inputs are checked with an absolute allowance of 16×2⁻¹⁰⁷⁴, as for quad-double: full precision needs every part to be a
-normal `f64`, so values above about 2⁻⁶⁰⁰. `ODLu` solves to about 10⁻¹³³ cond(A) against planted solutions, 2⁻²²⁰ times the quad-double LU's
-error on the same systems, for condition numbers from 1 to 10³⁰.
-
-The octo-double jet's coefficients are checked against exact arithmetic too (`tests/ojet.rs`). Polynomials,
-reciprocals, quotients and a rational function in the series variable, and series formed in the parameter arithmetic,
-are within 10⁻¹²³ of the sum of their terms' magnitudes (2.2×10⁻¹²⁸ seen, where the quad-double jet errs by 2×10⁻⁶⁴).
-The order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps (1.1×10⁻¹³⁰ seen; two steps
-leave 2.4×10⁻⁹⁵). On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12
-times, and a 24-order solve on 32 values 8.3 times, with four refinement steps against two (`cargo bench --bench jet`).
-The octo-double dual `Ou` gives partial derivatives and Jacobian columns within 10⁻¹²³ of the exact ones (3.6×10⁻¹³⁰
-seen, where `Qu` errs by 1.9×10⁻⁶⁴), and its value is `OV`'s bit for bit.
-
-Every check can fail. Two kinds of controls show it:
-
-- **Built-in breakage.** The feature `mutate` breaks the quad-double and octo-double algorithms one at a time on
-  purpose, and `cargo test --release --features mutate` checks that each breakage fails a test. One of them replaces
-  a fused multiply-subtract by a plain product on the compile-time backend only, and the backend check catches it there
-  and on no other backend.
-- **Hand-written controls.** The integration tests contain controls that feed deliberately wrong results to the same
-  checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor, and f128 conversions
-  that round twice.
+Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms one at a time, and
+`cargo test --release --features mutate` checks that each breakage fails a test. The integration tests also feed
+deliberately wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a
+perturbed LU factor, and f128 conversions that round twice.
 
 ## Testing, coverage and benchmarks
 
@@ -294,6 +273,16 @@ cargo bench --bench linalg                                      # double-double 
 cargo bench --bench jet                                         # OJet<24> against QJet<24>: product, sums, the jet solve
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
 ```
+
+Each precision costs more than the one below it:
+
+| Comparison | Per operation | Sums of products |
+|---|---|---|
+| quad-double against double-double | 8–29× | 14–17× |
+| octo-double against quad-double, NEON lanes | 4–8× (add 3.7, multiply 5.3, divide 7.6) | about 14×, as its accumulator keeps the smallest partial products the quad-double one drops |
+
+On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12 times, and a 24-order
+solve on 32 values 8.3 times, with four refinement steps against two.
 
 `tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, `OJet` its scalar series
 `OSeries` and `Ou` its scalar formulas, on every backend the CPU has. The NEON backend's code is also
