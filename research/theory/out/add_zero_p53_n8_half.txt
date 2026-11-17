@@ -1,0 +1,3 @@
+    rel, (a, b, x, Z) = best
+         ^^^^^^^^^^^^
+TypeError: cannot unpack non-iterable NoneType object

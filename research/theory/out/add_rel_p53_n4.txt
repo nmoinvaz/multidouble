@@ -1,0 +1,2 @@
+3ff0000000000000 3ca0000000000000 b950000000000000 b5fffffffffffffe
+bff0000000000000 bc9fffffffffffff 35fffffffffffffd af5ffffffffffffe

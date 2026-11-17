@@ -1,0 +1,60 @@
+% Relative accuracy of ADD after cancellation. Written to be \input after the appendix of
+% expansion-error-bounds.tex. Scripts: research/theory/add_rel.py (the family), add_zero.py (the searches).
+
+\section{Addition after cancellation}\label{sec:cancel}
+
+Theorem~\ref{thm:t3} bounds the error of ADD by $u^n|Z| + \kappa u^{n+1}(|a_0| + |b_0|)$, which is not relative to
+$|Z|$. The second term is needed: for $n \ge 3$ a cancelling sum can be returned with a relative error of about $u$,
+the accuracy of one floating-point number, whatever $n$.
+
+\begin{proposition}\label{prop:cancel}
+Assume~\ref{as:fp} with $p \ge 5$, and let $\sigma = u^{n-3}$. For $n = 3$ let
+\[
+a = (1,\ -u,\ -(2^p - 2)u^3), \qquad b = (-(1-u),\ (2^p - 3)u^3,\ -(1 - 2u)u^4),
+\]
+and for $n \ge 4$
+\[
+a = (1, u, \dots, u^{n-4},\ \sigma,\ -\sigma u,\ -\sigma(2^p - 2)u^3), \quad
+b = (-1, -u, \dots, -u^{n-4},\ -\sigma(1-u),\ \sigma(2^p - 3)u^3,\ -\sigma(1 - 2u)u^4).
+\]
+Both are B-nonoverlapping ($|a_{i+1}| \le \frac12\ulp(a_i)$) and satisfy $H(1)$. ADD returns $x = (-u^n, 0, \dots, 0)$,
+while $a + b = -u^n - (1 - 2u)u^{n+1}$, so
+\[
+\frac{|a + b - x|}{|a + b|} = \frac{(1 - 2u)\,u}{1 + u - 2u^2} = u\,(1 - 3u + O(u^2)).
+\]
+\end{proposition}
+
+\begin{proof}
+All values are multiples of powers of two, so we name them by their significands. For $n = 3$: $a_0 + b_0 = u$ is exact.
+$a_1 + b_1 = -u + u^2 - 3u^3$ lies in the binade $[u/2, u)$ of spacing $u^2$, and $3u^3 < u^2/2$, so $s_1 = -u + u^2$ and
+$t_1 = -3u^3$. Since $|b_2| < u^4 < \frac12\ulp(a_2) = u^3/2$, $s_2 = a_2 = -u^2 + 2u^3$ and $t_2 = b_2$, and $s_3 = t_2$.
+The dep of $t_0 = 0$ changes nothing. The dep of $t_1$ adds $-3u^3$ to $s_2$: $-u^2 - u^3$ is the midpoint of $-u^2$ and
+$-u^2 - 2u^3$, the tie goes to $-u^2$, whose significand is even, and the carry is $e = -u^3$. Finally $s_3 =
+\RN(-u^3 - (1 - 2u)u^4) = -u^3$, since $(1 - 2u)u^4$ is less than half the spacing $2u^4$ above $u^3$; this rounding
+loses $(1 - 2u)u^4$. The levels are $c = (u,\ -u + u^2,\ -u^2,\ -u^3)$, with sum $-u^3$. VecSum gives $\TwoSum(-u^2, -u^3)
+= (-u^2, -u^3)$ (a tie to the even $-u^2$), then $\TwoSum(-u + u^2, -u^2) = (-u, 0)$ and $\TwoSum(u, -u) = (0, 0)$, so
+$v = (0, 0, 0, -u^3)$, and the second pass emits nothing and returns $(-u^3, 0, 0)$.
+
+For $n \ge 4$, levels $0, \dots, n-4$ cancel exactly ($a_i + b_i = 0$, $t_i = 0$), and their deps change nothing, since
+$\TwoSum(y, 0) = (y, 0)$. Levels $n-3, \dots, n-1$ receive the operands of the case $n = 3$ multiplied by the power of
+two $\sigma$, and level $n$ plays the part of level 3; scaling by a power of two commutes with $\RN$ under (A2). So the
+levels are $(0, \dots, 0, \sigma c)$, VecSum's output is $(0, \dots, 0, -\sigma u^3)$, and $x = (-u^n, 0, \dots, 0)$. The
+nonoverlap and $H(1)$ follow from the significands: for instance $|a_{n-1}| = u^{n-1} - 2u^n \le \frac12\ulp(a_{n-2}) =
+u^{n-1}$ and $|b_{n-2}| = u^{n-1} - 3u^n \le \frac12\ulp(b_{n-3}) = u^{n-2}/2$.
+\end{proof}
+
+\begin{remark}
+The loss is the rounding at level $n$ of the carry $e$ and the error $t_{n-1}$: under cancellation the levels above
+it sum to nearly zero, so the rounding of level $n$ is relative to the result rather than to the operands. For $n = 2$
+the mechanism is absent (a sketch, not checked in detail): a rounding at level 2 needs $t_0 \ne 0$, and then by
+Sterbenz's lemma $|a_0 + b_0| > \frac12\max(|a_0|, |b_0|)$, so $|Z| > M/3 - 4uM$; if $t_0 = 0$ the levels $(s_0, s_1,
+t_1)$ are exact, and $R_2$ loses only when its first step emits, which needs $s_0 + s_1$ inexact and so, by the same
+lemma, $|Z| \ge \frac12\max(|s_0|, |s_1|) - u|s_1|$. The searches found relative errors of at most $0.98u^2$ at $n = 2$
+(\texttt{add\_climb.py}), and none on the cancelling family of \texttt{add\_zero.py}. Hida, Li and Bailey~\cite{HLB01} note that
+their faster quad-double addition is not relatively accurate, with an input that loses the last component (a relative
+error of order $u^{n-1}$). Proposition~\ref{prop:cancel} loses $n - 1$ components. multidouble~4.8.2 returns
+$-2^{-424}$ for the octo-doubles of the case $n = 8$, and $-2^{-212}$ for the quad-doubles of $n = 4$ (its \texttt{QD}
+\texttt{+}, QD's sloppy addition), at relative error $2^{-53}(1 - 3u)$. Random searches over cancelling inputs at $p = 6$
+and $p = 53$, $n = 3$ to $8$, found no relative error above $u$; whether $u(1 + O(u))$ bounds the relative error of ADD
+is open. The same searches with operands renormalized by $R_n$ found no loss at all.
+\end{remark}

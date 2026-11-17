@@ -1,0 +1,4 @@
+p=6 n=2: 68875 inputs; largest |Z - x|/|Z| = 0 = 2^0x0.0p+0 = 0 u^n; results 0 with Z != 0: 0
+p=6 n=3: 91923 inputs; largest |Z - x|/|Z| = 0.01538 = 2^0x1.f81f81f81f820p-7 = 4033 u^n; results 0 with Z != 0: 0
+p=6 n=3: 91923 inputs; largest |Z - x|/|Z| = 0 = 2^0x0.0p+0 = 0 u^n; results 0 with Z != 0: 0
+p=53 n=8: 4984 inputs; largest |Z - x|/|Z| = 1.085e-16 = 2^0x1.f439e4050ec0ap-54 = 4.699e+111 u^n; results 0 with Z != 0: 0
