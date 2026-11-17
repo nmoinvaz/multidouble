@@ -114,6 +114,140 @@ fn div_within_bound() {
     println!("div: worst {worst:.3} u^2");
 }
 
+/// a^n exactly, for n >= 0
+fn exact_pow(a: DD, n: u32) -> Dy {
+    let x = exact(a);
+    (0..n).fold(Dy::from_f64(1.0), |p, _| p.mul(&x))
+}
+
+/// `sqr` within the multiply's 5 u^2, and `powi` within 5 (|n| - 1) u^2, the first-order sum of its |n| - 1
+/// multiplications' bounds (each squaring doubles the error of what it squares), plus the divide's 8 u^2 for n < 0,
+/// measured there as the residual a^|n| x - 1. Thresholds fixed before the first run.
+#[test]
+fn sqr_and_powi_within_bounds() {
+    let mut r = Rng(6);
+    let (mut worst_sqr, mut worst_pow): (f64, f64) = (0.0, 0.0);
+    for i in 0..N {
+        let a = r.dd(20);
+        let s = a.sqr();
+        assert!(normalized(s));
+        let e = rel_err(s, &exact(a).mul(&exact(a)));
+        worst_sqr = worst_sqr.max(e);
+        assert!(e <= 5.0, "{a:?}.sqr(): {e} u^2");
+        let a = r.dd(4);
+        let n = (i % 25) as i32 - 12;
+        let p = a.powi(n);
+        let k = n.unsigned_abs();
+        let (e, thr) = if n >= 0 {
+            (rel_err(p, &exact_pow(a, k)), 5.0 * k.saturating_sub(1) as f64)
+        } else {
+            let res = exact(p).mul(&exact_pow(a, k)).sub(&Dy::from_f64(1.0));
+            (res.ratio(&Dy::from_f64(1.0)).abs() / U2, 5.0 * (k - 1) as f64 + 8.0)
+        };
+        worst_pow = worst_pow.max(if thr > 0.0 { e / thr } else { e });
+        assert!(e <= thr, "{a:?}.powi({n}): {e} u^2 > {thr}");
+    }
+    assert_eq!(DD::from_f64(3.0).powi(0), DD::ONE);
+    assert_eq!(DD::from_f64(-2.0).powi(5), DD::from_f64(-32.0));
+    assert_eq!(DD::from_f64(2.0).powi(-3), DD::from_f64(0.125));
+    // a negative power whose positive power overflows: 2^1024 is not representable, 2^-1024 is (subnormal)
+    assert_eq!(DD::from_f64(p2(512)).powi(-2), DD::from_f64(p2(-1024)));
+    assert_eq!(DD::from_f64(p2(100)).powi(-10), DD::from_f64(p2(-1000)));
+    // 2^1200 overflows; DD's division by the underflowed 2^-1200 = 0 gives NaN, as `DD::ONE / DD::ZERO` does
+    assert!(!DD::from_f64(p2(-600)).powi(-2).hi.is_finite());
+    assert!(DD::from_f64(f64::NAN).powi(-3).hi.is_nan());
+    println!("sqr: worst {worst_sqr:.3} u^2; powi: worst {worst_pow:.3} of its bound");
+}
+
+/// 2^e for any exponent of a nonzero f64, subnormal included (`2f64.powi(e)` underflows to 0 below about 2^-1023)
+fn p2(e: i32) -> f64 {
+    if e >= -1022 {
+        f64::from_bits(((e + 1023) as u64) << 52)
+    } else {
+        f64::from_bits(1u64 << (e + 1074))
+    }
+}
+
+/// |sqrt(x) - z| / sqrt(x) in units of u^2, from the exact residual: z = sqrt(x)(1 + d) gives (z^2 - x)/(2x) = d + d^2/2
+fn sqrt_err(z: DD, x: &Dy) -> f64 {
+    exact(z).mul(&exact(z)).sub(x).ratio(x).abs() / 2.0 / U2
+}
+
+/// `sqrt` within the proven 25/8 u^2 (Lefèvre, Louvet, Muller, Picot, Rideau 2023, Theorem 3.5), over random
+/// magnitudes, near the scaling threshold 2^-968, at the extremes of the range, and on exact squares, where it is exact.
+/// The d^2/2 of the residual is below 2^-200 u^2, so the bound is checked as stated.
+#[test]
+fn sqrt_within_bound() {
+    let mut r = Rng(8);
+    let mut worst: f64 = 0.0;
+    let mut check = |x: DD| {
+        let z = x.sqrt();
+        assert!(normalized(z), "{x:?}");
+        let e = sqrt_err(z, &exact(x));
+        worst = worst.max(e);
+        assert!(e <= 25.0 / 8.0, "{x:?}.sqrt(): {e} u^2");
+    };
+    for _ in 0..N {
+        check(r.dd(300).abs());
+    }
+    let mut subnormal = 0;
+    for e in [-1074, -1060, -1022, -1000, -969, -968, -967, -900, 1000, 1022] {
+        for _ in 0..50 {
+            // |hi| in [2^e, 2^(e+1)); below 2^-1022 a single subnormal f64 (mul_pwr2 takes normal powers only), as a
+            // renormalized value that small has a zero lo
+            let x = if e >= -1022 {
+                r.dd(0).abs().mul_pwr2(p2(e))
+            } else {
+                DD::from_f64((1.0 + r.unit()) * p2(e))
+            };
+            assert!(x.hi > 0.0, "2^{e}");
+            subnormal += !x.hi.is_normal() as usize;
+            check(x);
+        }
+    }
+    assert_eq!(subnormal, 100, "the inputs at 2^-1074 and 2^-1060 are subnormal");
+    for _ in 0..1000 {
+        let s = r.dd(200).abs();
+        let x = DD::from_f64(s.hi * s.hi);
+        if x.hi.is_normal() && exact(x).sub(&Dy::from_f64(s.hi).mul(&Dy::from_f64(s.hi))).is_zero() {
+            assert_eq!(x.sqrt().hi, s.hi.abs());
+        }
+    }
+    assert_eq!(DD::from_f64(4.0).sqrt(), DD::from_f64(2.0));
+    assert_eq!(DD::ZERO.sqrt(), DD::ZERO);
+    assert!(DD::from_f64(-1.0).sqrt().hi.is_nan());
+    assert_eq!(DD::from_f64(f64::INFINITY).sqrt().hi, f64::INFINITY);
+    println!("sqrt: worst {worst:.3} u^2");
+}
+
+/// The sqrt check can fail: the root of hi alone, ignoring lo, misses the bound.
+#[test]
+fn control_fires_for_sqrt() {
+    let mut r = Rng(9);
+    let caught = (0..1000).any(|_| {
+        let x = r.dd(20).abs();
+        sqrt_err(DD::from_f64(x.hi).sqrt(), &exact(x)) > 25.0 / 8.0
+    });
+    assert!(caught);
+}
+
+/// The sqr and powi checks can fail: a square without its 2 hi lo term, and a power formed in f64, break their
+/// bounds.
+#[test]
+fn controls_fire_for_sqr_and_powi() {
+    let mut r = Rng(7);
+    let (mut sqr_caught, mut pow_caught) = (false, false);
+    for _ in 0..1000 {
+        let a = r.dd(20);
+        let (p, e) = two_prod(a.hi, a.hi);
+        sqr_caught |= rel_err(DD::new(p, e), &exact(a).mul(&exact(a))) > 5.0;
+        let a = r.dd(4);
+        let broken = DD::from_f64(a.to_f64().powi(7));
+        pow_caught |= rel_err(broken, &exact_pow(a, 7)) > 30.0;
+    }
+    assert!(sqr_caught && pow_caught);
+}
+
 #[test]
 fn small_identities() {
     let one = DD::ONE;
