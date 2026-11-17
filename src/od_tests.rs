@@ -1183,6 +1183,123 @@ fn od_gap_regressions_control() {
     }
 }
 
+/// eight to nine values ±(1 + f)·2^e, e in -300..=0, in random magnitude order; half the time one value nearly cancels
+/// another, as the levels of a·(1/a) do
+fn unordered(r: &mut Rng) -> [f64; 9] {
+    let mut c: [f64; 9] = std::array::from_fn(|_| rde(r, -300, 0).to_f64());
+    if coin(r) {
+        let (i, j) = (r.int(0, 8) as usize, r.int(0, 8) as usize);
+        if i != j {
+            c[j] = -c[i] * (1.0 + f64::EPSILON * r.int(1, 1 << 20) as f64);
+        }
+    }
+    c
+}
+
+/// 4.8.0's renormalization (second pass by quick-two-sums), and whether its every quick-two-sum was exact
+fn renorm_fast_pass(c: [f64; 9]) -> ([f64; 8], bool) {
+    let c = crate::od::vecsum(c);
+    let (mut out, mut k, mut acc, mut exact) = ([0.0f64; 8], 0, c[0], true);
+    for &ci in &c[1..] {
+        let (t, e) = crate::od::quick_two_sum(acc, ci);
+        exact &= (t, e) == crate::od::two_sum(acc, ci);
+        if k < 7 && e != 0.0 {
+            out[k] = t;
+            k += 1;
+            acc = e;
+        } else {
+            acc = t;
+        }
+    }
+    out[k] = acc;
+    (out, exact)
+}
+
+fn exact_sum(c: &[f64]) -> Dy {
+    c.iter().fold(Dy::zero(), |s, &x| s.add(&Dy::from_f64(x)))
+}
+
+/// Pass: eight values in any magnitude order renormalize with their exact sum kept (seven emissions at most, so no
+/// part is truncated, and every two-sum is exact).
+#[test]
+fn renorm_of_eight_keeps_the_exact_sum_in_any_order() {
+    let mut r = Rng::new(0x5e7e);
+    let lost = (0..20000)
+        .filter(|_| {
+            let c: [f64; 8] = unordered(&mut r)[..8].try_into().unwrap();
+            !exact_sum(&crate::od::renorm_scalar(c)).sub(&exact_sum(&c)).is_zero()
+        })
+        .count();
+    assert_eq!(lost, 0, "{lost} of 20000 renormalizations lost part of their sum");
+}
+
+/// Control: with the second pass by quick-two-sums (`mutate::RENORM_FAST`), some of the same renormalizations lose
+/// part of their sum.
+#[cfg(feature = "mutate")]
+#[test]
+fn renorm_of_eight_keeps_the_exact_sum_control() {
+    let mut r = Rng::new(0x5e7e);
+    set_mutation(mutate::RENORM_FAST);
+    let lost = (0..20000)
+        .filter(|_| {
+            let c: [f64; 8] = unordered(&mut r)[..8].try_into().unwrap();
+            !exact_sum(&crate::od::renorm_scalar(c)).sub(&exact_sum(&c)).is_zero()
+        })
+        .count();
+    set_mutation(0);
+    assert!(lost > 0, "the quick-two-sum pass kept every sum");
+}
+
+/// Pass: wherever every quick-two-sum of 4.8.0's second pass was exact, the two-sum pass gives its bits; the inputs,
+/// half of them in magnitude order, include both kinds (at least 1000 of each in 20000).
+#[test]
+fn renorm_keeps_the_fast_pass_bits_where_it_was_exact() {
+    let (exact, inexact, changed) = fast_pass_comparison(0);
+    println!("renorm: {exact} with every quick-two-sum exact ({changed} changed), {inexact} with one inexact");
+    assert_eq!(
+        changed, 0,
+        "{changed} results changed where every quick-two-sum was exact"
+    );
+    assert!(exact >= 1000 && inexact >= 1000, "{exact} exact, {inexact} inexact");
+}
+
+/// Control: with the renormalization's eighth part dropped (`mutate::RENORM_DROP`), results change where every
+/// quick-two-sum was exact.
+#[cfg(feature = "mutate")]
+#[test]
+fn renorm_keeps_the_fast_pass_bits_control() {
+    assert!(fast_pass_comparison(mutate::RENORM_DROP).2 > 0);
+}
+
+/// over 20000 renormalizations, half in magnitude order (as the levels of a product of full values) and half in random
+/// order: those whose every quick-two-sum in 4.8.0's pass was exact, those with one inexact, and among the first those
+/// whose bits differ from 4.8.0's, with mutation `id` active in `renorm_scalar`
+fn fast_pass_comparison(id: u32) -> (usize, usize, usize) {
+    let mut r = Rng::new(0xb175);
+    let (mut exact, mut inexact, mut changed) = (0, 0, 0);
+    for i in 0..20000 {
+        let c = if i % 2 == 0 {
+            std::array::from_fn(|k| {
+                let e = -53 * k as i64 - r.int(0, 3);
+                rand_dy(&mut r, e).to_f64()
+            })
+        } else {
+            unordered(&mut r)
+        };
+        let (old, was_exact) = renorm_fast_pass(c);
+        set_mutation(id);
+        let new = crate::od::renorm_scalar(c);
+        set_mutation(0);
+        if was_exact {
+            exact += 1;
+            changed += (old.map(f64::to_bits) != new.map(f64::to_bits)) as usize;
+        } else {
+            inexact += 1;
+        }
+    }
+    (exact, inexact, changed)
+}
+
 /// the cases of `od_gap_regressions`
 fn gap_cases() -> Vec<(&'static str, Op, OD, OD)> {
     let od = |h: [u64; 8]| OD {
