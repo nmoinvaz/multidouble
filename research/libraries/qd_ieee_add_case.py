@@ -8,7 +8,10 @@ Checks, each of which must hold (exit status 1 otherwise):
   1. on the input below, ieee_add's relative error exceeds 4u^4 = 2^-210 (the bound fires);
   2. control, quiet: the exact sum rounded greedily to four doubles meets the bound on the same input;
   3. control, quiet: ieee_add with the dropped accumulator word v passed to a five-term renorm meets it;
-  4. control, quiet: ieee_add meets the bound on 2000 random non-cancelling inputs whose parts do not interleave.
+  4. control, quiet: ieee_add meets the bound on 2000 random non-cancelling inputs whose parts do not interleave;
+  5. on A2 (A with its last part one ulp larger), the upstream fix of the k == 3 case (BL-highprecision/QD 92d99c8)
+     still exceeds the bound, because the loop now ends with k == 4 and drops the accumulator (u, v);
+  6. control, quiet: our repair ports.qd_ieee_add_fix2 meets the bound on A and A2.
 """
 import random
 import struct
@@ -25,6 +28,7 @@ def h(s):
 
 
 A_HEX = ['-0x1.10b3152f6f89ap+0', '-0x1.fffffffffffffp-56', '0x1.dbf40e3873925p-110', '0x1.bd32b707ee75cp-166']
+A2_HEX = A_HEX[:3] + ['0x1.bd32b707ee75dp-166']
 B_HEX = ['-0x1.061d2017c3fddp+0', '0x1.f2c626c6a92efp-54', '0x1.db856994e5f1ep-110', '0x1.8fb8e95ff5794p-164']
 
 
@@ -113,6 +117,19 @@ def main():
     print("control random separated inputs: worst rel err 2^%.2f" % _l2(worst) if worst else "control random: exact")
     if worst > bound:
         print("FAIL 4"); ok = False
+    a2 = [h(s) for s in A2_HEX]
+    Z2 = vsum(a2) + vsum(b)
+    rf = rel(X.qd_ieee_add_fixed(a2, b), Z2)
+    print("A2 =", A2_HEX)
+    print("upstream fix 92d99c8 on A2: rel err 2^%.2f, ratio 2^%.2f" % (_l2(rf), _l2(rf / bound)))
+    if not rf > bound:
+        print("FAIL 5"); ok = False
+    for name, x in (("A", a), ("A2", a2)):
+        Zx = vsum(x) + vsum(b)
+        r2 = rel(X.qd_ieee_add_fix2(x, b), Zx)
+        print("control fix2 on %s: rel err %s" % (name, "2^%.2f" % _l2(r2) if r2 else "0"))
+        if r2 > bound:
+            print("FAIL 6"); ok = False
     print("PASS" if ok else "CHECK FAILED")
     return 0 if ok else 1
 

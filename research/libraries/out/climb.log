@@ -8,3 +8,5 @@ climb qd_sloppy_mul p=53 seed=1 steps=258835 restarts=87 best_ratio=3.72011 (log
 climb qd_accurate_div p=53 seed=1 steps=110398 restarts=37 best_ratio=0.151696 (log2 -3) time=60s
 climb qd_sloppy_div p=53 seed=1 steps=168052 restarts=57 best_ratio=11.7132 (log2 3) time=60s
 climb cp_bailey_add_renorm p=53 seed=1 steps=167830 restarts=56 best_ratio=1.92951e+24 (log2 80) time=30s
+climb qd_sloppy_add p=8 seed=2 steps=254252 restarts=85 best_ratio=0.925851 (log2 -1) time=60s
+climb qd_accurate_mul p=8 seed=2 steps=182624 restarts=61 best_ratio=0.201505 (log2 -3) time=60s

@@ -601,3 +601,77 @@ def gqd_mul_d(a, b):  # gqd_basic.cu:252-275
 
 def gqd_mul(a, b):  # gqd_basic.cu:284-332 (operator* is sloppy_mul)
     return _with_renorm5(qd_sloppy_mul, a, b)
+
+
+def qd_ieee_add_fixed(a, b):
+    """BL-highprecision/QD @ 92d99c8 (2026-10-23), include/qd/qd_inline.h:286-345: ieee_add with the k == 3
+    remainder renormalized as five terms. Every other line is as in 2.3.24."""
+    i = j = k = 0
+    x = [Z, Z, Z, Z]
+    if fabs_gt(a[i], b[j]):
+        u = a[i]; i += 1
+    else:
+        u = b[j]; j += 1
+    if fabs_gt(a[i], b[j]):
+        v = a[i]; i += 1
+    else:
+        v = b[j]; j += 1
+    u, v = qd_quick_two_sum(u, v)
+    while k < 4:
+        if i >= 4 and j >= 4:
+            x[k] = u
+            if k < 3:
+                k += 1
+                x[k] = v
+            else:
+                return qd_renorm5(x[0], x[1], x[2], x[3], v)
+            break
+        if i >= 4:
+            t = b[j]; j += 1
+        elif j >= 4:
+            t = a[i]; i += 1
+        elif fabs_gt(a[i], b[j]):
+            t = a[i]; i += 1
+        else:
+            t = b[j]; j += 1
+        s, u, v = qd_quick_three_accum(u, v, t)
+        if s[0] != 0:
+            x[k] = s
+            k += 1
+    for kk in range(i, 4):
+        x[3] = add(x[3], a[kk])
+    for kk in range(j, 4):
+        x[3] = add(x[3], b[kk])
+    return qd_renorm4(*x)
+
+
+def qd_ieee_add_fix2(a, b):
+    """A candidate complete repair (ours, not shipped): ieee_add's merge and double-length accumulation unchanged,
+    but at loop exit every word still held (the accumulator's u and v, and any unconsumed input) joins the emitted
+    parts in one renormalization with TwoSum in both passes (paper/fpemu.py renorm, mode 'two'), which is exact
+    for terms in any order up to its last step."""
+    i = j = k = 0
+    x = []
+    if fabs_gt(a[i], b[j]):
+        u = a[i]; i += 1
+    else:
+        u = b[j]; j += 1
+    if fabs_gt(a[i], b[j]):
+        v = a[i]; i += 1
+    else:
+        v = b[j]; j += 1
+    u, v = qd_quick_two_sum(u, v)
+    while len(x) < 4 and (i < 4 or j < 4):
+        if i >= 4:
+            t = b[j]; j += 1
+        elif j >= 4:
+            t = a[i]; i += 1
+        elif fabs_gt(a[i], b[j]):
+            t = a[i]; i += 1
+        else:
+            t = b[j]; j += 1
+        s, u, v = qd_quick_three_accum(u, v, t)
+        if s[0] != 0:
+            x.append(s)
+    terms = x + [u, v] + list(a[i:]) + list(b[j:])
+    return F.renorm(terms, 4, 'two')

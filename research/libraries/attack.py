@@ -41,6 +41,16 @@ def _(a, b):
     return X.qd_ieee_add(a, b)
 
 
+@op('qd_ieee_add_fixed', 4, 'rel', 4, 'add')  # BL-highprecision/QD 92d99c8, the k == 3 fix
+def _(a, b):
+    return X.qd_ieee_add_fixed(a, b)
+
+
+@op('qd_ieee_add_fix2', 4, 'rel', 4, 'add')  # our candidate repair, ports.qd_ieee_add_fix2
+def _(a, b):
+    return X.qd_ieee_add_fix2(a, b)
+
+
 @op('qd_accurate_mul', 4, 'rel', 2, 'mul')
 def _(a, b):
     return X.qd_accurate_mul(a, b)
