@@ -8,3 +8,9 @@ mul_cancel qd_accurate_mul p=53 seed=3 valid_trials=23732 over_bound=0 worst_rat
 mul_cancel qd_sloppy_mul p=53 seed=3 valid_trials=23732 over_bound=22 worst_ratio=1.878 (log2 0)
 mul_cancel cp_bailey_mul_renorm p=53 seed=3 valid_trials=23732 over_bound=0 worst_ratio=0.007743 (log2 -7)
 mul_cancel gqd_mul p=53 seed=3 valid_trials=23732 over_bound=22 worst_ratio=1.878 (log2 0)
+climb cp_bailey_mul_renorm p=53 seed=1 steps=165093 restarts=56 best_ratio=0.00780638 (log2 -8) time=60s
+dd df_add p=8 seed=1 steps=277724 max_rel_err=2.61700 u^2  time=20s
+dd df_add p=53 seed=1 steps=279527 max_rel_err=1.19364 u^2  time=30s
+dd boost_add p=8 seed=1 steps=299220 max_rel_err=2.61700 u^2  time=20s
+dd boost_add p=53 seed=1 steps=367416 max_rel_err=1.19397 u^2  time=30s
+dd df_mul p=8 seed=1 steps=287378 max_rel_err=4.40009 u^2  time=20s
