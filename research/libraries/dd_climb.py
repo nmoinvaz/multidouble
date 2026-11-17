@@ -47,14 +47,14 @@ def rel_err_u2(fn, kind, x, y):
 
 
 def rand_dw(rng, p):
+    """a random normalized double-word (xh, xl) with xh in [1, 2) and |xl| <= ulp(xh)/2"""
     m = rng.getrandbits(p) | (1 << (p - 1))
     xh = Fraction(m, 1 << (p - 1))
-    lo = Fraction(rng.getrandbits(p + 3) - (1 << (p + 2)), 1 << (p + 2)) * Fraction(1, 1 << (p - 1)) / 2 ** 0
-    lo *= Fraction(2) ** (-rng.choice([0, 0, 0, 1, 2, rng.randint(0, p)]))
-    V = xh + lo * Fraction(1, 1 << 0) * Fraction(1, 1 << 1)
-    V = Fraction(round(V * (1 << (3 * p))), 1 << (3 * p))
+    half_ulp = Fraction(1, 1 << p)
+    lo = Fraction(rng.getrandbits(p + 1) - (1 << p), 1 << p) * half_ulp
+    lo *= Fraction(1, 1 << rng.choice([0, 0, 0, 1, 2, rng.randint(0, p)]))
     s = rng.choice([-1, 1])
-    return A.expand(s * V, 2)
+    return A.expand(s * (xh + lo), 2)
 
 
 def mutate(rng, x):
@@ -62,7 +62,6 @@ def mutate(rng, x):
     i = rng.randrange(2)
     if x[i][0] == 0:
         i = 0
-    u = A.ulp_of(x[i]) if False else None
     m, e = x[i]
     ulp = Fraction(2) ** (abs(m).bit_length() - 1 + e - F.P + 1)
     k = rng.choice([1, 1, 2, 3, rng.randint(1, 1 << min(F.P - 2, 16))])

@@ -1,0 +1,10 @@
+climb qd_sloppy_add p=53 seed=1 steps=522885 restarts=175 best_ratio=0.249312 (log2 -2) time=120s
+climb qd_accurate_mul p=53 seed=1 steps=530834 restarts=177 best_ratio=0.062451 (log2 -5) time=120s
+climb cp_certified_add p=53 seed=1 steps=483477 restarts=162 best_ratio=0.0193583 (log2 -6) time=120s
+climb qd_ieee_add p=53 seed=1 steps=258325 restarts=87 best_ratio=6.72384e+13 (log2 45) time=90s
+climb qd_mul_d p=53 seed=1 steps=290627 restarts=97 best_ratio=0.123359 (log2 -4) time=60s
+climb qd_add_d p=53 seed=1 steps=354293 restarts=119 best_ratio=0.248165 (log2 -2) time=60s
+climb qd_sloppy_mul p=53 seed=1 steps=258835 restarts=87 best_ratio=3.72011 (log2 2) time=60s
+climb qd_accurate_div p=53 seed=1 steps=110398 restarts=37 best_ratio=0.151696 (log2 -3) time=60s
+climb qd_sloppy_div p=53 seed=1 steps=168052 restarts=57 best_ratio=11.7132 (log2 3) time=60s
+climb cp_bailey_add_renorm p=53 seed=1 steps=167830 restarts=56 best_ratio=1.92951e+24 (log2 80) time=30s

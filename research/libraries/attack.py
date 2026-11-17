@@ -86,6 +86,31 @@ def _(a, b):
     return X.cp_bailey_add_renorm(a, b, 4)
 
 
+@op('cp_bailey_mul_renorm', 4, 'campmul', 1, 'mul')  # multiplication.h:396, K = L = R = 4
+def _(a, b):
+    return X.cp_bailey_mul_renorm(a, b, 4)
+
+
+@op('gqd_add', 4, 'cray', 2, 'add')  # GQD documents QD's bounds by inheritance (a port of QD)
+def _(a, b):
+    return X.gqd_add(a, b)
+
+
+@op('gqd_add_d', 4, 'cray', 2, 'addd')
+def _(a, b):
+    return X.gqd_add_d(a, b[0])
+
+
+@op('gqd_mul_d', 4, 'rel', 2, 'muld')
+def _(a, b):
+    return X.gqd_mul_d(a, b[0])
+
+
+@op('gqd_mul', 4, 'rel', 2, 'mul')
+def _(a, b):
+    return X.gqd_mul(a, b)
+
+
 @op('cp_certified_add_d', 4, 'camp', 4.5, 'addd')
 def _(a, b):
     return X.cp_certified_add(a, [b[0]], 4)
@@ -117,6 +142,12 @@ def bound(spec, a, b, Zx, p):
         return k * u ** n * abs(Zx)
     if spec['bound'] == 'camp':
         return k * Fraction(1, 2 ** ((p - 1) * n)) * abs(Zx)
+    if spec['bound'] == 'campmul':
+        # 2^{-(p-1)(R+1)} (128/127 (K+L) - 129/254 R - 385/254 + 2^{p-1} + 2^{-p-r}(R^2+R)((R+1)!)^2), r = 0
+        R = K_ = L_ = n
+        c = (Fraction(128, 127) * (K_ + L_) - Fraction(129, 254) * R - Fraction(385, 254) + 2 ** (p - 1)
+             + Fraction(1, 2 ** p) * (R * R + R) * 14400)
+        return Fraction(1, 2 ** ((p - 1) * (R + 1))) * c * abs(Zx)
     if spec['bound'] == 'campM':
         return k * Fraction(1, 2 ** ((p - 1) * n)) * max(abs(vsum(a)), abs(vsum(b)))
     raise ValueError(spec['bound'])

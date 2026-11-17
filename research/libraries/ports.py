@@ -464,3 +464,140 @@ def cp_bailey_add_fast(x, y, R):  # addition.h:62-87, "quick and dirty", no boun
     if len(y) == 1:
         return cp_renorm2L_4add1(x, y[0], R)
     return cp_fast_renorm2L(_bailey_levels(x, y, R), R)
+
+
+def cp_bailey_mul_levels(x, y, R):  # multiplication.h:398-485 (the level builder, same as baileyMul_fast 301-392)
+    K, L = len(x), len(y)
+    assert K >= L
+    f = [Z] * (R + 1)
+    nn = R
+    if nn < L:
+        f[nn] = mul(x[0], y[nn])
+        for i in range(1, nn + 1):
+            f[nn] = fma(x[i], y[nn - i], f[nn])  # FP_FAST_FMA branch
+    elif nn < K:
+        f[nn] = mul(x[nn], y[0])
+        for j in range(1, L):
+            f[nn] = fma(x[nn - j], y[j], f[nn])
+    elif nn < K + L - 1:
+        f[nn] = mul(x[nn - L + 1], y[L - 1])
+        for i in range(nn - L + 2, K):
+            f[nn] = fma(x[i], y[nn - i], f[nn])
+    else:
+        f[nn] = Z
+
+    def carry(n, e):
+        for j in range(n + 1, R):
+            f[j], e = cp_two_sum(f[j], e)
+        f[R] = add(f[R], e)
+
+    for n in range((K + L - 2) if R + 1 > K + L - 1 else (R - 1), K - 1, -1):
+        f[n], e = X_two_prod(x[n - L + 1], y[L - 1])
+        carry(n, e)
+        for i in range(n - L + 2, K):
+            p, e = X_two_prod(x[i], y[n - i])
+            carry(n, e)
+            f[n], e = cp_two_sum(f[n], p)
+            carry(n, e)
+    for n in range((K - 1) if R + 1 > K else (R - 1), L - 1, -1):
+        f[n], e = X_two_prod(x[n], y[0])
+        carry(n, e)
+        for j in range(1, L):
+            p, e = X_two_prod(x[n - j], y[j])
+            carry(n, e)
+            f[n], e = cp_two_sum(f[n], p)
+            carry(n, e)
+    for n in range((L - 1) if R + 1 > L else (R - 1), -1, -1):
+        f[n], e = X_two_prod(x[0], y[n])
+        carry(n, e)
+        for i in range(1, n + 1):
+            p, e = X_two_prod(x[i], y[n - i])
+            carry(n, e)
+            f[n], e = cp_two_sum(f[n], p)
+            carry(n, e)
+    return f
+
+
+def X_two_prod(a, b):  # errorFreeTransf.h:76-80
+    p = mul(a, b)
+    return p, fma(a, b, neg(p))
+
+
+def cp_bailey_mul_renorm(x, y, R):  # multiplication.h:396-487
+    return cp_renorm_rand2L(cp_bailey_mul_levels(x, y, R), R)
+
+
+def cp_bailey_mul_fast(x, y, R):  # multiplication.h:298-393 (no bound stated)
+    return cp_fast_renorm2L(cp_bailey_mul_levels(x, y, R), R)
+
+
+# ------------------------------------------------------------------------------------------------------------
+# GQD (Lu, He and Luo; github.com/lumianph/gpuprec @ 452baddaf6, 2015-12-23), gqd/gqd_basic.cu. Its two_sum,
+# quick_two_sum (inline.cu) return the same values as QD's (they only short-circuit a zero operand), and its
+# Dekker two_prod is exact in the normal range, so the QD ports above serve for them.
+# ------------------------------------------------------------------------------------------------------------
+
+def gqd_renorm5(c0, c1, c2, c3, c4):  # gqd_basic.cu:61-112
+    s2 = s3 = Z
+    s0, c4 = qd_quick_two_sum(c3, c4)
+    s0, c3 = qd_quick_two_sum(c2, s0)
+    s0, c2 = qd_quick_two_sum(c1, s0)
+    c0, c1 = qd_quick_two_sum(c0, s0)
+    s0 = c0
+    s1 = c1
+    s0, s1 = qd_quick_two_sum(c0, c1)  # gqd_basic.cu:78, not in QD
+    if s1[0] != 0:
+        s1, s2 = qd_quick_two_sum(s1, c2)
+        if s2[0] != 0:
+            s2, s3 = qd_quick_two_sum(s2, c3)
+            if s3[0] != 0:
+                s3 = add(s3, c4)
+            else:
+                s2 = add(s2, c4)  # gqd_basic.cu:84; QD has s2 = quick_two_sum(s2, c4, s3)
+        else:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+            if s2[0] != 0:
+                s2, s3 = qd_quick_two_sum(s2, c4)
+            else:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+    else:
+        s0, s1 = qd_quick_two_sum(s0, c2)
+        if s1[0] != 0:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+            if s2[0] != 0:
+                s2, s3 = qd_quick_two_sum(s2, c4)
+            else:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+        else:
+            s0, s1 = qd_quick_two_sum(s0, c3)
+            if s1[0] != 0:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+            else:
+                s0, s1 = qd_quick_two_sum(s0, c4)
+    return [s0, s1, s2, s3]
+
+
+def _with_renorm5(fn, a, b):
+    global qd_renorm5
+    saved = qd_renorm5
+    qd_renorm5 = gqd_renorm5
+    try:
+        return fn(a, b)
+    finally:
+        qd_renorm5 = saved
+
+
+def gqd_add(a, b):  # gqd_basic.cu:168-220 (operator+ is sloppy_add); identical to QD's sloppy_add but for renorm
+    return _with_renorm5(qd_sloppy_add, a, b)
+
+
+def gqd_add_d(a, b):  # gqd_basic.cu:144-157
+    return _with_renorm5(qd_add_d, a, b)
+
+
+def gqd_mul_d(a, b):  # gqd_basic.cu:252-275
+    return _with_renorm5(qd_mul_d, a, b)
+
+
+def gqd_mul(a, b):  # gqd_basic.cu:284-332 (operator* is sloppy_mul)
+    return _with_renorm5(qd_sloppy_mul, a, b)
