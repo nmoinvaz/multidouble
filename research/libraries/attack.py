@@ -81,6 +81,11 @@ def _(a, b):
     return X.cp_bailey_add_renorm(a, b, 4)
 
 
+@op('cp_bailey_add_renorm_M', 4, 'campM', 24, 'add')  # the same bound read as relative to max(|x|, |y|)
+def _(a, b):
+    return X.cp_bailey_add_renorm(a, b, 4)
+
+
 @op('cp_certified_add_d', 4, 'camp', 4.5, 'addd')
 def _(a, b):
     return X.cp_certified_add(a, [b[0]], 4)
@@ -112,6 +117,8 @@ def bound(spec, a, b, Zx, p):
         return k * u ** n * abs(Zx)
     if spec['bound'] == 'camp':
         return k * Fraction(1, 2 ** ((p - 1) * n)) * abs(Zx)
+    if spec['bound'] == 'campM':
+        return k * Fraction(1, 2 ** ((p - 1) * n)) * max(abs(vsum(a)), abs(vsum(b)))
     raise ValueError(spec['bound'])
 
 
@@ -208,10 +215,9 @@ def run_case(spec, a, b, p):
 
 
 def hexs(x):
-    if F.P == 53:
-        return float.hex(F.to_bits(x) and __import__('struct').unpack('<d', F.to_bits(x).to_bytes(8, 'little'))[0]
-                         or 0.0)
-    return repr(x)
+    """C99 hex-float literal of a p = 53 value"""
+    import struct
+    return float.hex(struct.unpack('<d', F.to_bits(x).to_bytes(8, 'little'))[0])
 
 
 def main():

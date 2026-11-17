@@ -1,0 +1,11 @@
+qd_sloppy_add p=6 seed=7 trials=132800 worst_ratio=0.3263 (log2 -1.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+qd_ieee_add p=6 seed=7 trials=115393 worst_ratio=0.848 (log2 0.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+qd_add_d p=6 seed=7 trials=155210 worst_ratio=0.475 (log2 -2.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+qd_accurate_mul p=6 seed=7 trials=126756 worst_ratio=0.1979 (log2 -2.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+qd_sloppy_mul p=6 seed=7 trials=152226 worst_ratio=2.532 (log2 2.00) over_bound=29 nonoverlap_violations=0 time=25.0s
+qd_mul_d p=6 seed=7 trials=175195 worst_ratio=0.2137 (log2 -2.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+qd_sloppy_div p=6 seed=7 trials=83903 worst_ratio=8 (log2 3.00) over_bound=450 nonoverlap_violations=0 time=25.0s
+qd_accurate_div p=6 seed=7 trials=71655 worst_ratio=0.1797 (log2 -2.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+cp_certified_add p=6 seed=7 trials=118203 worst_ratio=0.01362 (log2 -6.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+cp_certified_add_d p=6 seed=7 trials=157447 worst_ratio=0.00977 (log2 -6.00) over_bound=0 nonoverlap_violations=0 time=25.0s
+cp_bailey_add_renorm_M p=6 seed=7 trials=104248 worst_ratio=0.0017 (log2 -9.00) over_bound=0 nonoverlap_violations=0 time=25.0s
