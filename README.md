@@ -42,6 +42,17 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
   coefficients would overflow in the original variable. `dd::pow2_near` gives the power of two nearest to a scale in
   the logarithm, within a factor of √2.
 
+### Packed storage
+
+| Type | What it is |
+|---|---|
+| `pack::PackedDD`, `pack::PackedQD`, `pack::PackedOD` | values packed in 121, 235 and 463 bits instead of 128, 256 and 512, restored bit for bit |
+
+A lower part keeps its sign and fraction but only a 4-bit code for its exponent, which in a renormalized value lies 53 or
+more binary places below the part above it. Values are stored back to back, so `get(i)` reads any one of them alone. A
+value whose parts do not fit the codes, under 0.1% of the octo-double arithmetic's results in the tests, keeps its lower
+parts raw in a side table. `words` and `side` give the storage, and `from_raw` checks and restores it.
+
 ### Derivatives and power series
 
 | Type | What it is |
