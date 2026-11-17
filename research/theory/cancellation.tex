@@ -43,6 +43,23 @@ nonoverlap and $H(1)$ follow from the significands: for instance $|a_{n-1}| = u^
 u^{n-1}$ and $|b_{n-2}| = u^{n-1} - 3u^n \le \frac12\ulp(b_{n-3}) = u^{n-2}/2$.
 \end{proof}
 
+Under $H(1)$ alone, which lets a part exceed the one above it, the result can be zero.
+
+\begin{proposition}\label{prop:cancel0}
+Assume~\ref{as:fp} with $p \ge 5$, and let $\sigma = u^{n-3}$. For $n = 3$ let $a = (1,\ -u + u^2,\ -u^2)$ and $b = (-(1 -
+u),\ u^3 - u^4,\ -u^3)$, and for $n \ge 4$ prefix $(1, u, \dots, u^{n-4})$ to $\sigma(1, -u + u^2, -u^2)$ and $(-1, -u,
+\dots, -u^{n-4})$ to $\sigma(-(1-u), u^3 - u^4, -u^3)$. Both satisfy $H(1)$, $a + b = -u^{n+1}$, and ADD returns $x = 0$.
+\end{proposition}
+
+\begin{proof}
+For $n = 3$: $s_0 = u$ and $t_0 = 0$. $a_1 + b_1 = -u + u^2 + u^3 - u^4$ rounds to $s_1 = -u + u^2$, so $t_1 = u^3 - u^4$.
+$a_2 + b_2 = -u^2 - u^3$ is the midpoint of $-u^2$ and $-u^2 - 2u^3$, so $s_2 = -u^2$ and $s_3 = t_2 = -u^3$. The dep of
+$t_1$ gives $\RN(-u^2 + u^3 - u^4) = -u^2 + u^3$ (spacing $u^3$ below $u^2$) with carry $-u^4$, and $\RN(-u^3 - u^4) =
+-u^3$ (a tie, spacing $2u^4$ above $u^3$), which loses $-u^4$. The levels $(u,\ -u + u^2,\ -u^2 + u^3,\ -u^3)$ sum to
+zero, every $\TwoSum$ of VecSum is exact with zero error, and $x = 0$, while $a + b = -u^4$. For $n \ge 4$ the prefix
+cancels exactly and the rest is the case $n = 3$ scaled by $\sigma$, as in Proposition~\ref{prop:cancel}.
+\end{proof}
+
 \begin{remark}
 The loss is the rounding at level $n$ of the carry $e$ and the error $t_{n-1}$: under cancellation the levels above
 it sum to nearly zero, so the rounding of level $n$ is relative to the result rather than to the operands. For $n = 2$
@@ -54,7 +71,9 @@ lemma, $|Z| \ge \frac12\max(|s_0|, |s_1|) - u|s_1|$. The searches found relative
 their faster quad-double addition is not relatively accurate, with an input that loses the last component (a relative
 error of order $u^{n-1}$). Proposition~\ref{prop:cancel} loses $n - 1$ components. multidouble~4.8.2 returns
 $-2^{-424}$ for the octo-doubles of the case $n = 8$, and $-2^{-212}$ for the quad-doubles of $n = 4$ (its \texttt{QD}
-\texttt{+}, QD's sloppy addition), at relative error $2^{-53}(1 - 3u)$. Random searches over cancelling inputs at $p = 6$
-and $p = 53$, $n = 3$ to $8$, found no relative error above $u$; whether $u(1 + O(u))$ bounds the relative error of ADD
-is open. The same searches with operands renormalized by $R_n$ found no loss at all.
+\texttt{+}, QD's sloppy addition), at relative error $2^{-53}(1 - 3u)$; on the operands of
+Proposition~\ref{prop:cancel0} both return $0$, for exact sums $-2^{-477}$ and $-2^{-265}$. For B-nonoverlapping operands,
+random searches over cancelling inputs at $p = 6$ and $p = 53$, $n = 3$ to $8$, found no relative error above $u$, and the
+same searches with operands renormalized by $R_n$ found no loss at all. Whether $u(1 + O(u))$ bounds the relative error
+of ADD on B-nonoverlapping operands, and whether outputs of the operations themselves can reach it, is open.
 \end{remark}

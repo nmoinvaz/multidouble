@@ -5,7 +5,8 @@ expansions
             b = (-1, -u, ..., -u^(n-4), -(1 - u) u^(n-3), (2^p - 3) u^n, -(1 - 2u) u^(n+1))
 returns x = (-u^n, 0, ..., 0) while a + b = -u^n - (1 - 2u) u^(n+1): relative error (1 - 2u) u / (1 + u - 2u^2).
 Checked exactly on fpemu.od_add; at p = 53 the operands are written as f64 bit patterns for the crate check.
-Control: with ties away from zero (fpemu MUTATE 'ties_away') the result must differ.
+Controls: with ties away from zero (fpemu MUTATE 'ties_away') the first family's result must differ, and with
+two-sum's error sign broken ('two_sum_sign') the second's.
 usage: add_rel.py [dumpdir]     exits non-zero on a failure."""
 import os
 import sys
@@ -24,6 +25,17 @@ def operands(p, n):
     else:
         a = [u ** i for i in range(n - 2)] + [-u ** (n - 2), -(two_p - 2) * u ** n]
         b = [-u ** i for i in range(n - 3)] + [-(1 - u) * u ** (n - 3), (two_p - 3) * u ** n, -(1 - 2 * u) * u ** (n + 1)]
+    return a, b
+
+
+def operands_zero(p, n):
+    """H(1) operands (not nonoverlapping) whose sum is -u^(n+1) and on which ADD returns 0"""
+    u = Q(1, 2 ** p)
+    s = u ** (n - 3)
+    pre_a = [u ** i for i in range(n - 3)] if n > 3 else []
+    pre_b = [-u ** i for i in range(n - 3)] if n > 3 else []
+    a = pre_a + [s, s * (-u + u * u), -s * u * u]
+    b = pre_b + [-s * (1 - u), s * (u ** 3 - u ** 4), -s * u ** 3]
     return a, b
 
 
@@ -73,6 +85,30 @@ for p in (5, 6, 7, 8, 10, 12, 24, 53):
                   f' ({"PASS" if good else "FAIL"}; control ties-away changes x: {fired})')
         if dump and p == 53:
             with open(os.path.join(dump, f'add_rel_p53_n{n}.txt'), 'w') as fh:
+                for v in (a, b):
+                    fh.write(' '.join('%016x' % F.to_bits(t) for t in v) + '\n')
+# the second family: a + b = -u^(n+1), ADD returns 0
+for p in (5, 6, 7, 8, 10, 12, 24, 53):
+    for n in range(3, 9):
+        F.set_p(p)
+        u = Q(1, 2 ** p)
+        av, bv = operands_zero(p, n)
+        a = [tofl(v, p) for v in av]
+        b = [tofl(v, p) for v in bv]
+        h1 = all(abs(v[i]) <= u ** i * abs(v[0]) for v in (av, bv) for i in range(n))
+        Z = sum(av) + sum(bv)
+        x = F.od_add(a, b)
+        xs = [A.val(t) for t in x]
+        good = h1 and Z == -u ** (n + 1) and all(t == 0 for t in xs)
+        F.MUTATE = 'two_sum_sign'
+        fired = [A.val(t) for t in F.od_add(a, b)] != xs
+        F.MUTATE = None
+        ok &= good and fired
+        if n in (3, 8) or not (good and fired):
+            print(f'zero family p={p:2d} n={n}: a + b = -u^(n+1), H(1) {h1}, ADD returns {"0" if all(t == 0 for t in xs) else xs}'
+                  f' ({"PASS" if good else "FAIL"}; control two-sum sign changes x: {fired})')
+        if dump and p == 53:
+            with open(os.path.join(dump, f'add_zero_p53_n{n}.txt'), 'w') as fh:
                 for v in (a, b):
                     fh.write(' '.join('%016x' % F.to_bits(t) for t in v) + '\n')
 print('PASS' if ok else 'FAIL')
