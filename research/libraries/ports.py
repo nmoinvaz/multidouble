@@ -1,0 +1,466 @@
+"""Faithful ports of shipped expansion arithmetic onto paper/fpemu.py (exact p-bit RN-even emulation).
+
+Every function names its source file and line. External code was read as data only; nothing was built or run.
+Sources:
+  QD 2.3.24 (qd-2.3.24.tar.gz from LBNL), include/qd/inline.h, include/qd/qd_inline.h, src/qd_real.cpp.
+  CAMPARY, mirror github.com/LegalizeAdulthood/campary at e805449 (2025-08-05), Doubles/src_cpu/*.h.
+Values are fpemu tuples (m, e). Two-prod uses the FMA form (QD_FMS / CAMPARY two_prod), as on every current CPU.
+"""
+import os
+import sys
+from fractions import Fraction
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'paper'))
+import fpemu as F  # noqa: E402
+
+add, sub, mul, fma, div, neg = F.add, F.sub, F.mul, F.fma, F.div, F.neg
+Z = F.PZ
+
+
+def val(x):
+    m, e = x
+    if m == 0:
+        return Fraction(0)
+    return Fraction(m) * (Fraction(2) ** e)
+
+
+def vsum(xs):
+    return sum((val(x) for x in xs), Fraction(0))
+
+
+def fabs_gt(x, y):
+    """|x| > |y| (std::abs(x) > std::abs(y), fabs(x) > fabs(y))"""
+    return abs(val(x)) > abs(val(y))
+
+
+# ------------------------------------------------------------------------------------------------------------
+# QD 2.3.24 error-free transformations, include/qd/inline.h
+# ------------------------------------------------------------------------------------------------------------
+
+def qd_quick_two_sum(a, b):  # inline.h:36-40
+    s = add(a, b)
+    return s, sub(b, sub(s, a))
+
+
+def qd_two_sum(a, b):  # inline.h:50-55
+    s = add(a, b)
+    bb = sub(s, a)
+    return s, add(sub(a, sub(s, bb)), sub(b, bb))
+
+
+def qd_two_prod(a, b):  # inline.h:85-89 (QD_FMS branch)
+    p = mul(a, b)
+    return p, fma(a, b, neg(p))
+
+
+# ------------------------------------------------------------------------------------------------------------
+# QD 2.3.24 qd_real, include/qd/qd_inline.h
+# ------------------------------------------------------------------------------------------------------------
+
+def qd_renorm4(c0, c1, c2, c3):  # qd_inline.h:95-125
+    s2 = s3 = Z
+    s0, c3 = qd_quick_two_sum(c2, c3)
+    s0, c2 = qd_quick_two_sum(c1, s0)
+    c0, c1 = qd_quick_two_sum(c0, s0)
+    s0 = c0
+    s1 = c1
+    if s1[0] != 0:
+        s1, s2 = qd_quick_two_sum(s1, c2)
+        if s2[0] != 0:
+            s2, s3 = qd_quick_two_sum(s2, c3)
+        else:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+    else:
+        s0, s1 = qd_quick_two_sum(s0, c2)
+        if s1[0] != 0:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+        else:
+            s0, s1 = qd_quick_two_sum(s0, c3)
+    return [s0, s1, s2, s3]
+
+
+def qd_renorm5(c0, c1, c2, c3, c4):  # qd_inline.h:127-177
+    s2 = s3 = Z
+    s0, c4 = qd_quick_two_sum(c3, c4)
+    s0, c3 = qd_quick_two_sum(c2, s0)
+    s0, c2 = qd_quick_two_sum(c1, s0)
+    c0, c1 = qd_quick_two_sum(c0, s0)
+    s0 = c0
+    s1 = c1
+    if s1[0] != 0:
+        s1, s2 = qd_quick_two_sum(s1, c2)
+        if s2[0] != 0:
+            s2, s3 = qd_quick_two_sum(s2, c3)
+            if s3[0] != 0:
+                s3 = add(s3, c4)
+            else:
+                s2, s3 = qd_quick_two_sum(s2, c4)
+        else:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+            if s2[0] != 0:
+                s2, s3 = qd_quick_two_sum(s2, c4)
+            else:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+    else:
+        s0, s1 = qd_quick_two_sum(s0, c2)
+        if s1[0] != 0:
+            s1, s2 = qd_quick_two_sum(s1, c3)
+            if s2[0] != 0:
+                s2, s3 = qd_quick_two_sum(s2, c4)
+            else:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+        else:
+            s0, s1 = qd_quick_two_sum(s0, c3)
+            if s1[0] != 0:
+                s1, s2 = qd_quick_two_sum(s1, c4)
+            else:
+                s0, s1 = qd_quick_two_sum(s0, c4)
+    return [s0, s1, s2, s3]
+
+
+def qd_three_sum(a, b, c):  # qd_inline.h:192-197
+    t1, t2 = qd_two_sum(a, b)
+    a, t3 = qd_two_sum(c, t1)
+    b, c = qd_two_sum(t2, t3)
+    return a, b, c
+
+
+def qd_three_sum2(a, b, c):  # qd_inline.h:199-204
+    t1, t2 = qd_two_sum(a, b)
+    a, t3 = qd_two_sum(c, t1)
+    b = add(t2, t3)
+    return a, b, c
+
+
+def qd_add_d(a, b):  # qd_inline.h:209-221, quad-double + double
+    c0, e = qd_two_sum(a[0], b)
+    c1, e = qd_two_sum(a[1], e)
+    c2, e = qd_two_sum(a[2], e)
+    c3, e = qd_two_sum(a[3], e)
+    return qd_renorm5(c0, c1, c2, c3, e)
+
+
+def qd_sloppy_add(a, b):  # qd_inline.h:360-405 (the live code; 340-355 is the commented reference version)
+    s0, t0 = qd_two_sum(a[0], b[0])  # 367-395 is two_sum written out per lane
+    s1, t1 = qd_two_sum(a[1], b[1])
+    s2, t2 = qd_two_sum(a[2], b[2])
+    s3, t3 = qd_two_sum(a[3], b[3])
+    s1, t0 = qd_two_sum(s1, t0)  # 397
+    s2, t0, t1 = qd_three_sum(s2, t0, t1)  # 398
+    s3, t0, t2 = qd_three_sum2(s3, t0, t2)  # 399
+    t0 = add(add(t0, t1), t3)  # 400
+    return qd_renorm5(s0, s1, s2, s3, t0)  # 403
+
+
+def qd_quick_three_accum(a, b, c):  # qd_inline.h:261-282; returns (s, a, b)
+    s, b = qd_two_sum(b, c)
+    s, a = qd_two_sum(a, s)
+    za = a[0] != 0
+    zb = b[0] != 0
+    if za and zb:
+        return s, a, b
+    if not zb:
+        b = a
+        a = s
+    else:
+        a = s
+    return Z, a, b
+
+
+def qd_ieee_add(a, b):  # qd_inline.h:286-336
+    i = j = k = 0
+    x = [Z, Z, Z, Z]
+    if fabs_gt(a[i], b[j]):
+        u = a[i]; i += 1
+    else:
+        u = b[j]; j += 1
+    if fabs_gt(a[i], b[j]):
+        v = a[i]; i += 1
+    else:
+        v = b[j]; j += 1
+    u, v = qd_quick_two_sum(u, v)
+    while k < 4:
+        if i >= 4 and j >= 4:
+            x[k] = u
+            if k < 3:
+                k += 1
+                x[k] = v
+            break
+        if i >= 4:
+            t = b[j]; j += 1
+        elif j >= 4:
+            t = a[i]; i += 1
+        elif fabs_gt(a[i], b[j]):
+            t = a[i]; i += 1
+        else:
+            t = b[j]; j += 1
+        s, u, v = qd_quick_three_accum(u, v, t)
+        if s[0] != 0:
+            x[k] = s
+            k += 1
+    for kk in range(i, 4):
+        x[3] = add(x[3], a[kk])
+    for kk in range(j, 4):
+        x[3] = add(x[3], b[kk])
+    return qd_renorm4(*x)
+
+
+def qd_mul_d(a, b):  # qd_inline.h:490-513, quad-double * double
+    p0, q0 = qd_two_prod(a[0], b)
+    p1, q1 = qd_two_prod(a[1], b)
+    p2, q2 = qd_two_prod(a[2], b)
+    p3 = mul(a[3], b)
+    s0 = p0
+    s1, s2 = qd_two_sum(q0, p1)
+    s2, q1, p2 = qd_three_sum(s2, q1, p2)
+    q1, q2, p3 = qd_three_sum2(q1, q2, p3)
+    s3 = q1
+    s4 = add(q2, p2)
+    return qd_renorm5(s0, s1, s2, s3, s4)
+
+
+def qd_sloppy_mul(a, b):  # qd_inline.h:567-599
+    p0, q0 = qd_two_prod(a[0], b[0])
+    p1, q1 = qd_two_prod(a[0], b[1])
+    p2, q2 = qd_two_prod(a[1], b[0])
+    p3, q3 = qd_two_prod(a[0], b[2])
+    p4, q4 = qd_two_prod(a[1], b[1])
+    p5, q5 = qd_two_prod(a[2], b[0])
+    p1, p2, q0 = qd_three_sum(p1, p2, q0)
+    p2, q1, q2 = qd_three_sum(p2, q1, q2)
+    p3, p4, p5 = qd_three_sum(p3, p4, p5)
+    s0, t0 = qd_two_sum(p2, p3)
+    s1, t1 = qd_two_sum(q1, p4)
+    s2 = add(q2, p5)
+    s1, t0 = qd_two_sum(s1, t0)
+    s2 = add(s2, add(t0, t1))
+    # 596: s1 += a0*b3 + a1*b2 + a2*b1 + a3*b0 + q0 + q3 + q4 + q5 (C++ left-to-right, then +=)
+    acc = mul(a[0], b[3])
+    for t in (mul(a[1], b[2]), mul(a[2], b[1]), mul(a[3], b[0]), q0, q3, q4, q5):
+        acc = add(acc, t)
+    s1 = add(s1, acc)
+    return qd_renorm5(p0, p1, s0, s1, s2)
+
+
+def qd_accurate_mul(a, b):  # qd_inline.h:601-661
+    p0, q0 = qd_two_prod(a[0], b[0])
+    p1, q1 = qd_two_prod(a[0], b[1])
+    p2, q2 = qd_two_prod(a[1], b[0])
+    p3, q3 = qd_two_prod(a[0], b[2])
+    p4, q4 = qd_two_prod(a[1], b[1])
+    p5, q5 = qd_two_prod(a[2], b[0])
+    p1, p2, q0 = qd_three_sum(p1, p2, q0)
+    p2, q1, q2 = qd_three_sum(p2, q1, q2)
+    p3, p4, p5 = qd_three_sum(p3, p4, p5)
+    s0, t0 = qd_two_sum(p2, p3)
+    s1, t1 = qd_two_sum(q1, p4)
+    s2 = add(q2, p5)
+    s1, t0 = qd_two_sum(s1, t0)
+    s2 = add(s2, add(t0, t1))
+    p6, q6 = qd_two_prod(a[0], b[3])
+    p7, q7 = qd_two_prod(a[1], b[2])
+    p8, q8 = qd_two_prod(a[2], b[1])
+    p9, q9 = qd_two_prod(a[3], b[0])
+    q0, q3 = qd_two_sum(q0, q3)
+    q4, q5 = qd_two_sum(q4, q5)
+    p6, p7 = qd_two_sum(p6, p7)
+    p8, p9 = qd_two_sum(p8, p9)
+    t0, t1 = qd_two_sum(q0, q4)
+    t1 = add(t1, add(q3, q5))
+    r0, r1 = qd_two_sum(p6, p8)
+    r1 = add(r1, add(p7, p9))
+    q3, q4 = qd_two_sum(t0, r0)
+    q4 = add(q4, add(t1, r1))
+    t0, t1 = qd_two_sum(q3, s1)
+    t1 = add(t1, q4)
+    # 657: t1 += a1*b3 + a2*b2 + a3*b1 + q6 + q7 + q8 + q9 + s2
+    acc = mul(a[1], b[3])
+    for t in (mul(a[2], b[2]), mul(a[3], b[1]), q6, q7, q8, q9, s2):
+        acc = add(acc, t)
+    t1 = add(t1, acc)
+    return qd_renorm5(p0, p1, s0, t0, t1)
+
+
+def qd_neg(a):  # qd_inline.h:438-440
+    return [neg(x) for x in a]
+
+
+def qd_sub(a, b, ieee=False):  # qd_inline.h:459-461, a + (-b), with the default sloppy add
+    return (qd_ieee_add if ieee else qd_sloppy_add)(a, qd_neg(b))
+
+
+def qd_sloppy_div(a, b, ieee=False):  # src/qd_real.cpp:693-712 (the default, QD_SLOPPY_DIV)
+    q0 = div(a[0], b[0])
+    r = qd_sub(a, qd_mul_d(b, q0), ieee)
+    q1 = div(r[0], b[0])
+    r = qd_sub(r, qd_mul_d(b, q1), ieee)
+    q2 = div(r[0], b[0])
+    r = qd_sub(r, qd_mul_d(b, q2), ieee)
+    q3 = div(r[0], b[0])
+    return qd_renorm4(q0, q1, q2, q3)
+
+
+def qd_accurate_div(a, b, ieee=False):  # src/qd_real.cpp:714-736
+    q0 = div(a[0], b[0])
+    r = qd_sub(a, qd_mul_d(b, q0), ieee)
+    q1 = div(r[0], b[0])
+    r = qd_sub(r, qd_mul_d(b, q1), ieee)
+    q2 = div(r[0], b[0])
+    r = qd_sub(r, qd_mul_d(b, q2), ieee)
+    q3 = div(r[0], b[0])
+    r = qd_sub(r, qd_mul_d(b, q3), ieee)
+    q4 = div(r[0], b[0])
+    return qd_renorm5(q0, q1, q2, q3, q4)
+
+
+# ------------------------------------------------------------------------------------------------------------
+# CAMPARY, Doubles/src_cpu (errorFreeTransf.h, renorm.h, addition.h)
+# ------------------------------------------------------------------------------------------------------------
+
+def cp_fast_two_sum(a, b):  # errorFreeTransf.h:38-43
+    s = add(a, b)
+    z = add(s, neg(a))
+    return s, add(b, neg(z))
+
+
+def cp_two_sum(a, b):  # errorFreeTransf.h:54-62
+    s = add(a, b)
+    aa = add(s, neg(b))
+    bb = add(s, neg(aa))
+    da = add(a, neg(aa))
+    db = add(b, neg(bb))
+    return s, add(da, db)
+
+
+def cp_vecsum(x):  # renorm.h:100-108 (non-unrolled branch); r[0] is the sum
+    sX = len(x)
+    r = [Z] * sX
+    s, r[sX - 1] = cp_fast_two_sum(x[sX - 2], x[sX - 1])
+    for i in range(sX - 3, 0, -1):
+        s, r[i + 1] = cp_two_sum(x[i], s)
+    r[0], r[1] = cp_two_sum(x[0], s)
+    return r
+
+
+def cp_second_pass(f, sR):  # renorm.h:234-241 (shared by renorm2L, renorm2L_4Add1, renorm_rand2L)
+    sX = len(f)
+    r = [Z] * sR
+    ptr = 0
+    i = 2
+    if f[1][0] == 0:
+        e = f[0]
+    else:
+        r[0] = f[0]
+        e = f[1]
+        ptr += 1
+    while ptr < sR and i < sX:
+        r[ptr], e = cp_fast_two_sum(e, f[i])
+        i += 1
+        if e[0] == 0:
+            e = r[ptr]
+        else:
+            ptr += 1
+    if ptr < sR and e[0] != 0:
+        r[ptr] = e
+        ptr += 1
+    for k in range(ptr, sR):
+        r[k] = Z
+    return r
+
+
+def cp_renorm2L(x, sR):  # renorm.h:228-242
+    return cp_second_pass(cp_vecsum(x), sR)
+
+
+def cp_vecsum_4add1(x, y):  # renorm.h:112-120
+    sX = len(x)
+    r = [Z] * (sX + 1)
+    s, r[sX] = cp_two_sum(x[sX - 1], y)
+    for i in range(sX - 2, 0, -1):
+        s, r[i + 1] = cp_two_sum(x[i], s)
+    r[0], r[1] = cp_two_sum(x[0], s)
+    return r
+
+
+def cp_renorm2L_4add1(x, y, sR):  # renorm.h:247-261
+    return cp_second_pass(cp_vecsum_4add1(x, y), sR)
+
+
+def cp_renorm_rand2L(x, sR):  # renorm.h:346-366
+    sX = len(x)
+    f = [Z] * sX
+    f[0], f[1] = cp_two_sum(x[0], x[1])
+    for i in range(2, sX):
+        pr, f[i] = cp_two_sum(f[i - 1], x[i])
+        for j in range(i - 2, 0, -1):
+            pr, f[j + 1] = cp_two_sum(f[j], pr)
+        f[0], f[1] = cp_fast_two_sum(f[0], pr)
+    return cp_second_pass(f, sR)
+
+
+def cp_fast_vecsum(x):  # renorm.h:78-86
+    sX = len(x)
+    r = [Z] * sX
+    s, r[sX - 1] = cp_fast_two_sum(x[sX - 2], x[sX - 1])
+    for i in range(sX - 3, 0, -1):
+        s, r[i + 1] = cp_fast_two_sum(x[i], s)
+    r[0], r[1] = cp_fast_two_sum(x[0], s)
+    return r
+
+
+def cp_fast_renorm2L(x, sR):  # renorm.h:195-209
+    return cp_second_pass(cp_fast_vecsum(x), sR)
+
+
+def cp_merge(x, y):  # addition.h:35-41
+    K, L = len(x), len(y)
+    z = []
+    i = j = 0
+    for _ in range(K + L):
+        if i == K or (j < L and fabs_gt(y[j], x[i])):
+            z.append(y[j]); j += 1
+        else:
+            z.append(x[i]); i += 1
+    return z
+
+
+def cp_certified_add(x, y, R):  # addition.h:47-55, "relative error < 4.5 * 2^{-(prec-1)R}"
+    if len(x) == 1:
+        return cp_renorm2L_4add1(y, x[0], R)
+    if len(y) == 1:
+        return cp_renorm2L_4add1(x, y[0], R)
+    return cp_renorm2L(cp_merge(x, y), R)
+
+
+def _bailey_levels(x, y, R):  # addition.h:66-83 and 97-114 (identical level builders)
+    K, L = len(x), len(y)
+    f = [Z] * (R + 1)
+    for i in range(K, R):
+        f[i] = Z
+    nn = R
+    if nn < L:
+        f[nn] = add(x[nn], y[nn])
+    elif nn < K:
+        f[nn] = x[nn]
+    else:
+        f[nn] = Z
+    for n in range((K - 1) if R + 1 > K else (R - 1), L - 1, -1):
+        f[n] = x[n]
+    for n in range((L - 1) if R + 1 > L else (R - 1), -1, -1):
+        f[n], e = cp_two_sum(x[n], y[n])
+        for i in range(n + 1, R):
+            f[i], e = cp_two_sum(f[i], e)
+        f[R] = add(f[R], e)
+    return f
+
+
+def cp_bailey_add_renorm(x, y, R):  # addition.h:93-118, "relative error < 24 * 2^{-(prec-1)R}"
+    if len(y) == 1:
+        return cp_renorm2L_4add1(x, y[0], R)
+    return cp_renorm_rand2L(_bailey_levels(x, y, R), R)
+
+
+def cp_bailey_add_fast(x, y, R):  # addition.h:62-87, "quick and dirty", no bound stated
+    if len(y) == 1:
+        return cp_renorm2L_4add1(x, y[0], R)
+    return cp_fast_renorm2L(_bailey_levels(x, y, R), R)
