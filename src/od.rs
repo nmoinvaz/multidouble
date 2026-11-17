@@ -74,10 +74,12 @@ pub mod mutate {
     pub const OV_FMA_PLAIN: u32 = 11;
     /// renormalization: the second pass by quick-two-sums, exact only when |acc| >= |c_i|
     pub const RENORM_FAST: u32 = 12;
+    /// mul: the products of order 8 dropped, an error of a few u^8 |ab| (u = 2^-53), inside the 1-unit thresholds
+    pub const MUL_L8: u32 = 13;
     /// number of ids
-    pub const N: u32 = 12;
+    pub const N: u32 = 13;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 13] = [
+    pub const NAMES: [&str; 14] = [
         "none",
         "renorm: eighth part dropped",
         "two-sum: error with a wrong sign",
@@ -91,6 +93,7 @@ pub mod mutate {
         "8-lane renorm: zero test ignored",
         "8-lane two-product: FMA as a plain product (native)",
         "renorm: second pass by quick-two-sums",
+        "mul: products of order 8 dropped",
     ];
 
     #[cfg(feature = "mutate")]
@@ -407,6 +410,9 @@ pub(crate) mod alg {
                         a[5].fma(b[3], a[4].fma(b[4], a[3].fma(b[5], a[2].fma(b[6], a[1].mul(b[7]))))),
                     ),
                 );
+                if mutate::on(mutate::MUL_L8) {
+                    s[8] = L::zero();
+                }
                 dep(&mut s, 1, e[0]);
                 dep(&mut s, 2, e[1]);
                 dep(&mut s, 3, e[2]);
