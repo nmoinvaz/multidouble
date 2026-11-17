@@ -15,8 +15,12 @@
 //!   error-free whatever the order of the parts (VecSum: Ogita, Rump, Oishi, "Accurate sum and dot product", SIAM J.
 //!   Sci. Comput. 26(6), 2005, 1955-1988, doi:10.1137/030601818; Joldes, Marty, Muller, Popescu, "Arithmetic
 //!   algorithms for extended precision using floating-point expansions", IEEE Trans. Comput. 65(4), 2016,
-//!   1197-1210, doi:10.1109/TC.2015.2441714). The second runs from the top with quick-two-sums and skips zero
-//!   errors, so that an exact partial sum does not leave a gap, and adds what is left into the eighth part.
+//!   1197-1210, doi:10.1109/TC.2015.2441714). The second runs from the top with two-sums and skips zero errors, so
+//!   that an exact partial sum does not leave a gap, and adds what is left into the eighth part. Its two-sums are
+//!   exact whatever the order of the first pass's output: a quick-two-sum is exact only when |acc| >= |c_i|, and a
+//!   product of a value with a part far below the one above it (x0 + x1 with |x1| far below ulp(x0), or zero parts
+//!   between nonzero ones) gives the first pass levels out of magnitude order, where a quick-two-sum dropped terms of
+//!   about 2^-325 (`od_tests`, category gap). The parts of such a result can still be out of magnitude order.
 //! * Addition: the parts pairwise by two-sums, then each error carried down the levels below it, every level but
 //!   the last by two-sums (`dep`), and the nine levels renormalized: QD's sloppy add with its error terms kept to
 //!   the eighth level. Its error is relative to |a| + |b| (Cray-style), as QD's `+`.
@@ -68,10 +72,12 @@ pub mod mutate {
     /// 8-lane only, on the backend `simd::Native`: two-product's fused multiply-subtract replaced by a plain product
     /// and a subtraction
     pub const OV_FMA_PLAIN: u32 = 11;
+    /// renormalization: the second pass by quick-two-sums, exact only when |acc| >= |c_i|
+    pub const RENORM_FAST: u32 = 12;
     /// number of ids
-    pub const N: u32 = 11;
+    pub const N: u32 = 12;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 12] = [
+    pub const NAMES: [&str; 13] = [
         "none",
         "renorm: eighth part dropped",
         "two-sum: error with a wrong sign",
@@ -84,6 +90,7 @@ pub mod mutate {
         "parse: last part truncated",
         "8-lane renorm: zero test ignored",
         "8-lane two-product: FMA as a plain product (native)",
+        "renorm: second pass by quick-two-sums",
     ];
 
     #[cfg(feature = "mutate")]
@@ -283,7 +290,13 @@ pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     let mut k = 0;
     let mut acc = c[0];
     for &ci in &c[1..] {
-        let (t, e) = quick_two_sum(acc, ci);
+        // two-sum, exact in any order: VecSum's output can be out of magnitude order (a product of a value with a
+        // part far below the one above it), where a quick-two-sum would drop a term
+        let (t, e) = if mutate::on(mutate::RENORM_FAST) {
+            quick_two_sum(acc, ci)
+        } else {
+            two_sum(acc, ci)
+        };
         if k < 7 && e != 0.0 {
             out[k] = t;
             k += 1;
