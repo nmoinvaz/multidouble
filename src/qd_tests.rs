@@ -151,8 +151,10 @@ enum Cat {
     Pow2,
     Sparse,
     Computed,
+    Gap,
 }
 
+/// the categories whose results' bits `QD_DIGEST` pins
 const CATS: [Cat; 7] = [
     Cat::Wide,
     Cat::Cancel,
@@ -161,6 +163,18 @@ const CATS: [Cat; 7] = [
     Cat::Pow2,
     Cat::Sparse,
     Cat::Computed,
+];
+
+/// every category of the accuracy checks: `CATS` and the gap category, whose results' bits `GAP_DIGEST` pins
+const ALL_CATS: [Cat; 8] = [
+    Cat::Wide,
+    Cat::Cancel,
+    Cat::Overflow,
+    Cat::Underflow,
+    Cat::Pow2,
+    Cat::Sparse,
+    Cat::Computed,
+    Cat::Gap,
 ];
 
 fn cat_name(c: Cat) -> &'static str {
@@ -172,7 +186,46 @@ fn cat_name(c: Cat) -> &'static str {
         Cat::Pow2 => "pow2",
         Cat::Sparse => "sparse",
         Cat::Computed => "computed",
+        Cat::Gap => "gap",
     }
+}
+
+/// a renormalized value with gaps: one to four nonzero parts, each 54 to 56 or 60 to 200 bits below the one above,
+/// zeros only at the end (the parts `QD`'s arithmetic expects)
+fn gapped(r: &mut Rng) -> QD {
+    let mut e = r.int(-20, 20);
+    let k = r.int(1, 4) as usize;
+    let mut x = [0.0; 4];
+    for xi in x.iter_mut().take(k) {
+        *xi = rand_dy(r, e).to_f64();
+        e -= if r.coin() { r.int(54, 56) } else { r.int(60, 200) };
+    }
+    QD::from_sum(x[0], x[1], x[2], x[3])
+}
+
+/// Control for the gap category: two values whose parts are not renormalized (b has a zero between nonzero parts) make
+/// the sloppy add miss its bound by about 1e14 units; with b renormalized by `QD::from_sum` it is within.
+#[test]
+fn qd_noncanonical_add_control() {
+    let q = |h: [u64; 4]| QD {
+        x: h.map(f64::from_bits),
+    };
+    let a = q([0xbf24a4bf95e36508, 0x360de74ea1aa0ea4, 0, 0]);
+    let b = q([0xbf406677559d16f9, 0, 0xb8860cbeea5248fc, 0]);
+    let miss = |b: QD| {
+        let (err, scale, _, allow) = exact_err(Op::SloppyAdd, a, b, a + b, false);
+        (
+            !within(&err, &scale, op_thr(Op::SloppyAdd), &allow),
+            err.ratio(&scale) / unit(),
+        )
+    };
+    let (raw, eraw) = miss(b);
+    let (canon, ecanon) = miss(QD::from_sum(b.x[0], b.x[1], b.x[2], b.x[3]));
+    println!("sloppy add, b not renormalized: {eraw:.3e} units; renormalized: {ecanon:.3e}");
+    assert!(
+        raw && !canon,
+        "not renormalized: {eraw:e} units, renormalized: {ecanon:e}"
+    );
 }
 
 /// one input pair (a, b) for an operation of the given kind (b unused by sqrt)
@@ -180,6 +233,24 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
     use Cat::*;
     use Kind::*;
     let one = Dy::from_f64(1.0);
+    if cat == Gap {
+        // a product of a gapped value deposits its partial products out of magnitude order and a (1/a) nearly cancels
+        // them, where the octo-double multiply lost terms until multidouble 4.8.1
+        let a = gapped(r);
+        return match kind {
+            Add => (a, gapped(r)),
+            Sqrt => (a.abs(), QD::ONE),
+            Sqr => (a, QD::ONE),
+            Mul => {
+                if r.coin() {
+                    (a, QD::ONE / a)
+                } else {
+                    (a, gapped(r))
+                }
+            }
+            Div => (gapped(r), a),
+        };
+    }
     if cat == Computed {
         // operands produced by quad-double arithmetic (QD-renormalized parts, not greedy ones): x y (1/y); for the
         // adds b = -(x y (1/y)) or b = -(a + d) (sloppy add, |d| = 2^-k |a|), so a + b is small with misaligned
@@ -282,7 +353,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
             let (e, f) = (r.int(-30, 30), r.int(-30, 30));
             (sparse_dy(r, e), sparse_dy(r, f))
         }
-        (Computed, _) => unreachable!(),
+        (Computed, _) | (Gap, _) => unreachable!(),
     };
     (qd_of(&a), qd_of(&b))
 }
@@ -577,7 +648,7 @@ fn results(op: Op, inp: &[(QD, QD)]) -> (Vec<QD>, Vec<QD>) {
 pub(crate) fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for op in OPS {
-        for cat in CATS {
+        for cat in ALL_CATS {
             let inp = inputs(op, cat, n, seed);
             set_mutation(id);
             let (rs, rv) = results(op, &inp);
@@ -1055,24 +1126,38 @@ fn qd_accuracy() {
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
     if (n, seed) == (4000, 1) {
+        let gap = digest_gap(&rs);
+        println!("qd gap digest {gap:016x}");
         assert!(
-            digest == QD_DIGEST,
-            "the results' bits changed: digest {digest:#018x}, pinned {:#018x}",
-            QD_DIGEST
+            digest == QD_DIGEST && gap == GAP_DIGEST,
+            "the results' bits changed: digests {digest:#018x}, {gap:#018x}, pinned {:#018x}, {:#018x}",
+            QD_DIGEST,
+            GAP_DIGEST
         );
     }
 }
 
-/// the digest of every row's results (`Res::digest`), in order
+/// the digest of the results (`Res::digest`) of every row in `CATS`, in order
 fn digest(rs: &[Res]) -> u64 {
-    rs.iter()
-        .fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
+    fold_digest(rs.iter().filter(|r| r.cat != "gap"))
+}
+
+/// the digest of the results of the gap category's rows, in order
+fn digest_gap(rs: &[Res]) -> u64 {
+    fold_digest(rs.iter().filter(|r| r.cat == "gap"))
+}
+
+fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
+    rs.fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
 }
 
 /// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with
 /// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
 /// be the scalar ones. Every backend gives these bits.
 const QD_DIGEST: u64 = 0xaa5c_661a_6064_c9d4;
+
+/// The digest of the gap category's results at the same size and seed, recorded with 4.8.2.
+const GAP_DIGEST: u64 = 0xed8b_01a4_013b_0742;
 
 /// Control for the pinned digest: with the O(eps^3) term a0 b2 of the product dropped
 /// (`mutate::SLOPPY_MUL_Q3`), the results' digest is not the pinned one.
