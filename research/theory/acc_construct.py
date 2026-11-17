@@ -4,7 +4,7 @@ result of the crate's renormalization). Each part is chosen, given the accumulat
 residue modulo the ulp of a lower level puts the sum just below a midpoint, so that the two-sum there carries about
 half an ulp down. The choice maximizes the carries weighted by an estimate of their effect on the final error.
 
-usage: acc_construct.py p n K [mut]     prints err/(u^n W) and err/(u^n |Z|) at k = 2^j and K; exact arithmetic.
+usage: acc_construct.py p n K [mut [dump.json|- [joint]]]     prints err/(u^n W) and err/(u^n |Z|) at k = 2^j and K; exact arithmetic.
 mut = 'acc_l3' runs the crate's mutation ACC_L3 (a control), 'none' the algorithm."""
 import math
 import sys
@@ -45,7 +45,29 @@ def candidates(s, m, e_g, p, n):
             step = max((last - first) // U // 7, 1) * U
             out.update(range(first, last + 1, step))
             out.add(last)
+    if JOINT:
+        # residues aimed at midpoints of two or three consecutive levels at once: the carry out of level j keeps the
+        # part's bits below ulp(s_j), and those decide the rounding at level j + 1
+        us = [(top(s[j]) - p + 1 - e_g) if s[j][0] else None for j in range(n + 1)]
+        for j in range(m, n + 1):
+            for depth in (2, 3):
+                ks = us[j:j + depth]
+                if len(ks) < depth or any(k is None or k < 2 for k in ks) or any(ks[i] <= ks[i + 1] for i in range(depth - 1)):
+                    continue
+                U = 1 << ks[0]
+                for d in (1, 2, 3):
+                    r = (U // 2 - sum(1 << (k - 1) for k in ks[1:]) - d) % U
+                    first = lo + ((r - lo) % U)
+                    if first >= hi:
+                        continue
+                    last = first + ((hi - 1 - first) // U) * U
+                    step = max((last - first) // U // 7, 1) * U
+                    out.update(range(first, last + 1, step))
+                    out.add(last)
     return sorted(out)
+
+
+JOINT = False
 
 
 def run(p, n, K, mut=None, log=True, dump=None):
@@ -107,4 +129,5 @@ def run(p, n, K, mut=None, log=True, dump=None):
 if __name__ == '__main__':
     p, n, K = map(int, sys.argv[1:4])
     mut = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != 'none' else None
-    run(p, n, K, mut, dump=sys.argv[5] if len(sys.argv) > 5 else None)
+    JOINT = len(sys.argv) > 6 and sys.argv[6] == 'joint'
+    run(p, n, K, mut, dump=sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] != '-' else None)

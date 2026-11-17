@@ -1,0 +1,13 @@
+p=53 n=8 theta=2 prod K=1: second term / (u^n W) = 2^-14.92  (E_lev 2^-17.87, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-34.53
+p=53 n=8 theta=2 prod K=4: second term / (u^n W) = 2^-14.28  (E_lev 2^-15.47, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-26.75
+p=53 n=8 theta=2 prod K=8: second term / (u^n W) = 2^-13.29  (E_lev 2^-13.77, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-21.05
+p=53 n=8 theta=2 prod K=16: second term / (u^n W) = 2^-10.55  (E_lev 2^-10.61, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-14.21
+p=53 n=8 theta=2 prod K=24: second term / (u^n W) = 2^-7.47  (E_lev 2^-7.48, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-9.79
+p=53 n=8 theta=2 prod K=32: second term / (u^n W) = 2^-4.77  (E_lev 2^-4.78, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-6.50
+p=53 n=8 theta=2 prod K=48: second term / (u^n W) = 2^-0.53  (E_lev 2^-0.53, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^-1.71
+p=53 n=8 theta=2 prod K=64: second term / (u^n W) = 2^2.68  (E_lev 2^2.68, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^1.78
+p=53 n=8 theta=2 prod K=128: second term / (u^n W) = 2^10.87  (E_lev 2^10.87, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^10.40
+p=53 n=8 theta=2 prod K=256: second term / (u^n W) = 2^19.45  (E_lev 2^19.45, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^19.20
+p=53 n=8 theta=2 prod K=512: second term / (u^n W) = 2^28.23  (E_lev 2^28.23, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^28.10
+p=53 n=8 theta=2 prod K=1024: second term / (u^n W) = 2^37.11  (E_lev 2^37.11, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^37.05
+p=53 n=8 theta=2 prod K=2048: second term / (u^n W) = 2^46.06  (E_lev 2^46.06, E_prod 2^-15.12, Phi_fin 2^-47.79); u^(n+1) K^(n+1 rising) / u^n = 2^46.03

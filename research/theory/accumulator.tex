@@ -85,8 +85,9 @@ E_{\rm prod}$. The asymptotic form is the $l = 0$ term of $E_{\rm lev}$, with $\
 
 At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is $2^{-14.9}$ for $K = 1$ (Theorem~\ref{thm:t3}
 for MUL), $2^{-10.6}$ for $K = 16$, $2^{-4.8}$ for $K = 32$, $2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.1}$
-for $K = 1024$ (\texttt{acc\_bound.py}). So the accumulator is proven accurate to about $u^8W$ for sums of up to about
-fifty products; beyond, the bound grows like $(Ku)^{9}W$. The growth is real.
+for $K = 1024$ (\texttt{acc\_bound.py}). The second term is at most $u^8W/8$ for $K \le 38$ products and at most $u^8W$
+for $K \le 50$ ($\theta = 2$; $40$ and $52$ for $\theta = 1$, $42$ and $54$ for sums of octo-doubles). Beyond, the bound
+grows like $(Ku)^{9}W$, and the growth is real.
 
 \begin{proposition}\label{prop:acc-low}
 At $p = 53$ and $n = 8$ there are $K = 2048$ terms, $1$ and $2047$ positive octo-doubles of size about $u$ with
@@ -97,17 +98,25 @@ times $u^8|Z|$. In particular no bound $C\,K\,u^nW$ with $C$ independent of $K$ 
 
 \begin{proof}
 Exact computation (\texttt{acc\_construct.py}, inputs in \texttt{out/acc\_p53\_n8\_K2048\_terms.txt}); multidouble's
-\texttt{OdAcc} returns the same eight parts (\texttt{acc\_check/}).
+\texttt{OdAcc} returns the same eight parts through \texttt{add} and through \texttt{add\_prod} with $b = 1$
+(\texttt{acc\_check/}), and \texttt{acc\_crate\_err.py} recomputes the error from those parts without the emulator.
 \end{proof}
+
+The inputs are adversarial: $2048$ random positive terms of the same sizes give errors below $0.004\,u^8W$.
 
 \begin{remark}
 The inputs are built one part at a time: each part is aimed at a midpoint of the ulp of a lower level, so that the
 $\TwoSum$ there carries about half an ulp down, and the next level grows by that carry at every deposit. Level $m$
 then grows like $(ku)^m/m!$ in units of $W$, and the final rounding errors at level $n$ like $(Ku)^{n+1}/(n+1)!$; the
 bound of Lemma~\ref{lem:acc} counts $m+1$ roundings per level and deposit where the construction realizes about one, and
-lies $2^{22}$ above it at $n = 8$ ($2^{46.0}$ against $2^{23.8}$ at $K = 2048$). At $n = 2$, $p = 8$, $K = 64$ the
-construction reaches $0.42$ of the bound. Whether one rounding per level and deposit can be proven, which would lower the
-bound by about $(n+1)!$, is open.
+lies $2^{22}$ above it at $n = 8$ ($2^{46.0}$ against $2^{23.8}$ at $K = 2048$). Measured, level $m+1$ grows per
+deposit by about $0.6\,u|s_m|$ in the construction, and aiming a part at the midpoints of two or three levels at once
+(\texttt{acc\_construct.py \dots\ joint}) gains nothing. A carry chain started by a part $t_l$ consists of multiples of
+the last bit of $t_l$ as long as the levels it passes are coarser, so it can round at level $m$ only if that bit lies
+below $\ulp(s_m)$; with the sizes of the construction, for $K$ well below $u^{-2/m}$ only the chains with $l \ge m -
+2$ qualify ($K \lesssim 3.7 \cdot 10^4$ at $m = 8$). This suggests at most two
+or three roundings per level and deposit, which would lower the bound by about $(n+1)!/3^{n+1}$; it is not proven. At
+$n = 2$, $p = 8$, $K = 64$ the construction reaches $0.42$ of the bound.
 
 Ogita, Rump and Oishi's SumK~\cite{ORO05}, in its vertical form (their Algorithm~4.12), is the same cascade for summands
 that are single floating-point numbers, rounded at the end to one number; their bound $\gamma_{2N-2}^{K}\sum|p_i|$

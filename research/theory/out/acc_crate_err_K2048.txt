@@ -1,1 +1,2 @@
+2048 terms, 0 of the terms after the first not B-nonoverlapping with normal parts
 |Z - x| / (u^8 |Z|) = 1.46758e+07 = 2^23.807; |Z - x| / (u^8 W) = 1.46758e+07; W/|Z| - 1 = 2^-96.0
