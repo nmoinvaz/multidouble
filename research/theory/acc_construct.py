@@ -92,7 +92,7 @@ def run(p, n, K, mut=None, log=True, dump=None):
             err = abs(Z - sum(A.val(y) for y in xr))
             lv = sum(A.val(y) for y in s)
             r1 = err / (u ** n * W)
-            rows.append((k, float(r1), float(err / (u ** n * abs(Z))), float(abs(Z - lv) / (u ** n * W))))
+            rows.append((k, float(r1), float(err / (u ** n * abs(Z))), float(abs(Z - lv) / (u ** n * W)), err, Z, W))
             print(f'k={k:6d} err/(u^n W)={float(r1):.6g} err/(u^n|Z|)={rows[-1][2]:.6g} '
                   f'level loss/(u^n W)={rows[-1][3]:.6g} levels/(u^m W)='
                   + ' '.join(f'{float(abs(A.val(s[j])) / (u ** j * W)):.3g}' for j in range(n + 1)), flush=True)
