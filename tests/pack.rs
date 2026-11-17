@@ -48,7 +48,7 @@ fn bits<const N: usize>(p: [f64; N]) -> [u64; N] {
 fn round_trip<const N: usize, T: Parts<N>>(v: &[T]) -> Packed<N> {
     let p = Packed::<N>::pack(v);
     assert_eq!(p.len(), v.len());
-    assert_eq!(p.words().len(), (v.len() * Packed::<N>::BITS).div_ceil(64));
+    assert_eq!(p.words().len(), (v.len().div_ceil(8) * Packed::<N>::BITS).div_ceil(8));
     assert_eq!(p.side().len(), p.escaped() * (N - 1));
     for (i, &x) in v.iter().enumerate() {
         assert_eq!(bits(p.get::<T>(i).to_parts()), bits(x.to_parts()), "value {i}");
@@ -111,11 +111,11 @@ fn edge_cases_round_trip() {
         [sub, sub, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         [1.0, sub, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         [p2(-900), p2(-955), p2(-1015), 0.0, 0.0, 0.0, 0.0, 0.0],
-        // drops 52, 53, 66, 67 below the part above
+        // drops 52, 53, 64, 65 below the part above
         [1.0, p2(-52), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         [1.0, p2(-53), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        [1.0, p2(-66), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        [1.0, p2(-67), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [1.0, p2(-64), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [1.0, p2(-65), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         // interior zeros: the drop counts from the last nonzero part
         [1.0, 0.0, -0.0, p2(-60), 0.0, p2(-120), 0.0, -p2(-180)],
         [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, p2(-60)],
@@ -142,20 +142,21 @@ fn edge_cases_round_trip() {
         ],
     ];
     let p = round_trip(&cases);
-    // the drops 52 and 67, and the subnormal, infinite and NaN lower parts, are escaped
+    // the drops 52 and 65, and the subnormal, infinite and NaN lower parts, are escaped: code 15 in the first lower
+    // part's field, 56 bits at bit 56 j of the group after the block's 8 leading parts
     let escaped: Vec<bool> = cases
         .iter()
         .enumerate()
         .map(|(i, _)| {
             let w = p.words();
-            let at = i * PackedOD::BITS + 64;
+            let at = (i / 8) * 8 * PackedOD::BITS + 512 + 56 * (i % 8);
             let (wi, s) = (at / 64, at % 64);
-            let f = if s + 57 > 64 {
+            let f = if s + 56 > 64 {
                 (w[wi] >> s) | (w[wi + 1] << (64 - s))
             } else {
                 w[wi] >> s
             };
-            (f >> 1) & 15 == 15
+            (f >> 52) & 15 == 15
         })
         .collect();
     assert_eq!(
@@ -177,16 +178,29 @@ fn edge_cases_round_trip() {
 #[test]
 fn from_raw_rejects_bad_packings() {
     let mut r = Rng(11);
-    // 63 values leave unused bits in the last word
-    let v = od_results(&mut r, 63);
+    // 55 values leave places past the last value in the last block, and unused bits in the last word
+    let v = od_results(&mut r, 55);
     let p = PackedOD::pack(&v);
-    assert_ne!(v.len() * PackedOD::BITS % 64, 0);
+    assert_ne!(v.len().div_ceil(8) * PackedOD::BITS % 8, 0);
     let (w, s) = (p.words().to_vec(), p.side().to_vec());
     assert!(PackedOD::from_raw(v.len(), w.clone(), s.clone()).is_some());
     assert!(
-        PackedOD::from_raw(v.len() + 1, w.clone(), s.clone()).is_none(),
+        PackedOD::from_raw(v.len() + 8, w.clone(), s.clone()).is_none(),
         "length"
     );
+    // the places past the last value hold +0: a packing of one more value, +0, but not of one with any of their bits
+    let more = PackedOD::from_raw(v.len() + 1, w.clone(), s.clone()).expect("place 55 holds +0");
+    assert_eq!(more.get::<OD>(55).x.map(f64::to_bits), [0; 8]);
+    // place 55 is the last of block 6: its leading part, its last field and its last sign
+    let end = 7 * 8 * PackedOD::BITS;
+    for bit in [6 * 8 * PackedOD::BITS + 64 * 7 + 5, end - 64, end - 1] {
+        let mut pad = w.clone();
+        pad[bit / 64] ^= 1 << (bit % 64);
+        assert!(
+            PackedOD::from_raw(v.len(), pad, s.clone()).is_none(),
+            "bit {bit} of a place past the last value"
+        );
+    }
     assert!(
         PackedOD::from_raw(v.len(), w[..w.len() - 1].to_vec(), s.clone()).is_none(),
         "words"
