@@ -110,6 +110,76 @@ impl DD {
     pub fn recip(self) -> DD {
         DD::ONE / self
     }
+    /// the square: the two-product of hi, and 2 hi lo by one fused multiply-add, one rounding fewer than `self * self`
+    #[inline(always)]
+    pub fn sqr(self) -> DD {
+        let (p, e) = two_prod(self.hi, self.hi);
+        let e = (self.hi + self.hi).mul_add(self.lo, e);
+        let (h, l) = quick_two_sum(p, e);
+        DD { hi: h, lo: l }
+    }
+    /// the square root, within 25/8 u^2 = 3.125 u^2 relative (u = 2^-53): Algorithm 8 (SQRTDWtoDW) of V. Lefèvre,
+    /// N. Louvet, J.-M. Muller, J. Picot, L. Rideau, "Accurate calculation of Euclidean norms using double-word
+    /// arithmetic", ACM Trans. Math. Softw. 49(1), 2023, doi:10.1145/3568672, whose Theorem 3.5 (HAL hal-03482567v1)
+    /// proves the bound, asymptotically optimal. Its condition x >= 2^(2k), k >= (emin + p)/2, keeps hi - s^2 exact;
+    /// a smaller x is scaled by 2^972 first and the root by 2^-486 after, both exact. Zero, a negative, infinite or
+    /// NaN hi gives hi.sqrt() with lo = 0.
+    pub fn sqrt(self) -> DD {
+        // zero, negative, NaN (unordered) or infinite
+        if self.hi.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || self.hi == f64::INFINITY {
+            return DD {
+                hi: self.hi.sqrt(),
+                lo: 0.0,
+            };
+        }
+        // 2^(2k) with k = -484, the least even power of two the theorem allows in binary64
+        if self.hi < f64::from_bits((1023 - 968) << 52) {
+            return self.mul_pwr2(2f64.powi(972)).sqrt().mul_pwr2(2f64.powi(-486));
+        }
+        let sh = self.hi.sqrt();
+        // exact: the remainder of a correctly rounded square root, by one fused multiply-add
+        let rho1 = (-sh).mul_add(sh, self.hi);
+        let rho2 = self.lo + rho1;
+        let sl = rho2 / (sh + sh);
+        let (h, l) = quick_two_sum(sh, sl);
+        DD { hi: h, lo: l }
+    }
+    /// self^n by binary powering (`sqr` and `*`), and the reciprocal for n < 0; self^0 is one
+    pub fn powi(self, n: i32) -> DD {
+        if n == 0 {
+            return DD::ONE;
+        }
+        let k = n.unsigned_abs();
+        if n < 0 && self.hi.abs().log2() * k as f64 > 1023.0 {
+            // self^k overflows while self^n may be representable, below 2^-1022 and so with fewer bits: power the
+            // reciprocal instead
+            return self.recip().powu(k);
+        }
+        let s = self.powu(k);
+        if n < 0 {
+            DD::ONE / s
+        } else {
+            s
+        }
+    }
+    /// self^k, k >= 1, by binary powering
+    fn powu(self, mut k: u32) -> DD {
+        if k == 1 {
+            return self;
+        }
+        let mut r = self;
+        let mut s = DD::ONE;
+        while k > 0 {
+            if k % 2 == 1 {
+                s = s * r;
+            }
+            k /= 2;
+            if k > 0 {
+                r = r.sqr();
+            }
+        }
+        s
+    }
     #[inline(always)]
     pub fn mul_f(self, b: f64) -> DD {
         let (p, e) = two_prod(self.hi, b);
