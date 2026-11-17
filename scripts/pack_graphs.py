@@ -89,7 +89,7 @@ def layout():
 def field():
     """one lower part, raw and packed, bit by bit"""
     s, x0, h = 11, 90, 34
-    svg = Svg(x0 + 64 * s + 40)
+    svg = Svg(x0 + 66 * s + 40)
     y = caption(svg, 16, 22, "One lower part",
                 "The 11-bit exponent becomes a 4-bit code: how far the part lies below the last nonzero part "
                 "above it.")
@@ -100,67 +100,69 @@ def field():
     outline(svg, x0, y, 64 * s, h)
     y2 = y + h + 56
     svg.text(x0 - 10, y2 + h / 2 + 4, "packed", size=11, fill=INK, anchor="end")
-    box(svg, x0, y2, s, h, SIGN, "sign", "s", ink=ON_LIGHT_FILL)
-    box(svg, x0 + s, y2, 4 * s, h, CODE, "code, 4 bits", "code")
-    box(svg, x0 + 5 * s, y2, 52 * s, h, FRAC, "fraction, 52 bits", "fraction (52)")
-    outline(svg, x0, y2, 57 * s, h)
-    hatch(svg, x0 + 57 * s, y2, 7 * s, h, "saved: 7 bits")
-    svg.text(x0 + 60.5 * s, y2 + h + 14, "7 saved", size=10, anchor="middle")
+    box(svg, x0, y2, s, h, SIGN, "sign: one bit of the group's sign byte", "s", ink=ON_LIGHT_FILL)
+    outline(svg, x0, y2, s, h)
+    xf = x0 + s + 6
+    box(svg, xf, y2, 4 * s, h, CODE, "code, 4 bits", "code")
+    box(svg, xf + 4 * s, y2, 52 * s, h, FRAC, "fraction, 52 bits", "fraction (52)")
+    outline(svg, xf, y2, 56 * s, h)
+    hatch(svg, xf + 56 * s, y2, 7 * s, h, "saved: 7 bits")
+    svg.text(xf + 59.5 * s, y2 + h + 14, "7 saved", size=10, anchor="middle")
+    svg.text(x0 + s / 2, y2 + h + 14, "sign byte", size=10, anchor="start")
+    svg.text(xf + 30 * s, y2 + h + 14, "7-byte field: fraction | code << 52", size=10, anchor="middle")
     # the exponent maps to the code, the fraction is copied
-    for (a, b) in ((x0 + 6.5 * s, x0 + 3 * s),):
-        svg.line(a, y + h + 2, b, y2 - 2, INK_SOFT, 1.2)
-        svg.add(f'<polygon points="{b:.1f},{y2 - 1:.1f} {b - 4:.1f},{y2 - 9:.1f} {b + 4:.1f},{y2 - 9:.1f}" '
-                f'fill="{INK_SOFT}"/>')
-    svg.text(x0 + 8 * s, y + h + 32, "code = (e of the last nonzero part above) − e − 53, kept when 0 to 13",
-             size=11, fill=INK)
-    mid = x0 + 50 * s
+    a1, b1 = x0 + 6.5 * s, xf + 2 * s
+    svg.line(a1, y + h + 2, b1, y2 - 2, INK_SOFT, 1.2)
+    svg.add(f'<polygon points="{b1:.1f},{y2 - 1:.1f} {b1 - 4:.1f},{y2 - 9:.1f} {b1 + 4:.1f},{y2 - 9:.1f}" '
+            f'fill="{INK_SOFT}"/>')
+    svg.text(x0 + 8 * s, y + h + 32, "code = 64 − drop, the drop being (e of the last nonzero part above) − e, "
+             "53 to 64", size=11, fill=INK)
+    mid = xf + 50 * s
     svg.line(mid, y + h + 2, mid, y2 - 2, INK_SOFT, 1.2)
     svg.add(f'<polygon points="{mid:.1f},{y2 - 1:.1f} {mid - 4:.1f},{y2 - 9:.1f} {mid + 4:.1f},{y2 - 9:.1f}" '
             f'fill="{INK_SOFT}"/>')
     y3 = y2 + h + 40
-    rows = [("0 … 13", "a normal part whose exponent lies 53 + code below the last nonzero part above it"),
-            ("14", "a zero part, its sign kept in the sign bit"),
-            ("15", "this value is in the side table; the fraction bits hold its index")]
+    rows = [("0 … 11", "a normal part whose exponent lies 64 − code below the last nonzero part above it"),
+            ("12", "a zero part, its sign in the sign byte"),
+            ("15", "this value is in the side table; the fraction bits hold its row")]
     svg.text(x0, y3, "code", size=11, fill=INK, weight="bold")
     svg.text(x0 + 70, y3, "meaning", size=11, fill=INK, weight="bold")
     for i, (c, m) in enumerate(rows):
         yy = y3 + 20 * (i + 1)
         svg.text(x0, yy, c, size=11, fill=INK, tabular=True)
         svg.text(x0 + 70, yy, m, size=11, fill=INK_SOFT)
-    return svg.finish(y3 + 20 * len(rows) + 18)
+    svg.text(x0, y3 + 20 * (len(rows) + 1), "Decoding is one add: the field under a constant top byte 0xfc, plus "
+             "the exponent above shifted by 52.", size=11, fill=INK_SOFT)
+    return svg.finish(y3 + 20 * (len(rows) + 1) + 18)
 
 
 def stream():
-    """packed values back to back across 64-bit words"""
-    s, x0, n = 0.62, 40, 3
-    bits = 463
-    words = -(-n * bits // 64)
-    svg = Svg(int(x0 + words * 64 * s + 40))
-    y = caption(svg, 16, 22, "Values back to back in 64-bit words",
-                "Value i starts at bit 463·i, so get(i) reads any value alone; values straddle word boundaries.")
-    h = 26
-    colors = [SERIES[0], SERIES[1], SERIES[2]]
-    for i in range(n):
-        xs = x0 + i * bits * s
-        box(svg, xs, y, 64 * s, h, colors[i], f"value {i}: x0, 64 bits")
-        for k in range(7):
-            xx = xs + (64 + 57 * k) * s
-            box(svg, xx, y, 57 * s - 0.6, h, colors[i], f"value {i}: x{k + 1}, 57 bits")
-        svg.add(f'<rect x="{xs:.1f}" y="{y:.1f}" width="{bits * s:.1f}" height="{h}" fill="none" '
-                f'stroke="{INK}" stroke-width="1.2"/>')
-        svg.text(xs + bits * s / 2, y + h / 2 + 4, f"value {i}", size=11, fill=ON_FILL, anchor="middle",
-                 weight="bold")
-        svg.text(xs, y - 6, f"bit {i * bits}", size=10, anchor="start", tabular=True)
-    yw = y + h + 12
-    for w in range(words):
-        xs = x0 + w * 64 * s
-        outline(svg, xs, yw, 64 * s, 18)
-        if w % 2 == 0:
-            svg.text(xs + 32 * s, yw + 13, f"w{w}", size=9, anchor="middle", tabular=True)
-    svg.text(x0 - 8, yw + 13, "words", size=10, anchor="end")
-    used = n * bits
-    hatch(svg, x0 + used * s, y, words * 64 * s - used * s, h, "unused bits of the last word, zero")
-    return svg.finish(yw + 40)
+    """one block of 8 octo-doubles, to scale in bytes"""
+    s, x0, h = 1.85, 40, 30
+    svg = Svg(int(x0 + 463 * s + 40))
+    y = caption(svg, 16, 22, "Blocks of 8 values",
+                "A block holds the 8 leading parts, then for each lower part the 8 fields and a byte of their "
+                "signs. get(i) reads block i/8; SIMD decodes a block with byte shuffles.")
+    y += 16
+    for j in range(8):
+        box(svg, x0 + 8 * j * s, y, 8 * s - 0.6, h, SERIES[j], f"value {j}: x0, raw f64, 8 bytes")
+    outline(svg, x0, y, 64 * s, h)
+    svg.text(x0 + 32 * s, y - 6, "x0 ×8", size=10, fill=INK, anchor="middle")
+    for k in range(1, 8):
+        xg = x0 + (64 + 57 * (k - 1)) * s
+        for j in range(8):
+            box(svg, xg + 7 * j * s, y, 7 * s - 0.6, h, SERIES[j], f"value {j}: x{k}, 7-byte field")
+        box(svg, xg + 56 * s, y, s, h, SERIES[9], f"x{k}: the 8 values' signs, 1 byte")
+        outline(svg, xg, y, 57 * s, h)
+        svg.text(xg + 28.5 * s, y - 6, f"x{k} ×8 + signs", size=10, fill=INK, anchor="middle")
+    yb = y + h + 10
+    svg.line(x0, yb, x0 + 463 * s, yb, INK_SOFT)
+    for xx in (x0, x0 + 463 * s):
+        svg.line(xx, yb - 4, xx, yb + 4, INK_SOFT)
+    svg.text(x0 + 463 * s / 2, yb + 16, "463 bytes: 8 values × 463 bits", size=10, anchor="middle", tabular=True)
+    svg.text(x0, yb + 36, "Colors mark the 8 values of the block; gray is the sign byte of each lower part.",
+             size=11, fill=INK_SOFT)
+    return svg.finish(yb + 52)
 
 
 def escape():
@@ -190,7 +192,7 @@ def escape():
     svg.line(ax, y + h + 2, ax, y2 - 14, INK_SOFT, 1.2)
     svg.add(f'<polygon points="{ax:.1f},{y2 - 13:.1f} {ax - 4:.1f},{y2 - 21:.1f} {ax + 4:.1f},{y2 - 21:.1f}" '
             f'fill="{INK_SOFT}"/>')
-    svg.text(x0, y2 + h + 22, "Used for a part 52 or more than 66 places down, a subnormal, infinite or NaN lower "
+    svg.text(x0, y2 + h + 22, "Used for a part 52 or more than 64 places down, a subnormal, infinite or NaN lower "
              "part, or a nonzero lower part under a non-normal x0.", size=11, fill=INK_SOFT)
     return svg.finish(y2 + h + 40)
 
@@ -201,7 +203,7 @@ SIZES = [
     ("raw parts", 512.0, True),
     ("lzma on the raw parts", 495.5, False),
     ("Blosc-style bit shuffle + zlib", 466.4, False),
-    ("pack::PackedOD", 463.46, True),
+    ("pack::PackedOD", 464.77, True),
     ("Blosc-style byte shuffle + lzma", 454.0, False),
     ("variable-length gap code", 449.4, False),
     ("exponent delta, byte shuffle, lzma", 443.8, False),

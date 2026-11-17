@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="834" height="310" viewBox="0 0 834 310" font-family="system-ui, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="856" height="330" viewBox="0 0 856 330" font-family="system-ui, sans-serif">
 <style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
-<rect width="834" height="310" fill="#fcfcfb"/>
+<rect width="856" height="330" fill="#fcfcfb"/>
 <text x="16.0" y="22.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">One lower part</text>
 <text x="16.0" y="38.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">The 11-bit exponent becomes a 4-bit code: how far the part lies below the last nonzero part above it.</text>
 <text x="80.0" y="89.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">raw f64</text>
@@ -12,42 +12,46 @@
 <text x="508.0" y="88.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">fraction (52)</text>
 <rect x="90.0" y="68.0" width="704.0" height="34.0" fill="none" stroke="#52514e" stroke-width="1"/>
 <text x="80.0" y="179.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal">packed</text>
-<rect x="90.0" y="158.0" width="11.0" height="34.0" fill="#eda100"><title>sign</title></rect>
+<rect x="90.0" y="158.0" width="11.0" height="34.0" fill="#eda100"><title>sign: one bit of the group's sign byte</title></rect>
 <text x="95.5" y="178.5" font-size="10" fill="#1a1a1a" text-anchor="middle" font-weight="normal">s</text>
-<rect x="101.0" y="158.0" width="44.0" height="34.0" fill="#1baf7a"><title>code, 4 bits</title></rect>
-<text x="123.0" y="178.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">code</text>
-<rect x="145.0" y="158.0" width="572.0" height="34.0" fill="#2a78d6"><title>fraction, 52 bits</title></rect>
-<text x="431.0" y="178.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">fraction (52)</text>
-<rect x="90.0" y="158.0" width="627.0" height="34.0" fill="none" stroke="#52514e" stroke-width="1"/>
-<rect x="717.0" y="158.0" width="77.0" height="34.0" fill="#e7e6e2"><title>saved: 7 bits</title></rect>
-<line x1="717.0" y1="158.0" x2="717.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="717.0" y1="165.0" x2="724.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="717.0" y1="172.0" x2="731.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="717.0" y1="179.0" x2="738.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="717.0" y1="186.0" x2="745.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="718.0" y1="192.0" x2="752.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="725.0" y1="192.0" x2="759.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="732.0" y1="192.0" x2="766.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="739.0" y1="192.0" x2="773.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="746.0" y1="192.0" x2="780.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="753.0" y1="192.0" x2="787.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="760.0" y1="192.0" x2="794.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="767.0" y1="192.0" x2="794.0" y2="165.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="774.0" y1="192.0" x2="794.0" y2="172.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="781.0" y1="192.0" x2="794.0" y2="179.0" stroke="#52514e" stroke-width="0.6"/>
-<line x1="788.0" y1="192.0" x2="794.0" y2="186.0" stroke="#52514e" stroke-width="0.6"/>
-<text x="755.5" y="206.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal">7 saved</text>
-<line x1="161.5" y1="104.0" x2="123.0" y2="156.0" stroke="#52514e" stroke-width="1.2"/>
-<polygon points="123.0,157.0 119.0,149.0 127.0,149.0" fill="#52514e"/>
-<text x="178.0" y="134.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">code = (e of the last nonzero part above) − e − 53, kept when 0 to 13</text>
-<line x1="640.0" y1="104.0" x2="640.0" y2="156.0" stroke="#52514e" stroke-width="1.2"/>
-<polygon points="640.0,157.0 636.0,149.0 644.0,149.0" fill="#52514e"/>
+<rect x="90.0" y="158.0" width="11.0" height="34.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="107.0" y="158.0" width="44.0" height="34.0" fill="#1baf7a"><title>code, 4 bits</title></rect>
+<text x="129.0" y="178.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">code</text>
+<rect x="151.0" y="158.0" width="572.0" height="34.0" fill="#2a78d6"><title>fraction, 52 bits</title></rect>
+<text x="437.0" y="178.5" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="normal">fraction (52)</text>
+<rect x="107.0" y="158.0" width="616.0" height="34.0" fill="none" stroke="#52514e" stroke-width="1"/>
+<rect x="723.0" y="158.0" width="77.0" height="34.0" fill="#e7e6e2"><title>saved: 7 bits</title></rect>
+<line x1="723.0" y1="158.0" x2="723.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="723.0" y1="165.0" x2="730.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="723.0" y1="172.0" x2="737.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="723.0" y1="179.0" x2="744.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="723.0" y1="186.0" x2="751.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="724.0" y1="192.0" x2="758.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="731.0" y1="192.0" x2="765.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="738.0" y1="192.0" x2="772.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="745.0" y1="192.0" x2="779.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="752.0" y1="192.0" x2="786.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="759.0" y1="192.0" x2="793.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="766.0" y1="192.0" x2="800.0" y2="158.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="773.0" y1="192.0" x2="800.0" y2="165.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="780.0" y1="192.0" x2="800.0" y2="172.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="787.0" y1="192.0" x2="800.0" y2="179.0" stroke="#52514e" stroke-width="0.6"/>
+<line x1="794.0" y1="192.0" x2="800.0" y2="186.0" stroke="#52514e" stroke-width="0.6"/>
+<text x="761.5" y="206.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal">7 saved</text>
+<text x="95.5" y="206.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">sign byte</text>
+<text x="437.0" y="206.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal">7-byte field: fraction | code &lt;&lt; 52</text>
+<line x1="161.5" y1="104.0" x2="129.0" y2="156.0" stroke="#52514e" stroke-width="1.2"/>
+<polygon points="129.0,157.0 125.0,149.0 133.0,149.0" fill="#52514e"/>
+<text x="178.0" y="134.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">code = 64 − drop, the drop being (e of the last nonzero part above) − e, 53 to 64</text>
+<line x1="657.0" y1="104.0" x2="657.0" y2="156.0" stroke="#52514e" stroke-width="1.2"/>
+<polygon points="657.0,157.0 653.0,149.0 661.0,149.0" fill="#52514e"/>
 <text x="90.0" y="232.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">code</text>
 <text x="160.0" y="232.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">meaning</text>
-<text x="90.0" y="252.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">0 … 13</text>
-<text x="160.0" y="252.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">a normal part whose exponent lies 53 + code below the last nonzero part above it</text>
-<text x="90.0" y="272.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">14</text>
-<text x="160.0" y="272.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">a zero part, its sign kept in the sign bit</text>
+<text x="90.0" y="252.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">0 … 11</text>
+<text x="160.0" y="252.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">a normal part whose exponent lies 64 − code below the last nonzero part above it</text>
+<text x="90.0" y="272.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">12</text>
+<text x="160.0" y="272.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">a zero part, its sign in the sign byte</text>
 <text x="90.0" y="292.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal" font-variant-numeric="tabular-nums">15</text>
-<text x="160.0" y="292.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">this value is in the side table; the fraction bits hold its index</text>
+<text x="160.0" y="292.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">this value is in the side table; the fraction bits hold its row</text>
+<text x="90.0" y="312.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="normal">Decoding is one add: the field under a constant top byte 0xfc, plus the exponent above shifted by 52.</text>
 </svg>

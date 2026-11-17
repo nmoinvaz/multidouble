@@ -402,7 +402,8 @@ impl<const N: usize> Packed<N> {
     }
 
     /// packed values from their words and side table (as `words` and `side` return them), or None if they are not a
-    /// valid packing of `len` values
+    /// valid packing of `len` values. The length is the caller's to keep: a place past the last value holds +0, which
+    /// is also a valid value, so a length that ends inside the last block, short of its padding, is not detected.
     pub fn from_raw(len: usize, words: Vec<u64>, side: Vec<u64>) -> Option<Self> {
         let blocks = len.div_ceil(8);
         let used = blocks.checked_mul(Self::BITS)?.checked_mul(8)?;
