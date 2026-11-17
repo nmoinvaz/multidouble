@@ -154,8 +154,10 @@ enum Cat {
     Pow2,
     Sparse,
     Computed,
+    Gap,
 }
 
+/// the categories whose results' bits `OD_DIGEST` pins and whose results' parts do not overlap
 const CATS: [Cat; 7] = [
     Cat::Wide,
     Cat::Cancel,
@@ -164,6 +166,18 @@ const CATS: [Cat; 7] = [
     Cat::Pow2,
     Cat::Sparse,
     Cat::Computed,
+];
+
+/// every category of the accuracy checks: `CATS` and the gap category, whose results' bits `GAP_DIGEST` pins
+const ALL_CATS: [Cat; 8] = [
+    Cat::Wide,
+    Cat::Cancel,
+    Cat::Overflow,
+    Cat::Underflow,
+    Cat::Pow2,
+    Cat::Sparse,
+    Cat::Computed,
+    Cat::Gap,
 ];
 
 /// the category's name in the tables
@@ -176,7 +190,26 @@ fn cat_name(c: Cat) -> &'static str {
         Cat::Pow2 => "pow2",
         Cat::Sparse => "sparse",
         Cat::Computed => "computed",
+        Cat::Gap => "gap",
     }
+}
+
+/// a value with a part far below the one above it: x0 + x1 with x1 2^-60 to 2^-400 below x0, or greedy parts with
+/// those below the first zeroed at random (zero parts between nonzero ones)
+fn gapped(r: &mut Rng) -> OD {
+    let e = r.int(-20, 20);
+    let mut x = greedy8(&rand_dy(r, e));
+    if coin(r) {
+        let g = r.int(60, 400);
+        x = [x[0], rand_dy(r, e - g).to_f64(), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    } else {
+        for xi in x.iter_mut().skip(1) {
+            if coin(r) {
+                *xi = 0.0;
+            }
+        }
+    }
+    OD { x }
 }
 
 /// one input pair (a, b) for an operation of the given kind (b unused by sqrt)
@@ -184,6 +217,23 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
     use Cat::*;
     use Kind::*;
     let one = Dy::from_f64(1.0);
+    if cat == Gap {
+        // a product of a gapped value sends the levels to the renormalization out of magnitude order; a (1/a)
+        // nearly cancels them (the square root's last Newton step forms such a product)
+        let a = gapped(r);
+        return match kind {
+            Add => (a, gapped(r)),
+            Sqrt => (a.abs(), OD::ONE),
+            Mul => {
+                if coin(r) {
+                    (a, OD::ONE / a)
+                } else {
+                    (a, gapped(r))
+                }
+            }
+            Div => (gapped(r), a),
+        };
+    }
     if cat == Computed {
         // operands produced by octo-double arithmetic (renormalized parts, not greedy ones): x y (1/y); for the adds
         // b = -(x y (1/y)) or b = -(a + d) (|d| = 2^-k |a|), so a + b is small with misaligned parts, as in a
@@ -285,7 +335,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
             let (e, f) = (r.int(-30, 30), r.int(-30, 30));
             (sparse_dy(r, e), sparse_dy(r, f))
         }
-        (Computed, _) => unreachable!(),
+        (Computed, _) | (Gap, _) => unreachable!(),
     };
     (od_of(&a), od_of(&b))
 }
@@ -540,7 +590,7 @@ fn results(op: Op, inp: &[(OD, OD)]) -> (Vec<OD>, Vec<OD>) {
 fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for op in OPS {
-        for cat in CATS {
+        for cat in ALL_CATS {
             let inp = inputs(op, cat, n, seed);
             set_mutation(id);
             let (rs, rv) = results(op, &inp);
@@ -979,24 +1029,39 @@ fn od_accuracy() {
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
     if (n, seed) == (2000, 1) {
+        let gap = digest_gap(&rs);
+        println!("od gap digest {gap:016x}");
         assert!(
-            digest == OD_DIGEST,
-            "the results' bits changed: digest {digest:#018x}, pinned {:#018x}",
-            OD_DIGEST
+            digest == OD_DIGEST && gap == GAP_DIGEST,
+            "the results' bits changed: digests {digest:#018x}, {gap:#018x}, pinned {:#018x}, {:#018x}",
+            OD_DIGEST,
+            GAP_DIGEST
         );
     }
 }
 
-/// the digest of every row's results (`Res::digest`), in order
+/// the digest of the results (`Res::digest`) of every row in `CATS`, in order
 fn digest(rs: &[Res]) -> u64 {
-    rs.iter()
-        .fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
+    fold_digest(rs.iter().filter(|r| r.cat != "gap"))
+}
+
+/// the digest of the results of the gap category's rows, in order
+fn digest_gap(rs: &[Res]) -> u64 {
+    fold_digest(rs.iter().filter(|r| r.cat == "gap"))
+}
+
+fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
+    rs.fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
 }
 
 /// The digest of `od_accuracy`'s results at its default size and seed (2000, 1), recorded with
 /// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
 /// be the scalar ones. Every backend gives these bits.
 const OD_DIGEST: u64 = 0x6ff0_7dec_6a4e_4e28;
+
+/// The digest of the gap category's results at the same size and seed, recorded with 4.8.1, whose renormalization's
+/// second pass by two-sums made them correct.
+const GAP_DIGEST: u64 = 0xd7a7_6d83_c65e_67d7;
 
 /// Control for the pinned digest: with the order-6 term a2 b3 of the product dropped
 /// (`mutate::MUL_E23`), the results' digest is not the pinned one.
@@ -1086,6 +1151,96 @@ fn od_results_do_not_overlap() {
         controls[0] > 1.0 && controls[1] > 0.5 && controls[1] <= 1.0 && controls[2] > 1.0,
         "{controls:?}"
     );
+}
+
+/// Inputs whose results missed their bounds by 1e10 to 1e28 units when the renormalization's second pass was by
+/// quick-two-sums: the square root of a two-part value with a gap and its product with its reciprocal, and two
+/// quotients of values with zero parts. Pass: each within its operation's threshold, scalar and lanes alike.
+#[test]
+fn od_gap_regressions() {
+    let bad: Vec<(&str, f64)> = gap_cases()
+        .iter()
+        .filter_map(|&(name, op, a, b)| {
+            let (r, rv) = results(op, &[(a, b)]);
+            let (err, scale, _, allow) = exact_err(op, a, b, r[0], false);
+            let ok = within(&err, &scale, op_thr(op), &allow) && same(r[0], rv[0]);
+            (!ok).then(|| (name, err.ratio(&scale) / unit()))
+        })
+        .collect();
+    assert!(bad.is_empty(), "{bad:?}");
+}
+
+/// Control: with the second pass by quick-two-sums (`mutate::RENORM_FAST`), every case misses its bound.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_gap_regressions_control() {
+    for (name, op, a, b) in gap_cases() {
+        set_mutation(mutate::RENORM_FAST);
+        let r = apply_s(op, a, b);
+        set_mutation(0);
+        let (err, scale, _, allow) = exact_err(op, a, b, r, false);
+        assert!(!within(&err, &scale, op_thr(op), &allow), "{name} within its bound");
+    }
+}
+
+/// the cases of `od_gap_regressions`
+fn gap_cases() -> Vec<(&'static str, Op, OD, OD)> {
+    let od = |h: [u64; 8]| OD {
+        x: h.map(f64::from_bits),
+    };
+    let a = od([0x3ff97f22dc331771, 0x320e700ef097bbfd, 0, 0, 0, 0, 0, 0]);
+    vec![
+        ("sqrt", Op::Sqrt, a, OD::ONE),
+        ("a (1/a)", Op::Mul, a, OD::ONE / a),
+        (
+            "quotient 1",
+            Op::Div,
+            od([
+                0x3fdc0b223f8ec38c,
+                0xbc6e614a71d2f866,
+                0xb590b5eca31e706d,
+                0x2ea39cd33f0fce0b,
+                0x27bc6d352bcd0000,
+                0,
+                0,
+                0,
+            ]),
+            od([
+                0x3ff04936766afb19,
+                0xbc65eb912e2cf5f6,
+                0x2b655daf2bc93326,
+                0xa7f828724fe44000,
+                0,
+                0,
+                0,
+                0,
+            ]),
+        ),
+        (
+            "quotient 2",
+            Op::Div,
+            od([
+                0x40081779531a9783,
+                0xb929a00ece965c74,
+                0xb26660a9a05ed265,
+                0x2efe880195dd03a0,
+                0x281c44f426214000,
+                0,
+                0,
+                0,
+            ]),
+            od([
+                0x3fb9b4b7d1740212,
+                0xbc49003abd38f755,
+                0xab2ec2cfd3d8683b,
+                0xa78f516e79640000,
+                0,
+                0,
+                0,
+                0,
+            ]),
+        ),
+    ]
 }
 
 /// decimal input and output, the conversions and the order, exactly
