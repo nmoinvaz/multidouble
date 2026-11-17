@@ -269,10 +269,10 @@ fn quick_three_accum(a: &mut f64, b: &mut f64, c: f64) -> f64 {
     0.0
 }
 
-/// Quad-double `x[0] + x[1] + x[2] + x[3]`. The arithmetic expects renormalized parts, each at most half an ulp of the
-/// one above with zeros only at the end, as its own results, `new` and `from_sum` give. Parts with a zero between
-/// nonzero ones, as a `QD { x }` built by hand can have, can make a sum lose terms of about 2^-160 relative
-/// (`qd_tests::qd_noncanonical_add_control`); `from_sum` renormalizes parts in any order.
+/// Quad-double `x[0] + x[1] + x[2] + x[3]`. The arithmetic expects parts as its own results, `new` and `from_sum` give
+/// them: decreasing in magnitude, with zeros only at the end. Parts with a zero between nonzero ones, as a `QD { x }`
+/// built by hand can have, can make a sum lose terms of about 2^-160 relative (`qd_tests::qd_noncanonical_add_control`);
+/// `from_sum` renormalizes parts in any order.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct QD {
     pub x: [f64; 4],
