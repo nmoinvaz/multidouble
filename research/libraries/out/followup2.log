@@ -1,0 +1,4 @@
+climb l3_bf_mul p=53 seed=1 steps=272029 restarts=91 best_ratio=3.80889 (log2 2) time=90s
+climb l3_bf_add p=53 seed=1 steps=202318 restarts=68 best_ratio=0.590845 (log2 -1) time=60s
+climb l3_bf_add p=8 seed=2 steps=291695 restarts=98 best_ratio=0.620619 (log2 -1) time=60s
+FOLLOWUP2-DONE
