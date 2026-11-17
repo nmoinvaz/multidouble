@@ -17,7 +17,7 @@
 use crate::dd::DD;
 use crate::dual::dd_param;
 use crate::dv::DV;
-use crate::od::{alg, mutate, quick_two_sum, vecsum, Limb, OD};
+use crate::od::{alg, mutate, quick_two_sum, two_sum, vecsum, Limb, OD};
 use crate::qd::QD;
 use crate::qv::QV;
 use crate::simd::{self, Kernel, Native, Simd};
@@ -116,7 +116,12 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
     let mut k = z;
     let mut acc = c[0];
     for i in 1..N {
-        let (t, e) = quick_two_sum(acc, c[i]);
+        // two-sum, as od::renorm_scalar
+        let (t, e) = if mutate::on(mutate::RENORM_FAST) {
+            quick_two_sum(acc, c[i])
+        } else {
+            two_sum(acc, c[i])
+        };
         // k < 7 and a nonzero error: t goes to slot k, k advances, e carries on. room is hidden from
         // the optimizer (`Simd::opaque`), so that the masks built from it stay bitwise operations on NEON
         let room = seven.gt(k).opaque();
