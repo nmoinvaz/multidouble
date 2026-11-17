@@ -1,0 +1,471 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{patterns}
+\usepackage[hidelinks]{hyperref}
+\emergencystretch=2em
+\widowpenalty=10000
+\clubpenalty=10000
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\RN}{\mathrm{RN}}
+\newcommand{\ulp}{\mathrm{ulp}}
+\newcommand{\F}{\mathbb{F}}
+\newcommand{\acc}{\mathit{acc}}
+\newcommand{\us}{u_{*}}
+\newcommand{\TwoSum}{\mathrm{TwoSum}}
+\newcommand{\FastTwoSum}{\mathrm{Fast2Sum}}
+\newcommand{\TwoProd}{\mathrm{TwoProd}}
+\newcommand{\dep}{\mathrm{dep}}
+
+\makeatletter
+\let\kept@itemize\itemize \def\itemize{\@beginparpenalty\@M\kept@itemize}
+\let\kept@enumerate\enumerate \def\enumerate{\@beginparpenalty\@M\kept@enumerate}
+\makeatother
+
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+
+\title{Error bounds for quad-double style arithmetic\\on floating-point expansions of any length}
+\author{Nathan Moinvaziri}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A floating-point expansion stores a number as an unevaluated sum of $n$ machine numbers, which gives about $n$ times
+the precision of the hardware format. The quad-double algorithms of Hida, Li and Bailey are the most widely used way
+to add, multiply, divide and take square roots of such sums, and they extend from four parts to any $n$. We found no
+proven error bound for them in the literature, even at four parts. We prove that the sum and the product of two
+$n$-part expansions err by at most $u^n$ times the exact result, where $u$ is the unit roundoff of the hardware
+format. This is the bound of rounding to a format with $n$ times the precision. A second, much smaller term is added,
+at most $2^{-15}$ of the first at eight parts in binary64, and measured against the operands' size for sums. Division
+has the same bound, and the square root three times it. Simple
+inputs reach the bound, so it cannot be improved. The proofs rest on an analysis of renormalization that allows its
+input terms in any order.
+\end{abstract}
+
+\section{Introduction}
+
+Many computations need more precision than the hardware gives, but far less than arbitrary precision. A common answer
+is to store a number as an \emph{expansion}, an unevaluated sum of floating-point numbers, each much smaller than the
+one before. In binary64, $\pi$ is stored with two parts as
+\[
+3.141592653589793 + 1.2246467991473532 \times 10^{-16},
+\]
+which is correct to about 32 decimal digits. Two parts give double-double arithmetic, four give quad-double, about 64
+digits, and eight give octo-double, about 128.
+
+The standard algorithms for expansions are those of the QD library of Hida, Li and Bailey~\cite{HLB01}. To multiply,
+they form the products of the parts, sort them by size into \emph{levels}, add each level with error-free
+transformations, and finally \emph{renormalize} the levels back into $n$ parts. The scheme works for any $n$, and the
+octo-double arithmetic of the multidouble library uses it at $n = 8$~\cite{md}.
+
+How accurate is the result? The QD paper bounds its addition under the assumption that the renormalization works, and
+notes that this remains to be proven. Joldes, Marty, Muller and Popescu~\cite{JMMP16} proved properties of a different
+renormalization for expansions of any length, and state that no error bound is known for QD's division. Proven bounds
+exist for other algorithms: a bin-based multiplication of any length~\cite{MPT16}, triple-word
+arithmetic~\cite{FMP19}, double-word arithmetic~\cite{JMP17}, and machine-verified networks for two to four
+parts~\cite{Zhang25}.
+
+\begin{samepage}
+We give proven bounds for the QD-style algorithms themselves, for every $n$:
+\begin{itemize}
+\item addition and multiplication of two expansions, and of an expansion and a floating-point number, are accurate to
+  $u^n$ relative, plus a small second term (Theorem~\ref{thm:main});
+\item division is accurate to $u^n$, and the square root to $3u^n$ at $n = 8$ (Theorem~\ref{thm:divsqrt});
+\item simple inputs reach the bound $u^n$, so it cannot be improved (Section~\ref{sec:example});
+\item the renormalization is exact until its last step, whatever the order of its input terms
+  (Theorem~\ref{thm:renorm}), and the other bounds rest on this.
+\end{itemize}
+\end{samepage}
+The main text states the results and shows why they hold. The full statements and proofs are in the appendix.
+
+\section{Expansions and their arithmetic}
+
+\subsection{Floating point}
+
+We use binary floating point of precision $p$, so $p = 53$ for binary64, with rounding to nearest, ties to even,
+written $\RN$. The \emph{unit roundoff} is $u = 2^{-p}$, so $u = 2^{-53} \approx 1.1 \times 10^{-16}$ in binary64. A
+single rounding changes a value $z$ by at most $u|z|$, and a format with precision $np$ has unit roundoff $u^n$. The
+unit in the last place of $x$, $\ulp(x)$, is the gap between consecutive floating-point numbers near $x$, so $\ulp(1)
+= 2u$. We assume a fused multiply-add and no underflow or overflow in any intermediate value
+(Assumption~\ref{as:fp}).
+
+An $n$-part expansion is $a = (a_0, \dots, a_{n-1})$ with value $a_0 + \dots + a_{n-1}$. Our results ask only that
+the parts shrink at least geometrically, a \emph{ladder}
+\[
+|a_i| \le (2u)^i\,|a_0|.
+\]
+The appendix calls this hypothesis $H(2)$. The usual expansions satisfy it: every expansion whose parts are each at
+most one ulp of the part above does, and those are what the algorithms return. The ladder also allows a part far below
+the one above it, and zero parts between nonzero ones (Figure~\ref{fig:ladder}).
+
+\nopagebreak
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \foreach \i in {1,2,3} { \draw[densely dashed, gray] (2.35*\i, -1.75) -- (2.35*\i, 0.55); }
+  \node[gray, font=\small, above] at (2.35, 0.55) {$2u|a_0|$};
+  \node[gray, font=\small, above] at (4.70, 0.55) {$(2u)^2|a_0|$};
+  \node[gray, font=\small, above] at (7.05, 0.55) {$(2u)^3|a_0|$};
+  \node[left, font=\small] at (-0.2, 0) {(a)};
+  \foreach \x/\l in {0/a_0, 2.4/a_1, 4.8/a_2, 7.2/a_3} {
+    \draw[fill=blue!12] (\x, -0.2) rectangle ++(2.3, 0.4); \node[font=\small] at (\x+1.15, 0) {$\l$}; }
+  \node[left, font=\small] at (-0.2, -1.2) {(b)};
+  \draw[fill=blue!12] (0, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (1.15, -1.2) {$a_0$};
+  \draw[fill=blue!12] (3.4, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (4.55, -1.2) {$a_1$};
+  \node[font=\small] at (6.5, -1.2) {$a_2 = 0$};
+  \draw[fill=blue!12] (8.3, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (9.45, -1.2) {$a_3$};
+  \draw[->] (0, -2.0) -- (10.8, -2.0) node[right, font=\small] {smaller};
+\end{tikzpicture}
+\caption{Two four-part expansions on the ladder. Each box is a part's $p$ significant bits, placed by its exponent.
+(a)~Each part at most one ulp of the part above. (b)~A gap after $a_0$ and a zero part. A part may lie anywhere to the
+right of its dashed line.}
+\label{fig:ladder}
+\end{figure}
+
+\subsection{Error-free transformations}
+
+\begin{samepage}
+The algorithms are built from three operations that return a rounded result together with its exact
+error~\cite{Dekker71,ORO05}:
+\begin{itemize}
+\item $\TwoSum(a, b)$ returns $s = \RN(a + b)$ and $e$ with $s + e = a + b$ exactly, using six operations;
+\item $\FastTwoSum(a, b)$ returns the same $s$ and $e$ with three operations, but only when $|a| \ge |b|$;
+\item $\TwoProd(a, b)$ returns $p = \RN(ab)$ and $e = ab - p$ exactly, using a product and one fused multiply-add.
+\end{itemize}
+\end{samepage}
+
+\subsection{Multiplication by levels}
+
+Write $a$ and $b$ with $a_0$ and $b_0$ of size about 1. The product $a_ib_j$ is then of size about $u^{i+j}$, and the
+exact product is grouped by this \emph{order} $i + j$, as in the QD paper:
+\[
+ab = \underbrace{a_0b_0}_{\text{order } 0} + \underbrace{(a_0b_1 + a_1b_0)}_{\text{order } 1} +
+\underbrace{(a_0b_2 + a_1b_1 + a_2b_0)}_{\text{order } 2} + \cdots
+\]
+Level $m$ collects everything of size about $u^m$. Each product of order below $n$ is split exactly by $\TwoProd$: its
+rounded value goes to level $i + j$ and its error, about $u$ times smaller, to level $i + j + 1$. A value is added to a
+level by $\TwoSum$, and the error of that addition is carried to the next level down, which we call a \emph{carry}. The
+products of order $n$ are only needed to about $p$ bits, so they are summed with fused multiply-adds into level $n$.
+The products of higher order are dropped. Figure~\ref{fig:levels} shows the scheme for $n = 4$, and
+Algorithm~\ref{alg:mul} gives it in full.
+
+\nopagebreak
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[x=0.9cm, y=0.9cm]
+  \foreach \i in {0,...,3} { \foreach \j in {0,...,3} {
+    \pgfmathtruncatemacro{\o}{\i+\j}
+    \ifnum\o<4 \fill[blue!12] (\j, -\i) rectangle ++(1, -1);
+    \else\ifnum\o=4 \fill[orange!25] (\j, -\i) rectangle ++(1, -1);
+    \else \fill[pattern=north east lines, pattern color=gray!50] (\j, -\i) rectangle ++(1, -1);
+    \fi\fi
+    \draw (\j, -\i) rectangle ++(1, -1);
+    \ifnum\o<5 \node[font=\small] at (\j+0.5, -\i-0.5) {$\o$}; \fi } }
+  \foreach \j in {0,...,3} { \node[font=\small] at (\j+0.5, 0.3) {$b_\j$}; }
+  \foreach \i in {0,...,3} { \node[font=\small, anchor=east] at (-0.1, -\i-0.5) {$a_\i$}; }
+  \begin{scope}[shift={(5, 0)}]
+    \fill[blue!12] (0, -0.3) rectangle ++(0.5, -0.5); \draw (0, -0.3) rectangle ++(0.5, -0.5);
+    \node[font=\small, anchor=west] at (0.7, -0.55) {order $< n$: $\TwoProd$, exact, error to the next level};
+    \fill[orange!25] (0, -1.2) rectangle ++(0.5, -0.5); \draw (0, -1.2) rectangle ++(0.5, -0.5);
+    \node[font=\small, anchor=west] at (0.7, -1.45) {order $n$: summed by fused multiply-adds};
+    \fill[pattern=north east lines, pattern color=gray!50] (0, -2.1) rectangle ++(0.5, -0.5);
+    \draw (0, -2.1) rectangle ++(0.5, -0.5);
+    \node[font=\small, anchor=west] at (0.7, -2.35) {order $> n$: dropped};
+  \end{scope}
+\end{tikzpicture}
+\caption{The partial products $a_ib_j$ of a four-part multiplication. Each cell shows the level its product goes
+to, its order $i + j$. The five levels $0, \dots, 4$ are renormalized into four parts.}
+\label{fig:levels}
+\end{figure}
+
+\begin{algorithm}[tp]
+\caption{Multiplication of $n$-part expansions (MUL)}\label{alg:mul}
+\begin{algorithmic}[1]
+\Require $a = (a_0, \dots, a_{n-1})$, $b = (b_0, \dots, b_{n-1})$
+\Ensure $x = (x_0, \dots, x_{n-1})$ with $\sum x_k \approx ab$
+\For{$j = 0, \dots, n-1$} $(s_j, e_j) \gets \TwoProd(a_0, b_j)$ \Comment{levels $0, \dots, n-1$}
+\EndFor
+\State $s_n \gets \RN\bigl(\sum_{i=1}^{n-1} a_ib_{n-i}\bigr)$ by a chain of fused multiply-adds \Comment{order $n$}
+\For{$j = 0, \dots, n-1$} $\dep(s, j+1, e_j)$
+\EndFor
+\For{$i = 1, \dots, n-1$ \textbf{and} $j = 0, \dots, n-1-i$}
+  \State $(p, e) \gets \TwoProd(a_i, b_j)$; \ $\dep(s, i+j, p)$; \ $\dep(s, i+j+1, e)$
+\EndFor
+\State \Return $R_n(s_0, \dots, s_n)$ \Comment{Algorithm~\ref{alg:renorm}}
+\Statex
+\Statex \textbf{procedure} $\dep(s, l, t)$: add $t$ to level $l$ and carry its error down
+\For{$m = l, \dots, n-1$} $(s_m, t) \gets \TwoSum(s_m, t)$
+\EndFor
+\State $s_n \gets \RN(s_n + t)$
+\end{algorithmic}
+\end{algorithm}
+
+Addition works the same way: level $i$ starts as $\TwoSum(a_i, b_i)$, and each error is carried down. The product and
+the sum of an expansion and a single floating-point number use the same scheme with fewer terms. The appendix lists
+all four operations.
+
+\subsection{Renormalization}
+
+The levels overlap: level $m$ can hold bits that belong in level $m - 1$. The renormalization $R_n$
+(Algorithm~\ref{alg:renorm}) turns $n + 1$ such terms into $n$ parts. Its first pass, VecSum~\cite{ORO05}, sweeps
+from the smallest term to the largest with $\TwoSum$, which leaves the sum exact. Its second pass sweeps from the
+largest term down and adds each term to an accumulator. When the addition is inexact, the rounded sum becomes the next
+part and the error becomes the new accumulator, so the step \emph{emits} a part. When the addition is exact, the sum
+stays in the accumulator.
+
+\nopagebreak
+\begin{algorithm}[H]
+\caption{Renormalization $R_n$}\label{alg:renorm}
+\begin{algorithmic}[1]
+\Require terms $c_0, \dots, c_N$ with $N \le n$, in any order of magnitude
+\Ensure $x = (x_0, \dots, x_{n-1})$
+\State $s \gets c_N$
+\For{$i = N-1, \dots, 0$} $(s, v_{i+1}) \gets \TwoSum(c_i, s)$ \Comment{VecSum}
+\EndFor
+\State $\acc \gets s$; \ $k \gets 0$; \ $x \gets (0, \dots, 0)$
+\For{$j = 1, \dots, N$}
+  \State $(t, e) \gets \TwoSum(\acc, v_j)$
+  \If{$e \ne 0$ \textbf{and} $k < n-1$} $x_k \gets t$; \ $k \gets k + 1$; \ $\acc \gets e$ \Comment{emit}
+  \Else{} $\acc \gets t$
+  \EndIf
+\EndFor
+\State $x_k \gets \acc$
+\end{algorithmic}
+\end{algorithm}
+
+The QD library uses $\FastTwoSum$ in both passes, and its authors note that the conditions under which this
+renormalization works are not known~\cite{HLB01}. Here both passes use $\TwoSum$. In the second pass, $\FastTwoSum$
+gives the same bits whenever $|\acc| \ge |v_j|$, which holds when the terms arrive in decreasing order. They need not:
+when an operand has a gap, a level can be larger than the level above it, and then only $\TwoSum$ is exact.
+
+\section{The results}
+
+The error of every operation has the same leading term: $u^n$ times the exact result.
+
+\begin{theorem}[Appendix, Theorem~\ref{thm:t3}]\label{thm:main}
+Let $Z$ be the exact sum or product of two expansions on the ladder, or of an expansion on the ladder and a
+floating-point number, and let $x$ be the computed $n$ parts. Then
+\[
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + \kappa_n\,u^{n+1}M,
+\]
+where $M = |a_0b_0|$ for a product and $M = |a_0| + |b_0|$ for a sum, and $\kappa_n$ is a constant that depends on
+the operation and on $n$.
+\end{theorem}
+
+The first term is the bound of rounding $Z$ to a format with $np$ bits. The second term is a correction. For a product,
+$M$ is within a factor of about $1 + 4u$ of $|Z|$, so the whole bound is relative. For a sum, $M$ is the size of the operands,
+and after cancellation it can be much larger than $|Z|$, as for any floating-point addition. Table~\ref{tab:summary}
+gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the correction grows with $n$.
+
+\nopagebreak
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+operation & error bound & input that reaches $u^8|Z|$ \\
+\midrule
+$a + b$ & $u^8|Z| + 2^{-33.0}u^8(|a_0| + |b_0|)$ & $(1, u, \dots, u^7) + (u^8, 0, \dots, 0)$ \\
+$a + f$ & $u^8|Z| + 2^{-42.4}u^8(|a_0| + |f|)$ & $(1, u, \dots, u^7) + u^8$ \\
+$a \times f$ & $u^8|Z| + 2^{-33.0}u^8|a_0f|$ & $f = 3$, Proposition~\ref{prop:sharp}(c) \\
+$a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ & $(1, u, \dots, u^6, 0) \times (1, 0, \dots, 0, u^7)$ \\
+$a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\
+$\sqrt a$ & $3.00004\,u^8|Z|$ & not known \\
+\bottomrule
+\end{tabular}
+\caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
+ladder and a floating-point number $f$. $Z$ is the exact result.}
+\label{tab:summary}
+\end{table}
+
+\nopagebreak
+\begin{table}[H]
+\centering
+\begin{tabular}{rccccc}
+\toprule
+$n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
+\midrule
+2 & $2^{-106}$ & $2^{-48.5}$ & $2^{-48.5}$ & $2^{-49.2}$ & $2^{-45.9}$ \\
+4 & $2^{-212}$ & $2^{-43.8}$ & $2^{-43.8}$ & $2^{-46.6}$ & $2^{-37.3}$ \\
+8 & $2^{-424}$ & $2^{-33.0}$ & $2^{-33.0}$ & $2^{-42.4}$ & $2^{-15.1}$ \\
+12 & $2^{-636}$ & $2^{-19.6}$ & $2^{-19.6}$ & $2^{-38.4}$ & $2^{12.5}$ \\
+\bottomrule
+\end{tabular}
+\caption{The second term of Theorem~\ref{thm:main} relative to the first, $\kappa_nu$, in binary64. The
+multiplication's constant grows like $n(n!)^2$, and from eleven parts its second term is the larger one.}
+\label{tab:main}
+\end{table}
+
+\begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t7}]\label{thm:divsqrt}
+For expansions on the ladder, long division with $n+1$ quotient terms errs by at most $(u^n + K_nu^{n+1})|a/b|$, with
+$K_8u = 2^{-25.5}$ and $K_nu < 1$ up to $n = 13$ in binary64. The square root by four Newton steps errs by at most
+$3.00004\,u^8\sqrt a$ at $n = 8$.
+\end{theorem}
+
+The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
+so is a sum whose operands' leading parts have one sign (Corollary~\ref{cor:closure}), so the bounds apply at every
+step of such a computation. A
+subtraction of nearly equal values can leave the ladder, and a computation that cancels needs its own analysis, as
+the division's remainders receive in the appendix.
+
+\section{A worked example}\label{sec:example}
+
+The bound $u^n|Z|$ is reached by simple inputs. Take $n = 3$ and multiply
+\[
+a = (1,\ u,\ 0), \qquad b = (1,\ 0,\ u^2).
+\]
+The exact product is $(1 + u)(1 + u^2) = 1 + u + u^2 + u^3$. Every partial product is a power of $u$ and exact, so
+Algorithm~\ref{alg:mul} fills the levels with $1, u, u^2, u^3$, one power each. The renormalization then runs as
+follows.
+\begin{center}
+\begin{tabular}{clll}
+\toprule
+step & $\TwoSum(\acc, v_j)$ & rounded sum and error & action \\
+\midrule
+1 & $1 + u$ & $1$, error $u$ & emit $x_0 = 1$ \\
+2 & $u + u^2$ & $u$, error $u^2$ & emit $x_1 = u$ \\
+3 & $u^2 + u^3$ & $u^2$, error $u^3$ & last part, keep $x_2 = u^2$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Each sum is a tie, exactly halfway between two floating-point numbers, and ties go to the even neighbor, which is the
+power of $u$. The result is $(1, u, u^2)$, and the last error $u^3$ has nowhere to go. So
+\[
+\Bigl|Z - \sum_k x_k\Bigr| = u^3 = u^3|Z|\,(1 - O(u)).
+\]
+The loss is the algorithm's, not the format's: the three binary64 numbers $(1 + 2u,\ -(u - u^2),\ u^3)$ add up to $Z$
+exactly. On this input, rounding ties away from zero returns that exact split.
+
+The same construction works for every $n$, for each operation except the square root.
+
+\begin{proposition}[Appendix, Proposition~\ref{prop:sharp}]\label{prop:worst}
+The product of $(1, u, \dots, u^{n-2}, 0)$ and $(1, 0, \dots, 0, u^{n-1})$ for $n \ge 3$, the sum of $(1, u, \dots,
+u^{n-1})$ and $(u^n, 0, \dots, 0)$, and the quotient of $(1, 0, \dots, 0)$ by $(-1, u, 0, \dots, 0)$ each return $\pm(1,
+u, \dots, u^{n-1})$, and so err by $u^n|Z|$ up to a factor $1 - O(u)$. The product with a floating-point number has a
+similar input.
+\end{proposition}
+
+Random inputs never come near this. At $n = 8$ in binary64, random operands give errors below $0.01\,u^8|Z|$ for every
+operation in multidouble's tests. The error is about half an ulp of the result's last part, and a random result's last
+part is far smaller than the ladder allows. Multidouble's octo-double~\cite{md} returns exactly $\pm(1, u, \dots, u^7)$
+on the product, sum and quotient inputs.
+
+\section{Why the bounds hold}
+
+\paragraph{The renormalization loses only at its last step.} Each step of the second pass either keeps the sum exactly
+in the accumulator or emits a part and carries the exact error. So nothing is lost until all $n$ parts are filled. Only
+the last step can lose its error, and only when every step before it emitted a part, as in the example above. That
+error is the last of a chain of $n$ rounding errors, each at most $u$ times the one before, which gives the factor
+$u^n$.
+
+\begin{theorem}[Appendix, Theorem~\ref{thm:t1}]\label{thm:renorm}
+For $n$ or fewer terms in any order, the renormalization is exact. For $n + 1$ terms it loses at most
+$u^n|v_0| + \sum_{j=1}^{n}u^{n+1-j}|v_j|$, where $v$ is VecSum's output, and this is attained.
+\end{theorem}
+
+Earlier analyses of renormalization assumed that the terms arrive in decreasing order and do not
+overlap~\cite{JMMP16,BJMP17,FMP19}. Theorem~\ref{thm:renorm} needs neither, because $\TwoSum$ is exact for terms in any
+order. With $\FastTwoSum$ alone, the same pass can drop terms when an operand has a gap: at $n = 8$, terms of
+relative size $2^{-325}$. The same failure has been seen elsewhere. Kouya~\cite{Kouya26} gives an input whose VecSum
+output is out of order, so that a following $\FastTwoSum$ chain drops a term. The Universal library found its
+quad-double addition losing accuracy when QD's renormalization received overlapping terms~\cite{universal}.
+
+\paragraph{The levels stay small.} The second term of Theorem~\ref{thm:main} comes from bounding each level. Every
+carry out of a level is at most $u$ times what the level holds, so level $m$ stays of size about $u^m|a_0b_0|$, up to
+a factor that counts the $\TwoSum$s it went through, $m(m+1)$ at level $m$ of the multiplication. The carries feed back
+into the levels' sizes, which gives a recursion for the bounds (Lemma~\ref{lem:l} and Theorem~\ref{thm:t2}). The
+dropped products of order above $n$ are bounded directly. With level $m$ at most $L_mu^mM$,
+Theorem~\ref{thm:renorm} gives Theorem~\ref{thm:main}. The division and the square root follow by carrying a bound on
+each part through every step (Lemma~\ref{lem:g}).
+
+\section{Consequences and limits}
+
+\begin{itemize}
+\item \textbf{Testing.} A library tested only on random inputs is not tested against $u^n$. At $n = 8$, random
+  errors stay below $0.01\,u^8|Z|$. The inputs of Proposition~\ref{prop:worst} reach the bound exactly and make sharp tests.
+\item \textbf{Renormalization.} The second pass should use $\TwoSum$, or $\FastTwoSum$ after a test that
+  $|\acc| \ge |v_j|$, which gives the same bits.
+\item \textbf{Many parts.} The multiplication's correction grows like $n(n!)^2$. Beyond ten parts in binary64 the
+  bound still holds, but it is no longer close to $u^n$.
+\item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
+  far below the one above it can make a product of two small parts underflow.
+\item \textbf{Open questions.} The second-order constants come from triangle inequalities and are not claimed to be
+  tight. Whether the square root's constant 3 is reached is open. Sums of products accumulated in levels, as
+  dot-product kernels do, are not covered.
+\end{itemize}
+
+\section{Computations}
+
+The constants were evaluated in exact rational arithmetic (\texttt{constants.py}, \texttt{div\_consts.py},
+\texttt{sqrt\_consts.py}). A reviewer who had not seen the checks recomputed them from the definitions with separate
+code, and the values agree to the digits given.
+
+Every statement was also tested by an independent emulator, written from multidouble's source without access to the
+proofs. It reproduces multidouble's octo-double bit for bit on 10,000 inputs of each operation. It ran the algorithms
+in exact arithmetic at precisions 5 to 10 with 5 to 8 parts, over exhaustive families of ladders, gaps, zero parts,
+cancelling pairs and shuffled orders, and at random and by hill climbing, about 37 million renormalizations in all,
+and at $p = 53$. No statement failed. The bounds of Theorem~\ref{thm:renorm} and Proposition~\ref{prop:worst} were
+reached with ratio 1, and each check fired on a halved bound or a deliberately broken algorithm. The example of
+Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}).
+
+Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
+meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}.
+
+\section*{How this work was done}
+
+Nathan Moinvaziri posed the problem and directed the work. Claude, an AI model made by Anthropic, drafted the
+statements and proofs. Two further Claude instances checked them independently: one refereed the proofs and the prior
+work, and the other tested every statement in exact arithmetic without reading the proofs.
+
+\clearpage
+\appendix
+\input{expansion-error-bounds-appendix}
+
+\begin{thebibliography}{99}
+\bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
+renormalization algorithm. \emph{ITP 2017}, LNCS 10499, 98--113, 2017. doi:10.1007/978-3-319-66107-0\_7.
+\bibitem{Dekker71} T. J. Dekker. A floating-point technique for extending the available precision. \emph{Numer.
+Math.} 18(3), 224--242, 1971. doi:10.1007/BF01397083.
+\bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
+68(11), 1573--1583, 2019. doi:10.1109/TC.2019.2918451.
+\bibitem{HLB01} Y. Hida, X. S. Li, D. H. Bailey. Algorithms for quad-double precision floating point arithmetic.
+\emph{ARITH-15}, 155--162, 2001. doi:10.1109/ARITH.2001.930115.
+\bibitem{JMMP16} M. Joldes, O. Marty, J.-M. Muller, V. Popescu. Arithmetic algorithms for extended precision using
+floating-point expansions. \emph{IEEE Trans. Comput.} 65(4), 1197--1210, 2016. doi:10.1109/TC.2015.2441714.
+\bibitem{JMP17} M. Joldes, J.-M. Muller, V. Popescu. Tight and rigorous error bounds for basic building blocks of
+double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), Article 15res, 2017. doi:10.1145/3121432.
+\bibitem{Kouya26} T. Kouya. A branch-free general renormalization scheme for pair arithmetic and its performance
+evaluation. arXiv:2609.35844, 2026.
+\bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust.
+\url{https://github.com/nmoinvaz/multidouble}.
+\bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using
+floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
+\bibitem{ORO05} T. Ogita, S. M. Rump, S. Oishi. Accurate sum and dot product. \emph{SIAM J. Sci. Comput.} 26(6),
+1955--1988, 2005. doi:10.1137/030601818.
+\bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
+132--143, 1991. doi:10.1109/ARITH.1991.145549.
+\bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request
+1321, ``compress the expansion before renormalizing addition'', 2026.
+\url{https://github.com/stillwater-sc/universal/pull/1321}.
+\bibitem{Zhang25} D. K. Zhang. \emph{Fast Algorithms for High-Precision Floating-Point Arithmetic}. PhD dissertation,
+Stanford University, 2025. \url{https://purl.stanford.edu/gt930wy1453}.
+\end{thebibliography}
+
+\end{document}
