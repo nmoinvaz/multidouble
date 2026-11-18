@@ -217,27 +217,29 @@ A proven bound holds for every input that meets its hypotheses: for the octo-dou
 |xᵢ| ≤ (2u)ⁱ|x₀| and no underflow in the run's products, and for the double-double a double-word. For exp they also need
 a finite result, eˣ below f64::MAX + ulp(f64::MAX)/2 (x below about ln f64::MAX), above which exp returns +inf as
 `f64::exp` does; ln's hold for every positive finite x. The double-double add's is Theorem 3.1 of Joldes, Muller and
-Popescu (2017), `fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022) proved formally, and the double-double
-square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it is. The
-octo-double ones are in [the paper](paper/expansion-error-bounds.pdf), where the add, multiply, divide and square root
-each have a second term at most 2⁻¹⁵ of the first. The exp and ln rows give the relative coefficient alone: their bounds
-also have an absolute term, given below, which is larger only for tiny results and near x = 1. The other bounds are the
-thresholds the tests check.
+Popescu (2017)[^jmp17], `fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022)[^mr22] proved formally, and
+the double-double square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023)[^llmpr23], whose
+Algorithm 8 it is. The octo-double ones are in [the paper](paper/expansion-error-bounds.pdf), where the add, multiply,
+divide and square root each have a second term at most 2⁻¹⁵ of the first. The exp and ln rows give the relative
+coefficient alone: their bounds also have an absolute term, given below, which is larger only for tiny results and near
+x = 1. The other bounds are the thresholds the tests check.
 
-- The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number
-  for `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most
-  (C_T + 5|k|·2⁻¹²¹⁷/|sin x cos x|)|tan x|, with C and C_T in the table and k the multiple of π/2 removed, so that
-  5|k|·2⁻¹²¹⁷ < 2⁻¹¹⁶³. The theorem needs a run without underflow, and the functions scale small reduced arguments by
-  powers of two so that every reduced argument from the early return's threshold up (2⁻²¹² at eight parts) gives one,
-  as the paper checks at eight parts in every binade, unless a part of x lies far below the ladder. The reduction is exact up to π/2's 1216 fraction bits, so the
-  bounds hold next to the multiples of π/2 too. Beyond 2⁵² the functions return NaN. The double-double bounds follow
-  from the published bounds of the double-word algorithms they use (DWTimesDW3, which Muller and Rideau (2022) bound
-  by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the paper's bounds of each operation,
-  and the tests compare all three types against a 2200-bit reference. In the default test run, random and constructed
-  arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.82 u² for the double-double sin
-  and cos and 4.07 u² for its tan, 1.24 u⁴ and 7.18 u⁴ for the quad-double ones, and 0.48 u⁸ for the octo-double
-  ones, the early return's x²/2 just below 2⁻²¹², below 0.01 u⁸ for every other kind of argument
-  (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
+- The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number for
+  `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most (C_T + 5|k|·2⁻¹²¹⁷/|sin x
+  cos x|)|tan x|, with C and C_T in the table and k the multiple of π/2 removed, so that 5|k|·2⁻¹²¹⁷ < 2⁻¹¹⁶³. The
+  theorem needs a run without underflow, and the functions scale small reduced arguments by powers of two so that every
+  reduced argument from the early return's threshold up (2⁻²¹² at eight parts) gives one, as the paper checks at eight
+  parts in every binade, unless a part of x lies far below the ladder. The reduction is exact up to π/2's 1216 fraction
+  bits, so the bounds hold next to the multiples of π/2 too. `scripts/trig_tables.py` computes those bits in exact
+  integer arithmetic from Machin's formula[^machin], π/4 = 4 arctan(1/5) − arctan(1/239), and checks them against
+  Gauss's, π/4 = 12 arctan(1/18) + 8 arctan(1/57) − 5 arctan(1/239). Beyond 2⁵² the functions return NaN. The
+  double-double bounds follow from the published bounds of the double-word algorithms they use[^jmp17] (DWTimesDW3,
+  which Muller and Rideau (2022)[^mr22] bound by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones
+  from the paper's bounds of each operation, and the tests compare all three types against a 2200-bit reference. In the
+  default test run, random and constructed arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at
+  most 1.82 u² for the double-double sin and cos and 4.07 u² for its tan, 1.24 u⁴ and 7.18 u⁴ for the quad-double ones,
+  and 0.48 u⁸ for the octo-double ones, the early return's x²/2 just below 2⁻²¹², below 0.01 u⁸ for every other kind of
+  argument (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
 - The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
   promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
   measured on the residual of its quotient.
@@ -247,28 +249,29 @@ thresholds the tests check.
   for the double-double add, multiply and divide.
 - The quad-double column is for the default operators `+`, `*` and `/`. The more accurate `ieee_add`, `accurate_mul` and
   `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴. The quad-double types use the QD library's algorithms (Hida, Li and Bailey,
-  ARITH-15, 2001) with three repairs: the accurate add lost a term when all parts are read with three emitted, and its
-  accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy far from
-  1, now scales its argument by a power of four.
+  ARITH-15, 2001)[^hlb01] with three repairs: the accurate add lost a term when all parts are read with three emitted,
+  and its accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy
+  far from 1, now scales its argument by a power of four.
 - The sloppy multiply has no level below the eighth part. Its error is the 64 roundings at that level and the dropped
   products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30, with
   the constant from `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random
   operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
-- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, sums a Taylor polynomial
-  whose degree falls with the reduced argument, and squares in the form t ← 2t + t², as the QD library's source does; ln
-  takes one Newton step on exp from the double-double logarithm, which starts from `explog`'s own binary64 logarithm,
+- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, with ln 2 split into a
+  head whose multiples are exact and a tail, as Cody and Waite do[^cw80], sums a Taylor polynomial whose degree falls
+  with the reduced argument, and squares in the form t ← 2t + t², as the QD library's exp does; ln takes one Newton step
+  on exp, as its log does[^qd], from the double-double logarithm, which starts from `explog`'s own binary64 logarithm,
   within a proven 5.915 u. The double-double ones use the double-word operations whose bounds are published (Joldes,
-  Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved formally, rather than `*`). The
-  octo-double bounds are proved in the paper (Theorems 39 and 41), the double-double ones in its Proposition 43 and the
-  start's in its Lemma 42. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall
-  below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the
-  octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products
-  of small factors are formed from the factors scaled below 2, and an emulator with every product hooked finds none
-  below the normal range at any binade of the argument, the closest 48 binades above it (`paper/explog_bits.py scan`); a
-  part far below the one above it can make one underflow, as for the other operations. `paper/explog_consts.py` computes
-  every constant. The ln column is relative to |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per
-  category give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double,
-  and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included
+  Muller and Popescu, 2017[^jmp17]; the product DWTimesDW2, whose bound Muller and Rideau proved formally[^mr22], rather
+  than `*`). The octo-double bounds are proved in the paper (Theorems 39 and 41), the double-double ones in its
+  Proposition 43 and the start's in its Lemma 42. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the
+  result's parts that fall below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the
+  double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only where |ln
+  x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled below 2, and an emulator with
+  every product hooked finds none below the normal range at any binade of the argument, the closest 48 binades above it
+  (`paper/explog_bits.py scan`); a part far below the one above it can make one underflow, as for the other operations.
+  `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|. Against a 1700-bit reference,
+  4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.55 u⁴ and
+  0.58 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included
   (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
@@ -334,3 +337,21 @@ Jacobian at the speed of SIMD f64 code, and at large D, where rounding is amplif
 
 [BSD 3-Clause](LICENSE), the license of the QD library whose quad-double algorithms `src/qd.rs` and `src/qv.rs`
 follow, and `src/od.rs` carries to eight parts. QD's own notice is kept in [LICENSE-QD](LICENSE-QD).
+
+[^jmp17]: M. Joldes, J.-M. Muller, V. Popescu, "Tight and rigorous error bounds for basic building blocks of
+    double-word arithmetic", ACM Trans. Math. Softw. 44(2), 2017,
+    [doi:10.1145/3121432](https://doi.org/10.1145/3121432).
+[^mr22]: J.-M. Muller, L. Rideau, "Formalization of double-word arithmetic, and comments on 'Tight and rigorous error
+    bounds for basic building blocks of double-word arithmetic'", ACM Trans. Math. Softw. 48(1), 2022,
+    [doi:10.1145/3484514](https://doi.org/10.1145/3484514).
+[^llmpr23]: V. Lefèvre, N. Louvet, J.-M. Muller, J. Picot, L. Rideau, "Accurate calculation of Euclidean norms using
+    double-word arithmetic", ACM Trans. Math. Softw. 49(1), 2023, [doi:10.1145/3568672](https://doi.org/10.1145/3568672).
+[^hlb01]: Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating point arithmetic", 15th IEEE
+    Symposium on Computer Arithmetic (ARITH-15), 155–162, 2001,
+    [doi:10.1109/ARITH.2001.930115](https://doi.org/10.1109/ARITH.2001.930115).
+[^qd]: Y. Hida, X. S. Li, D. H. Bailey, the QD library, `exp` and `log` in `src/dd_real.cpp` and `src/qd_real.cpp`,
+    [github.com/BL-highprecision/QD](https://github.com/BL-highprecision/QD).
+[^cw80]: W. J. Cody, Jr., W. Waite, *Software Manual for the Elementary Functions*, Prentice-Hall, Englewood Cliffs,
+    NJ, 1980, ISBN 0-13-822064-6.
+[^machin]: W. Jones, *Synopsis Palmariorum Matheseos*, J. Wale, London, 1706, p. 263, which gives John Machin's series
+    for π.
