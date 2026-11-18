@@ -245,7 +245,7 @@ does [[6]](#ref-qd), from a binary64 logarithm of its own, proved within 5.915 u
 `ln`. The functions scale small arguments by powers of two so that no product underflows, unless a part of x lies far
 below the ladder. The paper proves the octo-double bounds in Theorems 34, 39 and 41.
 
-The largest errors the tests measured, against exact arithmetic or a reference of 1700 to 2200 bits:
+The largest errors the tests measured on generated inputs, against exact arithmetic or a reference of 1700 to 2200 bits:
 
 | Operation | double-double | quad-double | octo-double |
 |---|---|---|---|
@@ -255,8 +255,9 @@ The largest errors the tests measured, against exact arithmetic or a reference o
 
 The double-double add is measured relative to the result, the quad-double `+` and the octo-double add's second term
 against |a| + |b|, and the double-double divide on the residual of its quotient. The octo-double add, multiply and
-divide reach their bounds on the paper's worst-case inputs, and random inputs stay far inside. The octo-double sin, cos
-and tan reach 0.48 u⁸ only just below 2⁻²¹², from the early return's x²/2, and stay below 0.01 u⁸ elsewhere.
+divide reach their bounds on the paper's worst-case inputs, its constructed inputs make the square root, sin, cos, tan,
+exp and ln err by about u⁸, and random inputs stay far inside. The octo-double sin, cos and tan reach 0.48 u⁸ on
+generated inputs only just below 2⁻²¹², from the early return's x²/2, and stay below 0.01 u⁸ elsewhere.
 
 The quad-double types use the QD library's algorithms (Hida, Li and Bailey, ARITH-15, 2001) [[7]](#ref-hlb01) with three
 repairs, two to the accurate add and one to the square root, which now scales its argument by a power of four.

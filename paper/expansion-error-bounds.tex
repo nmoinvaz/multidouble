@@ -302,12 +302,13 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 \caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
 ladder and a floating-point number $f$. $Z$ is the exact result. Each bound assumes no underflow inside the run; for
 $e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
-(A2$'$)).}
+(A2$'$)). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
+those of the others are in Table~\ref{tab:inputs}, each with its error as a multiple of $u^8|Z|$ (computed).}
 \label{tab:summary}
 \small
 \begin{tabular}{@{}ll@{}}
 \toprule
-operation & bound, and an input that reaches $u^8|Z|$ \\
+operation & bound, and an input with its error \\
 \midrule
 $a + b$ & $u^8|Z| + 2^{-33.0}u^8(|a_0| + |b_0|)$ \\
 & $(1, u, \dots, u^7) + (u^8, 0, \dots, 0)$ \\ \addlinespace
@@ -320,15 +321,15 @@ $a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ \\
 $a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ \\
 & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\ \addlinespace
 $\sqrt a$ & $3.00004\,u^8|Z|$ \\
-& not known \\ \addlinespace
+& Table~\ref{tab:inputs}: $(1 - 5u)\,u^8|Z|$ \\ \addlinespace
 $\sin x$, $\cos x$ & $3.17\,u^8|Z| + 5|k|2^{-1217}$, $|x_0| \le 2^{52}$ \\
-& not known \\ \addlinespace
+& Table~\ref{tab:inputs}: $0.999999995\,u^8|Z|$ and $1.00069\,u^8|Z|$ \\ \addlinespace
 $\tan x$ & $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)\,|Z|$ \\
-& not known \\ \addlinespace
+& Table~\ref{tab:inputs}: $1.00138\,u^8|Z|$ \\ \addlinespace
 $e^a$ & $3.661\,u^8|Z| + 2^{-1071}$ \\
-& not known \\ \addlinespace
+& Table~\ref{tab:inputs}: $(1 - 8.2u)\,u^8|Z|$ \\ \addlinespace
 $\ln a$ & $9.926\,u^8|Z| + 2^{-509}$ \\
-& not known \\
+& Table~\ref{tab:inputs}: $0.99998\,u^8|Z|$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -481,7 +482,8 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 
 \begin{itemize}
 \item \textbf{Testing.} A library tested only on random inputs is not tested against $u^n$. At $n = 8$, random
-  errors stay below $0.01\,u^8|Z|$. The inputs of Proposition~\ref{prop:worst} reach the bound exactly and make sharp tests.
+  errors stay below $0.01\,u^8|Z|$. The inputs of Proposition~\ref{prop:worst} reach the bound exactly and make sharp
+  tests, and those of Table~\ref{tab:inputs} reach about $u^8|Z|$ for the square root and the elementary functions.
 \item \textbf{Renormalization.} The second pass should use $\TwoSum$, or $\FastTwoSum$ after a test that
   $|\acc| \ge |v_j|$, which gives the same bits.
 \item \textbf{Many parts.} The multiplication's correction grows like $n(n!)^2$. Beyond ten parts in binary64 the
@@ -499,8 +501,11 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 \item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
   far below the one above it can make a product of two small parts underflow.
 \item \textbf{Open questions.} The second-order constants come from triangle inequalities and are not claimed to be
-  tight. Whether the square root's constant 3 is reached is open, and so is how close the accumulator's bound is to its
-  worst case, which the constructed inputs reach to within $2^{22}$.
+  tight. Constructed inputs make the square root err by $(1 - 5u)u^8|Z|$ and the sine, cosine, tangent, exponential
+  and logarithm by $0.99998$ to $1.00138$ times $u^8|Z|$ (Table~\ref{tab:inputs}), so the least leading constant of the
+  square root's bound lies between $1 - 5u$ and $3.00004$. Whether 3, or the functions' constants, are reached is open,
+  and so is how close the accumulator's bound is to its worst case, which the constructed inputs reach to within
+  $2^{22}$.
 \end{itemize}
 
 \section{Computations}
@@ -545,8 +550,15 @@ $2^{-509.17}$, is that of the earlier start, which the script's $2^{-509.08}$ no
 of step (3), the cases chosen by $U$, the scaled products and their losses, nor step (5) as it now stands, so the
 agreement is of the largest cases' digits, not of every step.
 
+The inputs of Table~\ref{tab:inputs} were checked from scratch (\texttt{table1\_inputs.py}): the emulator's results
+on them, the exact values enclosed by code that shares nothing with the algorithms (an integer square root, Taylor series
+of the sine and cosine in fixed point, and Python's correctly rounded decimal exp and ln at 1300 digits), the ratios of
+the errors to $u^8|Z|$, and multidouble's bits on the same inputs, which agree with the emulator's. Two controls drop
+every ratio far below its stated value: rounding ties away from zero, which breaks the chains of ties, and moving each
+input's leading part up by one ulp.
+
 Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
-meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}. They check the bounds of the exponential and
+meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst} and Table~\ref{tab:inputs}. They check the bounds of the exponential and
 the logarithm the same way against a reference accurate to $2^{-1600}$, which is checked against planted truth.
 
 \section*{How this work was done}
