@@ -10,7 +10,7 @@
 //! it, and lanes whose error is zero keep accumulating, as `od::renorm_scalar` does with its branch.
 //!
 //! `ODotAcc` is the 8-lane twin of `od::OdAcc`: each product's nine levels (`od::alg::expand`) added into nine
-//! running levels with two-sums, the last level plain, so a dot product errs by little more than its `finish`.
+//! running levels with two-sums, the last level plain. Its error bound is `od::OdAcc`'s.
 //!
 //! The large operations run inside `Simd::vectorize` and are not forced inline (an octo-double product is about a
 //! thousand lane operations), so a copy the compiler keeps out of line still runs with the backend's instructions.
