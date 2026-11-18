@@ -1,7 +1,7 @@
 //! Double-word operations of M. Joldes, J.-M. Muller, V. Popescu, "Tight and rigorous error bounds for basic building
 //! blocks of double-word arithmetic", ACM Trans. Math. Softw. 44(2), 2017, doi:10.1145/3121432, written once over the
-//! limb type (`f64` for the scalar double-double, `V8` for its lanes), so that the scalar and lane paths perform the same
-//! operations. A double-word is (hi, lo), and u = 2^-53.
+//! limb type (`f64` for the scalar double-double, `V8` for its lanes), so that the scalar and lane paths perform the
+//! same operations. A double-word is (hi, lo), and u = 2^-53.
 //!
 //! The error-free transformations are this module's own, with no mutation hooks: `od::two_sum` carries one, which
 //! would reach `DD::exp`. The two-product's error is `Limb::fms`, as in `dd::two_prod` and `dv::two_prod`.
