@@ -351,7 +351,8 @@ pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> (
     // a 2^-47 from 0.7854 decides whether it corrects, and round(RN(a c)) is its k_2 where RN(a c) is 2^-46 from 1.5
     let v0 = d[0].add(d[1]);
     let a0 = v0.abs();
-    let fix = a0.ge(T::splat(R_TH + p2(-47)));
+    // the lanes with k = 0, whose limbs are discarded, never take the branch below
+    let fix = T::and(a0.ge(T::splat(R_TH + p2(-47))), k.abs().gt(T::splat(0.5)));
     let t = v0.mul(T::splat(tables::TWO_OVER_PI));
     let half = t.abs().sub(T::splat(1.5)).abs().ge(T::splat(p2(-46)));
     let corr = T::and(fix, T::and(T::splat(2.8).gt(a0), half));
