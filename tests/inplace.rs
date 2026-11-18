@@ -5,10 +5,11 @@
 //! `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`,
 //! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`, and the split sums `cs_par`, `cs_range_par` and `cs_w_par`,
 //! against `cs`, `cs_range` and `cs_w`; the order-k sums one lane vector at a time, `cs_lane_at` and `cs_w_lane_at`,
-//! and split, `cs_at_par`, `cs_range_at_par` and `cs_w_at_par`, against `cs_at`, `cs_range_at` and `cs_w_at`, on
-//! random inputs and on jets holding signed zeros, zero parts, extreme magnitudes, infinities and NaNs. Each check has
-//! a control that must fail, the same comparison of a sum with two of its terms swapped, for the field sums also of a
-//! sum without its last term, and for the split order-k sums of a sum with one term moved by an ulp.
+//! and split, `cs_at_par`, `cs_range_at_par` and `cs_w_at_par`, against `cs_at`, `cs_range_at` and `cs_w_at`, and
+//! `cs_w_at` against its terms' whole jets weighted, on random inputs and on jets holding signed zeros, zero parts,
+//! extreme magnitudes, infinities and NaNs. Each check has a control that must fail, the same comparison of a sum with
+//! two of its terms swapped, for the field sums also of a sum without its last term, for the split order-k sums of a
+//! sum with one term moved by an ulp, and for the weighted ones of coefficient k left unweighted.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
@@ -745,12 +746,37 @@ fn indices(n: usize) -> Vec<usize> {
     js
 }
 
+/// `cs_w_at` with each term's whole jet weighted (`Lane::mulf`, every coefficient) rather than its coefficients 0..=k
+/// (`Lane::mulf_upto`): coefficient k of the products into a copy of out, lane vector by lane vector, in `cs_w_at`'s
+/// order (`Lane::acc_at`, `fin_at`)
+#[allow(clippy::too_many_arguments)]
+fn w_whole<T: Gen>(
+    out: &Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+    k: usize,
+) -> Fl<T, B> {
+    let mut o = *out;
+    for b in 0..B {
+        let mut a = T::acc0();
+        for i in lo..=hi {
+            T::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[j - i].0[b], k);
+        }
+        T::fin_at(&a, k, &mut o.0[b]);
+    }
+    o
+}
+
 /// The order-k sums at every coefficient k of the jet variable (k = 0 alone on the other lanes), for the series indices
 /// `indices(split_terms)` with the ranges 0..=j, j/3..=j - j/4 and an empty one, each written over a random destination:
 /// `cs_lane_at` and `cs_w_lane_at` against lane vector b of `cs_range_at` and `cs_w_at`, and `cs_at_par`,
 /// `cs_range_at_par` and `cs_w_at_par` against `cs_at`, `cs_range_at` and `cs_w_at`, which must split some sums of
-/// every jet lane and none of the other lanes. Control: every split range sum with x[lo] moved by one ulp in its
-/// leading part (`ulp_moved`) differs from the reference.
+/// every jet lane and none of the other lanes, and `cs_w_at` against the whole weighted jets (`w_whole`). Control:
+/// every split range sum with x[lo] moved by one ulp in its leading part (`ulp_moved`) differs from the reference.
 fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
     let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
     let n = split_terms::<T>();
@@ -758,7 +784,7 @@ fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
     let y: Vec<Fl<T, B>> = (0..n).map(|_| field(r)).collect();
     let (x, y) = (&x[..], &y[..]);
     let w = |i: usize| (2 * i + 1) as f64;
-    let (mut checks, mut split, mut controls, mut caught) = (0, 0, 0, 0);
+    let (mut checks, mut split, mut controls, mut caught, mut whole) = (0, 0, 0, 0, 0);
     for j in indices(n) {
         for k in 0..T::NJ.max(1) {
             let bg = field(r);
@@ -772,6 +798,12 @@ fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
                 let (mut want, mut want_w) = (bg, bg);
                 cs_range_at(&mut want, x, y, j, lo, hi, k);
                 cs_w_at(&mut want_w, x, y, j, lo, hi, w, k);
+                assert_eq!(
+                    fl_bits(&want_w),
+                    fl_bits(&w_whole(&bg, x, y, j, lo, hi, w, k)),
+                    "{be} {name}: cs_w_at against the whole weighted jets, j {j}, {lo}..={hi}, k {k}"
+                );
+                whole += 1;
                 for b in 0..B {
                     let mut o = bg.0[b];
                     cs_lane_at(&mut o, b, x, y, j, lo, hi, k);
@@ -836,8 +868,8 @@ fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
         "{be} {name}: control: a split order-k sum with a term moved by an ulp has the reference's bits"
     );
     println!(
-        "{be} {name}: {checks} order-k lane and split sums matched, {split} of them split; the control caught {caught} \
-         of {controls} terms moved by an ulp"
+        "{be} {name}: {checks} order-k lane and split sums matched, {split} of them split, {whole} weighted ones the \
+         whole weighted jets'; the control caught {caught} of {controls} terms moved by an ulp"
     );
 }
 
@@ -888,8 +920,8 @@ fn fl_bits_nan<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
         .collect()
 }
 
-/// The split order-k sums against `cs_at`, `cs_range_at` and `cs_w_at` on jets with special values (`edge_jet`), finite
-/// and with infinities and NaNs, at every coefficient k and series index `indices(split_terms)` with the ranges 0..=j and
+/// The split order-k sums against `cs_at`, `cs_range_at` and `cs_w_at`, and `cs_w_at` against the whole weighted jets
+/// (`w_whole`), on jets with special values (`edge_jet`), finite and with infinities and NaNs, at every coefficient k and series index `indices(split_terms)` with the ranges 0..=j and
 /// j/3..=j - j/4, each written over a destination with special values, at the three levels of `edge_jet`. Control:
 /// every split range sum of level 0 with the terms x[lo] and y[j - lo] made regular differs from the reference when
 /// x[lo] is moved by one ulp in its leading part (`ulp_moved`). At the other levels a product of 2^1000 or an infinity
@@ -898,7 +930,7 @@ fn fl_bits_nan<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
 fn edge_at_sums<T: Gen>(seed: u64, be: &str, name: &str) {
     let mut r = Rng(seed);
     let w = |i: usize| (2 * i + 1) as f64;
-    let (mut checks, mut split, mut nan, mut controls, mut caught) = (0, 0, 0, 0, 0);
+    let (mut checks, mut split, mut nan, mut controls, mut caught, mut whole) = (0, 0, 0, 0, 0, 0);
     for level in 0..3 {
         let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| edge_jet::<T>(r, level)));
         let n = split_terms::<T>();
@@ -924,6 +956,12 @@ fn edge_at_sums<T: Gen>(seed: u64, be: &str, name: &str) {
                         fl_bits_nan(&want_w),
                         "{be} {name}: cs_w_at_par, j {j}, {lo}..={hi}, k {k}"
                     );
+                    assert_eq!(
+                        fl_bits_nan(&want_w),
+                        fl_bits_nan(&w_whole(&bg, &x, &y, j, lo, hi, w, k)),
+                        "{be} {name}: cs_w_at against the whole weighted jets, j {j}, {lo}..={hi}, k {k}"
+                    );
+                    whole += 1;
                     if lo == 0 {
                         let mut out = bg;
                         cs_at_par(&mut out, &x, &y, j, k);
@@ -965,8 +1003,8 @@ fn edge_at_sums<T: Gen>(seed: u64, be: &str, name: &str) {
         controls - caught
     );
     println!(
-        "{be} {name}: {checks} order-k sums of special values matched, {split} of them split, {nan} with NaNs; the \
-         control changed {caught} of {controls} sums"
+        "{be} {name}: {checks} order-k sums of special values matched, {split} of them split, {nan} with NaNs, {whole} \
+         weighted ones the whole weighted jets'; the control changed {caught} of {controls} sums"
     );
 }
 
@@ -1075,4 +1113,54 @@ fn control_split_at_sum_moved_by_an_ulp_is_caught() {
     run::<native::Jet<5>>("Jet<5>");
     run::<native::QJet<5>>("QJet<5>");
     run::<native::OJet<5>>("OJet<5>");
+}
+
+/// Control for the weighted order-k sums: with `Lane::mulf_upto` leaving coefficient k unweighted
+/// (`dual::mutate::MULF_UPTO`), `cs_w_at` differs from the whole weighted jets (`w_whole`) at every coefficient k of
+/// `Jet<5>`, `QJet<5>`, `OJet<5>` and `Counted<OJet<5>>`, and without the mutation it is theirs again. A mutation is
+/// selected per thread, which a split sum's tasks do not see, so the control runs the serial sum.
+#[cfg(feature = "mutate")]
+#[test]
+fn control_weighted_sum_upto_k_is_caught() {
+    use multidouble::dual::mutate;
+    use multidouble::native;
+    fn run<T: Gen>(name: &str) {
+        let mut r = Rng(402);
+        let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
+        let x: Vec<Fl<T, B>> = (0..ORDERS).map(|_| field(&mut r)).collect();
+        let y: Vec<Fl<T, B>> = (0..ORDERS).map(|_| field(&mut r)).collect();
+        let w = |i: usize| (2 * i + 1) as f64;
+        let j = ORDERS - 1;
+        let mut caught = 0;
+        for k in 0..T::NJ {
+            let bg = field(&mut r);
+            let want = w_whole(&bg, &x, &y, j, 0, j, w, k);
+            let (mut out, mut again) = (bg, bg);
+            mutate::set(mutate::MULF_UPTO);
+            cs_w_at(&mut out, &x, &y, j, 0, j, w, k);
+            mutate::set(0);
+            caught += (fl_bits(&out) != fl_bits(&want)) as usize;
+            cs_w_at(&mut again, &x, &y, j, 0, j, w, k);
+            assert_eq!(
+                fl_bits(&again),
+                fl_bits(&want),
+                "{name}: k {k}, the weighted sum without the mutation"
+            );
+        }
+        assert_eq!(
+            caught,
+            T::NJ,
+            "{name}: control: {} of {} weighted sums with coefficient k unweighted have the whole weighted jets' bits",
+            T::NJ - caught,
+            T::NJ
+        );
+        println!(
+            "{name}: the weighted order-k sums with coefficient k unweighted differ at {caught} of {} k",
+            T::NJ
+        );
+    }
+    run::<native::Jet<5>>("Jet<5>");
+    run::<native::QJet<5>>("QJet<5>");
+    run::<native::OJet<5>>("OJet<5>");
+    run::<Counted<native::OJet<5>>>("Counted<OJet<5>>");
 }
