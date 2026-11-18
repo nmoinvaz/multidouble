@@ -34,17 +34,17 @@ and a rounding error at level $n$, is at most $u$ times the new value of the lev
 be the largest $|s_m|$ up to the end of deposit $k$, and $G_m(k)$ the sum of the absolute carries out of level $m$
 (for $m = n$, of the rounding errors there) in deposits $1, \dots, k$, with $G_{-1} = 0$. Level $m$ holds what was put
 into it, deposits and carries from level $m-1$, minus what left it, so
-\[
-\hat S_m(k) \le \tau_m W + G_{m-1}(k) + G_m(k), \qquad G_m(k) \le (m+1)u\sum_{j \le k}\hat S_m(j) \le (m+1)uk\,\hat
-S_m(k).
-\]
+\begin{gather*}
+\hat S_m(k) \le \tau_m W + G_{m-1}(k) + G_m(k), \\
+G_m(k) \le (m+1)u\sum_{j \le k}\hat S_m(j) \le (m+1)uk\,\hat S_m(k).
+\end{gather*}
 Since $(m+1)uk \le (n+1)uK$, $\hat S_m(k) \le \beta(\tau_mW + G_{m-1}(k))$. We show $\hat S_m(j) \le S_m(j)$ for all
 $j$ by induction on $m$. For $m = 0$ it reads $\hat S_0 \le \beta\tau_0W$. For $m \ge 1$, by the hypothesis for
 $m - 1$ and $\sum_{j=1}^{k} j^{(r)} = k^{(r+1)}/(r+1)$,
-\[
-G_{m-1}(k) \le mu\,\beta W\sum_{l=0}^{m-1}\binom{m-1}{l}\tau_l(\beta u)^{m-1-l}\frac{k^{(m-l)}}{m-l} = W\sum_{l=0}^{m-1}
-\binom{m}{l}\tau_l\,\beta^{m-l}u^{m-l}k^{(m-l)},
-\]
+\begin{align*}
+G_{m-1}(k) &\le mu\,\beta W\sum_{l=0}^{m-1}\binom{m-1}{l}\tau_l(\beta u)^{m-1-l}\frac{k^{(m-l)}}{m-l} \\
+&= W\sum_{l=0}^{m-1}\binom{m}{l}\tau_l\,\beta^{m-l}u^{m-l}k^{(m-l)},
+\end{align*}
 and $\beta(\tau_mW + G_{m-1}(k)) = S_m(k)$. This is (a). For (b), every operation but the roundings at level $n$ is
 exact, so $E_{\rm lev}$ is the sum of those rounding errors, and $|E_{\rm lev}| \le G_n(K) \le (n+1)u\sum_{k \le K}
 S_n(k)$; the same sum identity and $\binom{n}{l}\frac{n+1}{n+1-l} = \binom{n+1}{l}$ give (b).
@@ -63,10 +63,10 @@ with $\bar E_{\rm lev}$ the bound of Lemma~\ref{lem:acc}(b) and $\Phi = \sum_{j=
 bound of Lemma~\ref{lem:g}(a) for the last ADDF of FINISH. The part bounds come from Lemma~\ref{lem:g}(b) along
 FINISH: $r^{(0)}$ has part bounds $(S_0(K), 0, \dots, 0)$, and the $l$-th ADDF takes those of $r^{(l-1)}$, the bound
 $S_l(K)$ of $s_l$, $\lambda_0$ the first part bound plus $S_l(K)$, and $\bar Z = \sum_{m \le l}S_m(K)$. In particular, for $Ku$ bounded away from $1/(n+1)$,
-\[
-\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + u\bigl(\tau_0\beta^{n+1}K^{(n+1)} + O(K^n)\bigr)\,u^nW, \qquad \tau_0 \le
-1 + u.
-\]
+\begin{gather*}
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + u\bigl(\tau_0\beta^{n+1}K^{(n+1)} + O(K^n)\bigr)\,u^nW, \\
+\tau_0 \le 1 + u.
+\end{gather*}
 \end{theorem}
 
 \begin{proof}

@@ -8,9 +8,10 @@ what it would return in the same format with an unbounded exponent range.
 \end{assumption}
 
 Write $\us = u/(1+u)$. Under (A2), for every real $z$,
-\begin{equation}\label{eq:rn}
-|\RN(z) - z| \le \us |z|, \qquad |\RN(z) - z| \le u\,|\RN(z)|, \qquad \frac{|z|}{1+u} \le |\RN(z)| \le (1+u)|z|.
-\end{equation}
+\begin{gather}
+|\RN(z) - z| \le \us |z|, \qquad |\RN(z) - z| \le u\,|\RN(z)|, \label{eq:rn} \\
+\frac{|z|}{1+u} \le |\RN(z)| \le (1+u)|z|. \nonumber
+\end{gather}
 The second inequality follows from the first, since $|z| \le |\RN(z)| + |\RN(z) - z|$ and $\us/(1-\us) = u$. The
 number of parts is $n \ge 2$. A sum whose upper limit is below its lower one is zero.
 
@@ -44,16 +45,16 @@ $\FastTwoSum(a, b)$ returns $s = \RN(a+b)$ and $e = \RN(b - \RN(s - a))$; $\TwoP
 On levels $s_0, \dots, s_n$, $\dep(s, l, t)$ sets $e \gets t$, then for $m = l, \dots, n-1$ performs $(s_m, e) \gets
 \TwoSum(s_m, e)$, and finally $s_n \gets \RN(s_n + e)$. The error moved from level $m$ to level $m+1$ is a \emph{carry}.
 
-\paragraph{VecSum.} For $c = (c_0, \dots, c_{N-1})$: $s \gets c_{N-1}$; for $i = N-2, \dots, 0$, $(s, v_{i+1}) \gets
+\paragraph{VecSum} For $c = (c_0, \dots, c_{N-1})$: $s \gets c_{N-1}$; for $i = N-2, \dots, 0$, $(s, v_{i+1}) \gets
 \TwoSum(c_i, s)$; then $v_0 \gets s$. We write $s_i$ for the value of $s$ after the step with index $i$, so $s_{N-1} =
 c_{N-1}$, $s_i = \RN(c_i + s_{i+1})$ and $v_0 = s_0$.
 
-\paragraph{Renormalization $R_n$.} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
+\paragraph{Renormalization $R_n$} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
 \gets v_0$ and $x \gets 0 \in \F^n$. Step $j$, for $j = 1, \dots, N-1$, forms $(t, e) \gets \TwoSum(\acc, v_j)$. If $k <
 n-1$ and $e \ne 0$, the step \emph{emits}: $x_k \gets t$, $k \gets k+1$, $\acc \gets e$. Otherwise $\acc \gets t$.
 Finally $x_k \gets \acc$. We write $\acc_j$ for $\acc$ after step $j$, and $\acc_0 = v_0$.
 
-\paragraph{Operations.} For $n$-part $a$ and $b$, and $b \in \F$ where noted:
+\paragraph{Operations} For $n$-part $a$ and $b$, and $b \in \F$ where noted:
 \begin{itemize}
 \item ADD: $(s_i, t_i) \gets \TwoSum(a_i, b_i)$ for $i < n$; $s_n \gets t_{n-1}$; $\dep(s, l, t_{l-1})$ for $l = 1,
 \dots, n-1$; return $R_n(s)$.
@@ -100,10 +101,10 @@ B_k = \us^{\,n-k}|v_k| + \sum_{j=k+1}^{n} \us^{\,n+1-j}|v_j|.
 \item[(d)] With $\sigma_l = \sum_{m \ge l}|c_m|$: $|v_0| \le (1+u)^n\sigma_0$, and $|v_j| \le \min\bigl(|c_{j-1}|,\
 \us(1+u)^{n-j}\sigma_{j-1}\bigr)$ for $1 \le j \le n$.
 \item[(e)] If $|c_m| \le L_m u^m M$ for $0 \le m \le n$, with $M > 0$, then
-\[
-|E| \le u^n|S| + 2\beta_n\Lambda\,u^{n+1}M, \qquad \Lambda = \sum_{m=0}^{n} L_m, \quad \beta_n =
-\frac{(1+u)^{n-1}}{1-u}.
-\]
+\begin{gather*}
+|E| \le u^n|S| + 2\beta_n\Lambda\,u^{n+1}M, \\
+\Lambda = \sum_{m=0}^{n} L_m, \quad \beta_n = \frac{(1+u)^{n-1}}{1-u}.
+\end{gather*}
 \end{enumerate}
 \end{theorem}
 
@@ -119,9 +120,10 @@ is its error.
 
 (b) If $E = 0$ there is nothing to prove. Otherwise (a) applies; set $\acc_n = E$. For $1 \le j \le n$, $\acc_j$ is the
 error of $\TwoSum(\acc_{j-1}, v_j)$, so by Lemma~\ref{lem:facts}(a)
-\[
-|\acc_j| \le \us|\acc_{j-1} + v_j| \le \us|\acc_{j-1}| + \us|v_j| \quad\text{and}\quad |\acc_j| \le |v_j|.
-\]
+\begin{gather*}
+|\acc_j| \le \us|\acc_{j-1} + v_j| \le \us|\acc_{j-1}| + \us|v_j|, \\
+|\acc_j| \le |v_j|.
+\end{gather*}
 Iterating the first inequality from $j = k+1$ to $n$ gives $|E| \le \us^{\,n-k}|\acc_k| + \sum_{j=k+1}^n
 \us^{\,n+1-j}|v_j|$, and $|\acc_k| \le |v_k|$ (for $k \ge 1$ by the second inequality, for $k = 0$ by definition).
 
@@ -129,28 +131,28 @@ Iterating the first inequality from $j = k+1$ to $n$ gives $|E| \le \us^{\,n-k}|
 $\RN$ returns $u^i$, whose significand is even, with error $u^{i+1}$. Hence VecSum returns $v = c$. In the second pass,
 step $j$ computes $\TwoSum(u^{j-1}, u^j) = (u^{j-1}, u^j)$, so steps $1, \dots, n-1$ emit and step $n$ loses $E =
 u^n$. Finally $\sum_{i=1}^n u\,(1+u)^{-i} = 1 - (1+u)^{-n}$ gives
-\[
-B_0 = \frac{u^n}{(1+u)^n} + \sum_{j=1}^{n}\frac{u^{n+1-j}}{(1+u)^{n+1-j}}\,u^j = u^n\Bigl((1+u)^{-n} + 1 -
-(1+u)^{-n}\Bigr) = u^n.
-\]
+\begin{align*}
+B_0 &= \frac{u^n}{(1+u)^n} + \sum_{j=1}^{n}\frac{u^{n+1-j}}{(1+u)^{n+1-j}}\,u^j \\
+&= u^n\Bigl((1+u)^{-n} + 1 - (1+u)^{-n}\Bigr) = u^n.
+\end{align*}
 
 (d) By induction from $s_n = c_n$, $|s_i| = |\RN(c_i + s_{i+1})| \le (1+u)\bigl(|c_i| + (1+u)^{n-i-1}\sigma_{i+1}\bigr)
 \le (1+u)^{n-i}\sigma_i$; in particular $|v_0| = |s_0| \le (1+u)^n\sigma_0$. For $j \ge 1$, $v_j$ is the error of
 $\TwoSum(c_{j-1}, s_j)$, so $|v_j| \le |c_{j-1}|$ and $|v_j| \le \us(|c_{j-1}| + |s_j|) \le \us(1+u)^{n-j}\sigma_{j-1}$.
 
 (e) Take $k = 0$ in (b) and $\us \le u$. By (d), and $\sigma_l \le M\sum_{m \ge l} L_m u^m$,
-\[
-\begin{aligned}
-\sum_{j=1}^n u^{n+1-j}|v_j| &\le u^{n+1}M\sum_{j=1}^n (1+u)^{n-j}\sum_{m=j-1}^{n} L_m u^{m-j+1} \\
-&\le u^{n+1}M(1+u)^{n-1}\sum_{m=0}^n L_m \sum_{i \ge 0} u^i = \beta_n\Lambda u^{n+1}M,
-\end{aligned}
-\]
+\begin{align*}
+&\sum_{j=1}^n u^{n+1-j}|v_j| \\
+&\quad\le u^{n+1}M\sum_{j=1}^n (1+u)^{n-j}\sum_{m=j-1}^{n} L_m u^{m-j+1} \\
+&\quad\le u^{n+1}M(1+u)^{n-1}\sum_{m=0}^n L_m \sum_{i \ge 0} u^i = \beta_n\Lambda u^{n+1}M,
+\end{align*}
 since for fixed $m$ the exponents $m - j + 1$, $1 \le j \le \min(m+1, n)$, are distinct and nonnegative. Likewise,
 using $(m+1)u^m \le 1$ for $u \le 1/2$,
-\[
-|v_0| \le |S| + \sum_{j=1}^n |v_j| \le |S| + u(1+u)^{n-1}M\sum_{m=0}^n (m+1)L_m u^m \le |S| +
-u(1+u)^{n-1}\Lambda M,
-\]
+\begin{align*}
+|v_0| &\le |S| + \sum_{j=1}^n |v_j| \\
+&\le |S| + u(1+u)^{n-1}M\sum_{m=0}^n (m+1)L_m u^m \\
+&\le |S| + u(1+u)^{n-1}\Lambda M,
+\end{align*}
 so $u^n|v_0| \le u^n|S| + \beta_n\Lambda u^{n+1}M$. Adding the two bounds gives (e).
 \end{proof}
 
@@ -171,9 +173,10 @@ last step of a dep. Let $A_m$ be the sum of $|y|$ over (i) at level $m$, of $|t|
 $m = n$, of $|y|$ over (iii). Let $T_m$ be the number of $\TwoSum$s at level $m < n$, $Q$ the number of roundings at
 level $n$ (those of (iii) and the last steps of the deps), and assume $T_m u < 1$ and $Qu < 1$. Let $D_0 = A_0$ and, for
 $0 \le m \le n-1$,
-\[
-C_m = \frac{T_m u\,D_m}{1 - T_m u}, \qquad D_{m+1} = A_{m+1} + C_m, \qquad R = \frac{Q u\,D_n}{1 - Qu}.
-\]
+\begin{gather*}
+C_m = \frac{T_m u\,D_m}{1 - T_m u}, \qquad D_{m+1} = A_{m+1} + C_m, \\
+R = \frac{Q u\,D_n}{1 - Qu}.
+\end{gather*}
 Then: (a) at every moment $|s_m| \le D_m/(1 - T_m u)$ for $m < n$ and $|s_n| \le D_n/(1-Qu)$; (b) the carries out of
 level $m$ have absolute sum at most $C_m$; (c) at the end, $\sum_m s_m = Y - \sum r$, where $Y$ is the sum (with signs)
 of the $y$ of (i) and (iii) and the $t$ of (ii), and the rounding errors $r$ at level $n$ satisfy $\sum|r| \le R$.
@@ -206,22 +209,26 @@ satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and M
 $\Delta$ be
 \begin{center}
 \setlength{\tabcolsep}{5pt}
-\begin{tabular}{lccccccc}
+{\footnotesize\setlength{\tabcolsep}{2.5pt}\begin{tabular}{lccc}
 \toprule
-& $M$ & $\alpha_0$ & $\alpha_m$, $1 \le m < n$ & $\alpha_n$ & $T_m$ & $Q$ & $\Delta$ \\
+& MUL & ADD & MULF \\
 \midrule
-MUL & $|a_0 b_0|$ & $1+u$ & $(1+u)(m+1) + m/\theta$ & $n-1 + n/\theta$ & $m(m+1)$ & $n^2 + n - 1$ & $\Delta_n$ \\
-ADD & $|a_0| + |b_0|$ & $1+u$ & $1 + u + 1/\theta$ & $1/\theta$ & $m$ & $n-1$ & $0$ \\
-MULF & $|a_0 b|$ & $1+u$ & $1 + u + 1/\theta$ & $1/\theta$ & $m$ & $n-1$ & $0$ \\
+$M$ & $|a_0 b_0|$ & $|a_0| + |b_0|$ & $|a_0 b|$ \\
+$\alpha_0$ & $1+u$ & $1+u$ & $1+u$ \\
+$\alpha_m$, $0 < m < n$ & $(1+u)(m+1) + m/\theta$ & $1 + u + 1/\theta$ & $1 + u + 1/\theta$ \\
+$\alpha_n$ & $n-1 + n/\theta$ & $1/\theta$ & $1/\theta$ \\
+$T_m$ & $m(m+1)$ & $m$ & $m$ \\
+$Q$ & $n^2 + n - 1$ & $n-1$ & $n-1$ \\
+$\Delta$ & $\Delta_n$ & $0$ & $0$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{center}
 with $\Delta_n = \sum_{k=n+1}^{2n-2}(2n-1-k)\theta^k u^{k-n-1}$,
 and let $d_0 = \alpha_0$ and, for $0 \le m \le n-1$,
-\[
-\gamma_m = \frac{T_m d_m}{\theta(1 - T_m u)}, \quad \ell_m = \frac{d_m}{1 - T_m u}, \quad d_{m+1} = \alpha_{m+1} +
-\gamma_m,
-\]
+\begin{gather*}
+\gamma_m = \frac{T_m d_m}{\theta(1 - T_m u)}, \quad \ell_m = \frac{d_m}{1 - T_m u}, \\
+d_{m+1} = \alpha_{m+1} + \gamma_m,
+\end{gather*}
 and let $\ell_n = d_n/(1 - Qu)$, $L_m = \theta^m\ell_m$ and $R = Q\theta^n d_n/(1 - Qu)$.
 Then the level array of MUL, ADD and MULF has exactly $T_m$ $\TwoSum$s at level $m$ and $Q$ roundings at level $n$,
 (a) $|s_m| \le L_m u^m M$ at every moment, for $0 \le m \le n$, and (b) the final levels $c$ satisfy $|Z - \sum_m c_m|
@@ -294,18 +301,23 @@ gives the hypothesis of Theorem~\ref{thm:t1}(e), so $|S - \sum_k x_k| \le u^n|S|
 
 \begin{table}[H]
 \centering
-\begin{tabular}{lccl}
+\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$. In units of $2^{-418}$, the leading term is $1/64$ unit. Below each row, the bound for $\theta = 2$.}
+\label{tab:kappa}
+\small
+\begin{tabular}{@{}lcc@{}}
 \toprule
-operation & $\kappa$, $\theta = 1$ & $\kappa$, $\theta = 2$ & bound for $\theta = 2$ \\
+operation & $\kappa$, $\theta = 1$ & $\kappa$, $\theta = 2$ \\
 \midrule
-MUL & $2^{36.41}$ & $2^{37.92}$ & $2^{-424}|ab| + 2^{-439.08}|a_0b_0|$ \\
-ADD & $2^{17.97}$ & $2^{19.99}$ & $2^{-424}|a+b| + 2^{-457.01}(|a_0| + |b_0|)$ \\
-MULF & $2^{17.97}$ & $2^{19.99}$ & $2^{-424}|ab| + 2^{-457.01}|a_0b|$ \\
-ADDF & $2^{6.46}$ & $2^{10.56}$ & $2^{-424}|a+b| + 2^{-466.44}(|a_0| + |b|)$ \\
+MUL & $2^{36.41}$ & $2^{37.92}$ \\
+\multicolumn{3}{@{}r@{}}{$2^{-424}|ab| + 2^{-439.08}|a_0b_0|$} \\ \addlinespace
+ADD & $2^{17.97}$ & $2^{19.99}$ \\
+\multicolumn{3}{@{}r@{}}{$2^{-424}|a+b| + 2^{-457.01}(|a_0| + |b_0|)$} \\ \addlinespace
+MULF & $2^{17.97}$ & $2^{19.99}$ \\
+\multicolumn{3}{@{}r@{}}{$2^{-424}|ab| + 2^{-457.01}|a_0b|$} \\ \addlinespace
+ADDF & $2^{6.46}$ & $2^{10.56}$ \\
+\multicolumn{3}{@{}r@{}}{$2^{-424}|a+b| + 2^{-466.44}(|a_0| + |b|)$} \\
 \bottomrule
 \end{tabular}
-\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$. In units of $2^{-418}$, the leading term is $1/64$ unit.}
-\label{tab:kappa}
 \end{table}
 
 \begin{remark}
@@ -350,9 +362,10 @@ for ADD and ADDF when the leading parts $a_0$ and $b_0$ (or $b$) have the same s
 \begin{proof}
 By Theorem~\ref{thm:t1}(d) and Theorem~\ref{thm:t2}(a), $W_k \le \sum_{j=k+1}^{n} u(1+u)^{n-j}\sum_{m \ge j-1}L_mu^mM
 \le u(1+u)^{n-1}M\sum_{m \ge k}(m-k+1)L_mu^m \le u^{k+1}(1+u)^{n-1}\Lambda M$. Unrolling Lemma~\ref{lem:o},
-\[
-|x_i| \le (1+u)^iu^i|x_0| + \sum_{k=1}^{i}\bigl((1+u)u\bigr)^{i-k}(1+u)\,u^{k+1}(1+u)^{n-1}\Lambda M,
-\]
+\begin{align*}
+|x_i| &\le (1+u)^iu^i|x_0| \\
+&\quad + \sum_{k=1}^{i}\bigl((1+u)u\bigr)^{i-k}(1+u)\,u^{k+1}(1+u)^{n-1}\Lambda M,
+\end{align*}
 and the sum is at most $i\,u^{i+1}(1+u)^{n+i-1}\Lambda M$. For the lower bound, $|S| \ge |Z| - (R+\Delta)u^{n+1}M \ge
 (\zeta - (R+\Delta)u^{n+1})M$ by Theorem~\ref{thm:t2}(b), and $W_1 \le u^2(1+u)^{n-1}\Lambda M$, so Lemma~\ref{lem:o}
 gives $|x_0| \ge \xi M$. Substituting $M \le |x_0|/\xi$ gives $|x_i| \le (\theta'u)^i|x_0|$. For the adds with leading
@@ -392,26 +405,29 @@ $Q_k = (1+u)P^{(k)}_0$. For $k = 0, \dots, n-1$, with $P = P^{(k)}$, let
 \[
 G_0 = u(P_0 + Q_k), \quad G_i = P_i + (1+u)\rho^iQ_k \ (1 \le i < n),
 \]
-\[
-A_0 = (1+u)G_0, \quad A_m = (1+u)G_m + uG_{m-1} + u\rho^{m-1}Q_k \ (1 \le m < n),
-\]
+\begin{gather*}
+A_0 = (1+u)G_0, \\
+A_m = (1+u)G_m + uG_{m-1} + u\rho^{m-1}Q_k \ (1 \le m < n),
+\end{gather*}
 $A_n = uG_{n-1} + u\rho^{n-1}Q_k$,
 let $X_0, \dots, X_n$ and $R$ be the bounds of Lemma~\ref{lem:l} with these $A_m$, $T_0 = 0$, $T_m = 2m$ and $Q = 2n-1$
 ($X_m = D_m/(1-T_mu)$, $X_n = D_n/(1-Qu)$), let $\sigma_l = \sum_{m \ge l}X_m$, $V_0 = (1+u)^n\sigma_0$, $V_j =
 \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_i = \sum_{j > i}V_j$, and set
-\[
-\varepsilon_{k+1} = R + \min_{0 \le k' \le n}\Bigl(\us^{\,n-k'}V_{k'} + \sum_{j=k'+1}^n \us^{\,n+1-j}V_j\Bigr),
-\]
-\[
-P^{(k+1)}_0 = (1+u)(\sigma_0 + W_1), \qquad P^{(k+1)}_i = (1+u)(uP^{(k+1)}_{i-1} + W_i).
-\]
+\begin{align*}
+\varepsilon_{k+1} &= R + \min_{0 \le k' \le n}\Bigl(\us^{\,n-k'}V_{k'} \\
+&\qquad + \sum_{j=k'+1}^n \us^{\,n+1-j}V_j\Bigr),
+\end{align*}
+\begin{gather*}
+P^{(k+1)}_0 = (1+u)(\sigma_0 + W_1), \\
+P^{(k+1)}_i = (1+u)(uP^{(k+1)}_{i-1} + W_i).
+\end{gather*}
 Let $\tau = \sum_{i \ge 1}P^{(n)}_i + uP^{(n)}_0 + Q_n\rho/(1-\rho)$ and $\Theta = \tau + \sum_{k=1}^n \varepsilon_k$; let
 $V^q_j$ be the bounds $V_j$ above computed from $X_m = Q_m$ ($0 \le m \le n$), and $\Xi = u^n\sum_{j \ge 1}V^q_j +
 \sum_{j \ge 1}u^{n+1-j}V^q_j$. Then the result satisfies
-\[
-\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + K u^{n+1})\Bigl|\frac ab\Bigr|, \qquad K = \frac{(1+u^n)\Theta\frac{1-\rho}
-{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
-\]
+\begin{gather*}
+\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + K u^{n+1})\Bigl|\frac ab\Bigr|, \\
+K = \frac{(1+u^n)\Theta\frac{1-\rho}{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
+\end{gather*}
 At $n = 8$, $p = 53$: $K = 2^{25.9}$ for $\theta = 1$ and $K = 2^{27.47}$ for $\theta = 2$, so $|a/b - x| \le (1 +
 2^{-25.5})\,2^{-424}|a/b|$ for ulp-nonoverlapping $a$ and $b$.
 \end{theorem}
@@ -443,10 +459,10 @@ from \eqref{eq:a0}, $|a/b - \sum q| \le \Theta\frac{1-\rho}{1-2\rho}|a_0|/|b_0|$
 
 \emph{The result.} The $n+1$ terms $q_k$, in whatever order of magnitudes, satisfy $|q_k| \le Q_k|a_0|/|b_0|$, so by
 Theorem~\ref{thm:t1}(b) with $k' = 0$ and (d), and $|v_0| \le |\sum q| + \sum_{j \ge 1}|v_j|$,
-\[
-\Bigl|\sum q - \sum x\Bigr| \le u^n\Bigl|\sum q\Bigr| + \Xi\,|a_0|/|b_0| \le u^n\Bigl|\frac ab\Bigr| + u^n\Bigl|\frac
-ab - \sum q\Bigr| + \Xi\,|a_0|/|b_0|.
-\]
+\begin{align*}
+\Bigl|\sum q - \sum x\Bigr| &\le u^n\Bigl|\sum q\Bigr| + \Xi\,|a_0|/|b_0| \\
+&\le u^n\Bigl|\frac ab\Bigr| + u^n\Bigl|\frac ab - \sum q\Bigr| + \Xi\,\frac{|a_0|}{|b_0|}.
+\end{align*}
 Adding $|a/b - \sum q|$ and using $|a/b| \ge (1-2\rho)|a_0|/|b_0|$, which follows from \eqref{eq:a0} and $|b| \le
 |b_0|/(1-\rho)$, gives the bound. The values at $n = 8$ are those of \texttt{div\_consts.py}, in exact rational
 arithmetic.
@@ -506,18 +522,20 @@ h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1
 (1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let Lemma~\ref{lem:g} give the
 error bounds and part bounds
 \begin{align*}
-(\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\pi, \pi;\ (1+E)^2\bigr), \qquad (\epsilon_g, \gamma) = G_{\rm MUL}\bigl(\bar h,
-\mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
-(\epsilon_c, \kappa) &= G_{\rm ADDF}\bigl(\gamma, \tfrac12;\ \zeta,\ \lambda_0 = \zeta + {\textstyle\sum_{i \ge
-1}}\gamma_i\bigr), \qquad \zeta = \tfrac12(2E + E^2) + \tfrac12\epsilon_m + \epsilon_g, \\
-(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\kappa, \pi;\ (\zeta + \epsilon_c)(1+E)\bigr), \qquad (\epsilon_r, \pi') =
-G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) + (\zeta + \epsilon_c)(1+E) + \epsilon_d\bigr),
+(\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\pi, \pi;\ (1+E)^2\bigr), \\
+(\epsilon_g, \gamma) &= G_{\rm MUL}\bigl(\bar h, \mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
+(\epsilon_c, \kappa) &= G_{\rm ADDF}\bigl(\gamma, \tfrac12;\ \zeta,\ \lambda_0\bigr), \\
+\lambda_0 &= \zeta + {\textstyle\sum_{i \ge 1}}\gamma_i, \\
+\zeta &= \tfrac12(2E + E^2) + \tfrac12\epsilon_m + \epsilon_g, \\
+(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\kappa, \pi;\ (\zeta + \epsilon_c)(1+E)\bigr), \\
+(\epsilon_r, \pi') &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) \\
+&\qquad + (\zeta + \epsilon_c)(1+E) + \epsilon_d\bigr),
 \end{align*}
 the third argument being $\bar Z$, with $\lambda_m = \pi_m + \delta_m$ for the ADD, and let
-\[
-E_{k+1} = \tfrac32E^2 + \tfrac12E^3 + (1+E)\bigl(\tfrac12\epsilon_m + \epsilon_g + \epsilon_c\bigr) + \epsilon_d +
-\epsilon_r, \qquad \pi^{(k+1)} = \pi'.
-\]
+\begin{align*}
+E_{k+1} &= \tfrac32E^2 + \tfrac12E^3 + (1+E)\bigl(\tfrac12\epsilon_m + \epsilon_g + \epsilon_c\bigr) \\
+&\quad + \epsilon_d + \epsilon_r, \qquad \pi^{(k+1)} = \pi'.
+\end{align*}
 With $(\epsilon_z, \cdot) = G_{\rm MUL}(\pi^{(J)}, \bar a;\ 1 + E_J)$ and $\delta_J = E_J + \epsilon_z$, the result
 satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8$, $J = 4$, $p = 53$: $\delta_4 \le
 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$.
