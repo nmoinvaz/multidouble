@@ -1,0 +1,10 @@
+sample 0: err = 3.723e-06 u^8 W
+sample 1: err = 3.4e-05 u^8 W
+sample 2: err = 0.0002002 u^8 W
+sample 3: err = 7.528e-05 u^8 W
+sample 4: err = 1.171e-05 u^8 W
+sample 5: err = 8.155e-08 u^8 W
+max 0.0002002 u^8 W over 6 samples
+p=8 n=2 K=64 addx theta=1 start=cons seed=1: 26750 evaluations, 570 improvements; err/bound = 0.001212, err/(recursion bound) = 0.05003, err = 84.11 u^n W, recursion/theorem = 0.02422
+p=8 n=3 K=40 addx theta=1 start=cons seed=1: 25513 evaluations, 503 improvements; err/bound = 0.0003459, err/(recursion bound) = 0.0116, err = 209.5 u^n W, recursion/theorem = 0.02982
+p=8 n=4 K=28 addx theta=1 start=cons seed=1: 25205 evaluations, 499 improvements; err/bound = 6.964e-05, err/(recursion bound) = 0.002406, err = 369.2 u^n W, recursion/theorem = 0.02894
