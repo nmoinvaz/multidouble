@@ -8,7 +8,7 @@ from fractions import Fraction as Fr
 
 
 def vec_bounds(X, u, n):
-    """VecSum output bounds V_0..V_n from level bounds X_0..X_n (Theorem 8(d))"""
+    """VecSum output bounds V_0..V_n from level bounds X_0..X_n (Theorem 9(d))"""
     us = u / (1 + u)
     sig = [sum(X[l:]) for l in range(n + 1)]
     V = [(1 + u) ** n * sig[0]] + [min(X[j - 1], us * (1 + u) ** (n - j) * sig[j - 1]) for j in range(1, n + 1)]
@@ -16,13 +16,13 @@ def vec_bounds(X, u, n):
 
 
 def renorm_err(V, u, n):
-    """Theorem 8(b): min_k B_k"""
+    """Theorem 9(b): min_k B_k"""
     us = u / (1 + u)
     return min(us ** (n - k) * V[k] + sum(us ** (n + 1 - j) * V[j] for j in range(k + 1, n + 1)) for k in range(n + 1))
 
 
 def smf_step(P, Qk, n, theta, u):
-    """one remainder update r - q b: level bounds (Lemma 10), its error bound, and the part bounds of its result"""
+    """one remainder update r - q b: level bounds (Lemma 11), its error bound, and the part bounds of its result"""
     rho = Fr(theta) * u
     G = [u * (P[0] + Qk)] + [P[i] + (1 + u) * rho ** i * Qk for i in range(1, n)]
     A = [(1 + u) * G[0]] + [(1 + u) * G[m] + u * G[m - 1] + u * rho ** (m - 1) * Qk for m in range(1, n)]
