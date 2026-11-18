@@ -12,7 +12,8 @@ MUTATE = None  # controls: 'ties_away' (rounding), 'two_sum_sign' (two-sum's err
 LEVEL_HOOK = None  # called with the levels after every change by dep and after each level builder's setup
 DROP = None  # controls of the operation checks: 'add_t1' drops the error of a1 + b1 (as the crate's ADD_T1),
 #              'mul_e23' the error of a2 b3 (MUL_E23), 'mulf_e3' the error of a3 b (MUL_F_E3), 'div_rem' the remainder
-#              update before the sixth quotient term (DIV_REM), 'sqrt_iter' the second Newton step skipped (SQRT_ITER)
+#              update before the sixth quotient term (DIV_REM), 'sqrt_iter' the second Newton step skipped (SQRT_ITER),
+#              'sqrt_two_sum' the square root's two-sum of a_0, a_1 skipped
 RANGE_CHECK = False  # p = 53 only: count results outside f64's normal range (they would be subnormal or overflow)
 range_hits = 0
 PZ = (0, 0)
@@ -433,7 +434,8 @@ def od_sqrt(x, mode=None):
     s = pow2_floor(fsqrt(x[0]))
     inv = div(ONE, s)
     a = [mul(mul(xk, inv), inv) for xk in x]
-    a0, a1 = quick_two_sum(a[0], a[1])
+    # DROP 'sqrt_two_sum' takes a_0, a_1 as they are (a control: only a_1 above ulp(a_0)/2 tells them apart)
+    a0, a1 = (a[0], a[1]) if DROP == 'sqrt_two_sum' else quick_two_sum(a[0], a[1])
     sh = fsqrt(a0)
     yh, yl = quick_two_sum(sh, div(add(a1, fma(neg(sh), sh, a0)), add(sh, sh)))
     th = div(ONE, yh)

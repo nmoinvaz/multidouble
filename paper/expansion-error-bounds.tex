@@ -491,8 +491,9 @@ cancelling pairs and shuffled orders, and at random and by hill climbing, about 
 and at $p = 53$. No statement failed. The bounds of Theorem~\ref{thm:renorm} and Proposition~\ref{prop:worst} were
 reached with ratio 1, and each check fired on a halved bound or a deliberately broken algorithm. The example of
 Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}). The emulator's square root matches
-multidouble's bit for bit on 2000 inputs with gaps and zero parts, and a control that skips its last step mismatches
-on every one (\texttt{sqrt\_bits.py}).
+multidouble's bit for bit on 2000 inputs with gaps, zero parts and parts at the top of the ladder. A control that skips
+its last step mismatches on every one, and another that skips the two-sum of the leading parts mismatches on 30
+(\texttt{sqrt\_bits.py}).
 
 The accumulator's bound was evaluated in exact rational arithmetic and tested the same way (\texttt{accumulator/}):
 the constructed inputs of Proposition~\ref{prop:acc-low} at $p = 8$ to $14$ and at $p = 53$, and random sums, all within

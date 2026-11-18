@@ -12,7 +12,7 @@ plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth.
 | `constants.py`, `div_consts.py`, `sqrt_consts.py` | the constants of Theorems 12 and 13, 18, and 21 and 22 in exact rational arithmetic; their outputs are the `.txt` files |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
 | `example_n3.py` | the worked example of Section IV on `fpemu.py`, with a control that must fail |
-| `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with a control that skips its last step |
+| `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with controls that skip its last step and its two-sum of the leading parts |
 | `accumulator/` | the accumulator of Theorems 5 and 27 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`) and the error recomputed without the emulator (`acc_crate_err.py`); outputs in `accumulator/out/` |
 
 From this folder:
@@ -24,6 +24,7 @@ python3 sqrt_consts.py   # prints sqrt_consts.txt
 python3 example_n3.py .  # prints PASS
 python3 sqrt_bits.py 2000          # prints 2000 inputs, 0 mismatches
 python3 sqrt_bits.py 300 1 accumulator/acc_check/Cargo.toml control   # prints 300 inputs, 300 mismatches (control)
+python3 sqrt_bits.py 2000 1 accumulator/acc_check/Cargo.toml control2   # prints 2000 inputs, 30 mismatches (control2)
 tectonic -X compile expansion-error-bounds.tex
 ```
 

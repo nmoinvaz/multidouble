@@ -150,7 +150,7 @@ def sqrt_dd_consts(n, p, theta):
     tau = up(rho ** 2 / (1 - rho) ** 2)
     d1 = Fr(25, 8) * u ** 2                          # y / sqrt(a_0 + a_1) - 1
     d2 = 15 * u ** 2 + 56 * u ** 3                   # r_0 y - 1
-    # r_0 / A^(-1/2) = (1 + tau)^(1/2) (1 + d2) / (1 + d1); sqrt(1 + t) <= 1 + t/2 and >= 1 - t for 0 <= t <= 1
+    # r_0 / A^(-1/2) = (1 + t)^(1/2) (1 + d2) / (1 + d1) with |t| <= tau, and 1 - tau <= sqrt(1 + t) <= 1 + tau/2
     E0 = up(max((1 + tau / 2) * (1 + d2) / (1 - d1) - 1, 1 - (1 - tau) * (1 - d2) / (1 + d1)))
     # r_0 = (r_0h, r_0l) from a quick two-sum: |r_0l| <= u |r_0h|, so |r_0h| <= |r_0| / (1 - u)
     pi0 = [up((1 + E0) / (1 - u)), up(u * (1 + E0) / (1 - u))] + [Fr(0)] * (n - 2)
@@ -176,6 +176,7 @@ if __name__ == '__main__':
     print('from the double-double square root (one step with the second-order term, one Newton step):')
     for theta in (1, 2):
         r = sqrt_dd_consts(8, p, theta); u = r['u']
-        print(f'theta={theta} n=8: E_0 = {float(r["E0"] / u ** 2):.6g} u^2, E_1 = 2^{math.log2(r["E1"] / u ** 8):.2f} u^8, '
+        c2 = Fr(math.floor(r["E0"] / u ** 2 * 8), 8)  # E_0 = c2 u^2 + c3 u^3, c2 a multiple of 1/8
+        print(f'theta={theta} n=8: E_0 = {float(c2):g} u^2 + {float((r["E0"] - c2 * u ** 2) / u ** 3):.6g} u^3, E_1 = 2^{math.log2(r["E1"] / u ** 8):.2f} u^8, '
               f'E_2 = {float(r["E2"] / u ** 8):.10g} u^8, |sqrt(x) - result| <= {float(r["rel"] / u ** 8):.10g} u^8 sqrt(x)')
 
