@@ -1,9 +1,17 @@
-//! Dense double-double LU with partial pivoting (LAPACK getf2 order), column-major with the leading dimension
-//! padded to a multiple of 8 so the trailing update runs on 8-row lane vectors, columns updated in parallel (rayon)
-//! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
-//! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
-//! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) for systems
-//! too ill-conditioned for double-double.
+//! Dense LU factorizations and solves.
+//!
+//! * `DDLu` is a double-double LU with partial pivoting in LAPACK getf2 order. It is column-major with the leading
+//!   dimension padded to a multiple of 8, so the trailing update runs on 8-row lane vectors, and the columns of large
+//!   matrices are updated in parallel (rayon).
+//! * `DDLu::factor_f64` is the same factorization blocked in plain f64 (LAPACK's right-looking getrf), for
+//!   mixed-precision use, and `lu_rect_f64` is its step on a rectangular matrix.
+//! * The solves and transpose solves run in double-double with either set of factors, and `DDLu::solve_refine_qd`
+//!   refines a solve to quad-double.
+//! * `gram` forms Gram matrices.
+//! * `StaircaseLu` factors the staircase systems of multiple shooting with one global parameter.
+//! * `QDLu` and `ODLu` are the unblocked LU in quad-double and octo-double, for systems too ill-conditioned for
+//!   double-double and for quad-double.
+//! * `clu_logdet` gives the determinant of a complex double-double matrix.
 use crate::dd::{pow2_near, two_prod, two_sum, DD};
 use crate::dv::{self, DotAcc, DV};
 use crate::od::OD;
@@ -28,7 +36,8 @@ pub fn ld_for(n: usize) -> usize {
     n.div_ceil(8) * 8
 }
 
-/// a - l t on 8 rows (l, a lane vectors; t scalar), as one DD product added with an error-free sum
+/// a - l t on 8 rows, given nt = -t, as one double-double product added with an error-free sum. a and l are lane
+/// vectors and t is a scalar.
 #[inline(always)]
 fn axpy8<S: Simd>(a: DV<S>, l: DV<S>, nt: DV<S>) -> DV<S> {
     let (p, pe) = dv::two_prod(l.hi, nt.hi);
@@ -40,9 +49,9 @@ fn axpy8<S: Simd>(a: DV<S>, l: DV<S>, nt: DV<S>) -> DV<S> {
     DV { hi: h, lo }
 }
 
-/// a + l t in double-double, as the LU's updates and solves form it: one double-double product (the hi x hi product
-/// exact, the cross terms by FMA, lo x lo dropped) added to a with an error-free sum. Public for code that works on
-/// these factors itself (a block LU's solves) and must round as the solves here do.
+/// a + l t in double-double, as the LU's updates and solves form it. It is one double-double product, with the hi x hi
+/// product exact, the cross terms by FMA and lo x lo dropped, added to a with an error-free sum. It is public for code
+/// that works on these factors itself, such as a block LU's solves, and must round as the solves here do.
 #[inline(always)]
 pub fn dd_axpy(a: DD, l: DD, nt: DD) -> DD {
     let (p, pe) = two_prod(l.hi, nt.hi);
@@ -54,14 +63,14 @@ pub fn dd_axpy(a: DD, l: DD, nt: DD) -> DD {
     DD { hi: h, lo }
 }
 
-/// the lanes of rows i0..i0 + 8 that lie in lo..hi
+/// The lanes of rows i0..i0 + 8 that lie in lo..hi.
 #[inline(always)]
 fn rows_in<S: Simd>(i0: usize, lo: usize, hi: usize) -> M8<S> {
     let idx = V8::<S>::from_array(std::array::from_fn(|r| (i0 + r) as f64));
     idx.ge(V8::splat(lo as f64)).and(V8::splat(hi as f64).gt(idx))
 }
 
-/// u where m is set, a elsewhere
+/// Selects u where m is set and a elsewhere.
 #[inline(always)]
 fn sel_dv<S: Simd>(m: M8<S>, u: DV<S>, a: DV<S>) -> DV<S> {
     DV {
@@ -70,8 +79,8 @@ fn sel_dv<S: Simd>(m: M8<S>, u: DV<S>, a: DV<S>) -> DV<S> {
     }
 }
 
-/// b[i] = dd_axpy(b[i], l[i], nt) for i in lo..hi, on the 8-row blocks that meet lo..hi; rows outside keep their value
-/// (bitwise the scalar loop). l's low parts are ll, or zero when None. Every slice holds hi rounded up to 8 rows.
+/// Sets b[i] = dd_axpy(b[i], l[i], nt) for i in lo..hi on the 8-row blocks that meet lo..hi, bitwise the scalar loop.
+/// Rows outside keep their value. l's low parts are ll, or zero when None. Every slice holds hi rounded up to 8 rows.
 #[inline(always)]
 fn axpy_rows<S: Simd>(bh: &mut [f64], bl: &mut [f64], lh: &[f64], ll: Option<&[f64]>, lo: usize, hi: usize, nt: DD) {
     let t = DV::<S>::splat(nt);
@@ -93,7 +102,7 @@ fn axpy_rows<S: Simd>(bh: &mut [f64], bl: &mut [f64], lh: &[f64], ll: Option<&[f
     }
 }
 
-/// b[i] = l[i] t + b[i] (one rounding, as `f64::mul_add`) for i in lo..hi, as `axpy_rows` in f64
+/// Sets b[i] = l[i] t + b[i] for i in lo..hi with one rounding, as `f64::mul_add`. It is `axpy_rows` in f64.
 #[inline(always)]
 fn fma_rows<S: Simd>(b: &mut [f64], l: &[f64], lo: usize, hi: usize, t: f64) {
     let tv = V8::<S>::splat(t);
@@ -111,10 +120,10 @@ fn fma_rows<S: Simd>(b: &mut [f64], l: &[f64], lo: usize, hi: usize, t: f64) {
     }
 }
 
-/// The pivot of column col (rows k..n, col holding n rounded up to 8): the first row with the largest |col[i]| and
-/// that value, as the scalar search `if |col[i]| > best` from best = |col[k]| finds them: a NaN never wins, and a NaN
-/// at row k leaves k with best NaN. 8 rows at a time, each lane keeping its first maximum; then the largest value
-/// over the lanes, at the smallest row.
+/// The pivot of column col over rows k..n, col holding n rounded up to 8 entries. It returns the first row with the
+/// largest |col[i]| and that value, as the scalar search `if |col[i]| > best` from best = |col[k]| finds them. A NaN
+/// never wins, and a NaN at row k leaves k with best NaN. The search runs 8 rows at a time, each lane keeping its first
+/// maximum, and then takes the largest value over the lanes at the smallest row.
 #[inline(always)]
 fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
     let a = col[k].abs();
@@ -124,7 +133,7 @@ fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
     let none = V8::<S>::splat(-1.0);
     let (mut best, mut at) = (none, V8::<S>::splat(k as f64));
     let mut i = 8 * (k / 8);
-    // the row numbers of the block, as f64 (exact), stepped by 8
+    // The row numbers of the block as exact f64, stepped by 8.
     let mut idx = V8::<S>::from_array(std::array::from_fn(|r| (i + r) as f64));
     let (step, kv, nv) = (V8::<S>::splat(8.0), V8::<S>::splat(k as f64), V8::<S>::splat(n as f64));
     while i < n {
@@ -151,7 +160,7 @@ fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
     (p, m)
 }
 
-/// d[i] = q[i].to_dd(), 8 entries at a time (`QV::to_dv`), the remainder scalar
+/// Sets d[i] = q[i].to_dd(), 8 entries at a time (`QV::to_dv`) and the remainder scalar.
 #[inline(always)]
 fn to_dd_lanes<S: Simd>(q: &[QD], d: &mut [DD]) {
     let full = q.len() / 8 * 8;
@@ -167,7 +176,7 @@ fn to_dd_lanes<S: Simd>(q: &[QD], d: &mut [DD]) {
     }
 }
 
-/// x[i] = x[i] + QD::from_dd(d[i]), 8 entries at a time (`QV + QV`), the remainder scalar
+/// Sets x[i] = x[i] + QD::from_dd(d[i]), 8 entries at a time (`QV + QV`) and the remainder scalar.
 #[inline(always)]
 fn add_dd_lanes<S: Simd>(x: &mut [QD], d: &[DD]) {
     let full = x.len() / 8 * 8;
@@ -184,18 +193,22 @@ fn add_dd_lanes<S: Simd>(x: &mut [QD], d: &[DD]) {
     }
 }
 
-/// Blocked LU: matrices at least this large take `factor_blocked`; NB: panel width; CW: columns per parallel task;
-/// NC: columns per register tile.
+/// Matrices at least this large factor by `factor_blocked`.
 pub const BLOCKED_MIN: usize = 96;
+/// Panel width of the blocked LU.
 const NB: usize = 32;
+/// Columns per parallel task.
 const CW: usize = 8;
+/// Columns per register tile.
 const NC: usize = 4;
+/// Row blocks per register tile.
 const TR: usize = 2;
 
-/// getf2 on the panel columns j0..j0+jb (slices ph / pl hold just those columns, leading dimension ld): pivot search,
-/// row swaps within the panel, scaling, and updates of the later panel columns, as `factor_unblocked` does them,
-/// except that updates which cannot change a value are skipped: 8-row blocks whose multipliers are all exactly zero,
-/// and columns whose pivot-row entry is exactly zero (a - 0 t and a - l 0 return a; at most the sign of a zero differs).
+/// getf2 on the panel columns j0..j0 + jb, whose slices ph and pl hold just those columns with leading dimension ld. It
+/// does the pivot search, the row swaps within the panel, the scaling and the updates of the later panel columns as
+/// `factor_unblocked` does them. Updates that cannot change a value are skipped, those of 8-row blocks whose
+/// multipliers are all exactly zero and those of columns whose pivot-row entry is exactly zero. a - 0 t and a - l 0
+/// return a, and at most the sign of a zero differs.
 fn panel_getf2<S: Simd>(
     n: usize,
     ld: usize,
@@ -230,7 +243,7 @@ fn panel_getf2<S: Simd>(
                         hi: ph[ck + k],
                         lo: pl[ck + k],
                     };
-                // the multipliers, 8 rows at a time; zero entries are left as they are
+                // The multipliers, 8 rows at a time. Zero entries are left as they are.
                 let iv = DV::<S>::splat(inv);
                 let z = V8::<S>::zero();
                 let mut i = 8 * ((k + 1) / 8);
@@ -287,9 +300,13 @@ fn panel_getf2<S: Simd>(
     )
 }
 
-/// The trailing update of one panel on the given columns (offsets into ch / cl, leading dimension ld) and 8-row blocks
-/// (row offsets): entry -= l_ik u_kj for the panel's k in order, with TR row blocks x NC columns in registers.
-/// nt[j]: offset of column j's -u values (jb each) in nth / ntl; ph / pl: packed multipliers, [row block][k][lane].
+/// The trailing update of one panel, entry -= l_ik u_kj for the panel's k in order, with TR row blocks x NC columns in
+/// registers.
+///
+/// * `cols` holds the columns' offsets into ch and cl, whose leading dimension is ld.
+/// * `rows` holds the 8-row blocks, each as its row offset and its offset in ph and pl.
+/// * `nto[j]` is the offset of column j's -u values, jb of them, in nth and ntl.
+/// * ph and pl hold the packed multipliers, indexed [row block][k][lane].
 #[allow(clippy::too_many_arguments)]
 fn gemm<S: Simd>(
     ld: usize,
@@ -413,9 +430,9 @@ fn tile_rows<S: Simd, const R: usize, const W: usize>(
 }
 
 impl DDLu {
-    /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero).
-    /// par: work in parallel (rayon's current pool). Large matrices take the blocked path (`factor_blocked`), which
-    /// gives bitwise the same factors as the unblocked one.
+    /// Factors the n x n matrix given column-major with leading dimension ld, where ld % 8 == 0 and the padding rows
+    /// are zero. With `par` it works in parallel on rayon's current pool. Large matrices take the blocked path
+    /// (`factor_blocked`), whose factors equal the unblocked ones in value, bitwise apart from the signs of zeros.
     pub fn factor(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
         if n >= BLOCKED_MIN {
             Self::factor_blocked(n, ld, hi, lo, par)
@@ -424,7 +441,8 @@ impl DDLu {
         }
     }
 
-    /// LAPACK getf2 order: for each column k, pivot, scale, and update all trailing columns (in parallel if par).
+    /// Factors in LAPACK getf2 order. For each column k it pivots, scales and updates all trailing columns, in parallel
+    /// with `par`.
     pub fn factor_unblocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
         simd::dispatch(FactorUnblocked { n, ld, hi, lo, par })
     }
@@ -518,18 +536,20 @@ impl DDLu {
     }
 
     /// Blocked right-looking LU (panel width NB) that applies to every entry the operations of `factor_unblocked`, in
-    /// the same order, except those that cannot change a value: updates with an exactly zero multiplier block (8 rows)
-    /// or an exactly zero pivot-row entry (a - 0 t and a - l 0 return a; at most the sign of a zero differs). The
-    /// factors and pivots are therefore identical in value to getf2's (bitwise apart from the signs of zeros), and the
-    /// zero blocks of the multiple-shooting Jacobian cost nothing. Per panel of columns j0..je:
-    ///  1. the panel is factored as in getf2 (pivot search, row swaps and updates restricted to the panel);
-    ///  2. every column left of the panel gets the panel's row swaps, in order;
-    ///  3. every column right of the panel gets the swaps, then the panel's updates k = j0, j0 + 1, ... in order:
-    ///     rows above je one k at a time (a unit-lower triangular solve), rows below je on register tiles with the
-    ///     k loop innermost, so each entry is loaded and stored once per panel instead of once per k (getf2 sweeps the
-    ///     whole trailing matrix through memory for every k).
+    /// the same order, except those that cannot change a value. Those are the updates with an exactly zero multiplier
+    /// block (8 rows) or an exactly zero pivot-row entry, since a - 0 t and a - l 0 return a, and at most the sign of a
+    /// zero differs. The factors and pivots are therefore identical in value to getf2's, bitwise apart from the signs
+    /// of zeros, and the zero blocks of the multiple-shooting Jacobian cost nothing. Each panel of columns j0..je takes
+    /// three steps.
     ///
-    /// Step 3 runs in parallel over chunks of CW columns when par.
+    ///  1. The panel is factored as in getf2, with the pivot search, row swaps and updates restricted to the panel.
+    ///  2. Every column left of the panel gets the panel's row swaps, in order.
+    ///  3. Every column right of the panel gets the swaps, then the panel's updates k = j0, j0 + 1, ... in order. Rows
+    ///     above je take them one k at a time, a unit-lower triangular solve. Rows below je take them on register tiles
+    ///     with the k loop innermost, so each entry is loaded and stored once per panel instead of once per k, where
+    ///     getf2 sweeps the whole trailing matrix through memory for every k.
+    ///
+    /// Step 3 runs in parallel over chunks of CW columns when `par`.
     pub fn factor_blocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
         simd::dispatch(FactorBlocked { n, ld, hi, lo, par })
     }
@@ -556,7 +576,7 @@ impl DDLu {
                     let (pan_l, right_l) = rest_l.split_at_mut(jb * ld);
                     panel_getf2::<S>(n, ld, j0, jb, pan_h, pan_l, &mut perm)?;
                     let pv = &perm[j0..je];
-                    // 2. swaps left of the panel
+                    // Step 2, the swaps left of the panel.
                     for (ch, cl) in left_h.chunks_mut(ld).zip(left_l.chunks_mut(ld)) {
                         for (c, &p) in pv.iter().enumerate() {
                             if p != j0 + c {
@@ -568,8 +588,9 @@ impl DDLu {
                     if je == n {
                         break;
                     }
-                    // 3. multipliers: rows j0..je for the triangular part (zero for rows <= k, as getf2's mh), rows je..ld
-                    //    packed as [row block][k][lane] for the tiles (zero for padding rows >= n)
+                    // Step 3. The multipliers of rows j0..je serve the triangular part, zero for rows <= k as getf2's
+                    // mh. Those of rows je..ld are packed as [row block][k][lane] for the tiles, zero for padding
+                    // rows >= n.
                     let pan_h: &[f64] = pan_h;
                     let pan_l: &[f64] = pan_l;
                     let mut th = vec![0.0f64; jb * jb];
@@ -583,7 +604,7 @@ impl DDLu {
                     let nrb = (ld - je) / 8;
                     let mut ph = vec![0.0f64; nrb * jb * 8];
                     let mut pl = vec![0.0f64; nrb * jb * 8];
-                    // row blocks with a nonzero multiplier: (row offset, packed offset)
+                    // The row blocks with a nonzero multiplier, as (row offset, packed offset).
                     let mut rows: Vec<(usize, usize)> = Vec::with_capacity(nrb);
                     for rb in 0..nrb {
                         let mut nz = false;
@@ -608,7 +629,8 @@ impl DDLu {
                             #[inline(always)]
                             || {
                                 let w = ch.len() / ld;
-                                // nt[j]: -(entry (j0 + c, column j)) as read at step k = j0 + c (as getf2 reads it)
+                                // nth and ntl hold -(entry (j0 + c, column j)) at j jb + c, as getf2 reads it at step
+                                // k = j0 + c.
                                 let mut nth = vec![0.0f64; w * jb];
                                 let mut ntl = vec![0.0f64; w * jb];
                                 let mut cols: Vec<usize> = Vec::with_capacity(w);
@@ -621,7 +643,8 @@ impl DDLu {
                                             l.swap(j0 + c, p);
                                         }
                                     }
-                                    // a column that is zero on the panel's rows stays zero there (U12 = 0) and gets no update
+                                    // A column that is zero on the panel's rows stays zero there (U12 = 0) and gets no
+                                    // update.
                                     if h[j0..je].iter().all(|&x| x == 0.0) && l[j0..je].iter().all(|&x| x == 0.0) {
                                         continue;
                                     }
@@ -673,10 +696,10 @@ impl DDLu {
         )
     }
 
-    /// Solve A x = b (transpose: A^T x = b) for nrhs right-hand sides at once, b row-major (nrhs, n) as (hi, lo),
-    /// in place. Eight right-hand sides share each lane vector, and the groups of eight run in parallel when par.
-    /// Each lane does exactly the operations of `solve` / `solve_t`, so every row of the result is bitwise the
-    /// single right-hand-side solve.
+    /// Solves A x = b, or A^T x = b with `transpose`, for nrhs right-hand sides at once, in place, with b row-major
+    /// (nrhs, n) as (hi, lo). Eight right-hand sides share each lane vector, and the groups of eight run in parallel
+    /// when `par`. Each lane does exactly the operations of `solve` or `solve_t`, so every row of the result is bitwise
+    /// the single right-hand-side solve.
     pub fn solve_many(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
         simd::dispatch(SolveMany {
             lu: self,
@@ -744,8 +767,8 @@ impl DDLu {
         )
     }
 
-    /// For each column of the factors, the first and one past the last row holding a nonzero entry. Entries outside
-    /// are exact zeros, whose updates (a - 0 t = a) the lane solves skip; the rest run in the scalar solves' order.
+    /// For each column of the factors, the first and one past the last row holding a nonzero entry. Entries outside are
+    /// exact zeros, whose updates (a - 0 t = a) the lane solves skip. The rest run in the scalar solves' order.
     fn col_ranges(&self) -> Vec<(usize, usize)> {
         (0..self.n)
             .map(|k| {
@@ -761,7 +784,7 @@ impl DDLu {
             .collect()
     }
 
-    /// `solve` lane by lane (padding lanes hold zeros and stay zero).
+    /// `solve` lane by lane. Padding lanes hold zeros and stay zero.
     fn solve_dv<S: Simd>(&self, b: &mut [DV<S>], rg: &[(usize, usize)]) {
         S::vectorize(
             #[inline(always)]
@@ -775,7 +798,7 @@ impl DDLu {
                 }
                 for k in 0..n {
                     let nt = -b[k];
-                    // the lanes whose -y_k has a nonzero leading part; the scalar solve skips the others
+                    // The lanes whose -y_k has a nonzero leading part. The scalar solve skips the others.
                     let live = nt.hi.ne(V8::zero());
                     if live.bits() == 0 {
                         continue;
@@ -871,9 +894,9 @@ impl DDLu {
         }
     }
 
-    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
-    /// zero), then U x = y, each column's update of the rows below (or above) 8 rows at a time on the backend
-    /// `simd::dispatch` picks, every entry with the operations and order of the scalar loops.
+    /// Solves A x = b in place, b holding n values. It applies the row swaps, solves L y = b column by column, skipping
+    /// columns whose y_k is zero, and then solves U x = y. Each column updates the rows below, or above, 8 rows at a
+    /// time on the backend `simd::dispatch` picks, with the operations and order of the scalar loops on every entry.
     pub fn solve(&self, b: &mut [DD]) {
         simd::dispatch(Solve { lu: self, b })
     }
@@ -924,13 +947,13 @@ impl DDLu {
         )
     }
 
-    /// x with A x = b to quad-double accuracy, by iterative refinement with the residual in quad-double (Moler, J.
-    /// ACM 14 (1967) 316, doi:10.1145/321386.321394). This is the LU of A or of a double-double approximation of
-    /// it (A rounded, or A at a nearby point); `resid(x, r)` writes r = b - A x in quad-double for the caller's own
-    /// A and b. x starts as the solve of b rounded to double-double, and each of the `steps` steps adds the solve of
-    /// r rounded to double-double, the sum in quad-double: with the LU of A to double-double each step multiplies
-    /// the error by about cond(A) 2^-104, so two steps reach quad-double where cond(A) is below about 10^10.
-    /// The conversions and sums run 8 entries at a time on `QV` lanes (`QV::to_dv`, `QV + QV`), bitwise the scalar
+    /// Solves A x = b to quad-double accuracy, by iterative refinement with the residual in quad-double (Moler,
+    /// J. ACM 14 (1967) 316, doi:10.1145/321386.321394). `self` is the LU of A or of a double-double approximation of
+    /// it, A rounded or A at a nearby point, and `resid(x, r)` writes r = b - A x in quad-double for the caller's own A
+    /// and b. x starts as the solve of b rounded to double-double, and each of the `steps` steps adds the solve of r
+    /// rounded to double-double, the sum in quad-double. With the LU of A to double-double each step multiplies the
+    /// error by about cond(A) 2^-104, so two steps reach quad-double where cond(A) is below about 10^10. The
+    /// conversions and sums run 8 entries at a time on `QV` lanes (`QV::to_dv`, `QV + QV`), bitwise the scalar
     /// `QD::to_dd` and `QD + QD`.
     pub fn solve_refine_qd(&self, b: &[QD], steps: usize, resid: impl FnMut(&[QD], &mut [QD])) -> Vec<QD> {
         simd::dispatch(RefineQd {
@@ -963,7 +986,8 @@ impl DDLu {
         )
     }
 
-    /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
+    /// Solves A^T y = b in place. With P A = L U, P the recorded row swaps, it solves U^T w = b and L^T v = w and sets
+    /// y = P^T v.
     pub fn solve_t(&self, b: &mut [DD]) {
         let n = self.n;
         for k in 0..n {
@@ -988,8 +1012,8 @@ impl DDLu {
         }
     }
 
-    /// Solve A x = b in plain f64 with the hi parts of the factors (an f64 LU of A, accurate to about one ulp of its
-    /// entries), for the f64 lanes of the mixed-precision Jacobian.
+    /// Solves A x = b in plain f64 with the hi parts of the factors, an f64 LU of A accurate to about one ulp of its
+    /// entries, for the f64 lanes of the mixed-precision Jacobian.
     pub fn solve_hi(&self, b: &mut [f64]) {
         simd::dispatch(SolveHi { lu: self, b })
     }
@@ -1025,7 +1049,8 @@ impl DDLu {
         )
     }
 
-    /// (sign, ln|det|) of the factored matrix: product of the pivots u_kk, sign flipped per row interchange.
+    /// The sign and ln|det| of the factored matrix, as (sign, ln|det|). The determinant is the product of the pivots
+    /// u_kk, its sign flipped per row interchange.
     pub fn logdet(&self) -> (f64, f64) {
         let mut sign = 1.0f64;
         let mut la = 0.0f64;
@@ -1043,7 +1068,7 @@ impl DDLu {
         (sign, la)
     }
 
-    /// min and max |u_kk| (hi parts)
+    /// The minimum and maximum |u_kk|, over the hi parts.
     pub fn pivot_range(&self) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = 0.0f64;
@@ -1060,7 +1085,7 @@ impl DDLu {
 // The same blocked LU in plain f64, for the mixed-precision Newton step (an f64 Jacobian)
 // ---------------------------------------------------------------------------------------------------------------
 
-/// `panel_getf2` in f64 (one array; multipliers by the pivot's reciprocal, as LAPACK's dgetf2).
+/// `panel_getf2` in f64, on one array, with the multipliers formed by the pivot's reciprocal as in LAPACK's dgetf2.
 fn panel_getf2_f64<S: Simd>(
     n: usize,
     ld: usize,
@@ -1174,7 +1199,7 @@ fn tile_rows_f64<S: Simd, const R: usize, const W: usize>(
     }
 }
 
-/// `gemm` in f64 (4 row blocks x NC columns per register tile)
+/// `gemm` in f64, with 4 row blocks x NC columns per register tile.
 fn gemm_f64<S: Simd>(
     jb: usize,
     ch: &mut [f64],
@@ -1220,10 +1245,11 @@ fn gemm_f64<S: Simd>(
 }
 
 impl DDLu {
-    /// The blocked LU of `factor_blocked` (the same panels, row swaps, skipped zero blocks and register tiles) in plain
-    /// f64 on an f64 matrix: an f64 LU with partial pivoting (backward stable: L U = P (A + E), |E| of the order of
-    /// n eps |L| |U|), stored with lo = 0 so that the double-double solves (solve, solve_t, solve_many, chord) use these
-    /// factors as they are. For the mixed-precision Newton step, whose Jacobian is f64 to begin with.
+    /// The blocked LU of `factor_blocked`, with the same panels, row swaps, skipped zero blocks and register tiles, in
+    /// plain f64 on an f64 matrix. It is an f64 LU with partial pivoting, backward stable with L U = P (A + E) and |E|
+    /// of the order of n eps |L| |U|. The factors are stored with lo = 0, so the double-double solves (`solve`,
+    /// `solve_t`, `solve_many`, chord) use them as they are. It serves the mixed-precision Newton step, whose Jacobian
+    /// is f64 to begin with.
     pub fn factor_f64(n: usize, ld: usize, a: Vec<f64>, par: bool) -> Result<DDLu, String> {
         simd::dispatch(FactorF64 { n, ld, a, par })
     }
@@ -1338,19 +1364,23 @@ impl DDLu {
     }
 }
 
-/// Partial-pivoting LU, in place, of the first `np` columns of an `nr` x `ncol` f64 matrix: the step of a block
+/// Partial-pivoting LU, in place, of the first `np` columns of an `nr` x `ncol` f64 matrix. It is the step of a block
 /// (staircase) LU that factors one group of columns and passes the Schur complement on to the next, where the square
 /// [`DDLu::factor_f64`] does not apply.
 ///
-/// `a` is column-major with leading dimension `ld` (a multiple of 8, at least `nr`), with rows `nr..ld` zero.
-/// Afterwards rows `0..np` of the first `np` columns hold U11 and the rows below them the multipliers L21 (unit lower
-/// triangular L11 above them); rows `0..np` of the columns `np..ncol` hold U12, and rows `np..nr` of those columns the
-/// Schur complement A22 - L21 U12. `perm[k]` (`k < np`) is the row swapped with row `k` at step `k`, and every swap is
-/// applied to all `ncol` columns. The panels, row swaps, skipped zero blocks, register tiles and parallel column
-/// chunks are those of `factor_f64`, on the backend [`simd::dispatch`] picks, bitwise the same on every backend. The
-/// triangular update inside a panel runs row by row from the pivot down, where `factor_f64` uses aligned 8-row
-/// blocks, which can turn a -0 above the pivot into +0: with `nr = ncol = np` the factors equal `factor_f64`'s except
-/// possibly in the sign of zero entries.
+/// `a` is column-major with leading dimension `ld`, a multiple of 8 and at least `nr`, with rows `nr..ld` zero.
+/// Afterwards it holds the following.
+///
+/// * Rows `0..np` of the first `np` columns hold U11 on and above the diagonal and the unit lower triangular L11 below
+///   it, and the rows below them hold the multipliers L21.
+/// * Rows `0..np` of the columns `np..ncol` hold U12, and rows `np..nr` of those columns the Schur complement A22 - L21
+///   U12.
+/// * `perm[k]` (`k < np`) is the row swapped with row `k` at step `k`, and every swap is applied to all `ncol` columns.
+///
+/// The panels, row swaps, skipped zero blocks, register tiles and parallel column chunks are those of `factor_f64`, on
+/// the backend [`simd::dispatch`] picks, bitwise the same on every backend. The triangular update inside a panel runs
+/// row by row from the pivot down, where `factor_f64` uses aligned 8-row blocks, which can turn a -0 above the pivot
+/// into +0. With `nr = ncol = np` the factors equal `factor_f64`'s except possibly in the sign of zero entries.
 pub fn lu_rect_f64(
     nr: usize,
     ncol: usize,
@@ -1405,8 +1435,8 @@ fn lu_rect_f64_on<S: Simd>(
                     break;
                 }
                 let pan: &[f64] = pan;
-                // the multipliers packed by 8-row blocks from the aligned row r0 below je for the tiles (zero for rows
-                // < je, which the triangular update takes from the panel, and for rows >= nr)
+                // The multipliers packed by 8-row blocks from the aligned row r0 below je for the tiles. They are zero
+                // for rows < je, which the triangular update takes from the panel, and for rows >= nr.
                 let r0 = 8 * (je / 8);
                 let nrb = (ld - r0) / 8;
                 let mut pk = vec![0.0f64; nrb * jb * 8];
@@ -1479,8 +1509,8 @@ fn lu_rect_f64_on<S: Simd>(
     )
 }
 
-/// Gram matrix G = J^T J and g = J^T b for a column-major J (n x n, leading dimension ld): G column-major with
-/// leading dimension ld (only what LU needs; G is symmetric and filled completely).
+/// The Gram matrix G = J^T J and g = J^T b for a column-major J, n x n with leading dimension ld. G is column-major
+/// with leading dimension ld, the layout the LU needs, and is symmetric and filled completely.
 pub fn gram(n: usize, ld: usize, jh: &[f64], jl: &[f64], bh: &[f64], bl: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<DD>) {
     simd::dispatch(Gram { n, ld, jh, jl, bh, bl })
 }
@@ -1717,31 +1747,34 @@ impl Kernel for Gram<'_> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// staircase (almost block diagonal) systems with one global parameter
+// Staircase (almost block diagonal) systems with one global parameter
 // ---------------------------------------------------------------------------------------------------------------
 //
 // The Newton system of multiple shooting (or collocation) for a boundary-value problem with one unknown parameter,
-// factored without forming the dense matrix. The unknowns z (n of them) are column groups g_0..g_S, contiguous ranges
-// of z, and one parameter z[iparam]; the rows are row blocks r_0..r_{S-1}, contiguous ranges of rows, and one more row
-// row0. Row block s depends on g_s, g_{s+1} and the parameter; row0 on g_0 only (a normalization or phase condition).
+// factored without forming the dense matrix. The unknowns z, n of them, are column groups g_0..g_S, contiguous ranges
+// of z, and one parameter z[iparam]. The rows are row blocks r_0..r_{S-1}, contiguous ranges of rows, and one more row,
+// row0. Row block s depends on g_s, g_{s+1} and the parameter, and row0 on g_0 only, as a normalization or phase
+// condition.
+//
 // The parameter enters every row block, so the factorization works on an augmented system with one copy p_s of it in
-// each group from g_1 on (ColumnGroup::param) and link rows p_{s-1} - p_s = 0. Row block s then touches g_s and g_{s+1}
-// only, and Gaussian elimination with partial pivoting runs in steps: step s factors the columns of g_s, its pivot
-// candidates being the rows left over from step s - 1 (zero outside g_s), the extra row (row0 at s = 0, the link row
-// after) and row block s, and passes the rows it does not pivot on, now holding the Schur complement on g_{s+1}, to
-// step s + 1; the last step is a square LU on g_S. This is partial pivoting on the augmented matrix in this row and
-// column order (rows below a step never hold the step's columns), so it has that algorithm's stability, and the fill
-// stays inside the steps (the almost-block-diagonal solvers of de Boor and Weiss, ACM TOMS 6 (1980) 80,
-// doi:10.1145/355873.355880, and Diaz, Fairweather and Keast, ACM TOMS 9 (1983) 358, doi:10.1145/356044.356053, factor
-// the same structure with alternate row and column pivoting). Stored per step: L and U11 (rows x pivot columns) and U12
-// (pivot rows x next group), f64; each step is `lu_rect_f64`.
+// each group from g_1 on (`ColumnGroup::param`) and link rows p_{s-1} - p_s = 0. Row block s then touches g_s and
+// g_{s+1} only, and Gaussian elimination with partial pivoting runs in steps. Step s factors the columns of g_s. Its
+// pivot candidates are the rows left over from step s - 1 (zero outside g_s), the extra row (row0 at s = 0, the link
+// row after) and row block s. It passes the rows it does not pivot on, now holding the Schur complement on g_{s+1}, to
+// step s + 1. The last step is a square LU on g_S.
+//
+// This is partial pivoting on the augmented matrix in this row and column order, since rows below a step never hold the
+// step's columns, so it has that algorithm's stability, and the fill stays inside the steps. The almost-block-diagonal
+// solvers of de Boor and Weiss (ACM TOMS 6 (1980) 80, doi:10.1145/355873.355880) and of Diaz, Fairweather and Keast
+// (ACM TOMS 9 (1983) 358, doi:10.1145/356044.356053) factor the same structure with alternate row and column pivoting.
+// Each step stores L and U11 (rows x pivot columns) and U12 (pivot rows x next group) in f64, and is `lu_rect_f64`.
 //
 // The solves are in double-double with the f64 factors, as DDLu's solves with an f64 factorization. With E the copy of
 // the parameter into every p_s and S the selection of the non-link rows, J = S J_aug E, so J^-1 = P J_aug^-1 S^T and
-// J^-T = S J_aug^-T P^T for any P with P E = I; P reads the parameter from its first copy.
+// J^-T = S J_aug^-T P^T for any P with P E = I. P reads the parameter from its first copy.
 
-/// A column group of a `StaircaseLu`'s augmented system: a copy of the parameter first if `param`, then the unknowns
-/// z[zoff..zoff + zlen].
+/// A column group of a `StaircaseLu`'s augmented system. It holds a copy of the parameter first if `param`, then the
+/// unknowns z[zoff..zoff + zlen].
 #[derive(Clone, Copy, Debug)]
 pub struct ColumnGroup {
     pub param: bool,
@@ -1758,17 +1791,19 @@ impl ColumnGroup {
     }
 }
 
-/// One elimination step: rows 0..nc carried from the previous step, row nc the extra row (row0 or a link row), rows
-/// nc + 1..nr the residual rows roff..roff + rlen; np pivot columns (this step's group), nrc right columns (the next).
+/// One elimination step. Rows 0..nc are carried from the previous step, row nc is the extra row (row0 or a link row),
+/// and rows nc + 1..nr are the residual rows roff..roff + rlen. The step has np pivot columns, its own group, and nrc
+/// right columns, the next group.
 struct Step {
     nc: usize,
     nr: usize,
     np: usize,
     nrc: usize,
     ld: usize,
-    /// ld x np, column-major: U11 on and above the diagonal, the multipliers of L below (rows up to nr)
+    /// U11 on and above the diagonal and the multipliers of L below it, rows up to nr, as an ld x np column-major
+    /// array.
     l: Vec<f64>,
-    /// np x nrc, column-major with leading dimension ldu = ld_for(np) (zero below row np): U12
+    /// U12 as an np x nrc column-major array with leading dimension ldu = ld_for(np), zero below row np.
     u12: Vec<f64>,
     ldu: usize,
     perm: Vec<usize>,
@@ -1778,27 +1813,29 @@ struct Step {
 
 /// The factors of a staircase system (see `StaircaseLu::factor`).
 pub struct StaircaseLu {
-    /// size of the original system (z)
+    /// Size of the original system (z).
     pub n: usize,
     groups: Vec<ColumnGroup>,
     steps: Vec<Step>,
-    /// index of the group whose parameter copy is read as the parameter, and the parameter's index in z
+    /// Index of the group whose parameter copy is read as the parameter.
     gparam: usize,
+    /// The parameter's index in z.
     iparam: usize,
-    /// row0's index in the original rows
+    /// The index of row0 in the original rows.
     irow0: usize,
-    /// seconds spent in fill (building the blocks) and in the factorization
+    /// Seconds spent in fill, building the blocks.
     pub t_fill: f64,
+    /// Seconds spent in the factorization.
     pub t_factor: f64,
 }
 
-/// Deliberate breakage of `StaircaseLu::factor_control`, for checks that must be able to fail: `Pivot` scales one
-/// pivot of the middle step by 1 + 1e-6; `Link` replaces the link rows by p_s = 0 (the copies are no longer tied to
-/// the parameter).
+/// Deliberate breakage of `StaircaseLu::factor_control`, for checks that must be able to fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StaircaseControl {
     None,
+    /// Scales one pivot of the middle step by 1 + 1e-6.
     Pivot,
+    /// Replaces the link rows by p_s = 0, so the copies are no longer tied to the parameter.
     Link,
 }
 
@@ -1808,13 +1845,18 @@ fn f64dd(x: f64) -> DD {
 }
 
 impl StaircaseLu {
-    /// Build and factor. groups: g_0..g_S (g_0 without a parameter copy); `rblocks[s]` (s < S): the rows (offset,
-    /// count) of row block s; irow0: row0's index; iparam: the parameter's index in z. fill(s, w, ld, r0) writes row
-    /// block s into rows r0..r0 + rlen of the step's ld x (np + nrc) column-major array w (columns: g_s, then
-    /// g_{s+1}, each with its parameter copy first if it has one; the parameter's column of row block s is g_{s+1}'s
-    /// copy), and for s = 0 also row0 at row r0 - 1; the array is zero elsewhere. The link rows are written here.
-    /// Steps are factored in order, each in parallel over column chunks when par. A layout whose column groups with
-    /// the parameter, or row blocks with row0, do not cover 0..n exactly once is an error.
+    /// Builds and factors the system. Steps are factored in order, each in parallel over column chunks when `par`. A
+    /// layout whose column groups with the parameter, or row blocks with row0, do not cover 0..n exactly once is an
+    /// error.
+    ///
+    /// * `groups` are g_0..g_S, g_0 without a parameter copy.
+    /// * `rblocks[s]` (s < S) gives the rows of row block s as (offset, count).
+    /// * `irow0` is row0's index.
+    /// * `iparam` is the parameter's index in z.
+    /// * `fill(s, w, ld, r0)` writes row block s into rows r0..r0 + rlen of the step's ld x (np + nrc) column-major
+    ///   array w, and for s = 0 also row0 at row r0 - 1. The columns of w are g_s, then g_{s+1}, each with its
+    ///   parameter copy first if it has one, and the parameter's column of row block s is g_{s+1}'s copy. The array is
+    ///   zero elsewhere, and `factor` writes the link rows itself.
     pub fn factor<F>(
         n: usize,
         groups: Vec<ColumnGroup>,
@@ -1853,7 +1895,7 @@ impl StaircaseLu {
             .iter()
             .position(|g| g.param)
             .ok_or("staircase LU: no parameter copy")?;
-        // the column groups with the parameter, and the row blocks with row0, must each cover 0..n exactly once
+        // The column groups with the parameter, and the row blocks with row0, must each cover 0..n exactly once.
         let cols = groups.iter().map(|g| (g.zoff, g.zlen)).chain([(iparam, 1)]);
         let rows = rblocks.iter().copied().chain([(irow0, 1)]);
         for (what, parts) in [
@@ -1875,7 +1917,8 @@ impl StaircaseLu {
             }
         }
         let mut steps: Vec<Step> = Vec::with_capacity(ns);
-        // carried rows: (count, column-major nc x np of the coming step, leading dimension nc)
+        // The carried rows, as their count nc and the column-major nc x np block of the coming step, leading dimension
+        // nc.
         let mut carry: Vec<f64> = Vec::new();
         let mut nc = 0usize;
         let (mut t_fill, mut t_factor) = (0.0f64, 0.0f64);
@@ -1899,7 +1942,7 @@ impl StaircaseLu {
             }
             if s + 1 < ns {
                 if s > 0 {
-                    // link row p_{s-1} - p_s = 0 (both groups start with their parameter copy)
+                    // The link row p_{s-1} - p_s = 0, both groups starting with their parameter copy.
                     if !(groups[s].param && groups[s + 1].param) {
                         return Err("staircase LU: a link row needs parameter copies on both sides".into());
                     }
@@ -1920,7 +1963,7 @@ impl StaircaseLu {
                 let k = np / 2;
                 w[k * ld + k] *= 1.0 + 1e-6;
             }
-            // U12 (rows 0..np of the right columns) and the next carry (rows np..nr of the right columns)
+            // U12 is rows 0..np of the right columns, and the next carry is rows np..nr of them.
             let ldu = ld_for(np);
             let mut u12 = vec![0.0f64; ldu * nrc];
             let nc2 = nr - np;
@@ -1960,7 +2003,7 @@ impl StaircaseLu {
         })
     }
 
-    /// bytes held by the factors
+    /// Bytes held by the factors.
     pub fn bytes(&self) -> usize {
         self.steps
             .iter()
@@ -1973,7 +2016,7 @@ impl StaircaseLu {
         st.l[k * st.ld + i]
     }
 
-    /// min and max |u_kk| over all steps
+    /// The minimum and maximum |u_kk| over all steps.
     pub fn pivot_range(&self) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = 0.0f64;
@@ -1987,9 +2030,9 @@ impl StaircaseLu {
         (lo, hi)
     }
 
-    /// Solve J x = b in place (b: n values in the original row order in, the unknowns z out). Each column's update
-    /// runs 8 rows at a time on the backend `simd::dispatch` picks, every entry with the operations and order of the
-    /// scalar loops.
+    /// Solves J x = b in place. b holds n values, in the original row order on entry and the unknowns z on return. Each
+    /// column's update runs 8 rows at a time on the backend `simd::dispatch` picks, with the operations and order of
+    /// the scalar loops on every entry.
     pub fn solve(&self, b: &mut [DD]) {
         simd::dispatch(StairSolve { lu: self, b })
     }
@@ -2063,11 +2106,12 @@ impl StaircaseLu {
         )
     }
 
-    /// Solve J^T y = b in place (b: n values indexed by the unknowns in, by the residual rows out).
+    /// Solves J^T y = b in place. b holds n values, indexed by the unknowns on entry and by the residual rows on
+    /// return.
     pub fn solve_t(&self, b: &mut [DD]) {
         assert_eq!(b.len(), self.n);
         let ns = self.steps.len();
-        // U^T w = P^T-placed b, forward over the groups
+        // U^T w = P^T-placed b, forward over the groups.
         let mut ws: Vec<Vec<DD>> = Vec::with_capacity(ns);
         for (s, g) in self.groups.iter().enumerate() {
             let st = &self.steps[s];
@@ -2098,7 +2142,7 @@ impl StaircaseLu {
             }
             ws.push(v);
         }
-        // L^T and P^T, backward over the steps; each step's leading entries are the adjoint of the rows it carried in
+        // L^T and P^T, backward over the steps. Each step's leading entries are the adjoint of the rows it carried in.
         let mut adj: Vec<DD> = Vec::new();
         let mut out = vec![DD::ZERO; self.n];
         for s in (0..ns).rev() {
@@ -2132,9 +2176,9 @@ impl StaircaseLu {
         b.copy_from_slice(&out);
     }
 
-    /// Several right-hand sides, row-major (nrhs, n) as (hi, lo), in place; each row bitwise as solve / solve_t
-    /// gives it. Eight right-hand sides share each lane vector (`solve_dv`, `solve_t_dv`), and the groups of eight run
-    /// in parallel when par.
+    /// `solve` or `solve_t` for several right-hand sides in place, row-major (nrhs, n) as (hi, lo), each row bitwise as
+    /// the single solve gives it. Eight right-hand sides share each lane vector (`solve_dv`, `solve_t_dv`), and the
+    /// groups of eight run in parallel when `par`.
     pub fn solve_many(&self, bh: &mut [f64], bl: &mut [f64], nrhs: usize, transpose: bool, par: bool) {
         simd::dispatch(StairSolveMany {
             lu: self,
@@ -2200,8 +2244,8 @@ impl StaircaseLu {
         )
     }
 
-    /// `solve` lane by lane: each lane a right-hand side (padding lanes hold zeros and stay zero). The scalar solve
-    /// skips a column whose -y_k has a zero leading part; here those lanes keep their values.
+    /// `solve` lane by lane, each lane a right-hand side. Padding lanes hold zeros and stay zero. The scalar solve
+    /// skips a column whose -y_k has a zero leading part, and here those lanes keep their values.
     fn solve_dv<S: Simd>(&self, b: &mut [DV<S>]) {
         S::vectorize(
             #[inline(always)]
@@ -2354,7 +2398,7 @@ impl StaircaseLu {
     }
 }
 
-/// x's parts as two arrays of len (at least x.len(), zero after)
+/// x's parts as two arrays of length len, at least x.len(), zero past x.
 #[inline(always)]
 fn split(x: &[DD], len: usize) -> (Vec<f64>, Vec<f64>) {
     let (mut h, mut l) = (vec![0.0f64; len], vec![0.0f64; len]);
@@ -2365,7 +2409,7 @@ fn split(x: &[DD], len: usize) -> (Vec<f64>, Vec<f64>) {
     (h, l)
 }
 
-/// x from the arrays h and l
+/// Sets x from the arrays h and l.
 #[inline(always)]
 fn join(x: &mut [DD], h: &[f64], l: &[f64]) {
     for (i, v) in x.iter_mut().enumerate() {
@@ -2381,27 +2425,28 @@ fn join(x: &mut [DD], h: &[f64], l: &[f64]) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QdLuControl {
     None,
-    /// every trailing update rounded to double-double (its two lower parts dropped)
+    /// Every trailing update rounded to double-double, its two lower parts dropped.
     UpdateDd,
 }
 
-/// Dense quad-double LU with partial pivoting (LAPACK getf2 order, as `DDLu::factor_unblocked`), column-major with
-/// the leading dimension a multiple of 8 and each entry's four parts in four arrays, so that the multipliers and the
-/// trailing update run on 8-row `QV` lanes; the trailing columns are updated in parallel (rayon) for large matrices.
-/// For systems whose condition number nears 2^104, where a double-double solve has no correct digit: a solve's error
-/// is about cond(A) 2^-209 (backward stability of partial pivoting; Higham, Accuracy and Stability of Numerical
-/// Algorithms, 2nd ed., SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an exactly zero
-/// pivot-row entry is skipped (it cannot change a value), so the zero blocks of a sparse matrix cost nothing.
+/// Dense quad-double LU with partial pivoting in LAPACK getf2 order, as `DDLu::factor_unblocked`. It is column-major
+/// with the leading dimension a multiple of 8 and each entry's four parts in four arrays, so that the multipliers and
+/// the trailing update run on 8-row `QV` lanes, and the trailing columns are updated in parallel (rayon) for large
+/// matrices. It serves systems whose condition number nears 2^104, where a double-double solve has no correct digit. A
+/// solve's error is about cond(A) 2^-209, by the backward stability of partial pivoting (Higham, Accuracy and Stability
+/// of Numerical Algorithms, 2nd ed., SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an
+/// exactly zero pivot-row entry is skipped, since it cannot change a value, so the zero blocks of a sparse matrix cost
+/// nothing.
 #[derive(Clone)]
 pub struct QDLu {
     pub n: usize,
     pub ld: usize,
-    /// part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it) at c[q][j * ld + i]
+    /// Part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it), at c[q][j * ld + i].
     pub c: [Vec<f64>; 4],
     pub perm: Vec<usize>,
 }
 
-/// one column's four parts, as the parallel update zips them
+/// One column's four parts, as the parallel update zips them.
 type Cols4<'a> = (((&'a mut [f64], &'a mut [f64]), &'a mut [f64]), &'a mut [f64]);
 
 #[inline(always)]
@@ -2416,8 +2461,8 @@ fn sel_qv<S: Simd>(m: M8<S>, u: QV<S>, a: QV<S>) -> QV<S> {
     }
 }
 
-/// b[i] += l[i] t for i in lo..hi, on the 8-row blocks that meet lo..hi; rows outside keep their value. Blocks of l
-/// that are exactly zero are skipped. Every slice holds hi rounded up to 8 rows.
+/// Adds l[i] t to b[i] for i in lo..hi on the 8-row blocks that meet lo..hi. Rows outside keep their value, and blocks
+/// of l that are exactly zero are skipped. Every slice holds hi rounded up to 8 rows.
 #[inline(always)]
 fn qd_axpy_rows<S: Simd>(b: [&mut [f64]; 4], l: [&[f64]; 4], lo: usize, hi: usize, t: QD, ctl: QdLuControl) {
     let tv = QV::<S>::splat(t);
@@ -2443,13 +2488,14 @@ fn qd_axpy_rows<S: Simd>(b: [&mut [f64]; 4], l: [&[f64]; 4], lo: usize, hi: usiz
 }
 
 impl QDLu {
-    /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero), part q
-    /// of entry (i, j) at c[q][j * ld + i]. par: update the trailing columns in parallel (rayon's current pool).
+    /// Factors the n x n matrix given column-major with leading dimension ld, where ld % 8 == 0 and the padding rows
+    /// are zero, with part q of entry (i, j) at c[q][j * ld + i]. With `par` the trailing columns are updated in
+    /// parallel on rayon's current pool.
     pub fn factor(n: usize, ld: usize, c: [Vec<f64>; 4], par: bool) -> Result<QDLu, String> {
         Self::factor_control(n, ld, c, par, QdLuControl::None)
     }
 
-    /// `factor` with a control (`QdLuControl`; None is `factor`)
+    /// `factor` with a control (`QdLuControl`), where `None` is `factor`.
     pub fn factor_control(n: usize, ld: usize, c: [Vec<f64>; 4], par: bool, ctl: QdLuControl) -> Result<QDLu, String> {
         simd::dispatch(FactorQd { n, ld, c, par, ctl })
     }
@@ -2484,7 +2530,7 @@ impl QDLu {
                     let piv = QV::<S>::splat(QD {
                         x: std::array::from_fn(|q| c[q][ck + k]),
                     });
-                    // the multipliers l_ik = a_ik / a_kk, rows k + 1..n
+                    // The multipliers l_ik = a_ik / a_kk, rows k + 1..n.
                     let mut i = 8 * ((k + 1) / 8);
                     while i < n {
                         let x = load_qv::<S>([&c[0], &c[1], &c[2], &c[3]], ck + i);
@@ -2550,7 +2596,7 @@ impl QDLu {
         )
     }
 
-    /// entry (i, j) of the factors
+    /// Entry (i, j) of the factors.
     #[inline(always)]
     pub fn at(&self, i: usize, j: usize) -> QD {
         let o = j * self.ld + i;
@@ -2564,8 +2610,9 @@ impl QDLu {
         std::array::from_fn(|q| &self.c[q][r.clone()])
     }
 
-    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
-    /// zero), then U x = y, each column's update 8 rows at a time on the backend `simd::dispatch` picks.
+    /// Solves A x = b in place, b holding n values. It applies the row swaps, solves L y = b column by column, skipping
+    /// columns whose y_k is zero, and then solves U x = y, each column's update 8 rows at a time on the backend
+    /// `simd::dispatch` picks.
     pub fn solve(&self, b: &mut [QD]) {
         simd::dispatch(SolveQd { lu: self, b })
     }
@@ -2617,7 +2664,8 @@ impl QDLu {
         )
     }
 
-    /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
+    /// Solves A^T y = b in place. With P A = L U, P the recorded row swaps, it solves U^T w = b and L^T v = w and sets
+    /// y = P^T v.
     pub fn solve_t(&self, b: &mut [QD]) {
         let n = self.n;
         for k in 0..n {
@@ -2642,7 +2690,7 @@ impl QDLu {
         }
     }
 
-    /// min and max |u_kk| (leading parts)
+    /// The minimum and maximum |u_kk|, over the leading parts.
     pub fn pivot_range(&self) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = 0.0f64;
@@ -2688,45 +2736,45 @@ impl Kernel for SolveQd<'_> {
 // Dense octo-double LU
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Variants of `ODLu::factor_control`: the scalar reference of the lanes, and a deliberate breakage for the controls
-/// of the accuracy tests.
+/// Variants of `ODLu::factor_control`, the scalar reference of the lanes and a deliberate breakage for the controls of
+/// the accuracy tests.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OdLuControl {
-    /// the factorization itself
+    /// The factorization itself.
     None,
-    /// every update in scalar octo-double (`OD`), entry by entry: bitwise `None` (each lane of `OV` is the scalar
-    /// computation), the reference of the bitwise tests and of the lanes' benchmark
+    /// Every update in scalar octo-double (`OD`), entry by entry. It is bitwise `None`, as each lane of `OV` is the
+    /// scalar computation, and is the reference of the bitwise tests and of the lanes' benchmark.
     Scalar,
-    /// every trailing update rounded to quad-double (its four lower parts dropped)
+    /// Every trailing update rounded to quad-double, its four lower parts dropped.
     UpdateQd,
 }
 
-/// Dense octo-double LU with partial pivoting (LAPACK getf2 order, as `QDLu`), column-major with the leading dimension
-/// a multiple of 8 and each entry's eight parts in eight arrays, so that the multipliers and the trailing update run
-/// on 8-row `OV` lanes; the trailing columns are updated in parallel (rayon) for large matrices. For systems whose
-/// condition number nears 2^209, where a quad-double solve has no correct digit: a solve's error is about cond(A)
-/// 2^-418 (backward stability of partial pivoting; Higham, Accuracy and Stability of Numerical Algorithms, 2nd ed.,
-/// SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an exactly zero pivot-row entry is
-/// skipped (it cannot change a value). Every backend gives the same bits.
+/// Dense octo-double LU with partial pivoting in LAPACK getf2 order, as `QDLu`. It is column-major with the leading
+/// dimension a multiple of 8 and each entry's eight parts in eight arrays, so that the multipliers and the trailing
+/// update run on 8-row `OV` lanes, and the trailing columns are updated in parallel (rayon) for large matrices. It
+/// serves systems whose condition number nears 2^209, where a quad-double solve has no correct digit. A solve's error
+/// is about cond(A) 2^-418, by the backward stability of partial pivoting (Higham, Accuracy and Stability of Numerical
+/// Algorithms, 2nd ed., SIAM 2002, ch. 9). An update with an exactly zero multiplier block (8 rows) or an exactly zero
+/// pivot-row entry is skipped, since it cannot change a value. Every backend gives the same bits.
 #[derive(Clone)]
 pub struct ODLu {
-    /// the order
+    /// The order.
     pub n: usize,
-    /// the leading dimension, a multiple of 8
+    /// The leading dimension, a multiple of 8.
     pub ld: usize,
-    /// part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it) at c[q][j * ld + i]
+    /// Part q of entry (i, j) of L (unit, below the diagonal) and U (on and above it), at c[q][j * ld + i].
     pub c: [Vec<f64>; 8],
-    /// the row swaps: row k was exchanged with row perm\[k\] at step k
+    /// The row swaps. Row k was exchanged with row perm\[k\] at step k.
     pub perm: Vec<usize>,
 }
 
-/// the 8 entries i..i + 8 of an octo-double column, from its eight part arrays
+/// The 8 entries i..i + 8 of an octo-double column, from its eight part arrays.
 #[inline(always)]
 fn load_ov<S: Simd>(c: [&[f64]; 8], i: usize) -> OV<S> {
     OV::load(c.map(|p| &p[i..i + 8]))
 }
 
-/// u where m is set, a elsewhere, in every part
+/// Selects u where m is set and a elsewhere, in every part.
 #[inline(always)]
 fn sel_ov<S: Simd>(m: M8<S>, u: OV<S>, a: OV<S>) -> OV<S> {
     OV {
@@ -2734,9 +2782,9 @@ fn sel_ov<S: Simd>(m: M8<S>, u: OV<S>, a: OV<S>) -> OV<S> {
     }
 }
 
-/// b[i] += l[i] t for i in lo..hi, on the 8-row blocks that meet lo..hi (rows outside keep their value), or with
-/// `OdLuControl::Scalar` row by row in `OD`. Blocks of l that are exactly zero are skipped. Every slice holds hi
-/// rounded up to 8 rows.
+/// Adds l[i] t to b[i] for i in lo..hi on the 8-row blocks that meet lo..hi, or row by row in `OD` with
+/// `OdLuControl::Scalar`. Rows outside keep their value, and blocks of l that are exactly zero are skipped. Every slice
+/// holds hi rounded up to 8 rows.
 #[inline(always)]
 fn od_axpy_rows<S: Simd>(b: [&mut [f64]; 8], l: [&[f64]; 8], lo: usize, hi: usize, t: OD, ctl: OdLuControl) {
     let tv = OV::<S>::splat(t);
@@ -2770,11 +2818,11 @@ fn od_axpy_rows<S: Simd>(b: [&mut [f64]; 8], l: [&[f64]; 8], lo: usize, hi: usiz
 }
 
 impl ODLu {
-    /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero), part q
-    /// of entry (i, j) at c[q][j * ld + i]. Each entry's parts must be normalized, as `OD` keeps them (`OD::new`
-    /// renormalizes raw parts): the pivot search and the skipped zero updates read the leading parts only, as in
-    /// `QDLu`. par: update the trailing columns in parallel (rayon's current pool). A zero or non-finite pivot is an
-    /// error naming its column.
+    /// Factors the n x n matrix given column-major with leading dimension ld, where ld % 8 == 0 and the padding rows
+    /// are zero, with part q of entry (i, j) at c[q][j * ld + i]. Each entry's parts must be normalized, as `OD` keeps
+    /// them (`OD::new` renormalizes raw parts), since the pivot search and the skipped zero updates read the leading
+    /// parts only, as in `QDLu`. With `par` the trailing columns are updated in parallel on rayon's current pool. A
+    /// zero or non-finite pivot is an error naming its column.
     ///
     /// ```
     /// use multidouble::linalg::ODLu;
@@ -2793,12 +2841,12 @@ impl ODLu {
         Self::factor_control(n, ld, c, par, OdLuControl::None)
     }
 
-    /// `factor` with a variant (`OdLuControl`; None is `factor`)
+    /// `factor` with a variant (`OdLuControl`), where `None` is `factor`.
     pub fn factor_control(n: usize, ld: usize, c: [Vec<f64>; 8], par: bool, ctl: OdLuControl) -> Result<ODLu, String> {
         simd::dispatch(FactorOd { n, ld, c, par, ctl })
     }
 
-    /// `factor_control` on the backend S
+    /// `factor_control` on the backend S.
     fn factor_on<S: Simd>(
         n: usize,
         ld: usize,
@@ -2829,7 +2877,7 @@ impl ODLu {
                     let piv = OD {
                         x: std::array::from_fn(|q| c[q][ck + k]),
                     };
-                    // the multipliers l_ik = a_ik / a_kk, rows k + 1..n
+                    // The multipliers l_ik = a_ik / a_kk, rows k + 1..n.
                     if ctl == OdLuControl::Scalar {
                         for i in k + 1..n {
                             let l = OD {
@@ -2862,7 +2910,7 @@ impl ODLu {
                     }
                     let ncols = n - k - 1;
                     let ml: [&[f64]; 8] = m.each_ref().map(|p| &p[..]);
-                    // the trailing columns, each as its eight parts
+                    // The trailing columns, each as its eight parts.
                     let mut parts = c
                         .each_mut()
                         .map(|p| p[(k + 1) * ld..(k + 1 + ncols) * ld].chunks_mut(ld));
@@ -2894,7 +2942,7 @@ impl ODLu {
         )
     }
 
-    /// entry (i, j) of the factors
+    /// Entry (i, j) of the factors.
     #[inline(always)]
     pub fn at(&self, i: usize, j: usize) -> OD {
         let o = j * self.ld + i;
@@ -2903,19 +2951,20 @@ impl ODLu {
         }
     }
 
-    /// the eight part arrays of column k of the factors
+    /// The eight part arrays of column k of the factors.
     fn col(&self, k: usize) -> [&[f64]; 8] {
         let r = k * self.ld..(k + 1) * self.ld;
         std::array::from_fn(|q| &self.c[q][r.clone()])
     }
 
-    /// Solve A x = b in place (b: n values): the row swaps, L y = b column by column (skipping columns whose y_k is
-    /// zero), then U x = y, each column's update 8 rows at a time on the backend `simd::dispatch` picks.
+    /// Solves A x = b in place, b holding n values. It applies the row swaps, solves L y = b column by column, skipping
+    /// columns whose y_k is zero, and then solves U x = y, each column's update 8 rows at a time on the backend
+    /// `simd::dispatch` picks.
     pub fn solve(&self, b: &mut [OD]) {
         simd::dispatch(SolveOd { lu: self, b })
     }
 
-    /// `solve` on the backend S
+    /// `solve` on the backend S.
     fn solve_on<S: Simd>(&self, b: &mut [OD]) {
         S::vectorize(
             #[inline(always)]
@@ -2975,7 +3024,8 @@ impl ODLu {
         )
     }
 
-    /// Solve A^T y = b in place. With P A = L U (P the recorded row swaps): U^T w = b, L^T v = w, y = P^T v.
+    /// Solves A^T y = b in place. With P A = L U, P the recorded row swaps, it solves U^T w = b and L^T v = w and sets
+    /// y = P^T v.
     pub fn solve_t(&self, b: &mut [OD]) {
         let n = self.n;
         for k in 0..n {
@@ -3000,7 +3050,7 @@ impl ODLu {
         }
     }
 
-    /// min and max |u_kk| (leading parts)
+    /// The minimum and maximum |u_kk|, over the leading parts.
     pub fn pivot_range(&self) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = 0.0f64;
@@ -3023,7 +3073,7 @@ struct FactorOd {
 
 impl Kernel for FactorOd {
     type Output = Result<ODLu, String>;
-    /// ODLu::factor_control on the backend S
+    /// `ODLu::factor_control` on the backend S.
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
         ODLu::factor_on::<S>(self.n, self.ld, self.c, self.par, self.ctl)
@@ -3037,7 +3087,7 @@ struct SolveOd<'a> {
 
 impl Kernel for SolveOd<'_> {
     type Output = ();
-    /// ODLu::solve on the backend S
+    /// `ODLu::solve` on the backend S.
     #[inline(always)]
     fn run<S: Simd>(self) {
         self.lu.solve_on::<S>(self.b)
@@ -3048,8 +3098,8 @@ impl Kernel for SolveOd<'_> {
 mod od_lu_tests {
     use super::*;
 
-    /// ODLu on one backend: the bits of the factors (with the parallel trailing update), the pivots, and the
-    /// solutions of A x = b and A^T x = b
+    /// `ODLu` on one backend. It gives the bits of the factors, with the parallel trailing update, the pivots, and the
+    /// solutions of A x = b and A^T x = b.
     #[derive(Clone)]
     struct OdOnBackend {
         n: usize,
@@ -3060,7 +3110,7 @@ mod od_lu_tests {
 
     impl Kernel for OdOnBackend {
         type Output = Vec<u64>;
-        /// the bits of the factors, pivots and solutions on the backend S
+        /// The bits of the factors, pivots and solutions on the backend S.
         #[inline(always)]
         fn run<S: Simd>(self) -> Vec<u64> {
             let lu = ODLu::factor_on::<S>(self.n, self.ld, self.c, true, OdLuControl::None).unwrap();
@@ -3074,10 +3124,10 @@ mod od_lu_tests {
         }
     }
 
-    /// The octo-double LU's factors (with the parallel trailing update), pivots and solutions of A x = b and A^T x = b
-    /// are bitwise the same on every backend this CPU runs, on a block-sparse matrix (skipped zero updates) with all
-    /// eight parts in use and a b with zeros and negative zeros. Control: one flipped low bit is caught by the same
-    /// comparison.
+    /// The octo-double LU's factors, with the parallel trailing update, its pivots and its solutions of A x = b and A^T
+    /// x = b are bitwise the same on every backend this CPU runs. The matrix is block-sparse, for skipped zero updates,
+    /// with all eight parts in use, and b has zeros and negative zeros. As a control, one flipped low bit is caught by
+    /// the same comparison.
     #[test]
     fn od_lu_every_backend_gives_the_same_bits() {
         let n = 61;
@@ -3134,24 +3184,26 @@ mod od_lu_tests {
 // The determinant of a complex double-double matrix
 // ---------------------------------------------------------------------------------------------------------------
 
-/// ln|det| and arg det (in (-pi, pi]) of the complex n x n matrix with real parts rh + rl and imaginary parts
-/// ih + il (column-major, leading dimension ld, ld % 8 == 0, padding rows zero), by LU with partial pivoting in
-/// getf2 order: the pivot of column k is its entry of largest modulus on or below the diagonal, the column below it
-/// is scaled by 1 / u_kk = conj(u_kk) / |u_kk|^2, and the trailing columns are updated on 8-row lane vectors (the
-/// real and the imaginary part of a - l t each through the dot accumulator; in parallel over the columns when par).
-/// ln|det| and arg det are the sums of ln|u_kk| and arg u_kk in f64, the pivots rounded to f64 first, plus pi per
-/// row interchange; the factors are not kept. Also returns min and max |u_kk|. For a real matrix `DDLu::logdet`
-/// gives the sign and ln|det|.
+/// The ln|det| and arg det, in (-pi, pi], of the complex n x n matrix with real parts rh + rl and imaginary parts
+/// ih + il. The matrix is column-major with leading dimension ld, ld % 8 == 0, and its padding rows are zero. It
+/// returns (ln|det|, arg det, min |u_kk|, max |u_kk|) and keeps no factors. For a real matrix `DDLu::logdet` gives the
+/// sign and ln|det|.
 ///
-/// The elimination is blocked in panels of columns (LAPACK's getrf), each trailing column taking a panel's
-/// interchanges and updates in one pass, and the updates that cannot change a value are skipped, as
-/// `DDLu::factor_blocked` skips them: those of the 8-row blocks whose multipliers are all exactly zero (a - 0 t returns
-/// a), and the multipliers of exactly zero entries. So the zero blocks of a sparse matrix, such as a multiple-shooting
-/// Jacobian's, cost nothing, and the results are those of getf2 as written (`CluControl::Dense`) bit for bit: each
-/// entry gets the same operations in the same order, and a skipped update only leaves the signs of zero parts as they
-/// were, where the accumulator would make them +0; the one place such a sign is read, the imaginary part of a negative
-/// real pivot (arg +-pi), is read as getf2 leaves it. Skipping is exact in a column while its entries are finite,
-/// normalized double-doubles; a column with another entry takes every update from then on.
+/// The LU has partial pivoting in getf2 order. The pivot of column k is its entry of largest modulus on or below the
+/// diagonal, the column below it is scaled by 1 / u_kk = conj(u_kk) / |u_kk|^2, and the trailing columns are updated on
+/// 8-row lane vectors, in parallel over the columns when `par`. The real and the imaginary part of a - l t each go
+/// through the dot accumulator. ln|det| and arg det are the sums of ln|u_kk| and arg u_kk in f64, the pivots rounded to
+/// f64 first, plus pi per row interchange.
+///
+/// The elimination is blocked in panels of columns (LAPACK's getrf), each trailing column taking a panel's interchanges
+/// and updates in one pass. The updates that cannot change a value are skipped, as `DDLu::factor_blocked` skips them.
+/// Those are the updates of the 8-row blocks whose multipliers are all exactly zero (a - 0 t returns a), and the
+/// multipliers of exactly zero entries. So the zero blocks of a sparse matrix, such as a multiple-shooting Jacobian's,
+/// cost nothing, and the results are those of getf2 as written (`CluControl::Dense`) bit for bit. Each entry gets the
+/// same operations in the same order, and a skipped update only leaves the signs of zero parts as they were, where the
+/// accumulator would make them +0. The one place such a sign is read, the imaginary part of a negative real pivot
+/// (arg +-pi), is read as getf2 leaves it. Skipping is exact in a column while its entries are finite, normalized
+/// double-doubles, and a column with another entry takes every update from then on.
 #[allow(clippy::type_complexity)]
 pub fn clu_logdet(
     n: usize,
@@ -3165,16 +3217,18 @@ pub fn clu_logdet(
     clu_logdet_control(n, ld, rh, rl, ih, il, par, CluControl::None)
 }
 
-/// The elimination of `clu_logdet_control`: `None` is `clu_logdet`'s; `Dense` is getf2 as written, unblocked with
-/// every update, the reference that `None` matches bit for bit; `SignOfZero` and `KeepSkipping` are deliberate breakages of `None`,
-/// for checks that must be able to fail: the pivots' imaginary parts read with the signs of zeros that the skipped
-/// updates left, and the skipping kept on for an entry that is not a finite, normalized double-double (and for a zero
-/// entry under a pivot whose reciprocal is not finite).
+/// The elimination of `clu_logdet_control`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CluControl {
+    /// `clu_logdet`'s elimination.
     None,
+    /// getf2 as written, unblocked with every update, the reference that `None` matches bit for bit.
     Dense,
+    /// A deliberate breakage of `None`, for checks that must be able to fail. The pivots' imaginary parts are read with
+    /// the signs of zeros that the skipped updates left.
     SignOfZero,
+    /// A deliberate breakage of `None`, for checks that must be able to fail. The skipping stays on for an entry that
+    /// is not a finite, normalized double-double, and for a zero entry under a pivot whose reciprocal is not finite.
     KeepSkipping,
 }
 
@@ -3204,18 +3258,21 @@ pub fn clu_logdet_control(
     .map(|(v, _)| v)
 }
 
-/// Every pivot of `clu_logdet`'s elimination, in elimination order: ln|u_kk| and arg u_kk, the f64 summands of its
-/// ln|det| and arg det in that order, and the row each column's pivot came from (k when there was no interchange;
-/// arg det adds pi before arg u_kk when there was one)
+/// Every pivot of `clu_logdet`'s elimination, in elimination order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CluPivots {
+    /// The terms ln|u_kk|, the f64 summands of ln|det| in this order.
     pub ln_abs: Vec<f64>,
+    /// The terms arg u_kk, the f64 summands of arg det in this order. arg det adds pi before arg u_kk when the pivot
+    /// came from another row.
     pub arg: Vec<f64>,
+    /// The row each column's pivot came from, k when there was no interchange.
     pub rows: Vec<usize>,
 }
 
-/// `clu_logdet` with every pivot recorded: its (ln|det|, arg det, min |u_kk|, max |u_kk|) bit for bit, and the pivots
-/// (`CluPivots`), which the blocked elimination forms as getf2 does (`CluControl::Dense`), bit for bit
+/// `clu_logdet` with every pivot recorded. It returns `clu_logdet`'s (ln|det|, arg det, min |u_kk|, max |u_kk|) bit for
+/// bit, and the pivots (`CluPivots`), which the blocked elimination forms bit for bit as getf2 does
+/// (`CluControl::Dense`).
 #[allow(clippy::type_complexity)]
 pub fn clu_pivots(
     n: usize,
@@ -3229,7 +3286,7 @@ pub fn clu_pivots(
     clu_pivots_control(n, ld, rh, rl, ih, il, par, CluControl::None)
 }
 
-/// `clu_pivots` with the elimination `control` selects (`CluControl`)
+/// `clu_pivots` with the elimination `control` selects (`CluControl`).
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn clu_pivots_control(
     n: usize,
@@ -3255,8 +3312,8 @@ pub fn clu_pivots_control(
     .map(|(v, p)| (v, p.unwrap_or_default()))
 }
 
-/// whether every entry of column j (rows 0..n) in the parts (hi, lo) is a finite, normalized double-double: hi + lo
-/// rounds to hi (so lo is zero where hi is)
+/// Whether every entry of column j, rows 0..n, in the parts (hi, lo) is a finite, normalized double-double. Normalized
+/// means that hi + lo rounds to hi, so lo is zero where hi is.
 fn col_normalized(n: usize, ld: usize, j: usize, hi: &[f64], lo: &[f64]) -> bool {
     let (h, l) = (&hi[j * ld..j * ld + n], &lo[j * ld..j * ld + n]);
     h.iter()
@@ -3264,10 +3321,10 @@ fn col_normalized(n: usize, ld: usize, j: usize, hi: &[f64], lo: &[f64]) -> bool
         .all(|(&x, &y)| x.is_finite() && y.is_finite() && x + y == x)
 }
 
-/// Step k's update of one column (real parts ch + cl, imaginary parts dh + dl) with the step's multipliers (zero
-/// outside rows k + 1..n), a -= l t on the 8-row blocks `blocks`, as getf2 makes it (the real and the imaginary part
-/// each through the dot accumulator). A column whose pivot-row entry t has zero hi parts is left as it is, as getf2
-/// leaves it. `dirty` is set when a result is not finite, unless `keep`.
+/// Step k's update a -= l t of one column, with real parts ch + cl and imaginary parts dh + dl, by the step's
+/// multipliers, which are zero outside rows k + 1..n. It runs on the 8-row blocks `blocks` as getf2 makes it, the real
+/// and the imaginary part each through the dot accumulator. A column whose pivot-row entry t has zero hi parts is left
+/// as it is, as getf2 leaves it. `dirty` is set when a result is not finite, unless `keep`.
 #[inline(always)]
 #[allow(clippy::type_complexity)]
 fn clu_update<S: Simd>(
@@ -3293,12 +3350,12 @@ fn clu_update<S: Simd>(
         let ai = DV::<S>::load(&dh[i..i + 8], &dl[i..i + 8]);
         let lr = DV::<S>::load(&mrh[i..i + 8], &mrl[i..i + 8]);
         let li = DV::<S>::load(&mih[i..i + 8], &mil[i..i + 8]);
-        // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
+        // a -= l t, with re = ar - lr tr + li ti and im = ai - lr ti - li tr.
         let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
         let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
         nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
         ni.store(&mut dh[i..i + 8], &mut dl[i..i + 8]);
-        // x - x is zero exactly when x is finite; the accumulator's lo part is finite with its hi part
+        // x - x is zero exactly when x is finite. The accumulator's lo part is finite with its hi part.
         ok = ok.and(nr.hi.sub(nr.hi).eq(zero)).and(ni.hi.sub(ni.hi).eq(zero));
     }
     if !keep && ok.bits() != 0xff {
@@ -3306,20 +3363,22 @@ fn clu_update<S: Simd>(
     }
 }
 
-/// `clu_logdet`'s elimination: getf2's operations on every entry, in its order, blocked in panels of NB columns
-/// (LAPACK's right-looking getrf), without the updates that cannot change a value. Per panel of columns j0..je:
-///  1. each column k of the panel in turn: its pivot, the row interchange in the panel's columns, its multipliers
-///     (an exactly zero entry left as it is when the pivot's reciprocal is finite), and its update of the panel's
-///     later columns;
-///  2. every column right of the panel gets the panel's row interchanges, then the panel's updates k = j0, j0 + 1, ...
-///     in order, so that it passes through memory once per panel rather than once per k (in parallel over chunks of
-///     CW columns when par).
+/// `clu_logdet`'s elimination. It applies getf2's operations to every entry, in its order, blocked in panels of NB
+/// columns (LAPACK's right-looking getrf), without the updates that cannot change a value. Each panel of columns j0..je
+/// takes two steps.
 ///
-/// The columns left of the panel are not interchanged: the factors are not kept, and getf2 reads no column left of
-/// its step. A column takes, of step k's update, only the 8-row blocks whose multipliers are not all zero, while
-/// its entries are finite, normalized double-doubles (a - 0 t is then a, its zero parts made +0); a column that
-/// starts with another entry, or in which an update makes one, takes every block from then on (`dirty`), since there
-/// a - 0 t can change a value (0 Inf, 0 NaN, a renormalization).
+///  1. Each column k of the panel in turn gets its pivot, the row interchange in the panel's columns, its multipliers
+///     and its update of the panel's later columns. An exactly zero entry is left as it is when the pivot's reciprocal
+///     is finite.
+///  2. Every column right of the panel gets the panel's row interchanges, then the panel's updates k = j0, j0 + 1, ...
+///     in order, so that it passes through memory once per panel rather than once per k. This runs in parallel over
+///     chunks of CW columns when `par`.
+///
+/// The columns left of the panel are not interchanged, since the factors are not kept and getf2 reads no column left of
+/// its step. Of step k's update, a column takes only the 8-row blocks whose multipliers are not all zero while its
+/// entries are finite, normalized double-doubles, where a - 0 t is a with its zero parts made +0. A column that starts
+/// with another entry, or in which an update makes one, takes every block from then on (`dirty`), since there a - 0 t
+/// can change a value (0 Inf, 0 NaN, a renormalization).
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn clu_blocked_on<S: Simd>(
     n: usize,
@@ -3351,8 +3410,8 @@ fn clu_blocked_on<S: Simd>(
                 arg: Vec::with_capacity(n),
                 rows: Vec::with_capacity(n),
             });
-            // the panel's multipliers, column c at offset c ld, zero outside rows k + 1..n; its 8-row blocks from
-            // 8 floor((k + 1) / 8) on, all of them and those with a nonzero multiplier
+            // The panel's multipliers, column c at offset c ld, zero outside rows k + 1..n. `all` and `nz` hold its
+            // 8-row blocks from 8 floor((k + 1) / 8) on, all of them and those with a nonzero multiplier.
             let (mut mrh, mut mrl, mut mih, mut mil) = (
                 vec![0.0f64; NB * ld],
                 vec![0.0f64; NB * ld],
@@ -3378,8 +3437,8 @@ fn clu_blocked_on<S: Simd>(
                             p = i;
                         }
                     }
-                    // a NaN diagonal entry is a non-finite pivot (as `pivot_search`); a column of NaN leaves best at
-                    // -1 (a NaN modulus never replaces it, so best is never NaN itself)
+                    // A NaN diagonal entry is a non-finite pivot, as in `pivot_search`. A column of NaN leaves
+                    // best at -1, since a NaN modulus never replaces it, so best is never NaN itself.
                     if rh[ck + k].hypot(ih[ck + k]).is_nan() || best <= 0.0 || !best.is_finite() {
                         return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                     }
@@ -3391,7 +3450,8 @@ fn clu_blocked_on<S: Simd>(
                             ih.swap(j * ld + k, j * ld + p);
                             il.swap(j * ld + k, j * ld + p);
                         }
-                        // and in the panel's earlier multipliers, as getf2 interchanges the factors' columns
+                        // The interchange also applies to the panel's earlier multipliers, as getf2 interchanges the
+                        // factors' columns.
                         for mc in (0..c).map(|c| c * ld) {
                             mrh.swap(mc + k, mc + p);
                             mrl.swap(mc + k, mc + p);
@@ -3403,13 +3463,13 @@ fn clu_blocked_on<S: Simd>(
                     let ur = at(&rh, &rl, ck + k);
                     let ui = at(&ih, &il, ck + k);
                     let mag = (ur.hi + ur.lo).hypot(ui.hi + ui.lo);
-                    // the pivot's lo parts can be NaN with finite hi parts
+                    // The pivot's lo parts can be NaN with finite hi parts.
                     if mag <= 0.0 || !mag.is_finite() {
                         return Err(format!("singular or non-finite pivot at column {k} ({mag})"));
                     }
-                    // getf2 updates column k at every earlier step whose pivot-row entry (now in rows 0..k) has a
-                    // nonzero hi part; the accumulator leaves no part of such a column -0, so its pivot's zero parts
-                    // are read as +0, which the skipped updates would have made them
+                    // getf2 updates column k at every earlier step whose pivot-row entry, now in rows 0..k, has a
+                    // nonzero hi part. The accumulator leaves no part of such a column -0, so its pivot's zero parts
+                    // are read as +0, which the skipped updates would have made them.
                     let swept =
                         control != CluControl::SignOfZero && (0..k).any(|i| rh[ck + i] != 0.0 || ih[ck + i] != 0.0);
                     let yi = if swept {
@@ -3417,7 +3477,7 @@ fn clu_blocked_on<S: Simd>(
                     } else {
                         ui.hi + ui.lo
                     };
-                    // |u| and its phase to f64 are all ln|u| and arg u need
+                    // |u| and its phase to f64 are all that ln|u| and arg u need.
                     let (lu, au) = (mag.ln(), yi.atan2(ur.hi + ur.lo));
                     la += lu;
                     arg += au;
@@ -3431,18 +3491,18 @@ fn clu_blocked_on<S: Simd>(
                     if k + 1 == n {
                         break;
                     }
-                    // The multipliers a_ik / u with u and every a_ik scaled by the same power of two (exact) to bring
-                    // u to order one: 1/u_s = conj(u_s) / |u_s|^2 then neither overflows nor underflows for any
-                    // pivot, and a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a
-                    // subnormal pivot under an ordinary entry). The quotients' significands are those of the
-                    // unscaled formula, so the factors are bitwise the same wherever that one stays in range.
+                    // The multipliers a_ik / u, with u and every a_ik scaled by the same power of two (exact) to bring
+                    // u to order one. Then 1/u_s = conj(u_s) / |u_s|^2 neither overflows nor underflows for any pivot,
+                    // and a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a
+                    // subnormal pivot under an ordinary entry). The quotients' significands are those of the unscaled
+                    // formula, so the factors are bitwise the same wherever that one stays in range.
                     let isc = 1.0 / pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
                     let (us_r, us_i) = (ur.mul_pwr2(isc), ui.mul_pwr2(isc));
                     let den = us_r * us_r + us_i * us_i;
                     let vr = us_r / den;
                     let vi = -(us_i / den);
-                    // a zero entry's multiplier is a zero (left as it is) only with a finite reciprocal, which a
-                    // non-normalized pivot can fail to have (0 NaN is NaN)
+                    // A zero entry's multiplier is a zero, left as it is, only with a finite reciprocal, which a
+                    // non-normalized pivot can fail to have (0 NaN is NaN).
                     let finite = [vr.hi, vr.lo, vi.hi, vi.lo].iter().all(|x| x.is_finite());
                     let r0 = 8 * ((k + 1) / 8);
                     let mc = c * ld;
@@ -3495,7 +3555,7 @@ fn clu_blocked_on<S: Simd>(
                 if je == n {
                     break;
                 }
-                // the blocks with a nonzero multiplier after the panel's later interchanges
+                // The blocks with a nonzero multiplier after the panel's later interchanges.
                 for (c, (nzc, allc)) in nz.iter_mut().zip(&all).take(jb).enumerate() {
                     let mc = c * ld;
                     nzc.clear();
@@ -3578,8 +3638,8 @@ fn clu_blocked_on<S: Simd>(
     )
 }
 
-/// getf2 as written (`CluControl::Dense`): for each column k its pivot, the row interchange in every column, its
-/// multipliers, and every trailing column's update on every 8-row block from 8 floor((k + 1) / 8)
+/// getf2 as written (`CluControl::Dense`). For each column k it takes the pivot, the row interchange in every column,
+/// the multipliers, and every trailing column's update on every 8-row block from 8 floor((k + 1) / 8).
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn clu_dense_on<S: Simd>(
     n: usize,
@@ -3621,8 +3681,8 @@ fn clu_dense_on<S: Simd>(
                         p = i;
                     }
                 }
-                // a NaN diagonal entry is a non-finite pivot (as `pivot_search`); a column of NaN leaves best at -1
-                // (a NaN modulus never replaces it, so best is never NaN itself)
+                // A NaN diagonal entry is a non-finite pivot, as in `pivot_search`. A column of NaN leaves best at -1,
+                // since a NaN modulus never replaces it, so best is never NaN itself.
                 if rh[ck + k].hypot(ih[ck + k]).is_nan() || best <= 0.0 || !best.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                 }
@@ -3638,11 +3698,11 @@ fn clu_dense_on<S: Simd>(
                 let ur = at(&rh, &rl, ck + k);
                 let ui = at(&ih, &il, ck + k);
                 let mag = (ur.hi + ur.lo).hypot(ui.hi + ui.lo);
-                // the pivot's lo parts can be NaN with finite hi parts
+                // The pivot's lo parts can be NaN with finite hi parts.
                 if mag <= 0.0 || !mag.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({mag})"));
                 }
-                // |u| and its phase to f64 are all ln|u| and arg u need
+                // |u| and its phase to f64 are all that ln|u| and arg u need.
                 let (lu, au) = (mag.ln(), (ui.hi + ui.lo).atan2(ur.hi + ur.lo));
                 la += lu;
                 arg += au;
@@ -3656,11 +3716,11 @@ fn clu_dense_on<S: Simd>(
                 if k + 1 == n {
                     break;
                 }
-                // The multipliers a_ik / u with u and every a_ik scaled by the same power of two (exact) to bring u
-                // to order one: 1/u_s = conj(u_s) / |u_s|^2 then neither overflows nor underflows for any pivot,
-                // and a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a
-                // subnormal pivot under an ordinary entry). The quotients' significands are those of the unscaled
-                // formula, so the factors are bitwise the same wherever that one stays in range.
+                // The multipliers a_ik / u, with u and every a_ik scaled by the same power of two (exact) to bring u to
+                // order one. Then 1/u_s = conj(u_s) / |u_s|^2 neither overflows nor underflows for any pivot, and
+                // a_ik,s / u_s is a_ik / u, which can only overflow when the multiplier itself does (a subnormal pivot
+                // under an ordinary entry). The quotients' significands are those of the unscaled formula, so the
+                // factors are bitwise the same wherever that one stays in range.
                 let isc = 1.0 / pow2_near(mag.clamp(f64::MIN_POSITIVE, 2f64.powi(1022)));
                 let (us_r, us_i) = (ur.mul_pwr2(isc), ui.mul_pwr2(isc));
                 let den = us_r * us_r + us_i * us_i;
@@ -3713,7 +3773,7 @@ fn clu_dense_on<S: Simd>(
                                 let ai = DV::<S>::load(&dh[i..i + 8], &dl[i..i + 8]);
                                 let lr = DV::<S>::load(&lrh[i..i + 8], &lrl[i..i + 8]);
                                 let li = DV::<S>::load(&lih[i..i + 8], &lil[i..i + 8]);
-                                // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
+                                // a -= l t, with re = ar - lr tr + li ti and im = ai - lr ti - li tr.
                                 let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
                                 let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
                                 nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
@@ -3761,7 +3821,7 @@ struct CluLogdet {
     record: bool,
 }
 
-/// (ln|det|, arg det, min |u_kk|, max |u_kk|) and, when recorded, the pivots
+/// The tuple (ln|det|, arg det, min |u_kk|, max |u_kk|) and, when recorded, the pivots.
 type CluOutput = Result<((f64, f64, f64, f64), Option<CluPivots>), String>;
 
 impl Kernel for CluLogdet {
@@ -3781,7 +3841,8 @@ impl Kernel for CluLogdet {
 mod tests {
     use super::*;
 
-    /// deterministic pseudo-random normalized DD matrix, column-major, leading dimension ld_for(n), padding zero
+    /// A deterministic pseudo-random normalized double-double matrix, column-major with leading dimension ld_for(n) and
+    /// zero padding.
     pub fn mat_pub(n: usize, seed: u64) -> (usize, Vec<f64>, Vec<f64>) {
         mat(n, seed)
     }
@@ -3807,8 +3868,8 @@ mod tests {
         (ld, h, l)
     }
 
-    /// block-sparse like the multiple-shooting Jacobian: blocks of size bs on the diagonal and the first block
-    /// superdiagonal, a dense last column and row
+    /// A block-sparse matrix like the multiple-shooting Jacobian, with blocks of size bs on the diagonal and the first
+    /// block superdiagonal and a dense last column and row.
     fn sparse(n: usize, bs: usize, seed: u64) -> (usize, Vec<f64>, Vec<f64>) {
         let (ld, mut h, mut l) = mat(n, seed);
         for c in 0..n {
@@ -3823,7 +3884,8 @@ mod tests {
         (ld, h, l)
     }
 
-    /// equal as numbers (signed zeros may differ); returns the number of entries whose bits differ
+    /// Asserts that a and b are equal as numbers, signed zeros aside, and returns the number of entries whose bits
+    /// differ.
     fn same(a: &[f64], b: &[f64], what: &str) -> usize {
         assert_eq!(a.len(), b.len());
         let mut d = 0;
@@ -3860,8 +3922,9 @@ mod tests {
         }
     }
 
-    /// the f64 LU (factor_f64) of an f64 matrix: the dd solve with its factors agrees with the dd LU's solution to
-    /// f64 accuracy; a perturbed factorization (one pivot scaled by 1 + 1e-6) must fail the check
+    /// The f64 LU (`factor_f64`) of an f64 matrix. The double-double solve with its factors agrees with the
+    /// double-double LU's solution to f64 accuracy, and a perturbed factorization, one pivot scaled by 1 + 1e-6, must
+    /// fail the check.
     #[test]
     fn f64_lu_solves() {
         let check = |n: usize, h: &Vec<f64>, ld: usize, mutate: bool| -> f64 {
@@ -3901,7 +3964,7 @@ mod tests {
                 s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
                 *v = ((s >> 11) as f64) / ((1u64 << 53) as f64) - 0.5;
             }
-            bh[3 * n + 5] = 0.0; // a zero entry exercises the skipped update in solve
+            bh[3 * n + 5] = 0.0; // A zero entry exercises the skipped update in `solve`.
             let bl = vec![0.0; k * n];
             for transpose in [false, true] {
                 for par in [false, true] {
@@ -3937,8 +4000,8 @@ mod tests {
         }
     }
 
-    /// lu_rect_f64 with every column pivoted (nr = ncol = np) is factor_f64: the same pivots, and the same factors
-    /// except possibly in the sign of zero entries (see lu_rect_f64)
+    /// `lu_rect_f64` with every column pivoted (nr = ncol = np) is `factor_f64`. It gives the same pivots, and the same
+    /// factors except possibly in the sign of zero entries (see `lu_rect_f64`).
     #[test]
     fn rect_lu_square_is_factor_f64() {
         for (n, sp) in [(37, false), (96, false), (157, true), (300, true)] {
@@ -3955,9 +4018,10 @@ mod tests {
         }
     }
 
-    /// max |P A - L U| / max |A| over the nr x ncol matrix, with L U for the rectangular factorization: L = (unit L11;
-    /// L21) on the first np columns, U = (U11 U12) on the first np rows, and the Schur complement S added in rows
-    /// np..nr of the columns np.. (the products in double-double, so the check measures the factorization's error only)
+    /// max |P A - L U| / max |A| over the nr x ncol matrix, with L U for the rectangular factorization.
+    /// L = (unit L11; L21) on the first np columns, U = (U11 U12) on the first np rows, and the Schur complement S is
+    /// added in rows np..nr of the columns from np on. The products are in double-double, so the check measures the
+    /// factorization's error only.
     #[allow(clippy::too_many_arguments)]
     fn rect_residual(nr: usize, ncol: usize, np: usize, ld: usize, a0: &[f64], f: &[f64], perm: &[usize]) -> f64 {
         let mut pa = a0.to_vec();
@@ -3986,9 +4050,9 @@ mod tests {
         err / amax
     }
 
-    /// lu_rect_f64 on rectangular matrices (np below, at and off multiples of 8 and of the panel width; tall without
-    /// trailing columns; dense and block sparse): P A = L U + S to f64 rounding. Control: one multiplier off by a
-    /// relative 1e-6 must fail the check.
+    /// `lu_rect_f64` on rectangular matrices gives P A = L U + S to f64 rounding. The cases have np below, at and off
+    /// multiples of 8 and of the panel width, tall matrices without trailing columns, and dense and block-sparse
+    /// matrices. As a control, one multiplier off by a relative 1e-6 must fail the check.
     #[test]
     fn rect_lu_factors() {
         for (nr, ncol, np, bs) in [
@@ -4015,7 +4079,7 @@ mod tests {
                 lu_rect_f64(nr, ncol, np, ld, &mut f, &mut perm, par).unwrap();
                 let e = rect_residual(nr, ncol, np, ld, &a0, &f, &perm);
                 let mut g = f.clone();
-                // the largest multiplier (below the diagonal of the pivoted columns; sparse ones are mostly zero)
+                // The largest multiplier, below the diagonal of the pivoted columns, since sparse ones are mostly zero.
                 let m = (0..np)
                     .flat_map(|c| (c + 1..nr).map(move |i| c * ld + i))
                     .max_by(|&x, &y| f[x].abs().total_cmp(&f[y].abs()))
@@ -4032,7 +4096,7 @@ mod tests {
         }
     }
 
-    /// everything `linalg` dispatches, on one backend, its results flattened
+    /// Everything `linalg` dispatches, on one backend, with its results flattened.
     #[derive(Clone)]
     struct OnBackend {
         n: usize,
@@ -4053,11 +4117,11 @@ mod tests {
             b.solve_many_on::<S>(&mut xh, &mut xl, k, false, true);
             let (gh, gl, g) = gram_on::<S>(n, ld, &self.h, &self.l, &self.h[..ld], &self.l[..ld]);
             let g: Vec<f64> = g.iter().flat_map(|d| [d.hi, d.lo]).collect();
-            // rectangular: the first 70 columns pivoted (not a multiple of 8), the rest updated
+            // Rectangular, with the first 70 columns pivoted (not a multiple of 8) and the rest updated.
             let (mut r, mut perm) = (self.h.clone(), vec![0usize; 70]);
             lu_rect_f64_on::<S>(n, n, 70, ld, &mut r, &mut perm, true).unwrap();
             let perm: Vec<f64> = perm.iter().map(|&p| p as f64).collect();
-            // the single right-hand-side solves, with zeros and negative zeros in b
+            // The single right-hand-side solves, with zeros and negative zeros in b.
             let rhs = |n: usize| -> Vec<DD> {
                 (0..n)
                     .map(|i| match i % 5 {
@@ -4077,7 +4141,7 @@ mod tests {
             f.solve_on::<S>(&mut x2);
             let mut x3: Vec<f64> = rhs(n).iter().map(|d| d.hi).collect();
             f.solve_hi_on::<S>(&mut x3);
-            // the staircase solves, single and 8 lanes at a time
+            // The staircase solves, single and 8 lanes at a time.
             let st = stair(4, 3);
             let sn = st.n;
             let mut y1 = rhs(sn);
@@ -4115,8 +4179,8 @@ mod tests {
         }
     }
 
-    /// QDLu on one backend: the factors (with the parallel trailing update) and pivots, and the solutions of A x = b
-    /// and A^T x = b
+    /// `QDLu` on one backend. It gives the factors, with the parallel trailing update, the pivots, and the solutions of
+    /// A x = b and A^T x = b.
     #[derive(Clone)]
     struct QdOnBackend {
         n: usize,
@@ -4139,8 +4203,8 @@ mod tests {
         }
     }
 
-    /// a staircase LU with column groups a, b (k of them), a (b = 2 a), each row block filled with deterministic
-    /// pseudo-random entries
+    /// A staircase LU with column groups a, b (k of them), a, where b = 2 a, each row block filled with deterministic
+    /// pseudo-random entries.
     fn stair(a: usize, k: usize) -> StaircaseLu {
         let b = 2 * a;
         let n = 2 * a + k * b + 1;
@@ -4174,7 +4238,7 @@ mod tests {
         StaircaseLu::factor(n, groups, &rblocks, n - 1, n - 1, fill, false).unwrap()
     }
 
-    // The scalar loops the lane code replaced, as references: each lane version must give their bits.
+    // Scalar loops as references. Each lane version must give their bits.
 
     fn pivot_ref(col: &[f64], k: usize, n: usize) -> (usize, f64) {
         let (mut p, mut best) = (k, col[k].abs());
@@ -4333,7 +4397,7 @@ mod tests {
                 r ^= r << 17;
                 r
             };
-            // pivot search: random magnitudes with ties, signed zeros, infinities and NaNs, every k and n
+            // The pivot search, on random magnitudes with ties, signed zeros, infinities and NaNs, for every k and n.
             let pick = |x: u64| match x % 9 {
                 0 => 0.0,
                 1 => -0.0,
@@ -4355,14 +4419,14 @@ mod tests {
                     "{}: pivot {p} {b} vs {q} {c}",
                     S::NAME
                 );
-                // the last row with the largest value, which the lanes must not pick
+                // The last row with the largest value, which the lanes must not pick.
                 ties += (k..n).rev().find(|&i| col[i].abs() == c).is_some_and(|i| i != q) as usize;
             }
             assert!(
                 ties > 100,
                 "control: too few ties ({ties}) to tell the first maximum from the last"
             );
-            // axpy_rows and fma_rows against the scalar loops, every range in 0..40
+            // `axpy_rows` and `fma_rows` against the scalar loops, for every range in 0..40.
             for _ in 0..2000 {
                 let len = 40;
                 let (lo, hi) = {
@@ -4370,7 +4434,7 @@ mod tests {
                     let b = (next() % 41) as usize;
                     (a.min(b), a.max(b))
                 };
-                // finite values, with negative zeros
+                // Finite values, with negative zeros.
                 let v = |x: u64| {
                     let y = if x.is_multiple_of(7) { -0.0 } else { pick(x) };
                     if y.is_finite() {
@@ -4410,7 +4474,7 @@ mod tests {
                     );
                 }
             }
-            // the solves
+            // The solves.
             for (n, seed) in [(1usize, 1u64), (7, 2), (8, 3), (9, 4), (33, 5), (100, 6)] {
                 let (ld, mut h, mut l) = mat(n, seed);
                 for i in (0..ld * n).step_by(5) {
@@ -4437,7 +4501,7 @@ mod tests {
                         S::NAME
                     );
                 }
-                // the refinement to quad-double, with a residual that is not the true one (any function will do)
+                // The refinement to quad-double, with a residual that is not the true one, since any function will do.
                 let bq: Vec<QD> = b.iter().map(|&v| QD::from_dd(v).add_f(1e-20)).collect();
                 let resid = |x: &[QD], r: &mut [QD]| {
                     for i in 0..x.len() {
@@ -4487,14 +4551,14 @@ mod tests {
     }
 
     /// The lane code (pivot search, row updates, the single solves, the quad-double refinement) gives the scalar loops'
-    /// bits on every backend.
-    /// Control: the pivot inputs have ties, so a search that took the last maximum would fail.
+    /// bits on every backend. As a control, the pivot inputs have ties, so a search that took the last maximum would
+    /// fail.
     #[test]
     fn lane_code_matches_the_scalar_loops() {
         simd::for_each_available(LanesMatchScalar);
     }
 
-    /// Control for the solve references: a solve whose update rounds the product to f64 first differs from them.
+    /// Control for the solve references. A solve whose update rounds the product to f64 first differs from them.
     #[test]
     fn control_rounded_update_differs() {
         let (n, seed) = (20, 9);
@@ -4542,7 +4606,7 @@ mod tests {
         for (name, got) in &ran[1..] {
             assert_eq!(bits_differ(want, got), 0, "{name} against {first}");
         }
-        // control: one flipped low bit is caught by the same comparison
+        // As a control, one flipped low bit is caught by the same comparison.
         let mut wrong = want.clone();
         let m = want.len() / 2;
         wrong[m] = f64::from_bits(wrong[m].to_bits() ^ 1);
@@ -4553,9 +4617,10 @@ mod tests {
         );
     }
 
-    /// The quad-double LU's factors (with the parallel trailing update), pivots and solutions of A x = b and A^T x = b
-    /// are bitwise the same on every backend this CPU runs, on the block-sparse matrix (skipped zero updates) with two
-    /// more parts and a b with zeros and negative zeros. Control: one flipped low bit is caught by the same comparison.
+    /// The quad-double LU's factors, with the parallel trailing update, its pivots and its solutions of A x = b and A^T
+    /// x = b are bitwise the same on every backend this CPU runs. The matrix is the block-sparse one, for skipped zero
+    /// updates, with two more parts, and b has zeros and negative zeros. As a control, one flipped low bit is caught by
+    /// the same comparison.
     #[test]
     fn qd_lu_every_backend_gives_the_same_bits() {
         let n = 157;
@@ -4595,7 +4660,8 @@ mod bench {
     use super::*;
     use std::time::Instant;
 
-    /// cargo test --release --lib bench_lu -- --ignored --nocapture   (env N, T)
+    /// Run with `cargo test --release --lib bench_lu -- --ignored --nocapture`. The environment variables N, T, REPS
+    /// and FILE set the order, the thread count, the repetitions and a matrix file.
     #[test]
     #[ignore]
     fn bench_lu() {
