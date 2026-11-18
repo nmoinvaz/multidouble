@@ -315,12 +315,20 @@ trait Ext: Copy + Neg<Output = Self> {
     fn reduce(self) -> (u32, Self);
     /// the last part dropped (`mutate::TAN_DIV_SHORT`)
     fn drop_last(self) -> Self;
+    /// times a power of two, every part
+    fn scale(self, p: f64) -> Self;
 }
 
 /// the bucket of |r_0| in [TINY, 0.7854]: j with 2^-(j+1) <= |r_0| < 2^-j (0 for [0.5, 0.7854])
 #[inline(always)]
 fn bucket(r0: f64) -> usize {
     (1022 - ((r0.to_bits() >> 52) & 0x7ff) as i64) as usize
+}
+
+/// 2^k, for -1022 <= k <= 1023
+#[inline(always)]
+fn pow2(k: i32) -> f64 {
+    f64::from_bits(((1023 + k) as u64) << 52)
 }
 
 /// the Horner sum c_(k-1) z^(k-2) + ... + c_1 of a table with k >= 2 terms
@@ -344,16 +352,22 @@ fn terms(t: &[u8], j: usize, short: u32) -> usize {
     }
 }
 
-/// sin r for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed: r + r (z P(z)), or r when r is tiny
+/// sin r for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed: r + r (z P(z)), or r when r is tiny. The last two steps
+/// run on r' = 2^(j+1) r, |r'_0| in [1/2, 1) for r_0 in bucket j, and the sum is scaled back: r t, about r^3/6, would
+/// otherwise have products below the normal range for |r| below about 2^-189 at eight parts. The scalings are exact
+/// and change no bit where the unscaled steps stay in the normal range.
 #[inline(always)]
 fn sin_r<T: Ext>(r: T, z: T) -> T {
     let r0 = r.lead().abs();
     if r0 < T::TINY {
         return r;
     }
-    let k = terms(T::KS, bucket(r0), mutate::SIN_SHORT);
+    let j = bucket(r0);
+    let k = terms(T::KS, j, mutate::SIN_SHORT);
     let p = horner(z, &tables::SIN, k);
-    r.add(r.mul(z.mul(p)))
+    let e = j as i32 + 1;
+    let r1 = r.scale(pow2(e));
+    r1.add(r1.mul(z.mul(p))).scale(pow2(-e))
 }
 
 /// cos r for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed: 1 + z Q(z), or 1 when r is tiny
@@ -432,6 +446,7 @@ fn tan<T: Ext>(x: T) -> T {
     let (q, r) = x.reduce();
     let z = r.mul(r);
     let (s, c) = (sin_r(r, z), cos_r(r, z));
+    let r0 = r.lead().abs();
     let short = |d: T| {
         if mutate::on(mutate::TAN_DIV_SHORT) {
             d.drop_last()
@@ -439,10 +454,16 @@ fn tan<T: Ext>(x: T) -> T {
             d
         }
     };
-    if q % 2 == 0 {
+    if q % 2 == 1 {
+        -c.div(short(s))
+    } else if r0 < T::TINY {
         s.div(short(c))
     } else {
-        -c.div(short(s))
+        // sin r / cos r on the numerator times 2^(3(j+1)), a quotient near 2^(2j): cos r = 1 - r^2/2 + ... has its
+        // last parts about 2^(-2j-318) at eight parts, and their products with the last quotient terms of an unscaled
+        // sin r / cos r leave the normal range for |r| below about 2^-82
+        let e = 3 * (bucket(r0) as i32 + 1);
+        s.scale(pow2(e)).div(short(c)).scale(pow2(-e))
     }
 }
 
@@ -510,6 +531,9 @@ impl Ext for DD {
     fn drop_last(self) -> DD {
         DD::from_f64(self.hi)
     }
+    fn scale(self, p: f64) -> DD {
+        self.mul_pwr2(p)
+    }
 }
 
 impl Ext for QD {
@@ -554,6 +578,9 @@ impl Ext for QD {
             x: [self.x[0], self.x[1], self.x[2], 0.0],
         }
     }
+    fn scale(self, p: f64) -> QD {
+        self.mul_pwr2(p)
+    }
 }
 
 impl Ext for OD {
@@ -595,6 +622,9 @@ impl Ext for OD {
         let mut x = self.x;
         x[7] = 0.0;
         OD { x }
+    }
+    fn scale(self, p: f64) -> OD {
+        self.mul_pwr2(p)
     }
 }
 
