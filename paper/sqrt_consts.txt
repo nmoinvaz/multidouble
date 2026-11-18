@@ -7,5 +7,5 @@ theta=2 n=12 J=5: |sqrt(x) - result| <= 6536.690164 u^n sqrt(x); E_k/u^n: [1.266
 n=8 theta=2 last step (units u^n): em 1.00001 eg 0.500009 ec 1.55431e-15 ed 4.35393e-22 er 1 ez 1.00002
 rel - 3 u^8 = 2^-14.94 u^8
 from the double-double square root (one step with the second-order term, one Newton step):
-theta=1 n=8: E_0 = 19.125 u^2, E_1 = 2^120.09 u^8, E_2 = 2.000009854 u^8, |sqrt(x) - result| <= 3.000019707 u^8 sqrt(x)
-theta=2 n=8: E_0 = 22.125 u^2, E_1 = 2^120.72 u^8, E_2 = 2.00001389 u^8, |sqrt(x) - result| <= 3.000031815 u^8 sqrt(x)
+theta=1 n=8: E_0 = 19.125 u^2 + 58 u^3, E_1 = 2^120.09 u^8, E_2 = 2.000009854 u^8, |sqrt(x) - result| <= 3.000019707 u^8 sqrt(x)
+theta=2 n=8: E_0 = 22.125 u^2 + 72 u^3, E_1 = 2^120.72 u^8, E_2 = 2.00001389 u^8, |sqrt(x) - result| <= 3.000031815 u^8 sqrt(x)

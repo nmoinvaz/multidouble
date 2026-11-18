@@ -568,7 +568,7 @@ formula above is nondecreasing in the quantities so rounded, so the computed val
 \end{proof}
 
 The square root of multidouble starts closer instead. SQRT$^{\rm DD}_n$ takes $s$, $a$ and $h$ as SQRT$_{n,J}$, then
-$(a_0', a_1') = \FastTwoSum(a_0, a_1)$, $y$ the double-word square root of $a_0' + a_1'$ by Algorithm~8
+$(a_0', a_1') = \FastTwoSum(a_0, a_1)$, $v$ the double-word square root of $a_0' + a_1'$ by Algorithm~8
 of~\cite{LLMPR23}, and $r = 1/y$ by DWDivDW2~\cite{JMP17}, so that $r = (r_0, r_1, 0, \dots, 0)$. One step keeps the
 second-order term: with $m$, $g$ and $c$ as above, $q = \mathrm{MUL}(c, c)$, $t = \mathrm{ADD}(q, q/2)$, $w =
 \mathrm{ADD}(c, t)$, $d = \mathrm{MUL}(w, r)$ and $r \gets \mathrm{ADD}(r, d)$. One step of SQRT$_{n,J}$ follows,
@@ -601,17 +601,18 @@ E_1 &= \tfrac52E^3 + \tfrac{15}8E^4 + \tfrac38E^5 + \epsilon_d + \epsilon_r \\
 \end{align*}
 Let $E_2$ and $\pi^{(2)}$ be one step of Theorem~\ref{thm:t7} from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
 G_{\rm MUL}(\pi^{(2)}, \bar a;\ 1 + E_2)$ and $\delta^{\rm DD} = E_2 + \epsilon_z$. Then $|\sqrt x - \sum_k
-\mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$: $E_0 \le 22.125\,u^2$, $E_1 \le 2^{-303}$, and
+\mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$: $E_0 \le 22.125\,u^2 + 72\,u^3$ for
+$\theta = 2$ and $19.125\,u^2 + 58\,u^3$ for $\theta = 1$, $E_1 \le 2^{-303}$, and
 $\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$, the bounds of SQRT$_{8,4}$.
 \end{theorem}
 
 \begin{proof}
 \emph{Start.} $\FastTwoSum$ is exact, since $|a_1| \le \rho|a_0|$, and $(a_0', a_1')$ is a double-word number far from
-underflow, as $a_0 \in [1, 4)$. Theorem~3.5 of~\cite{LLMPR23} gives $y = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
-\eta_1$, and Theorem~7.1 of~\cite{JMP17}, which~\cite{MR22} proved formally, gives $r y = 1 + d_2$ with $|d_2| \le
-\eta_2$ for $p \ge 7$. With $A = (a_0 + a_1)(1 + t)$, where $|t| \le \tau$ by $|a_2 + \dots| \le \rho^2a_0/(1-\rho)$ and
-$|a_0 + a_1| \ge (1-\rho)a_0$, $r/y_A = (1+t)^{1/2}(1+d_2)/(1+d_1)$ for $y_A = A^{-1/2}$, and $1 - t \le (1+t)^{1/2}
-\le 1 + t/2$ give $|r/y_A - 1| \le E_0$. The output of $\FastTwoSum$ has $|r_1| \le u|r_0|$, so $|r_0| \le |r|/(1-u)$,
+underflow, as $a_0 \in [1, 4)$. Theorem~3.5 of~\cite{LLMPR23} gives $v = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
+\eta_1$, and Theorem~7.1 of~\cite{JMP17}, which~\cite{MR22} proved formally, gives $r v = 1 + d_2$ with $|d_2| \le
+\eta_2$ for $p \ge 7$. With $A = (a_0 + a_1)(1 + \vartheta)$, where $|\vartheta| \le \tau$ by $|a_2 + \dots| \le
+\rho^2a_0/(1-\rho)$ and $|a_0 + a_1| \ge (1-\rho)a_0$, $r/y = (1+\vartheta)^{1/2}(1+d_2)/(1+d_1)$ for $y = A^{-1/2}$,
+and $1 - \tau \le (1+\vartheta)^{1/2} \le 1 + \tau/2$ for $|\vartheta| \le \tau \le 1$ give $|r/y - 1| \le E_0$. The output of $\FastTwoSum$ has $|r_1| \le u|r_0|$, so $|r_0| \le |r|/(1-u)$,
 which is $\pi^{(0)}$.
 
 \emph{The second-order step.} With $r = y(1+e)$, the exact $c$ is $-e - \frac12e^2$, and $(1+e)(1 + c + \frac32c^2) = 1 +
