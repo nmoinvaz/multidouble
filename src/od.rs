@@ -2,8 +2,8 @@
 //! overlap, about 126 significant digits (2^-418 relative, `OD::EPS`). A product, a quotient or a square root has
 //! |x_{i+1}| <= ulp(x_i)/2; a sum (od + od, od + f64) |x_{i+1}| <= ulp(x_i), since after cancelling operands its
 //! renormalization can leave a part past half the ulp of the one above, up to 0.74 ulp in the tests
-//! (`od_tests::od_results_do_not_overlap`; ulp-nonoverlapping in the sense of Joldes, Muller and Popescu, below). The
-//! 8-lane `ov::OV` runs the same algorithms with bitwise the same results.
+//! (`od_tests::od_results_do_not_overlap`; ulp-nonoverlapping in the sense of Joldes, Marty, Muller and Popescu,
+//! below). The 8-lane `ov::OV` runs the same algorithms with bitwise the same results.
 //!
 //! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the
 //! scalar type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double
@@ -44,7 +44,8 @@
 //!   twin of `ov::ODotAcc`); `finish` adds the levels with octo-double + f64.
 //!
 //! The error bounds the tests check are stated per operation where it is defined (`od_tests`), measured against
-//! exact arithmetic (`exact`). The algorithms carry no proof here: the bounds are those measured. Full precision
+//! exact arithmetic (`exact`). paper/expansion-error-bounds.pdf proves the bounds of the sum, product, quotient,
+//! square root and sums of products for operands on the ladder; the tests check them. Full precision
 //! needs every part to be a normal f64, |x| above about 2^-600 (424 bits above 2^-1022); below that the lower parts
 //! lose bits to underflow, as QD's do below about 2^-800.
 //!
@@ -295,10 +296,10 @@ pub(crate) fn vecsum<L: Limb, const N: usize>(c: [L; N]) -> [L; N] {
     c
 }
 
-/// The renormalization of N parts to eight, branching on zero errors (`ov` has the masked twin): the two-sum pass
-/// from the smallest part up (`vecsum`), then a quick-two-sum pass from the top that emits a part only where the
-/// error is nonzero, and once seven parts are out adds the rest into the eighth. An infinite first part returns the
-/// first eight parts as they are.
+/// The renormalization of N parts to eight, branching on zero errors (`ov` has the masked twin): the two-sum pass from
+/// the smallest part up (`vecsum`), then a two-sum pass from the top (a quick-two-sum where |acc| >= |c_i|, which is
+/// exact and gives the same bits) that emits a part only where the error is nonzero, and once seven parts are out adds
+/// the rest into the eighth. An infinite first part returns the first eight parts as they are.
 #[inline(always)]
 pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     if c[0].is_infinite() {

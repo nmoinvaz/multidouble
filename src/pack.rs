@@ -19,10 +19,10 @@
 //! The decoders add the field, with a constant top byte, to the exponent above: `fraction | t << 52 | 0xfc << 56` plus
 //! `e << 52` is the part's bits without the sign, as the constant is `-64 << 52`.
 //!
-//! A value whose parts do not fit the codes (a part 52 or more than 64 places below the last nonzero one, a subnormal,
-//! infinite or NaN lower part, or a nonzero lower part below a leading part that is not a normal number) keeps its
-//! lower parts raw in the side table. Every value is restored bit for bit, signed zeros and NaN payloads included. The
-//! places of a block past the last value hold +0.
+//! A value whose parts do not fit the codes (a part fewer than 53 or more than 64 places below the last nonzero one, a
+//! subnormal, infinite or NaN lower part, or a nonzero lower part below a leading part that is not a normal number)
+//! keeps its lower parts raw in the side table. Every value is restored bit for bit, signed zeros and NaN payloads
+//! included. The places of a block past the last value hold +0.
 //!
 //! [`Packed::unpack_into`] and [`Packed::dot`] decode 8 values at once on the SIMD backend [`crate::simd::dispatch`]
 //! picks (NEON, AVX2, AVX-512, or plain code elsewhere), with bitwise the same results on all. [`Packed::blocks`] gives
@@ -113,7 +113,8 @@ pub trait Parts<const N: usize>: Copy {
     const F64S: bool = false;
 }
 
-/// whether T is its parts in order in memory: its `F64S`, its size, and a value built from distinct parts
+/// whether T is its parts in order in memory: its `F64S`, its size, its alignment, and a value built from distinct
+/// parts
 fn f64s<const N: usize, T: Parts<N>>() -> bool {
     if !T::F64S || std::mem::size_of::<T>() != 8 * N || std::mem::align_of::<T>() != 8 {
         return false;
@@ -549,7 +550,8 @@ impl<const N: usize, T: Parts<N>> Kernel for Unpack<'_, N, T> {
     type Output = ();
     #[inline(always)]
     fn run<S: Simd>(self) {
-        // its own function on every backend, so that it is not inlined whole into the caller of dispatch
+        // its own function on SSE2, NEON and the portable backend (AVX2 and AVX-512 inline it), so that it is not
+        // inlined whole into the caller of dispatch there
         S::outline(
             #[inline(always)]
             || self.body::<S>(),

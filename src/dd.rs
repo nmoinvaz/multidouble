@@ -207,8 +207,9 @@ impl DD {
         let (h, l) = quick_two_sum(p, e);
         DD { hi: h, lo: l }
     }
-    /// times a power of two b (`is_pwr2`): both parts scaled, exact barring overflow and underflow, so bitwise
-    /// `mul_f(b)` without its rounding steps; for computing in a variable rescaled by 2^k
+    /// times a power of two b (`is_pwr2`): both parts scaled, exact barring overflow and underflow, so `mul_f(b)`
+    /// without its rounding steps, bit for bit except a zero lo, which takes the sign of lo b where `mul_f` gives +0;
+    /// for computing in a variable rescaled by 2^k
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> DD {
         debug_assert!(is_pwr2(b), "mul_pwr2: {b} is not a power of two");

@@ -486,7 +486,7 @@ fn b_exact(op: Op, b: QD) -> Dy {
     }
 }
 
-/// (err, scale, rel, allow): the check is err <= thr·u·scale + allow, the reported value err / scale; rel is the
+/// (err, scale, rel, allow): the check is err <= thr 2^-209 scale + allow, the reported value err / scale; rel is the
 /// relative error of the result (= err / scale except for the Cray-style measure). In the near-underflow inputs allow
 /// is 16·2^-1074 on the result (its parts cannot go below 2^-1074), carried to err: 16·2^-1074 for add and mul,
 /// 16·2^-1074 |b| for div (err = |r b - a|), 32·2^-1074 |r| for sqrt (err = |r^2 - a|); div and sqrt add
@@ -1386,7 +1386,7 @@ fn qd_ieee_add_regression() {
 
 /// `QD::ieee_add` when the loop ends with four parts emitted while input parts remain: QD adds the parts not read to
 /// x[3] and drops its accumulator u, v, which after the emitted parts overlap can hold the result's last 50 bits. On
-/// b and on a, a2 (a and a2 differ in a's last bit; a ends with three parts emitted, a2 with four) QD's literal
+/// (a, b) and (a2, b) (a and a2 differ in a's last bit; a ends with three parts emitted, a2 with four) QD's literal
 /// algorithm misses by 2^46 u on both, and a version with only the three-parts repair still misses on a2. Same-sign
 /// sums, no cancellation, found by the library survey of research/libraries on branch wip/discover-b. Each sum must be
 /// within 1 u of the exact one, the lanes must agree with the scalar add bit for bit, and QD's literal algorithm must
@@ -1885,7 +1885,7 @@ fn qd_diag_accumulator() {
                 // levels 0-2 as built, level 3 exact, summed exactly: the error left is the products' truncation
                 let ex = Dy::sum(&acc.s[..3]).add(&lvl3);
                 let e_exact3 = ex.sub(&x).abs().ratio(&s) / unit();
-                // the four levels as built, summed exactly (no finish): the error left is level 3's rounding
+                // the five levels as built, summed exactly (no finish): the error left is level 3's rounding
                 let e_nofin = Dy::sum(&acc.s).sub(&x).abs().ratio(&s) / unit();
                 m3 = m3.max(e_nofin);
                 m4 = m4.max(Dy::from_f64(acc.s[3]).ratio(&s) / unit());

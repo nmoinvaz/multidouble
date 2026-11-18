@@ -405,8 +405,8 @@ impl<S: Simd> Precision<S> for Octo {
 
 #[cfg(test)]
 mod tests {
-    //! Each method of `Quad` and `Octo` against the precision's own method on the same inputs, bit for bit. The
-    //! control `mutated` swaps two parts on input and must differ.
+    //! Each method of `Double`, `Quad` and `Octo` against the precision's own method on the same inputs, bit for bit.
+    //! The control `precision_mutated_differs` swaps two parts on input and must differ.
     use super::*;
     use crate::simd::Native;
 

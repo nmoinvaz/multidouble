@@ -2,8 +2,10 @@
 //! padded to a multiple of 8 so the trailing update runs on 8-row lane vectors, columns updated in parallel (rayon)
 //! for large matrices; the same factorization blocked in plain f64 (LAPACK's right-looking getrf) for
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
-//! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) for systems
-//! too ill-conditioned for double-double.
+//! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) and
+//! octo-double (`ODLu`) for systems too ill-conditioned for the precision below. Also the f64 LU of a block of columns
+//! (`lu_rect_f64`) and of a staircase system (`StaircaseLu`), and the log-determinant and pivots of a complex
+//! double-double matrix (`clu_logdet`, `clu_pivots`).
 use crate::dd::{pow2_near, two_prod, two_sum, DD};
 use crate::dv::{self, DotAcc, DV};
 use crate::od::OD;
@@ -288,8 +290,9 @@ fn panel_getf2<S: Simd>(
 }
 
 /// The trailing update of one panel on the given columns (offsets into ch / cl, leading dimension ld) and 8-row blocks
-/// (row offsets): entry -= l_ik u_kj for the panel's k in order, with TR row blocks x NC columns in registers.
-/// nt[j]: offset of column j's -u values (jb each) in nth / ntl; ph / pl: packed multipliers, [row block][k][lane].
+/// (each a row offset and its offset into ph / pl): entry -= l_ik u_kj for the panel's k in order, with TR row blocks x
+/// NC columns in registers. nto[j]: offset of column j's -u values (jb each) in nth / ntl; ph / pl: packed multipliers,
+/// [row block][k][lane].
 #[allow(clippy::too_many_arguments)]
 fn gemm<S: Simd>(
     ld: usize,
@@ -415,7 +418,7 @@ fn tile_rows<S: Simd, const R: usize, const W: usize>(
 impl DDLu {
     /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero).
     /// par: work in parallel (rayon's current pool). Large matrices take the blocked path (`factor_blocked`), which
-    /// gives bitwise the same factors as the unblocked one.
+    /// gives the unblocked one's factors, equal as numbers (the signs of zeros may differ).
     pub fn factor(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
         if n >= BLOCKED_MIN {
             Self::factor_blocked(n, ld, hi, lo, par)
@@ -608,7 +611,7 @@ impl DDLu {
                             #[inline(always)]
                             || {
                                 let w = ch.len() / ld;
-                                // nt[j]: -(entry (j0 + c, column j)) as read at step k = j0 + c (as getf2 reads it)
+                                // nth / ntl: -(entry (j0 + c, column j)) as read at step k = j0 + c (as getf2 reads it)
                                 let mut nth = vec![0.0f64; w * jb];
                                 let mut ntl = vec![0.0f64; w * jb];
                                 let mut cols: Vec<usize> = Vec::with_capacity(w);
@@ -4595,7 +4598,7 @@ mod bench {
     use super::*;
     use std::time::Instant;
 
-    /// cargo test --release --lib bench_lu -- --ignored --nocapture   (env N, T)
+    /// cargo test --release --lib bench_lu -- --ignored --nocapture   (env N, T, REPS, FILE)
     #[test]
     #[ignore]
     fn bench_lu() {

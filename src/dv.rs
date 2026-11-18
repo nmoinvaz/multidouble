@@ -2,8 +2,8 @@
 //! the FMA two-product multiply and the three-quotient divide, so every operation is accurate to a few units of
 //! 2^-104 relative.
 //!
-//! `DotAcc` accumulates a sum of double-double products as (s, err): each product is formed exactly to ~2^-104,
-//! its leading part is added to s with an error-free two-sum and all error terms go into err (Ogita-Rump-Oishi
+//! `DotAcc` accumulates a sum of double-double products as (s, e): each product is formed exactly to ~2^-104,
+//! its leading part is added to s with an error-free two-sum and all error terms go into e (Ogita-Rump-Oishi
 //! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
 use crate::dd::DD;
 use crate::simd::Simd;

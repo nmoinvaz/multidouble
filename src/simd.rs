@@ -2,8 +2,8 @@
 //!
 //! The lane types ([`crate::v8::V8`], [`crate::dv::DV`], [`crate::qv::QV`], the dual lanes) are generic over an
 //! instruction set `S: Simd`. Code written once over `S` runs on the best one the CPU has through [`dispatch`]:
-//! AVX-512F (with AVX2 and FMA), then AVX2 + FMA, then SSE2 on x86-64, NEON on aarch64, a plain array elsewhere.
-//! Every backend gives bitwise the same results, so the choice changes only the speed.
+//! AVX-512F (with AVX2 and FMA), then AVX2 + FMA, then SSE2 on x86 and x86-64, NEON on aarch64, a plain array
+//! elsewhere. Every backend gives bitwise the same results, so the choice changes only the speed.
 //!
 //! [`Native`] is the backend the build's target features select at compile time, the one the aliases in
 //! [`crate::native`] use. The others can be named only inside [`Kernel::run`], which [`dispatch`] and
@@ -93,8 +93,8 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn hot<T>(f: impl FnOnce() -> T) -> T;
     /// f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 (whose instructions need the
     /// caller's target features) and compiled as a function of its own, never inlined, on the other backends: for the
-    /// steps of the octo-double operations (`od`, `ov`), each hundreds to a thousand lane operations, so that each is
-    /// compiled once rather than in every operation that uses it.
+    /// steps of the octo-double operations (`od`, `ov`), each hundreds to a thousand lane operations, and for
+    /// `pack`'s decoders, so that each is compiled once rather than in every operation that uses it.
     fn outline<T>(f: impl FnOnce() -> T) -> T;
 }
 

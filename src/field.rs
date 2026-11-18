@@ -1177,7 +1177,8 @@ impl<L: MatLane> MatLane for Counted<L> {
 
 /// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
 /// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), `solve_lanes_refine`, the double-double
-/// solve refined in the field's lane type, and `solve_lanes_jet`, `solve_lanes_jet_refine` and
+/// solve refined in the field's lane type, `solve_lanes_refine_t`, the same for value and tangent together, and
+/// `solve_lanes_jet`, `solve_lanes_jet_refine` and
 /// `solve_lanes_jet_refine_od`, a jet's system solved order by order in double-double, quad-double and octo-double.
 /// All panic if the order is not 8 B.
 pub trait FieldSolve {
@@ -1516,7 +1517,7 @@ impl FieldSolve for DDLu {
 /// that would otherwise run to the values' order). Call `done(k, &[c_k of each field])` for k = 0, 1, 2, ... in
 /// turn, with the coefficients of order k; it returns true once the tangent terms max |c_k| r^k (r the evaluation
 /// radius; the maximum over the fields, lanes and tangents given, f64 tangents through `Lane::tan64`, else the hi
-/// part of `Lane::tan`, so a complex tangent (`Dc`) by its real part) of `run` consecutive orders are all below
+/// part of `Lane::tan`, so a complex tangent (`Dc`) by its real part) of `run` consecutive orders are all at most
 /// `tol` times the largest tangent term so far, and k >= kmin. The values are not looked at, so a value lane type
 /// never ends early.
 pub struct TangentTail {
