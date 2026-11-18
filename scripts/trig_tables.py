@@ -193,7 +193,11 @@ def main():
             for i in range(0, len(t), 24):
                 w('    ' + ' '.join(f'{x},' for x in t[i:i + 24]))
             w('];')
-    open(out, 'w').write('\n'.join(L) + '\n')
+    # a temporary file beside the output, renamed over it once written, so that a failed write leaves the old tables
+    tmp = out + '.tmp'
+    with open(tmp, 'w') as fh:
+        fh.write('\n'.join(L) + '\n')
+    os.replace(tmp, out)
     print(f'pi from Machin and Gauss agree to 2^-{G - (max(hi, ghi) - min(lo, glo)).bit_length()}; '
           f'P = round(pi/2 2^{F}) has {P.bit_length()} bits; RN(2/pi) = {t2p!r}')
     for n in (2, 4, 8):

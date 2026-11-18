@@ -284,8 +284,17 @@ fn trig_reference_planted_truth() {
         assert!(d <= 2048.0, "{what}: {d} units of 2^-{FR}");
     }
     // pi/2 from Machin's formula, an independent derivation, agrees
-    let machin = half_pi_with(&[(4, 5)], &[(1, 239)]);
-    assert!(fx_dist(&machin, half_pi()) <= 4.0);
+    assert!(halves_agree(&machin_half_pi(), half_pi()));
+}
+
+/// pi/2 from Machin's formula, pi/4 = 4 arctan(1/5) - arctan(1/239)
+fn machin_half_pi() -> Fx {
+    half_pi_with(&[(4, 5)], &[(1, 239)])
+}
+
+/// two values of pi/2 agree to 4 units of 2^-FR
+fn halves_agree(a: &Fx, b: &Fx) -> bool {
+    fx_dist(a, b) <= 4.0
 }
 
 /// Control: with pi/2 off by 2^-2000, every planted truth that involves pi fails
@@ -297,6 +306,8 @@ fn trig_reference_planted_truth_control() {
     });
     let bad = planted(&p).iter().filter(|(_, d)| *d > 2048.0).count();
     assert_eq!(bad, 3, "the three checks at multiples of pi must fail");
+    // and Machin's pi/2 does not agree with it
+    assert!(!halves_agree(&machin_half_pi(), &p));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -370,7 +381,12 @@ fn trig_constants() {
         (8, &t::KS8[..], &t::KC8[..]),
     ] {
         assert_eq!(ks.len(), 53 * n / 2);
+        assert_eq!(kc.len(), 53 * n / 2);
         for (j, (&k_s, &k_c)) in ks.iter().zip(kc).enumerate() {
+            assert!(
+                terms_in_tables(k_s as usize) && terms_in_tables(k_c as usize),
+                "n = {n}, bucket {j}"
+            );
             assert!(
                 series_enough(n, j, k_s as u64, true),
                 "sin, n = {n}, bucket {j}: {k_s} terms"
@@ -381,6 +397,12 @@ fn trig_constants() {
             );
         }
     }
+}
+
+/// a series length the coefficient tables can serve: 2 to their length
+fn terms_in_tables(k: usize) -> bool {
+    use crate::trig::tables as t;
+    (2..=t::SIN.len().min(t::COS.len())).contains(&k)
 }
 
 /// R^(2K) 2^(53 n + 10) <= (2K+1)! (1 - R^2/6), or (2K)! (1 - R^2/2) for cos, exactly (R an upper bound of |r| in
@@ -410,6 +432,8 @@ fn series_enough(n: usize, j: usize, k: u64, sine: bool) -> bool {
 #[test]
 fn trig_constants_control() {
     use crate::trig::tables as t;
+    // series lengths past the coefficient tables, or below two
+    assert!(!terms_in_tables(t::SIN.len() + 1) && !terms_in_tables(1));
     let mut sin = t::SIN;
     sin[5][7] = f64::from_bits(sin[5][7].to_bits() + 1);
     assert_eq!(table_mismatches(&sin, &t::COS), 1);
@@ -733,6 +757,11 @@ fn scale() -> usize {
     n
 }
 
+/// n samples times TRIG_N, which must not overflow
+fn samples(n: usize) -> usize {
+    n.checked_mul(scale()).expect("TRIG_N too large")
+}
+
 fn print_rows<T: Ty>(rows: &[Row]) {
     println!(
         "{}: error in u^{} (bounds {} for sin and cos, {} for tan)",
@@ -759,7 +788,7 @@ fn print_rows<T: Ty>(rows: &[Row]) {
 }
 
 fn accuracy<T: Ty>(n: usize) {
-    let rows = run::<T>(n * scale(), 1);
+    let rows = run::<T>(samples(n), 1);
     if report() {
         print_rows::<T>(&rows);
     }
@@ -859,7 +888,7 @@ fn reduction_failures<T: Ty>(xs: &[T]) -> usize {
 #[test]
 fn trig_reduction() {
     for cat in CATS {
-        let n = 200 * scale();
+        let n = samples(200);
         assert_eq!(reduction_failures(&inputs::<DD>(cat, n, 7)), 0, "dd {cat:?}");
         assert_eq!(reduction_failures(&inputs::<QD>(cat, n, 7)), 0, "qd {cat:?}");
         assert_eq!(reduction_failures(&inputs::<OD>(cat, n, 7)), 0, "od {cat:?}");
