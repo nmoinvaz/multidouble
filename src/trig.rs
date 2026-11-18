@@ -299,17 +299,25 @@ pub(crate) fn reduce<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
 // the evaluation, once for the three types
 // ---------------------------------------------------------------------------------------------------------------
 
-/// the arithmetic the functions need, by type
+/// the arithmetic the functions need, by type, and the choices they make by lane: one lane for the scalar types (`bool`
+/// masks, `usize` integers, `f64` scales, `one_lane!`)
 pub(crate) trait Ext: Copy + Neg<Output = Self> {
     /// 2^-(53 n / 2), n the number of parts: below it sin r = r and cos r = 1 to within u^N/6 and u^N/2
     const TINY: f64;
     /// terms of the sin and cos series by bucket of r_0
     const KS: &'static [u8];
     const KC: &'static [u8];
-    fn lead(self) -> f64;
-    fn finite(self) -> bool;
+    /// a mask, one bit per lane
+    type M: Copy;
+    /// a small integer per lane: k mod 4, a bucket or a number of terms
+    type K: Copy;
+    /// an f64 per lane
+    type F: Copy;
+    fn lead(self) -> Self::F;
+    fn finite(self) -> Self::M;
     /// the N leading parts of an eight-part table entry
     fn coef(c: &[f64; 8]) -> Self;
+    fn zero() -> Self;
     fn one() -> Self;
     fn nan() -> Self;
     fn mul(self, b: Self) -> Self;
@@ -318,11 +326,36 @@ pub(crate) trait Ext: Copy + Neg<Output = Self> {
     fn one_plus(self) -> Self;
     fn div(self, b: Self) -> Self;
     /// x = k pi/2 + r: (k mod 4, r)
-    fn reduce(self) -> (u32, Self);
+    fn reduce(self) -> (Self::K, Self);
     /// the last part dropped (`mutate::TAN_DIV_SHORT`)
     fn drop_last(self) -> Self;
     /// times a power of two, every part
-    fn scale(self, p: f64) -> Self;
+    fn scale(self, p: Self::F) -> Self;
+    /// per lane a where m is set, b elsewhere
+    fn sel(m: Self::M, a: Self, b: Self) -> Self;
+    /// (NaN, tiny): the lanes `early` gives NaN, and the others with |x_0| below TINY
+    fn early(self) -> (Self::M, Self::M);
+    /// (tiny, j): the lanes with |r_0| below TINY, and per lane the bucket of |r_0|, the last bucket where tiny
+    fn buckets(self) -> (Self::M, Self::K);
+    /// b on every lane
+    fn mask(b: bool) -> Self::M;
+    fn all(m: Self::M) -> bool;
+    fn any(m: Self::M) -> bool;
+    fn or(m: Self::M, n: Self::M) -> Self::M;
+    /// per lane f(k mod 4)
+    fn quadrant(q: Self::K, f: fn(usize) -> bool) -> Self::M;
+    /// per lane the terms for bucket j: of the cos series where c is set, of the sin series elsewhere
+    fn terms(c: Self::M, j: Self::K) -> Self::K;
+    /// the most terms of any lane
+    fn kmax(k: Self::K) -> usize;
+    /// the lanes whose Horner sum takes step i, those with k >= i + 2 terms
+    fn active(k: Self::K, i: usize) -> Self::M;
+    /// per lane coefficient k - 1: of the cos table where c is set, of the sin table elsewhere
+    fn lead_coef(c: Self::M, k: Self::K) -> Self;
+    /// per lane 2^(m (j + 1))
+    fn pow2_j(j: Self::K, m: i32) -> Self::F;
+    /// per lane 1 where u is set, p elsewhere
+    fn unit_where(u: Self::M, p: Self::F) -> Self::F;
 }
 
 /// the bucket of |r_0| in [TINY, 0.7854]: j with 2^-(j+1) <= |r_0| < 2^-j (0 for [0.5, 0.7854])
@@ -338,12 +371,14 @@ fn pow2(k: i32) -> f64 {
     f64::from_bits(((1023 + k) as u64) << 52)
 }
 
-/// the Horner sum c_(k-1) z^(k-2) + ... + c_1 of a table with k >= 2 terms
+/// the Horner sum c_(k-1) z^(k-2) + ... + c_1 of a table with k >= 2 terms, c(i) = c_i, per lane: each lane starts at
+/// its own c_(k-1), `lead`, and keeps its sum through the steps past its own k, so that it rounds as the scalar sum of
+/// its k terms
 #[inline(always)]
-fn horner<T: Ext>(z: T, c: &[[f64; 8]], k: usize) -> T {
-    let mut p = T::coef(&c[k - 1]);
-    for i in (1..k - 1).rev() {
-        p = z.mul(p).add(T::coef(&c[i]));
+fn horner<T: Ext>(z: T, k: T::K, lead: T, c: impl Fn(usize) -> T) -> T {
+    let mut p = lead;
+    for i in (1..T::kmax(k) - 1).rev() {
+        p = T::sel(T::active(k, i), z.mul(p).add(c(i)), p);
     }
     p
 }
@@ -359,101 +394,145 @@ fn terms(t: &[u8], j: usize, short: u32) -> usize {
     }
 }
 
-/// sin r for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed: r + r (z P(z)), or r when r is tiny. The last two steps
-/// run on r' = 2^(j+1) r, |r'_0| in [1/2, 1) for r_0 in bucket j, and the sum is scaled back: r t, about r^3/6, would
-/// otherwise have products below the normal range for |r| below about 2^-189 at eight parts. The scalings are exact
-/// and change no bit where the unscaled steps stay in the normal range.
+/// Per lane sin r where c is clear and cos r where it is set, for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed, and
+/// (tiny, j) = `r.buckets()`.
+///
+/// sin r = r + r (z P(z)), or r when r is tiny. The last two steps run on r' = 2^(j+1) r, |r'_0| in [1/2, 1) for r_0
+/// in bucket j, and the sum is scaled back: r t, about r^3/6, would otherwise have products below the normal range for
+/// |r| below about 2^-189 at eight parts. The scalings are exact and change no bit where the unscaled steps stay in the
+/// normal range.
+///
+/// cos r = 1 + z Q(z), or 1 when r is tiny.
 #[inline(always)]
-fn sin_r<T: Ext>(r: T, z: T) -> T {
-    let r0 = r.lead().abs();
-    if r0 < T::TINY {
-        return r;
+fn sin_cos_r<T: Ext>(r: T, z: T, tiny: T::M, j: T::K, c: T::M) -> T {
+    let small = T::sel(c, T::one(), r);
+    if T::all(tiny) {
+        return small;
     }
-    let j = bucket(r0);
-    let k = terms(T::KS, j, mutate::SIN_SHORT);
-    let p = horner(z, &tables::SIN, k);
-    let e = j as i32 + 1;
-    let r1 = r.scale(pow2(e));
-    r1.add(r1.mul(z.mul(p))).scale(pow2(-e))
-}
-
-/// cos r for |r| <= 0.7854 (1 + 2^-52), z = r^2 as computed: 1 + z Q(z), or 1 when r is tiny
-#[inline(always)]
-fn cos_r<T: Ext>(r: T, z: T) -> T {
-    let r0 = r.lead().abs();
-    if r0 < T::TINY {
-        return T::one();
-    }
-    let k = terms(T::KC, bucket(r0), mutate::COS_SHORT);
-    let q = horner(z, &tables::COS, k);
-    z.mul(q).one_plus()
-}
-
-/// what to return before the reduction: NaN for NaN, infinities and |x_0| > 2^52, x itself (sin, tan) or one (cos)
-/// below 2^-(53n/2), and None otherwise
-#[inline(always)]
-fn early<T: Ext>(x: T, cos: bool) -> Option<T> {
-    let a = x.lead().abs();
-    if !x.finite() || a > LIMIT {
-        Some(T::nan())
-    } else if a < T::TINY {
-        Some(if cos { T::one() } else { x })
+    // one series on every lane, or each lane's own
+    let (all_c, no_c) = (T::all(c), !T::any(c));
+    let k = T::terms(c, j);
+    let p = horner(z, k, T::lead_coef(c, k), |i| {
+        if all_c {
+            T::coef(&tables::COS[i])
+        } else if no_c {
+            T::coef(&tables::SIN[i])
+        } else {
+            T::sel(c, T::coef(&tables::COS[i]), T::coef(&tables::SIN[i]))
+        }
+    });
+    let zp = z.mul(p);
+    let s = if all_c {
+        zp
     } else {
-        None
+        let r1 = r.scale(T::pow2_j(j, 1));
+        r1.add(r1.mul(zp)).scale(T::pow2_j(j, -1))
+    };
+    let v = if no_c { s } else { T::sel(c, zp.one_plus(), s) };
+    T::sel(tiny, small, v)
+}
+
+/// The lanes that return before the reduction (`skip`), with their sin and tan, and their cos: NaN for NaN, infinities
+/// and |x_0| > 2^52, x itself (sin, tan) or one (cos) below 2^-(53n/2). `x` is the reduction's input, zero on them.
+struct Early<T: Ext> {
+    skip: T::M,
+    sin: T,
+    cos: T,
+    x: T,
+}
+
+#[inline(always)]
+fn early<T: Ext>(x: T) -> Early<T> {
+    let (nan, tiny) = x.early();
+    let skip = T::or(nan, tiny);
+    Early {
+        skip,
+        sin: T::sel(nan, T::nan(), x),
+        cos: T::sel(nan, T::nan(), T::one()),
+        x: T::sel(skip, T::zero(), x),
     }
 }
 
+/// k mod 4 odd
+#[inline(always)]
+fn odd(q: usize) -> bool {
+    q % 2 == 1
+}
+
+/// k mod 4 is 2 or 3: sin x = -(sin r or cos r)
+#[inline(always)]
+fn sin_neg(q: usize) -> bool {
+    q >= 2
+}
+
+/// k mod 4 is 1 or 2: cos x = -(sin r or cos r)
+#[inline(always)]
+fn cos_neg(q: usize) -> bool {
+    q == 1 || q == 2
+}
+
+#[inline(always)]
 fn sin<T: Ext>(x: T) -> T {
-    if let Some(v) = early(x, false) {
-        return v;
+    let e = early(x);
+    if T::all(e.skip) {
+        return e.sin;
     }
-    let (q, r) = x.reduce();
+    let (q, r) = e.x.reduce();
     let z = r.mul(r);
-    match q {
-        0 => sin_r(r, z),
-        1 => cos_r(r, z),
-        2 => -sin_r(r, z),
-        _ => -cos_r(r, z),
-    }
+    let (tiny, j) = r.buckets();
+    // sin r, cos r, -sin r, -cos r by k mod 4
+    let v = sin_cos_r(r, z, tiny, j, T::quadrant(q, odd));
+    T::sel(e.skip, e.sin, T::sel(T::quadrant(q, sin_neg), -v, v))
 }
 
+#[inline(always)]
 fn cos<T: Ext>(x: T) -> T {
-    if let Some(v) = early(x, true) {
-        return v;
+    let e = early(x);
+    if T::all(e.skip) {
+        return e.cos;
     }
-    let (q, r) = x.reduce();
+    let (q, r) = e.x.reduce();
     let z = r.mul(r);
-    match q {
-        0 => cos_r(r, z),
-        1 => -sin_r(r, z),
-        2 => -cos_r(r, z),
-        _ => sin_r(r, z),
-    }
+    let (tiny, j) = r.buckets();
+    // cos r, -sin r, -cos r, sin r by k mod 4
+    let v = sin_cos_r(r, z, tiny, j, T::quadrant(q, |q| !odd(q)));
+    T::sel(e.skip, e.cos, T::sel(T::quadrant(q, cos_neg), -v, v))
 }
 
+#[inline(always)]
 fn sin_cos<T: Ext>(x: T) -> (T, T) {
-    if let Some(v) = early(x, false) {
-        return (v, early(x, true).unwrap());
+    let e = early(x);
+    if T::all(e.skip) {
+        return (e.sin, e.cos);
     }
-    let (q, r) = x.reduce();
+    let (q, r) = e.x.reduce();
     let z = r.mul(r);
-    let (s, c) = (sin_r(r, z), cos_r(r, z));
-    match q {
-        0 => (s, c),
-        1 => (c, -s),
-        2 => (-s, -c),
-        _ => (-c, s),
-    }
+    let (tiny, j) = r.buckets();
+    let (s, c) = (
+        sin_cos_r(r, z, tiny, j, T::mask(false)),
+        sin_cos_r(r, z, tiny, j, T::mask(true)),
+    );
+    // (s, c), (c, -s), (-s, -c), (-c, s) by k mod 4
+    let odd = T::quadrant(q, odd);
+    let (a, b) = (T::sel(odd, c, s), T::sel(odd, s, c));
+    let a = T::sel(T::quadrant(q, sin_neg), -a, a);
+    let b = T::sel(T::quadrant(q, cos_neg), -b, b);
+    (T::sel(e.skip, e.sin, a), T::sel(e.skip, e.cos, b))
 }
 
+#[inline(always)]
 fn tan<T: Ext>(x: T) -> T {
-    if let Some(v) = early(x, false) {
-        return v;
+    let e = early(x);
+    if T::all(e.skip) {
+        return e.sin;
     }
-    let (q, r) = x.reduce();
+    let (q, r) = e.x.reduce();
     let z = r.mul(r);
-    let (s, c) = (sin_r(r, z), cos_r(r, z));
-    let r0 = r.lead().abs();
+    let (tiny, j) = r.buckets();
+    let (s, c) = (
+        sin_cos_r(r, z, tiny, j, T::mask(false)),
+        sin_cos_r(r, z, tiny, j, T::mask(true)),
+    );
     let short = |d: T| {
         if mutate::on(mutate::TAN_DIV_SHORT) {
             d.drop_last()
@@ -461,17 +540,112 @@ fn tan<T: Ext>(x: T) -> T {
             d
         }
     };
-    if q % 2 == 1 {
-        -c.div(short(s))
-    } else if r0 < T::TINY {
-        s.div(short(c))
+    // -cos r / sin r for odd k, sin r / cos r for even k
+    let odd = T::quadrant(q, odd);
+    let (num, den) = (T::sel(odd, c, s), short(T::sel(odd, s, c)));
+    // unscaled for odd k and for tiny r
+    let unit = T::or(odd, tiny);
+    let t = if T::all(unit) {
+        num.div(den)
     } else {
         // sin r / cos r on the numerator times 2^(3(j+1)), a quotient near 2^(2j): cos r = 1 - r^2/2 + ... has its
         // last parts about 2^(-2j-318) at eight parts, and their products with the last quotient terms of an unscaled
         // sin r / cos r leave the normal range for |r| below about 2^-82
-        let e = 3 * (bucket(r0) as i32 + 1);
-        s.scale(pow2(e)).div(short(c)).scale(pow2(-e))
-    }
+        let (up, down) = (T::pow2_j(j, 3), T::pow2_j(j, -3));
+        num.scale(T::unit_where(unit, up))
+            .div(den)
+            .scale(T::unit_where(unit, down))
+    };
+    T::sel(e.skip, e.sin, T::sel(odd, -t, t))
+}
+
+/// the choices of one lane, for the scalar types' `Ext`
+macro_rules! one_lane {
+    () => {
+        type M = bool;
+        type K = usize;
+        type F = f64;
+        #[inline(always)]
+        fn sel(m: bool, a: Self, b: Self) -> Self {
+            if m {
+                a
+            } else {
+                b
+            }
+        }
+        #[inline(always)]
+        fn early(self) -> (bool, bool) {
+            let a = self.lead().abs();
+            let nan = !self.finite() || a > LIMIT;
+            (nan, !nan && a < Self::TINY)
+        }
+        #[inline(always)]
+        fn buckets(self) -> (bool, usize) {
+            let a = self.lead().abs();
+            if a < Self::TINY {
+                (true, Self::KS.len() - 1)
+            } else {
+                (false, bucket(a))
+            }
+        }
+        #[inline(always)]
+        fn mask(b: bool) -> bool {
+            b
+        }
+        #[inline(always)]
+        fn all(m: bool) -> bool {
+            m
+        }
+        #[inline(always)]
+        fn any(m: bool) -> bool {
+            m
+        }
+        #[inline(always)]
+        fn or(m: bool, n: bool) -> bool {
+            m || n
+        }
+        #[inline(always)]
+        fn quadrant(q: usize, f: fn(usize) -> bool) -> bool {
+            f(q)
+        }
+        #[inline(always)]
+        fn terms(c: bool, j: usize) -> usize {
+            if c {
+                terms(Self::KC, j, mutate::COS_SHORT)
+            } else {
+                terms(Self::KS, j, mutate::SIN_SHORT)
+            }
+        }
+        #[inline(always)]
+        fn kmax(k: usize) -> usize {
+            k
+        }
+        /// the one lane takes every step, as kmax is its k
+        #[inline(always)]
+        fn active(_k: usize, _i: usize) -> bool {
+            true
+        }
+        #[inline(always)]
+        fn lead_coef(c: bool, k: usize) -> Self {
+            Self::coef(if c {
+                &tables::COS[k - 1]
+            } else {
+                &tables::SIN[k - 1]
+            })
+        }
+        #[inline(always)]
+        fn pow2_j(j: usize, m: i32) -> f64 {
+            pow2(m * (j as i32 + 1))
+        }
+        #[inline(always)]
+        fn unit_where(u: bool, p: f64) -> f64 {
+            if u {
+                1.0
+            } else {
+                p
+            }
+        }
+    };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -504,6 +678,7 @@ impl Ext for DD {
     const TINY: f64 = f64::from_bits((1023 - 53) << 52); // 2^-53
     const KS: &'static [u8] = &tables::KS2;
     const KC: &'static [u8] = &tables::KC2;
+    one_lane!();
     fn lead(self) -> f64 {
         self.hi
     }
@@ -512,6 +687,9 @@ impl Ext for DD {
     }
     fn coef(c: &[f64; 8]) -> DD {
         DD { hi: c[0], lo: c[1] }
+    }
+    fn zero() -> DD {
+        DD::ZERO
     }
     fn one() -> DD {
         DD::ONE
@@ -531,12 +709,12 @@ impl Ext for DD {
     fn div(self, b: DD) -> DD {
         self.fast_div(b)
     }
-    fn reduce(self) -> (u32, DD) {
+    fn reduce(self) -> (usize, DD) {
         let (q, r) = reduce(&[self.hi, self.lo]);
         // the greedy r can have |r_1| = ulp(r_0)/2 with r_0 odd, a tie that RN(r_0 + r_1) rounds away from r_0; the
         // double-word algorithms' bounds need r_0 = RN(r_0 + r_1)
         let (hi, lo) = quick_two_sum(r[0], r[1]);
-        (q, DD { hi, lo })
+        (q as usize, DD { hi, lo })
     }
     fn drop_last(self) -> DD {
         DD::from_f64(self.hi)
@@ -550,6 +728,7 @@ impl Ext for QD {
     const TINY: f64 = f64::from_bits((1023 - 106) << 52); // 2^-106
     const KS: &'static [u8] = &tables::KS4;
     const KC: &'static [u8] = &tables::KC4;
+    one_lane!();
     fn lead(self) -> f64 {
         self.x[0]
     }
@@ -560,6 +739,9 @@ impl Ext for QD {
         QD {
             x: [c[0], c[1], c[2], c[3]],
         }
+    }
+    fn zero() -> QD {
+        QD::ZERO
     }
     fn one() -> QD {
         QD::ONE
@@ -579,9 +761,9 @@ impl Ext for QD {
     fn div(self, b: QD) -> QD {
         self / b
     }
-    fn reduce(self) -> (u32, QD) {
+    fn reduce(self) -> (usize, QD) {
         let (q, x) = reduce(&self.x);
-        (q, QD { x })
+        (q as usize, QD { x })
     }
     fn drop_last(self) -> QD {
         QD {
@@ -597,6 +779,7 @@ impl Ext for OD {
     const TINY: f64 = f64::from_bits((1023 - 212) << 52); // 2^-212
     const KS: &'static [u8] = &tables::KS8;
     const KC: &'static [u8] = &tables::KC8;
+    one_lane!();
     fn lead(self) -> f64 {
         self.x[0]
     }
@@ -605,6 +788,9 @@ impl Ext for OD {
     }
     fn coef(c: &[f64; 8]) -> OD {
         OD { x: *c }
+    }
+    fn zero() -> OD {
+        OD::ZERO
     }
     fn one() -> OD {
         OD::ONE
@@ -624,9 +810,9 @@ impl Ext for OD {
     fn div(self, b: OD) -> OD {
         self / b
     }
-    fn reduce(self) -> (u32, OD) {
+    fn reduce(self) -> (usize, OD) {
         let (q, x) = reduce(&self.x);
-        (q, OD { x })
+        (q as usize, OD { x })
     }
     fn drop_last(self) -> OD {
         let mut x = self.x;
