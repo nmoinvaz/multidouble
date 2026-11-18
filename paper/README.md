@@ -10,6 +10,8 @@ plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth.
 |---|---|
 | `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex` | the source; the appendix holds the proofs, the last file those for sums of products |
 | `constants.py`, `div_consts.py`, `sqrt_consts.py` | the constants of Theorems 11 and 12, 17, and 19 and 20 in exact rational arithmetic; their outputs are the `.txt` files |
+| `sloppy_consts.py` | the bound of the opt-in sloppy multiply (`OD::sloppy_mul`) and of sums of its products, from Lemma 11 and Theorem 9(a) and, for the sums, Lemma 25 and Theorem 26, in exact rational arithmetic; `check` is its control |
+| `sloppy_emu.py` | the sloppy multiply on `fpemu.py`, written from its description: hill climbs against `sloppy_consts.py`'s bound at p = 6 to 53 and n = 3 to 8, the crate's worst found pair bit for bit, and a control that must fire |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
 | `example_n3.py` | the worked example of Section 4 on `fpemu.py`, with a control that must fail |
 | `accumulator/` | the accumulator of Theorems 5 and 26 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`) and the error recomputed without the emulator (`acc_crate_err.py`); outputs in `accumulator/out/` |
@@ -21,6 +23,9 @@ python3 constants.py     # prints constants.txt
 python3 div_consts.py    # prints div_consts.txt
 python3 sqrt_consts.py   # prints sqrt_consts.txt
 python3 example_n3.py .  # prints PASS
+python3 sloppy_consts.py # the sloppy multiply's bound, 2^31.92 u^8 |a_0 b_0| at n = 8
+python3 sloppy_consts.py check  # prints PASS
+python3 sloppy_emu.py bound     # prints PASS; also bits and control
 tectonic -X compile expansion-error-bounds.tex
 ```
 
