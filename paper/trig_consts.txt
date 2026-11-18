@@ -1,0 +1,10 @@
+src/trig/tables.rs: series lengths and constants as derived here
+double-word: sin, cos <= 7.841411 u^2, tan <= 28.414065 u^2; top bucket (K = 15, 15): sin r 4.787060, cos r 7.055938, quotient 15.000000 u^2
+paper n=2: sin, cos <= 3.168700 u^2, tan <= 6.452138 u^2; top bucket (K = 15, 15): sin r 1.497844, cos r 2.383227, quotient 1.000000 (theta = 1.414237) u^2
+paper n=4: sin, cos <= 3.164154 u^4, tan <= 6.426154 u^4; top bucket (K = 24, 25): sin r 1.476406, cos r 2.378681, quotient 1.000000 (theta = 1.414237) u^4
+paper n=8: sin, cos <= 3.163167 u^8, tan <= 6.418351 u^8; top bucket (K = 41, 41): sin r 1.469589, cos r 2.377695, quotient 1.000000 (theta = 1.414237) u^8
+paper n=12: sin, cos <= 3582.787311 u^12, tan <= 4929.367335 u^12; top bucket (K = 56, 57): sin r 1344.792375, cos r 3582.001838, quotient 1.002056 (theta = 1.414237) u^12
+paper n=8 by bucket (sin x, cos x, tan x in u^8): j=0: 2.469589/3.163167/6.418351, j=1: 2.175822/1.709457/4.800526, j=2: 2.042246/1.161115/4.182441, j=3: 2.010473/1.040136/4.045395, j=4: 2.002633/1.009784/4.011115, j=5: 2.000652/1.002445/4.002771, ...
+paper n=8, cos in bucket 0 (u^8): reduction 0.785473, last ADDF 1, the rest 1.377695
+paper n=8, |r_0| < 2^-1: sin, cos <= 2.175822 u^8, tan <= 4.800526 u^8
+paper n=8, |r_0| < 2^-5: sin, cos <= 2.000705 u^8, tan <= 4.002771 u^8
