@@ -57,8 +57,9 @@
 //!
 //! With the cargo feature `mutate`, `mutate::set(id)` breaks one step on purpose in the current thread, for the
 //! controls of the accuracy tests; without it the hooks are compile-time `false`.
-use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
+use crate::dd::{quick_two_sum, DD};
 use crate::dv::{self, DV};
+use crate::dw;
 use crate::od::{alg, OD};
 use crate::ov::OV;
 use crate::qd::QD;
@@ -804,28 +805,6 @@ macro_rules! eight_lanes {
 // the three types
 // ---------------------------------------------------------------------------------------------------------------
 
-/// DWTimesDW3, Algorithm 12 of Joldes, Muller and Popescu (2017): within (4u^2 + u^3/2)/(1+u)^2 relative (Muller and
-/// Rideau 2022, Theorem 2.8)
-#[inline(always)]
-fn dw_times_dw3(x: DD, y: DD) -> DD {
-    let (ch, cl1) = two_prod(x.hi, y.hi);
-    let tl0 = x.lo * y.lo;
-    let tl1 = x.hi.mul_add(y.lo, tl0);
-    let cl2 = x.lo.mul_add(y.hi, tl1);
-    let cl3 = cl1 + cl2;
-    let (h, l) = quick_two_sum(ch, cl3);
-    DD { hi: h, lo: l }
-}
-
-/// DWPlusFP, Algorithm 4 of Joldes, Muller and Popescu (2017): within 2u^2 relative (their Theorem 2.2)
-#[inline(always)]
-fn dw_plus_fp(x: DD, y: f64) -> DD {
-    let (sh, sl) = two_sum(x.hi, y);
-    let v = x.lo + sl;
-    let (h, l) = quick_two_sum(sh, v);
-    DD { hi: h, lo: l }
-}
-
 impl Ext for DD {
     const TINY: f64 = f64::from_bits((1023 - 53) << 52); // 2^-53
     const KS: &'static [u8] = &tables::KS2;
@@ -850,13 +829,15 @@ impl Ext for DD {
         DD::from_f64(f64::NAN)
     }
     fn mul(self, b: DD) -> DD {
-        dw_times_dw3(self, b)
+        let (hi, lo) = dw::dw_times_dw3((self.hi, self.lo), (b.hi, b.lo));
+        DD { hi, lo }
     }
     fn add(self, b: DD) -> DD {
         self + b
     }
     fn one_plus(self) -> DD {
-        dw_plus_fp(self, 1.0)
+        let (hi, lo) = dw::dw_plus_fp((self.hi, self.lo), 1.0);
+        DD { hi, lo }
     }
     fn div(self, b: DD) -> DD {
         self.fast_div(b)
@@ -1046,27 +1027,6 @@ fn finite_lanes<S: Simd>(c: &[V8<S>]) -> M8<S> {
     m
 }
 
-/// `dw_times_dw3` on all lanes, bitwise per lane
-#[inline(always)]
-fn dw_times_dw3_lanes<S: Simd>(x: DV<S>, y: DV<S>) -> DV<S> {
-    let (ch, cl1) = dv::two_prod(x.hi, y.hi);
-    let tl0 = x.lo.mul(y.lo);
-    let tl1 = x.hi.fma(y.lo, tl0);
-    let cl2 = x.lo.fma(y.hi, tl1);
-    let cl3 = cl1.add(cl2);
-    let (h, l) = dv::quick_two_sum(ch, cl3);
-    DV { hi: h, lo: l }
-}
-
-/// `dw_plus_fp` on all lanes, bitwise per lane
-#[inline(always)]
-fn dw_plus_fp_lanes<S: Simd>(x: DV<S>, y: V8<S>) -> DV<S> {
-    let (sh, sl) = dv::two_sum(x.hi, y);
-    let v = x.lo.add(sl);
-    let (h, l) = dv::quick_two_sum(sh, v);
-    DV { hi: h, lo: l }
-}
-
 impl<S: Simd> DV<S> {
     /// lane l the leading two parts of the table entry r\[l\]
     #[inline(always)]
@@ -1109,7 +1069,8 @@ impl<S: Simd> Ext for DV<S> {
     }
     #[inline(always)]
     fn mul(self, b: Self) -> Self {
-        dw_times_dw3_lanes(self, b)
+        let (hi, lo) = dw::dw_times_dw3((self.hi, self.lo), (b.hi, b.lo));
+        DV { hi, lo }
     }
     #[inline(always)]
     fn add(self, b: Self) -> Self {
@@ -1117,7 +1078,8 @@ impl<S: Simd> Ext for DV<S> {
     }
     #[inline(always)]
     fn one_plus(self) -> Self {
-        dw_plus_fp_lanes(self, V8::splat(1.0))
+        let (hi, lo) = dw::dw_plus_fp((self.hi, self.lo), V8::splat(1.0));
+        DV { hi, lo }
     }
     #[inline(always)]
     fn div(self, b: Self) -> Self {
