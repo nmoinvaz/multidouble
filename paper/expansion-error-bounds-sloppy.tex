@@ -13,7 +13,7 @@ $n$: $\TwoSum$s at levels $l, \dots, n-2$, then $s_{n-1} \gets \RN(s_{n-1} + e)$
 \item[(3)] $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n-1$.
 \item[(4)] For $i = 1, \dots, n-2$ and $j = 0, \dots, n-2-i$: $(p_{ij}, e_{ij}) \gets \TwoProd(a_i, b_j)$, $\dep(s, i+j,
   p_{ij})$, $\dep(s, i+j+1, e_{ij})$.
-\item[(5)] Return $R_n(s)$.
+\item[(5)] Return $\Ren_n(s)$.
 \end{enumerate}
 Level $n-1$ is summed in plain arithmetic, as QD's sloppy multiplication sums its terms of order 3~\cite{HLB01}, and
 there is no level $n$. It holds the products of orders $n-1$ and $n$, taken exactly into the FMAs of step (2), the

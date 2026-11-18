@@ -1,6 +1,6 @@
 """Lemma 20 of expansion-error-bounds.pdf (an operation's error and its result's part bounds from part bounds of its
-operands) and Theorems 21 and 22 (the square root), in exact rationals. Units: r in y = A^(-1/2), a and h in A, m in y^2, g
-and c dimensionless (A y^2 = 1), d in y, z in sqrt(A). usage: sqrt_consts.py [p]"""
+operands) and Theorems 21 and 22 (the square root), in exact rationals. Units: r in y = a^(-1/2), the parts of a and h in the
+value a, m in y^2, g and c dimensionless (a y^2 = 1), d in y, z in sqrt(a). usage: sqrt_consts.py [p]"""
 import sys, math
 from fractions import Fraction as Fr
 from div_consts import vec_bounds
@@ -74,9 +74,9 @@ def op_bounds(op, n, u, al, be, Zb, lam=None):
 def sqrt_consts(n, p, theta, J=4):
     """Theorem 21: the bounds E_k on |r_k / y - 1| and the final relative error bound of the square root"""
     u = Fr(1, 2 ** p); rho = Fr(theta) * u
-    upa = (1 - rho) / (1 - 2 * rho)                  # a_0 <= upa A, and |a_i| <= rho^i a_0
-    apart = [rho ** i * upa for i in range(n)]        # a, units A
-    hpart = [t / 2 for t in apart]                   # h = a/2, units A
+    upa = (1 - rho) / (1 - 2 * rho)                  # a_0 <= upa a, and |a_i| <= rho^i a_0
+    apart = [rho ** i * upa for i in range(n)]        # a's parts, units a
+    hpart = [t / 2 for t in apart]                   # h = a/2, units a
     E = up(max((1 + 2 * u) / (1 - rho) - 1, 1 - (1 - 2 * u) * (1 - 2 * rho) / (1 - rho)))
     pi = [1 + E] + [Fr(0)] * (n - 1)                 # parts of r_0, units y
     steps = []
@@ -146,12 +146,12 @@ def sqrt_dd_consts(n, p, theta):
     upa = (1 - rho) / (1 - 2 * rho)
     apart = [rho ** i * upa for i in range(n)]
     hpart = [t / 2 for t in apart]
-    # a = (a_0 + a_1)(1 + tau): |a_2 + ... | <= rho^2/(1 - rho) a_0 and |a_0 + a_1| >= (1 - rho) a_0
-    tau = up(rho ** 2 / (1 - rho) ** 2)
+    # a = (a_0 + a_1)(1 + d_3), |d_3| <= eta_3: |a_2 + ... | <= rho^2/(1 - rho) a_0 and |a_0 + a_1| >= (1 - rho) a_0
+    eta3 = up(rho ** 2 / (1 - rho) ** 2)
     d1 = Fr(25, 8) * u ** 2                          # y / sqrt(a_0 + a_1) - 1
     d2 = 15 * u ** 2 + 56 * u ** 3                   # r_0 y - 1
-    # r_0 / A^(-1/2) = (1 + t)^(1/2) (1 + d2) / (1 + d1) with |t| <= tau, and 1 - tau <= sqrt(1 + t) <= 1 + tau/2
-    E0 = up(max((1 + tau / 2) * (1 + d2) / (1 - d1) - 1, 1 - (1 - tau) * (1 - d2) / (1 + d1)))
+    # r_0 / a^(-1/2) = (1 + d_3)^(1/2) (1 + d2) / (1 + d1), and 1 - eta_3 <= sqrt(1 + d_3) <= 1 + eta_3/2
+    E0 = up(max((1 + eta3 / 2) * (1 + d2) / (1 - d1) - 1, 1 - (1 - eta3) * (1 - d2) / (1 + d1)))
     # r_0 = (r_0h, r_0l) from a quick two-sum: |r_0l| <= u |r_0h|, so |r_0h| <= |r_0| / (1 - u)
     pi0 = [up((1 + E0) / (1 - u)), up(u * (1 + E0) / (1 - u))] + [Fr(0)] * (n - 2)
     E1, pi1, s1 = newton_step(n, u, E0, pi0, hpart, True)
