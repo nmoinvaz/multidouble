@@ -28,6 +28,14 @@
 //!   fused multiply-adds, all deposited by order into nine levels whose first eight sum with two-sums, then
 //!   renormalized: QD's accurate multiply, extended to eight parts. The levels carry the product's terms to order 8,
 //!   below the eighth part, so its error is that of the renormalization's rounding to eight parts.
+//! * The sloppy multiply (`OD::sloppy_mul`, opt-in): QD's sloppy multiply extended to eight parts. Levels 0..6 sum
+//!   with two-sums, each carry taken down to level 6 only, and level 7 sums in plain f64 the products of orders 7
+//!   and 8 (by fused multiply-adds), the errors of order 6 and the carries out of level 6. There is no level 8, so
+//!   the 168 two-sums of the default's carries become 112, and the renormalization of the eight levels is exact. Its
+//!   error is the roundings at level 7: at most 2^31.93 u^8 |a_0 b_0| (u = 2^-53) for operands on the ladder
+//!   |a_i| <= (2u)^i |a_0|, from the level bounds of the error-bounds paper (`paper/sloppy_consts.py`). The bound is
+//!   a triangle inequality over 64 roundings: random operands give at most 98 u^8 |a_0 b_0| and a hill climb 582
+//!   (`od_tests`, `od_sloppy_mul`, `od_sloppy_worst_case`), where `*` errs by at most u^8. Every bit differs from `*`.
 //! * Division: long division, nine quotient terms q_k = r_0 / b_0 with the remainder r - b q_k updated in one pass
 //!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), four steps, after scaling by a
 //!   power of four (QD's, with this crate's scaling, `qd::QD::sqrt`).
@@ -76,10 +84,13 @@ pub mod mutate {
     pub const RENORM_FAST: u32 = 12;
     /// mul: the products of order 8 dropped, an error of a few u^8 |ab| (u = 2^-53), inside the 1-unit thresholds
     pub const MUL_L8: u32 = 13;
+    /// sloppy mul: the carries out of level 6 dropped instead of added to level 7 (the truncation one level too
+    /// high), an error of about u^7 |ab| whenever one is nonzero, past the sloppy multiply's proven bound
+    pub const SLOPPY_C6: u32 = 14;
     /// number of ids
-    pub const N: u32 = 13;
+    pub const N: u32 = 14;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 14] = [
+    pub const NAMES: [&str; 15] = [
         "none",
         "renorm: eighth part dropped",
         "two-sum: error with a wrong sign",
@@ -94,6 +105,7 @@ pub mod mutate {
         "8-lane two-product: FMA as a plain product (native)",
         "renorm: second pass by quick-two-sums",
         "mul: products of order 8 dropped",
+        "sloppy mul: carries out of level 6 dropped",
     ];
 
     #[cfg(feature = "mutate")]
@@ -450,6 +462,84 @@ pub(crate) mod alg {
         L::renorm(expand(a, b))
     }
 
+    /// `dep` on the sloppy product's eight levels: two-sums at levels l..6, a plain add at level 7 (with
+    /// `mutate::SLOPPY_C6`, the carry out of level 6 dropped)
+    #[inline(always)]
+    fn dep_sloppy<L: Limb>(s: &mut [L; 8], l: usize, t: L) {
+        if l <= 6 && mutate::on(mutate::SLOPPY_C6) {
+            let mut e = t;
+            for m in l..7 {
+                (s[m], e) = two_sum(s[m], e);
+            }
+        } else {
+            dep(s, l, t);
+        }
+    }
+
+    /// The sloppy product's eight levels: levels 0..6 as in `expand`, each deposit carried down with two-sums to
+    /// level 6 only, and level 7 in plain f64. Level 7 holds the products of orders 7 and 8 by fused multiply-adds,
+    /// the smallest first, the errors of the products of order 6, and the carries out of level 6.
+    #[inline(always)]
+    pub fn expand_sloppy<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 8];
+                let mut e = [L::zero(); 7];
+                for j in 0..7 {
+                    (s[j], e[j]) = two_prod(a[0], b[j]);
+                }
+                let o8 = a[7].fma(
+                    b[1],
+                    a[6].fma(
+                        b[2],
+                        a[5].fma(b[3], a[4].fma(b[4], a[3].fma(b[5], a[2].fma(b[6], a[1].mul(b[7]))))),
+                    ),
+                );
+                s[7] = a[7].fma(
+                    b[0],
+                    a[6].fma(
+                        b[1],
+                        a[5].fma(
+                            b[2],
+                            a[4].fma(b[3], a[3].fma(b[4], a[2].fma(b[5], a[1].fma(b[6], a[0].fma(b[7], o8))))),
+                        ),
+                    ),
+                );
+                dep_sloppy(&mut s, 1, e[0]);
+                dep_sloppy(&mut s, 2, e[1]);
+                dep_sloppy(&mut s, 3, e[2]);
+                dep_sloppy(&mut s, 4, e[3]);
+                dep_sloppy(&mut s, 5, e[4]);
+                dep_sloppy(&mut s, 6, e[5]);
+                dep_sloppy(&mut s, 7, e[6]);
+                // rows 1..6: a_i b_j of order i + j <= 6 into level i + j, its error into level i + j + 1
+                macro_rules! pp {
+                ($(($i:literal, $j:literal)),*) => {
+                    $({
+                        let (p, e) = two_prod(a[$i], b[$j]);
+                        dep_sloppy(&mut s, $i + $j, p);
+                        dep_sloppy(&mut s, $i + $j + 1, e);
+                    })*
+                };
+            }
+                pp!((1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5));
+                pp!((2, 0), (2, 1), (2, 2), (2, 3), (2, 4));
+                pp!((3, 0), (3, 1), (3, 2), (3, 3));
+                pp!((4, 0), (4, 1), (4, 2));
+                pp!((5, 0), (5, 1));
+                pp!((6, 0));
+                s
+            },
+        )
+    }
+
+    /// a b by the sloppy multiply: the eight levels of `expand_sloppy`, renormalized (exactly, as eight terms)
+    #[inline(always)]
+    pub fn sloppy_mul<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
+        L::renorm(expand_sloppy(a, b))
+    }
+
     /// r - b q for an f64 q in one pass: r_i - RN(b_i q) by two-sums, those errors and the errors of the products
     /// carried down nine levels, renormalized (the remainder of long division)
     #[inline(always)]
@@ -698,6 +788,15 @@ impl OD {
             x: alg::add_f(&self.x, b),
         }
     }
+    /// a b by the sloppy multiply (see the module doc): levels 0..6 error-free, level 7 in plain f64, about 1.3 times
+    /// fewer instructions than `*`, within 2^31.93 u^8 |a_0 b_0| of the exact product for operands on the ladder. Its
+    /// bits differ from `*`.
+    #[inline]
+    pub fn sloppy_mul(self, b: OD) -> OD {
+        OD {
+            x: alg::sloppy_mul(&self.x, &b.x),
+        }
+    }
     /// od x f64
     #[inline]
     pub fn mul_f(self, b: f64) -> OD {
@@ -906,6 +1005,16 @@ impl OdAcc {
     #[inline]
     pub fn add_prod(self, a: OD, b: OD) -> OdAcc {
         let t = alg::expand(&a.x, &b.x);
+        let mut s = self.s;
+        alg::acc_levels(&mut s, &t);
+        OdAcc { s }
+    }
+    /// self + a b by the sloppy multiply's eight levels (`OD::sloppy_mul`), added into the running levels as `add`
+    /// adds a value. Each product adds its own error, at most 2^31.93 u^8 |a_0 b_0|, and the levels' accumulation is
+    /// the default's; it can be mixed with `add_prod` and `add` in one sum.
+    #[inline]
+    pub fn add_prod_sloppy(self, a: OD, b: OD) -> OdAcc {
+        let t = alg::expand_sloppy(&a.x, &b.x);
         let mut s = self.s;
         alg::acc_levels(&mut s, &t);
         OdAcc { s }
