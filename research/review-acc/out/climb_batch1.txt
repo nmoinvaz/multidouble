@@ -8,3 +8,10 @@ max 0.0002002 u^8 W over 6 samples
 p=8 n=2 K=64 addx theta=1 start=cons seed=1: 26750 evaluations, 570 improvements; err/bound = 0.001212, err/(recursion bound) = 0.05003, err = 84.11 u^n W, recursion/theorem = 0.02422
 p=8 n=3 K=40 addx theta=1 start=cons seed=1: 25513 evaluations, 503 improvements; err/bound = 0.0003459, err/(recursion bound) = 0.0116, err = 209.5 u^n W, recursion/theorem = 0.02982
 p=8 n=4 K=28 addx theta=1 start=cons seed=1: 25205 evaluations, 499 improvements; err/bound = 6.964e-05, err/(recursion bound) = 0.002406, err = 369.2 u^n W, recursion/theorem = 0.02894
+p=10 n=2 K=250 addx theta=1 start=cons seed=1: 6418 evaluations, 440 improvements; err/bound = 0.001134, err/(recursion bound) = 0.04018, err = 917.2 u^n W, recursion/theorem = 0.02823
+p=10 n=3 K=150 addx theta=1 start=cons seed=1: 6682 evaluations, 424 improvements; err/bound = 0.0004386, err/(recursion bound) = 0.01082, err = 7759 u^n W, recursion/theorem = 0.04052
+p=8 n=2 K=40 prod theta=1 start=rand seed=3: 21456 evaluations, 263 improvements; err/bound = 0.0003637, err/(recursion bound) = 0.001695, err = 0.7338 u^n W, recursion/theorem = 0.2146
+p=10 n=3 K=60 mixed theta=2 start=rand seed=4: 9307 evaluations, 224 improvements; err/bound = 5.024e-06, err/(recursion bound) = 1.197e-05, err = 0.2592 u^n W, recursion/theorem = 0.4198
+p=8 n=2 K=2 addx theta=1 start=rand seed=5: 159043 evaluations, 38 improvements; err/bound = 0.8365, err/(recursion bound) = 0.8405, err = 0.9961 u^n W, recursion/theorem = 0.9952
+p=8 n=2 K=2 addx theta=1 start=rand seed=5: 199421 evaluations, 38 improvements; err/bound = 0.8365, err/(recursion bound) = 0.8405, err = 0.9961 u^n W, recursion/theorem = 0.9952
+control fired
