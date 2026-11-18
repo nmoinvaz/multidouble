@@ -1,0 +1,5 @@
+    K   model err/(u^8|Z|)     log2 crate add crate add_prod    W/|Z|-1 err/(8(8+K)u^8W)
+  256              0.12157   -3.040     same           same  -1.58e-30        5.756e-05
+  512              36.4966    5.190     same           same  -3.16e-30         0.008773
+ 1024              26368.1   14.687     same           same  -5.19e-30            3.194
+ 2048          1.96728e+07   24.230     same           same  -5.19e-30             1196
