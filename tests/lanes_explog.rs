@@ -353,17 +353,19 @@ fn every_backend(div: usize) -> Vec<(&'static str, Row)> {
 
 #[test]
 fn lanes_match_scalar_bit_for_bit() {
-    let rows = every_backend(1);
-    for (isa, r) in &rows {
-        println!(
-            "{isa:<8} {:<7} {:>6} lanes, {:>5} vectors mixing special and other lanes, {} differ",
-            r.what, r.lanes, r.mixed, r.misses
-        );
-    }
-    let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
-    assert!(bad.is_empty(), "{bad:#?}");
-    // a fair share of the vectors mixes special values with other lanes in one call
-    assert!(rows.iter().all(|(_, r)| r.mixed * 4 >= r.lanes / 8), "{rows:#?}");
+    common::big_stack(|| {
+        let rows = every_backend(1);
+        for (isa, r) in &rows {
+            println!(
+                "{isa:<8} {:<7} {:>6} lanes, {:>5} vectors mixing special and other lanes, {} differ",
+                r.what, r.lanes, r.mixed, r.misses
+            );
+        }
+        let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
+        assert!(bad.is_empty(), "{bad:#?}");
+        // a fair share of the vectors mixes special values with other lanes in one call
+        assert!(rows.iter().all(|(_, r)| r.mixed * 4 >= r.lanes / 8), "{rows:#?}");
+    });
 }
 
 /// The control (feature `mutate`): the lanes' own break fails every type and function on every backend, and the
@@ -371,26 +373,28 @@ fn lanes_match_scalar_bit_for_bit() {
 #[cfg(feature = "mutate")]
 #[test]
 fn control_fires() {
-    use multidouble::explog::mutate;
-    for id in 1..=mutate::N {
-        mutate::set(id);
+    common::big_stack(|| {
+        use multidouble::explog::mutate;
+        for id in 1..=mutate::N {
+            mutate::set(id);
+            let rows = every_backend(4);
+            mutate::set(0);
+            let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
+            assert!(bad.is_empty(), "under '{}': {bad:#?}", mutate::NAMES[id as usize]);
+        }
+        mutate::set(mutate::LANE_STEP);
         let rows = every_backend(4);
         mutate::set(0);
-        let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
-        assert!(bad.is_empty(), "under '{}': {bad:#?}", mutate::NAMES[id as usize]);
-    }
-    mutate::set(mutate::LANE_STEP);
-    let rows = every_backend(4);
-    mutate::set(0);
-    for (isa, r) in &rows {
-        println!(
-            "control '{}': {isa:<8} {:<7} {} of {} lanes differ",
-            mutate::NAMES[mutate::LANE_STEP as usize],
-            r.what,
-            r.misses,
-            r.lanes
-        );
-    }
-    let silent: Vec<_> = rows.iter().filter(|(_, r)| r.misses == 0).collect();
-    assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
+        for (isa, r) in &rows {
+            println!(
+                "control '{}': {isa:<8} {:<7} {} of {} lanes differ",
+                mutate::NAMES[mutate::LANE_STEP as usize],
+                r.what,
+                r.misses,
+                r.lanes
+            );
+        }
+        let silent: Vec<_> = rows.iter().filter(|(_, r)| r.misses == 0).collect();
+        assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
+    });
 }
