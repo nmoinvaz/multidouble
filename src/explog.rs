@@ -75,8 +75,14 @@ pub mod mutate {
     pub const N: u32 = 5;
     /// the lanes only: each lane skips the first step of its Horner sum (its mask off by one), the scalar types do not
     pub const LANE_STEP: u32 = 6;
+    /// the lanes only: every lane scales its Horner sum by lane 0's powers of two
+    pub const LANE_POW2_POLY: u32 = 7;
+    /// the lanes only: every lane scales ln's f t by lane 0's powers of two
+    pub const LANE_POW2_FT: u32 = 8;
+    /// the lanes only: every lane scales ln's series by lane 0's powers of two
+    pub const LANE_POW2_SERIES: u32 = 9;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 7] = [
+    pub const NAMES: [&str; 10] = [
         "none",
         "exp: ln 2's tail cut to one part",
         "exp: Taylor polynomial at half its degree",
@@ -84,6 +90,9 @@ pub mod mutate {
         "ln: start off by 2^-20",
         "ln: log(1 + c) cut to c",
         "lanes: first Horner step skipped",
+        "lanes: lane 0's powers of two in the Horner sum",
+        "lanes: lane 0's powers of two in ln's f t",
+        "lanes: lane 0's powers of two in ln's series",
     ];
 
     #[cfg(feature = "mutate")]
@@ -721,6 +730,14 @@ fn step<T: Prec>(c: T::C, i: i32, new: T, old: T) -> T {
     }
 }
 
+/// the controls of the lanes' own powers of two (`mutate::LANE_POW2_POLY` and the others): every lane takes lane 0's
+#[inline(always)]
+fn lane0_pow2<T: Prec>(id: u32, p: &mut ([f64; 8], [f64; 8])) {
+    if T::L > 1 && mutate::on(id) {
+        *p = ([p.0[0]; 8], [p.1[0]; 8]);
+    }
+}
+
 /// (k, t) with e^x ~ 2^k (1 + t), for |x_0| <= 745.2: the reduction, the Taylor polynomial and the squarings
 #[inline(always)]
 fn expm1_red<T: Prec>(x: T) -> ([i32; 8], T) {
@@ -777,13 +794,14 @@ fn expm1_red<T: Prec>(x: T) -> ([i32; 8], T) {
         // q = sum_(j=2)^d r^(j-2) / j! by Horner's rule, and t = r + r (r q), the outer product and sum in r 2^-er;
         // each lane starts at its own degree and keeps q through the steps above it
         let (mut c, mut poly) = ([&INV_FACT[1]; 8], 0u8);
-        let (mut pa, mut pb) = ([1.0; 8], [1.0; 8]);
+        let mut pr = ([1.0; 8], [1.0; 8]);
         for j in 0..T::L {
             c[j] = &INV_FACT[d[j] as usize];
             if d[j] > 1 {
-                (poly, pa[j], pb[j]) = (poly | 1 << j, pow2(-er[j]), pow2(er[j]));
+                (poly, pr.0[j], pr.1[j]) = (poly | 1 << j, pow2(-er[j]), pow2(er[j]));
             }
         }
+        lane0_pow2::<T>(mutate::LANE_POW2_POLY, &mut pr);
         let skip = (T::L > 1 && mutate::on(mutate::LANE_STEP)) as i32;
         let dc = T::counts(&d);
         let mut q = T::konsts(&c);
@@ -792,8 +810,8 @@ fn expm1_red<T: Prec>(x: T) -> ([i32; 8], T) {
             q = step(dc, i + skip, s, q);
         }
         let w = r.times(q);
-        let rs = r.times_pwr2s(&pa);
-        t = T::sel(T::mask(poly), rs.plus(rs.times(w)).times_pwr2s(&pb), r);
+        let rs = r.times_pwr2s(&pr.0);
+        t = T::sel(T::mask(poly), rs.plus(rs.times(w)).times_pwr2s(&pr.1), r);
     }
     // each lane squares m times
     let mc = T::counts(&m);
@@ -911,6 +929,8 @@ fn ln_of<T: Prec>(x: T) -> T {
             (pt.0[j], pt.1[j]) = (pow2(-et[j]), pow2(et[j]));
         }
     }
+    lane0_pow2::<T>(mutate::LANE_POW2_FT, &mut pf);
+    lane0_pow2::<T>(mutate::LANE_POW2_FT, &mut pt);
     let s = f.plus(t);
     let c = if ft == 0 {
         s
@@ -927,6 +947,7 @@ fn ln_of<T: Prec>(x: T) -> T {
             (ser, pc.0[j], pc.1[j]) = (ser | 1 << j, pow2(-ec[j]), pow2(ec[j]));
         }
     }
+    lane0_pow2::<T>(mutate::LANE_POW2_SERIES, &mut pc);
     let corr = if ser == 0 {
         c
     } else {
