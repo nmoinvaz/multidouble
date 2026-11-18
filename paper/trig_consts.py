@@ -10,7 +10,7 @@ The algorithm, per bucket j of |r_0| (2^-(j+1) <= |r_0| < 2^-j, j = 0 for [1/2, 
   cos r = ADDF(MUL(z, q_1), 1),        q_(K-1) = c_(K-1),  q_k = ADD(MUL(z, q_(k+1)), c_k),  c_k = (-1)^k/(2k)!
 the constants rounded greedily to n parts, and r either x itself (k = 0, x on the ladder |x_i| <= (2u)^i |x_0|) or
 the greedy n-part rounding of the exact x - k pi/2 (its parts within the same ladder). Units: r, w and sin r in |r|,
-z and t in r^2, the Horner sums absolute; |r| <= R_j.
+z and t in r^2, the Horner sums absolute; |r| <= rbar_j (R below).
 
 usage: trig_consts.py [check]     (check: the tables of src/trig/tables.rs, and the controls, must pass)"""
 import math
@@ -131,7 +131,7 @@ def coefs(n, kmax, sine, kept=None):
 
 
 def bucket_r(n, j):
-    """R_j >= |r| in bucket j; j = nb is the tiny bucket, |r| < 2^-(53n/2)"""
+    """rbar_j >= |r| in bucket j; j = nb is the tiny bucket, |r_0| < u^(n/2) = 2^-(53n/2)"""
     if j == 0:
         return R_TOP
     return Fr(1, 2 ** j) * (1 + Fr(1, 2 ** 50))
