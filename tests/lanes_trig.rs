@@ -363,50 +363,58 @@ fn mismatches<K: Kernel<Output = usize> + Clone>(k: K) -> Vec<(&'static str, usi
 
 #[test]
 fn dv_trig_matches_dd() {
-    let ran = mismatches(DvTrig(3000));
-    assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
-    println!("checked on {:?}", simd::available());
+    common::big_stack(|| {
+        let ran = mismatches(DvTrig(3000));
+        assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
+        println!("checked on {:?}", simd::available());
+    });
 }
 
 #[test]
 fn qv_trig_matches_qd() {
-    let ran = mismatches(QvTrig(1000));
-    assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
-    println!("checked on {:?}", simd::available());
+    common::big_stack(|| {
+        let ran = mismatches(QvTrig(1000));
+        assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
+        println!("checked on {:?}", simd::available());
+    });
 }
 
 #[test]
 fn ov_trig_matches_od() {
-    let ran = mismatches(OvTrig(300));
-    assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
-    println!("checked on {:?}", simd::available());
+    common::big_stack(|| {
+        let ran = mismatches(OvTrig(300));
+        assert!(ran.iter().all(|r| r.1 == 0), "lane results that differ: {ran:?}");
+        println!("checked on {:?}", simd::available());
+    });
 }
 
 /// Control (feature `mutate`): each per-lane breakage makes the same checks fail, for each type on every backend
 #[cfg(feature = "mutate")]
 #[test]
 fn lanes_trig_controls() {
-    use multidouble::trig::mutate;
-    let mut missed = Vec::new();
-    for id in [mutate::LANE_TERMS, mutate::LANE_QUADRANT] {
-        mutate::set(id);
-        let ran = [
-            ("dv", mismatches(DvTrig(200))),
-            ("qv", mismatches(QvTrig(100))),
-            ("ov", mismatches(OvTrig(40))),
-        ];
-        mutate::set(0);
-        for (t, by_backend) in ran {
-            for (name, bad) in by_backend {
-                println!(
-                    "'{}': {t} on {name}: {bad} lane results differ",
-                    mutate::NAMES[id as usize]
-                );
-                if bad == 0 {
-                    missed.push(format!("{t} on {name} under '{}'", mutate::NAMES[id as usize]));
+    common::big_stack(|| {
+        use multidouble::trig::mutate;
+        let mut missed = Vec::new();
+        for id in [mutate::LANE_TERMS, mutate::LANE_QUADRANT] {
+            mutate::set(id);
+            let ran = [
+                ("dv", mismatches(DvTrig(200))),
+                ("qv", mismatches(QvTrig(100))),
+                ("ov", mismatches(OvTrig(40))),
+            ];
+            mutate::set(0);
+            for (t, by_backend) in ran {
+                for (name, bad) in by_backend {
+                    println!(
+                        "'{}': {t} on {name}: {bad} lane results differ",
+                        mutate::NAMES[id as usize]
+                    );
+                    if bad == 0 {
+                        missed.push(format!("{t} on {name} under '{}'", mutate::NAMES[id as usize]));
+                    }
                 }
             }
         }
-    }
-    assert!(missed.is_empty(), "controls that did not fail: {missed:#?}");
+        assert!(missed.is_empty(), "controls that did not fail: {missed:#?}");
+    });
 }
