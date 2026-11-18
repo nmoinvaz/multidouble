@@ -826,6 +826,91 @@ fn trig_od_accuracy() {
     accuracy::<OD>(500);
 }
 
+/// The inputs of the paper's Table 1 for the octo-double sin, cos and tan (paper/table1_inputs.py), with the floors
+/// their errors reach in units of u^8: x chosen so that f(x) lies just past 2^E (1 + u + ... + u^7) and the result
+/// is 2^E (1, u, ..., u^7) up to sign, the ninth part that the renormalization drops near u^8 2^E.
+const OD_TABLE1: [(Fun, [u64; 8], f64); 3] = [
+    (
+        Fun::Sin,
+        [
+            0x3ee000000000aaab,
+            0x3b75555eeef6eef2,
+            0x381729d2975900e8,
+            0x348a195a54a29eb4,
+            0x3128cc3a41f5cda2,
+            0xad6de6f5c4da02df,
+            0x29dad523df82f39d,
+            0x261efb1a1688e432,
+        ],
+        0.999999995,
+    ),
+    (
+        Fun::Cos,
+        [
+            0x3ff941fb6999a8d4,
+            0x3c98b0c392810f09,
+            0xb93572503683ff67,
+            0xb58f05686f022788,
+            0xb1ca742cfa0db1ed,
+            0x2e6693f13d61b2d3,
+            0xab0bccc00c1d973a,
+            0xa7a798c3c05b350e,
+        ],
+        1.00069,
+    ),
+    (
+        Fun::Tan,
+        [
+            0x3e0000000000000e,
+            0x3aaffaaaaaaaaaac,
+            0xb748f55222222223,
+            0xb3eb04e88ad1ad57,
+            0x307dc840ac82561c,
+            0x2d0b1f36bfab0d59,
+            0x299bd6c73c83ad94,
+            0xa5fdb97f61d2dd6c,
+        ],
+        1.00138,
+    ),
+];
+
+/// The octo-double sin, cos and tan on the inputs of the paper's Table 1. Pass: each result 2^E (1, u, ..., u^7) up to
+/// sign, each error at least its floor and within the proven bound, scalar and lanes alike. Control: each input with
+/// its leading part one ulp up errs by less than its floor.
+#[test]
+fn trig_od_table1_inputs() {
+    use crate::native::OV;
+    let u = 2f64.powi(-53);
+    let eval = |f: Fun, x: OD| match f {
+        Fun::Sin => (x.sin(), OV::splat(x).sin().lane(0)),
+        Fun::Cos => (x.cos(), OV::splat(x).cos().lane(0)),
+        Fun::Tan => (x.tan(), OV::splat(x).tan().lane(0)),
+    };
+    for (f, b, floor) in OD_TABLE1 {
+        let x = OD {
+            x: b.map(f64::from_bits),
+        };
+        let (got, lane) = eval(f, x);
+        let e = err(f, x, got, &reference(&exact(x)));
+        let top = got.x[0];
+        let pow = f64::from_bits(top.abs().to_bits() & 0x7ff0_0000_0000_0000).copysign(top);
+        let ladder = (1..8).all(|k| got.x[k] == pow * u.powi(k as i32));
+        println!("{f:?}: error {e:.9} u^8, floor {floor}");
+        assert!(ladder, "{f:?}: the result is not 2^E (1, u, ..., u^7)");
+        assert_eq!(got.x, lane.x, "{f:?}: lanes differ from the scalar result");
+        let bound = if f == Fun::Tan { OD_BOUND[1] } else { OD_BOUND[0] };
+        assert!(
+            e >= floor && e <= bound,
+            "{f:?}: error {e} u^8 outside [{floor}, {bound}]"
+        );
+        let mut y = x;
+        y.x[0] = y.x[0].next_up();
+        let ey = err(f, y, eval(f, y).0, &reference(&exact(y)));
+        println!("  control, leading part one ulp up: {ey:.3e} u^8");
+        assert!(ey < floor, "{f:?} control: {ey} u^8, the check cannot fail");
+    }
+}
+
 /// crate::trig::reduce on parts of any of the three lengths
 fn reduce_parts(x: &[f64]) -> (u32, Vec<f64>) {
     match x.len() {
