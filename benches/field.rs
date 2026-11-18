@@ -7,6 +7,10 @@
 // operations that combine them, from the orders below k. A QJet<24> lane vector is 6 KB and its accumulator 7.5 KB,
 // which the value-returning sums move once per term. Before timing, the two versions' outputs are checked to be the
 // same bits. The single sums at the same k show the gain per sum, for QJet<24>, the double-double Jet<24> and QV.
+//
+// The order-k sums of a series formed one coefficient at a time, on Fl<OJet<28>, 4> with 40 terms, time the weighted
+// `cs_w_at` against the unweighted `cs_at` and against each term's whole jet weighted, which `cs_w_at` did before it
+// weighted only the coefficients 0..=k that it reads (`Lane::mulf_upto`), at k = 0, 3, 13 and 27.
 
 // Frames of jet fields, which nightly clippy's large_unopt_stack_frames flags in the unoptimized build. The
 // benchmarks run optimized, and stable clippy does not know the lint.
@@ -18,8 +22,8 @@ use std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 use multidouble::dd::DD;
 use multidouble::dual::{Lane, Param};
-use multidouble::field::{cs, cs_into, cs_par, cs_range, cs_range_into, cs_w, cs_w_into, cs_w_par, Fl};
-use multidouble::native::{DMat, Jet, QJet, QV};
+use multidouble::field::{cs, cs_at, cs_into, cs_par, cs_range, cs_range_into, cs_w, cs_w_at, cs_w_into, cs_w_par, Fl};
+use multidouble::native::{DMat, Jet, OJet, QJet, QV, V8};
 
 const K: usize = 146;
 const B: usize = 4;
@@ -317,5 +321,66 @@ fn sums(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, centre, sums);
+/// the order-k sums of 40 terms on Fl<OJet<28>, B>: `cs_at`, `cs_w_at` and each term's whole jet weighted
+/// (`Lane::mulf`, as `cs_w_at` before `Lane::mulf_upto`), after checking that the two weightings give the same bits
+fn order_k(c: &mut Criterion) {
+    type O = OJet<28>;
+    const NT: usize = 40;
+    let mut r = Rng(0x0dd5);
+    // every part of every coefficient random, part q scaled by 2^-53q
+    let mut field = || {
+        let mut f = Fl::<O, B>::zero();
+        for v in f.0.iter_mut() {
+            for x in v.c.iter_mut() {
+                for (q, part) in x.c.iter_mut().enumerate() {
+                    let s = 2f64.powi(-53 * q as i32);
+                    *part = V8::from_array(std::array::from_fn(|_| r.next() * s));
+                }
+            }
+        }
+        f
+    };
+    let x: Vec<Fl<O, B>> = (0..NT).map(|_| field()).collect();
+    let y: Vec<Fl<O, B>> = (0..NT).map(|_| field()).collect();
+    let w = |i: usize| (2 * i + 1) as f64;
+    let whole = |o: &mut Fl<O, B>, k: usize| {
+        for b in 0..B {
+            let mut a = O::acc0();
+            for i in 0..NT {
+                O::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[NT - 1 - i].0[b], k);
+            }
+            O::fin_at(&a, k, &mut o.0[b]);
+        }
+    };
+    let bits = |f: &Fl<O, B>| -> Vec<u64> {
+        f.0.iter()
+            .flat_map(|j| j.c.iter())
+            .flat_map(|v| v.c.iter())
+            .flat_map(|p| p.to_array().map(f64::to_bits))
+            .collect()
+    };
+    let mut g = c.benchmark_group(format!("order-k sums, OJet<28>, {NT} terms, B = {B}"));
+    g.sample_size(10).measurement_time(Duration::from_secs(2));
+    for k in [0, 3, 13, 27] {
+        let (mut o, mut p) = (Fl::<O, B>::zero(), Fl::<O, B>::zero());
+        cs_w_at(&mut o, &x, &y, NT - 1, 0, NT - 1, w, k);
+        whole(&mut p, k);
+        assert!(
+            bits(&o) == bits(&p),
+            "cs_w_at differs from the whole weighted jets at k = {k}"
+        );
+        g.bench_function(format!("k = {k} cs_at"), |bch| {
+            bch.iter(|| cs_at(black_box(&mut o), black_box(&x), black_box(&y), NT - 1, k))
+        });
+        g.bench_function(format!("k = {k} cs_w_at"), |bch| {
+            bch.iter(|| cs_w_at(black_box(&mut o), black_box(&x), black_box(&y), NT - 1, 0, NT - 1, w, k))
+        });
+        g.bench_function(format!("k = {k} whole jets weighted"), |bch| {
+            bch.iter(|| whole(black_box(&mut o), k))
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(benches, centre, sums, order_k);
 criterion_main!(benches);
