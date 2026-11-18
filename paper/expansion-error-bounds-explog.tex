@@ -21,8 +21,8 @@ a sum never leaves (A2), as one that underflows is exact. The theorems below ass
 \paragraph{Constants} $c_h$ is $\ln 2$ rounded to 42 significant bits, so that for every integer $|k| < 2^{11}$, $kc_h$
 is in $\F$ and is a multiple of $2^{-42}$. $c_\ell$ is the greedy $n$-part expansion of $\ln 2 - c_h$ ($v_0 = \RN(v)$,
 $v_1 = \RN(v - v_0)$, \dots), and $\eta_\ell = |\ln 2 - c_h - \sum_i c_{\ell,i}|$. $F_j$ is the greedy $n$-part
-expansion of $1/j!$ and $\phi_j = |\sum_iF_{j,i} - 1/j!|$; $A_i$ is that of $(-1)^{i+1}/i$ and $\phi'_i =
-|\sum_jA_{i,j} - (-1)^{i+1}/i|$. $\Lambda = \RN(1/\ln 2)$. $B = pn + 12$, so that a term below $2^{-B}$ of a
+expansion of $1/j!$ and $\phi_j = |\sum_iF_{j,i} - 1/j!|$; $F'_i$ is that of $(-1)^{i+1}/i$ and $\phi'_i =
+|\sum_jF'_{i,j} - (-1)^{i+1}/i|$. $\Lambda = \RN(1/\ln 2)$. $B = pn + 12$, so that a term below $2^{-B}$ of a
 result is below $2^{-12}u^n$ of it.
 
 \paragraph{EXP$_{n,s,d}$} For an $n$-part $x$ with $|x_0| \le X = 745.2$:
@@ -46,14 +46,14 @@ multidouble's \texttt{OD::exp}.
 
 \begin{lemma}\label{lem:expred}
 Assume (A2$'$) and $p = 53$, and let $|x_0| \le X \le 745.3$, $|x - x_0| \le \gamma$ and $|x_i| \le \alpha_i$ for $i
-\ge 1$. Let $K = 1075$, $\beta = X(|\Lambda - 1/\ln 2| + u\Lambda)$, $\rho_e = (\frac12 + \beta)\ln 2 + \gamma$, $r_e =
-x - k\ln 2$, and assume $\alpha_0 = \rho_e + \gamma + K|\ln 2 - c_h| < \frac12$.
+\ge 1$. Let $\bar k = 1075$, $\beta = X(|\Lambda - 1/\ln 2| + u\Lambda)$, $\bar r_{\max} = (\frac12 + \beta)\ln 2 + \gamma$, $r_e =
+x - k\ln 2$, and assume $\alpha_0 = \bar r_{\max} + \gamma + \bar k|\ln 2 - c_h| < \frac12$.
 \begin{enumerate}
-\item[(a)] $|k| \le K$, $|r_e| \le \rho_e$, and for $k \ne 0$, $x_0 - kc_h \in \F$.
-\item[(b)] Let $k \ne 0$, $|r_e| \le \bar r$, $\delta = \epsilon_1 + \epsilon_2 + K\eta_\ell$, and
+\item[(a)] $|k| \le \bar k$, $|r_e| \le \bar r_{\max}$, and for $k \ne 0$, $x_0 - kc_h \in \F$.
+\item[(b)] Let $k \ne 0$, $|r_e| \le \bar r$, $\delta = \epsilon_1 + \epsilon_2 + \bar k\eta_\ell$, and
   \begin{align*}
-  (\epsilon_1, \mu) &= G_{\rm MULF}(|c_\ell|, K;\ K|c_\ell|), \\
-  (\epsilon_2, \pi^r) &= G_{\rm ADD}(\alpha, \mu;\ \bar r + K\eta_\ell + \epsilon_1).
+  (\epsilon_1, \mu) &= G_{\rm MULF}(|c_\ell|, \bar k;\ \bar k|c_\ell|), \\
+  (\epsilon_2, \pi^r) &= G_{\rm ADD}(\alpha, \mu;\ \bar r + \bar k\eta_\ell + \epsilon_1).
   \end{align*}
   Then $|r - r_e| \le \delta$ and $|r_i| \le \pi^r_i$.
 \end{enumerate}
@@ -64,46 +64,46 @@ For $x$ on $H(\theta)$, $\alpha_i = \rho^iX$ and $\gamma = \rho X/(1-\rho)$ serv
 (a) If $x_0\Lambda$ underflows, $k = 0$ and (a) is immediate. Otherwise, by \eqref{eq:rn}, $|\RN(x_0\Lambda) -
 x_0/\ln 2| \le |x_0||\Lambda - 1/\ln 2| + u|x_0\Lambda| \le \beta$, so $|k|
 \le X/\ln 2 + \beta + \frac12 < 1076$ and $|x_0 - k\ln 2| \le (\frac12 + \beta)\ln 2$, and with $|x - x_0| \le
-\gamma$, $|r_e| \le \rho_e$. If $k \ne 0$ then $|\RN(x_0\Lambda)| \ge \frac12$, so $|x_0| \ge \frac14$ and $x_0$ is a
+\gamma$, $|r_e| \le \bar r_{\max}$. If $k \ne 0$ then $|\RN(x_0\Lambda)| \ge \frac12$, so $|x_0| \ge \frac14$ and $x_0$ is a
 multiple of $2^{-54}$, and so is $kc_h$. Their difference is $r_e - (x - x_0) + k(\ln 2 - c_h)$, of magnitude at most
 $\alpha_0 < \frac12$, so it is a multiple of $2^{-54}$ below $2^{53}\cdot 2^{-54}$, in $\F$.
 
 (b) The parts of $x'$ are bounded by $\alpha$: its leading part is $x_0 - kc_h$, bounded in (a), and the others are
 those of $x$. Lemma~\ref{lem:g} bounds MULF's error by $\epsilon_1$ and its parts by $\mu$, its exact result being
 $-k\sum_ic_{\ell,i}$. The exact sum that ADD rounds is $x' - k\sum_ic_{\ell,i}$ plus MULF's error, that is $r_e +
-k(\ln 2 - c_h - \sum_i c_{\ell,i})$ plus that error, of magnitude at most $\bar r + K\eta_\ell + \epsilon_1$; so
-$|r - r_e| \le \epsilon_2 + \epsilon_1 + K\eta_\ell$.
+k(\ln 2 - c_h - \sum_i c_{\ell,i})$ plus that error, of magnitude at most $\bar r + \bar k\eta_\ell + \epsilon_1$; so
+$|r - r_e| \le \epsilon_2 + \epsilon_1 + \bar k\eta_\ell$.
 \end{proof}
 
 \begin{lemma}\label{lem:core}
-Assume (A2$'$), (A3) and $n \le 31$. Let $r$ be an $n$-part expansion of sign $\sigma \in \{1, -1\}$ with $a
+Assume (A2$'$), (A3) and $n \le 31$. Let $r$ be an $n$-part expansion with $a
 \le |r| \le b$ and $|r_i| \le \pi_i$, and let steps (2)--(4) of EXP$_{n,s,d}$ run on it with $m$ squarings, degree $d'$
 and $U < \bar c = 2^{e+1}$. Write $[m > 0]$ for 1 if $m > 0$ and 0 otherwise. Let $b' = 2^{-m}\min(b, \bar c) +
-n\eta_0[m > 0]$ and $\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\tau_j = e^{2^jb'} - 1$
-and $g_j = 1 + \tau_j$ if $\sigma = 1$, and $\tau_j = 1 - e^{-2^jb'}$ and $g_j = e^{-2^ja2^{-m}}$ if $\sigma = -1$. Let
-$v_{d'} = 1/d'!$, $e_{d'} = \phi_{d'}$, $\kappa_{d'} = |F_{d'}|$, and for $j = d'-1, \dots, 2$
+n\eta_0[m > 0]$ and $\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\bar t_j = e^{2^jb'} - 1$
+and $g_j = 1 + \bar t_j$ if $r \ge 0$, and $\bar t_j = 1 - e^{-2^jb'}$ and $g_j = e^{-2^ja2^{-m}}$ if $r \le 0$. Let
+$v_{d'} = 1/d'!$, $e_{d'} = \phi_{d'}$, $\pi^q_{d'} = |F_{d'}|$, and for $j = d'-1, \dots, 2$
 \begin{align*}
-(\epsilon^p_j, \mu_j) &= G_{\rm MUL}\bigl(\pi', \kappa_{j+1};\ b'(v_{j+1} + e_{j+1})\bigr), \\
-(\epsilon^a_j, \kappa_j) &= G_{\rm ADD}\bigl(|F_j|, \mu_j;\ \tfrac1{j!} + \phi_j + b'(v_{j+1} + e_{j+1}) +
+(\epsilon^p_j, \mu_j) &= G_{\rm MUL}\bigl(\pi', \pi^q_{j+1};\ b'(v_{j+1} + e_{j+1})\bigr), \\
+(\epsilon^a_j, \pi^q_j) &= G_{\rm ADD}\bigl(|F_j|, \mu_j;\ \tfrac1{j!} + \phi_j + b'(v_{j+1} + e_{j+1}) +
 \epsilon^p_j\bigr), \\
 e_j &= \phi_j + b'e_{j+1} + \epsilon^p_j + \epsilon^a_j, \qquad v_j = \tfrac1{j!} + b'v_{j+1}.
 \end{align*}
-Let $(\epsilon', \omega') = G_{\rm MUL}(\pi', \kappa_2;\ b'(v_2 + e_2))$, $(\epsilon'', \omega) = G_{\rm MUL}(\pi',
+Let $(\epsilon', \omega') = G_{\rm MUL}(\pi', \pi^q_2;\ b'(v_2 + e_2))$, $(\epsilon'', \omega) = G_{\rm MUL}(\pi',
 \omega';\ b'(b'(v_2 + e_2) + \epsilon'))$,
 \begin{align*}
-E^- &= \epsilon'' + b'(\epsilon' + b'e_2) + R_{d'} + 2n\eta_0[m > 0], \\
-R_{d'} &= \frac{b'^{d'+1}}{(d'+1)!\,(1 - b'/(d'+2))},
+E^- &= \epsilon'' + b'(\epsilon' + b'e_2) + E^{\rm tr}_{d'} + 2n\eta_0[m > 0], \\
+E^{\rm tr}_{d'} &= \frac{b'^{d'+1}}{(d'+1)!\,(1 - b'/(d'+2))},
 \end{align*}
-$(\epsilon''', \psi^-) = G_{\rm ADD}(\pi', \omega;\ \tau_0 + E^-)$, $E_0 = E^- + \epsilon''' + n\eta_0$ and $\psi_{0,i}
-= \psi^-_i + \eta_0$; if $d' = 1$, $E_0 = R_1$ and $\psi_0 = \pi'$. For $j = 0, \dots, m-1$
+$(\epsilon''', \psi^-) = G_{\rm ADD}(\pi', \omega;\ \bar t_0 + E^-)$, $E_0 = E^- + \epsilon''' + n\eta_0$ and $\psi_{0,i}
+= \psi^-_i + \eta_0$; if $d' = 1$, $E_0 = E^{\rm tr}_1$ and $\psi_0 = \pi'$. For $j = 0, \dots, m-1$
 \begin{align*}
-(\epsilon^m_j, \nu_j) &= G_{\rm MUL}\bigl(\psi_j, \psi_j;\ (\tau_j + E_j)^2\bigr), \\
-(\epsilon^s_j, \psi_{j+1}) &= G_{\rm ADD}\bigl(2\psi_j, \nu_j;\ \tau_{j+1} + 2E_j(1 + \tau_j) + E_j^2 + \epsilon^m_j\bigr),
+(\epsilon^m_j, \nu_j) &= G_{\rm MUL}\bigl(\psi_j, \psi_j;\ (\bar t_j + E_j)^2\bigr), \\
+(\epsilon^s_j, \psi_{j+1}) &= G_{\rm ADD}\bigl(2\psi_j, \nu_j;\ \bar t_{j+1} + 2E_j(1 + \bar t_j) + E_j^2 + \epsilon^m_j\bigr),
 \\
 E_{j+1} &= 2g_jE_j + E_j^2 + \epsilon^m_j + \epsilon^s_j.
 \end{align*}
 Then the result $t$ of step (4) satisfies $|t - (e^r - 1)| \le E_m$ and $|t_i| \le \psi_{m,i}$, and $|e^r - 1| \le
-\tau_m$.
+\bar t_m$.
 \end{lemma}
 
 \begin{proof}
@@ -111,33 +111,33 @@ $U$ is the sum of $n$ magnitudes rounded $n - 1$ times, then times $1 + 2^{-48}$
 |z|/(1+u)$, so $U \ge \sum_i|r_i|(1 + 2^{-48})/(1+u)^n \ge \sum_i|r_i|$ for $n \le 31$ (or the product underflowed, as
 above), and $|r|, |r_i| < \bar c$. The scaling by $2^{-m}$ is exact but for parts that fall below $2^{-1022}$, each
 moved by at most $\eta_0$; so $|r'| \le b'$ and $|r'_i| \le \pi'_i$, and the computed $r'$ is within $n\eta_0$ of
-$2^{-m}r$, which moves $e^{r'} - 1$ by at most $2n\eta_0$. Let $Q_j = \sum_{i=j}^{d'} r'^{i-j}/i!$, so $|Q_j| \le v_j$.
-By induction from $j = d'$, the computed $q$ after the pass with index $j$ satisfies $|q - Q_j| \le e_j$ and has parts
-bounded by $\kappa_j$: the exact product $r'q$ has magnitude at most $b'(v_{j+1} + e_{j+1})$, Lemma~\ref{lem:g} bounds
-its rounding by $\epsilon^p_j$, the exact sum $F_j + \RN(r'q)$ has magnitude at most the stated bound, and $q - Q_j =
-(F_j - 1/j!) + r'(q_{\rm old} - Q_{j+1}) + $ the two roundings. Likewise $r'w$, formed as $2^{e'}\mathrm{MUL}(\hat r,
-w)$, satisfies $|r'w - r'^2Q_2| \le \epsilon'' + b'\epsilon' + b'^2e_2$ before the scaling back, the scaled MUL and ADD
-having $2^{-e'}$ times the bounds used here, and $r' + r'^2Q_2 = \sum_{i=1}^{d'}r'^i/i!$ differs from $e^{r'} - 1$ by at
-most $R_{d'}$. The scaling back by $2^{e'}$ moves each part by at most $\eta_0$. So the first $t$
-errs by at most $E_0$ from $T_0 = e^{r'} - 1$; for $d' = 1$, $t = r'$ and only $R_1$ is left.
+$2^{-m}r$, which moves $e^{r'} - 1$ by at most $2n\eta_0$. Let $q^*_j = \sum_{i=j}^{d'} r'^{i-j}/i!$, so $|q^*_j| \le v_j$.
+By induction from $j = d'$, the computed $q$ after the pass with index $j$ satisfies $|q - q^*_j| \le e_j$ and has parts
+bounded by $\pi^q_j$: the exact product $r'q$ has magnitude at most $b'(v_{j+1} + e_{j+1})$, Lemma~\ref{lem:g} bounds
+its rounding by $\epsilon^p_j$, the exact sum $F_j + \RN(r'q)$ has magnitude at most the stated bound, and $q - q^*_j =
+(F_j - 1/j!) + r'(q_{\rm old} - q^*_{j+1}) + $ the two roundings. Likewise $r'w$, formed as $2^{e'}\mathrm{MUL}(\hat r,
+w)$, satisfies $|r'w - r'^2q^*_2| \le \epsilon'' + b'\epsilon' + b'^2e_2$ before the scaling back, the scaled MUL and ADD
+having $2^{-e'}$ times the bounds used here, and $r' + r'^2q^*_2 = \sum_{i=1}^{d'}r'^i/i!$ differs from $e^{r'} - 1$ by at
+most $E^{\rm tr}_{d'}$. The scaling back by $2^{e'}$ moves each part by at most $\eta_0$. So the first $t$
+errs by at most $E_0$ from $t^*_0 = e^{r'} - 1$; for $d' = 1$, $t = r'$ and only $E^{\rm tr}_1$ is left.
 
-Let $T_j = e^{2^jr'} - 1$, so $|T_j| \le \tau_j$ and $T_{j+1} = 2T_j + T_j^2$, and let $t$ before pass $j$ be $T_j +
-h$ with $|h| \le E_j$. Then $2t + t^2 = T_{j+1} + h(2 + 2T_j + h)$, and $|2 + 2T_j| = 2e^{2^jr'} \le 2g_j$, using $r'
-\le -a2^{-m}$ when $\sigma = -1$. MUL rounds $t^2$, of magnitude at most $(\tau_j + E_j)^2$, within $\epsilon^m_j$, and
+Let $t^*_j = e^{2^jr'} - 1$, so $|t^*_j| \le \bar t_j$ and $t^*_{j+1} = 2t^*_j + (t^*_j)^2$, and let $t$ before pass $j$ be $t^*_j +
+h$ with $|h| \le E_j$. Then $2t + t^2 = t^*_{j+1} + h(2 + 2t^*_j + h)$, and $|2 + 2t^*_j| = 2e^{2^jr'} \le 2g_j$, using $r'
+\le -a2^{-m}$ when $r \le 0$. MUL rounds $t^2$, of magnitude at most $(\bar t_j + E_j)^2$, within $\epsilon^m_j$, and
 ADD rounds $2t + \RN(t^2)$, of magnitude at most the stated bound, within $\epsilon^s_j$; $2t$ is exact with parts
-bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $T_m = e^r - 1$.
+bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $t^*_m = e^r - 1$.
 \end{proof}
 
 \begin{theorem}\label{thm:exp}
 Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
 $|x_0| \le X$, and let $y$ be the finite result of EXP$_{n,s,d}$. For a case, take $k = 0$ or $k \ne 0$, an exponent $e$
-of step (2) (one for each $m \ge 1$; for $m = 0$, all those of one degree $d'$), a sign $\sigma$ of $r$, and an interval
+of step (2) (one for each $m \ge 1$; for $m = 0$, all those of one degree $d'$), a sign of $r$, and an interval
 $[a, b]$ of the values of $|r|$ that can select $e$; for $k = 0$ let $\pi$ be the part bounds of an expansion on
 $H(\theta)$ with $|r| \le b$ and $\delta = 0$, and for $k \ne 0$ let $\pi = \pi^r$ and $\delta$ be those of
-Lemma~\ref{lem:expred}(b) with $\bar r = b + \delta^*$, $\delta^*$ its $\delta$ for $\bar r = \rho_e$. With $E_m$ and
-$\psi_m$ of Lemma~\ref{lem:core}, let $Z = e^b + E_m$ for $\sigma = 1$ and $e^{-a} + E_m$ for $\sigma = -1$,
-$(\epsilon_s, \cdot) = G_{\rm ADDF}(\psi_m, 1;\ Z, Z + \sum_{i \ge 1}\psi_{m,i})$, $v = e^{a - \delta}$ for $\sigma = 1$
-and $e^{-b-\delta}$ for $\sigma = -1$, and
+Lemma~\ref{lem:expred}(b) with $\bar r = b + \delta^*$, $\delta^*$ its $\delta$ for $\bar r = \bar r_{\max}$. With $E_m$ and
+$\psi_m$ of Lemma~\ref{lem:core}, let $Z = e^b + E_m$ for $r \ge 0$ and $e^{-a} + E_m$ for $r \le 0$,
+$(\epsilon_s, \cdot) = G_{\rm ADDF}(\psi_m, 1;\ Z, Z + \sum_{i \ge 1}\psi_{m,i})$, $v = e^{a - \delta}$ for $r \ge 0$
+and $e^{-b-\delta}$ for $r \le 0$, and
 \[
 \varepsilon = \frac{E_m + \epsilon_s}{v} + e^\delta - 1.
 \]
@@ -150,7 +150,7 @@ $2^{-1022}$. At $n = 8$, $s = 6$, $d = 43$ and $\theta = 2$, $\varepsilon_{\exp}
 \begin{proof}
 Step (2) selects $e$ only if $2^e \le U < 2^{e+1}$, and $U \le \sum_i|r_i|(1 + u)^n(1 + 2^{-48}) \le \sum_i|r_i|(1 +
 2^{-46})$, so $\sum_i|r_i| \ge 2^e(1 - 2^{-46})$ and $|r| \ge \sum_i|r_i| - 2\sum_{i \ge 1}\pi_i$. So the $|r|$ that
-select $e$ lie in $[2^e(1 - 2^{-46}) - 2\sum_{i \ge 1}\pi_i,\ 2^{e+1})$, intersected with $[0, \rho_e + \delta^*]$ by
+select $e$ lie in $[2^e(1 - 2^{-46}) - 2\sum_{i \ge 1}\pi_i,\ 2^{e+1})$, intersected with $[0, \bar r_{\max} + \delta^*]$ by
 Lemma~\ref{lem:expred}. Fix the case that contains the run. By Lemma~\ref{lem:expred} (for $k = 0$, $r = x$ is exact) and
 Lemma~\ref{lem:core}, $t$ errs from $e^r - 1$ by at most $E_m$, so the exact sum $t + 1$ has magnitude at most $e^r +
 E_m \le Z$, and ADDF errs by at most $\epsilon_s$ (Lemma~\ref{lem:g}). So $\hat y = \mathrm{ADDF}(t, 1)$ satisfies
@@ -178,7 +178,7 @@ products and Horner's inner steps add terms smaller by factors of $|t|$ or $|r'|
   EXP: if $\min(e_f, e_t) < -B - 13$, $c = \mathrm{ADD}(f, t)$; otherwise $p = 2^{e_t}(2^{e_f}\mathrm{MUL}(2^{-e_f}f,
   2^{-e_t}t))$ and $c = \mathrm{ADD}(\mathrm{ADD}(f, t), p)$.
 \item[(5)] With $e_c$ the exponent of $U_c$: if $e_c < -B - 13$, $\gamma = c$. Otherwise, with $c \otimes v =
-  2^{e_c}\mathrm{MUL}(2^{-e_c}c, v)$, $h \gets A_q$; $h \gets \mathrm{ADD}(A_i, c \otimes h)$ for $i = q-1,
+  2^{e_c}\mathrm{MUL}(2^{-e_c}c, v)$, $h \gets F'_q$; $h \gets \mathrm{ADD}(F'_i, c \otimes h)$ for $i = q-1,
   \dots, 2$; $\gamma = c \otimes \mathrm{ADDF}(c \otimes h, 1)$. Return $\mathrm{ADD}(y_0, \gamma)$.
 \end{enumerate}
 Up to rounding, $1 + c = (1 + f)(1 + t) = xe^{-y_0}$, so $y_0 + \log(1 + c) = \ln x$, and step (5) sums $\log(1 + c) =
@@ -195,7 +195,7 @@ In LOG$_{n,s,d,q}$ under the hypotheses of Theorem~\ref{thm:log}, $f = x' - 1$ e
 \end{lemma}
 
 \begin{proof}
-By Lemma~\ref{lem:expred}(a), $2^kx = e^{-e_0 - r_e}$ with $e_0 = y_0 - \ln x$ and $|r_e| \le \rho_e$, so $2^kx \in
+By Lemma~\ref{lem:expred}(a), $2^kx = e^{-e_0 - r_e}$ with $e_0 = y_0 - \ln x$ and $|r_e| \le \bar r_{\max}$, so $2^kx \in
 [0.70, 1.42]$ by the bound on $|e_0|$ of Theorem~\ref{thm:log}, and $x'_0 = 2^kx_0$ lies in $[\frac12, 2]$ by
 \eqref{eq:a0}. ADDF's first $\TwoSum(x'_0, -1)$ is then exact with error zero (Sterbenz), each later one is
 $\TwoSum(x'_i, 0) = (x'_i, 0)$, and the level $s_n$ is zero. VecSum's first $\TwoSum$ adds that zero, so $v_n = 0$,
@@ -213,23 +213,23 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
 \begin{itemize}
 \item $\bar y = \ell + E(\ell)$, and $\pi^y$ the part bounds of a two-part expansion on $H(1)$ with value at most $\bar
   y$; for $k = 0$, $\pi = \pi^y$, $\delta = 0$ and $b \le \bar y$; for $k \ne 0$, $\pi = \pi^r$ and $\delta$ those of
-  Lemma~\ref{lem:expred}(b) with $X = \bar y/(1-u)$, $\gamma = 2u\bar y$ and $\alpha = \pi^y$; $E_m$, $\psi_m$ and $\tau_m$
+  Lemma~\ref{lem:expred}(b) with $X = \bar y/(1-u)$, $\gamma = 2u\bar y$ and $\alpha = \pi^y$; $E_m$, $\psi_m$ and $\bar t_m$
   those of Lemma~\ref{lem:core};
-\item $\xi = e^{E + \delta - a} + 2n\eta_0$ for $\sigma = 1$ and $e^{E + b + \delta} + 2n\eta_0$ for $\sigma = -1$,
+\item $\xi = e^{E + \delta - a} + 2n\eta_0$ for $r \ge 0$ and $e^{E + b + \delta} + 2n\eta_0$ for $r \le 0$,
   $\bar f = \max(\xi - 1, 1 - e^{-(E + b + \delta)} + 2n\eta_0)$, $\pi^x$ the part bounds of an expansion on $H(\theta)$
   with value at most $\xi$, each plus $2\eta_0$, and $(\cdot, \pi^f) = G_{\rm ADDF}(\pi^x, 1;\ \bar f, \bar f + \sum_{i
   \ge 1}\pi^x_i)$;
-\item $(\epsilon_{ft}, \nu) = G_{\rm MUL}(\pi^f, \psi_m;\ \bar f(\tau_m + E_m))$, then $\epsilon_{ft}$ plus $2n\eta_0 +
-  2^{-B-12}\max(\bar f, \tau_m + E_m)$ and each $\nu_i$ plus $2\eta_0$; $(\epsilon_{f+t}, \zeta) = G_{\rm ADD}(\pi^f,
+\item $(\epsilon_{ft}, \nu) = G_{\rm MUL}(\pi^f, \psi_m;\ \bar f(\bar t_m + E_m))$, then $\epsilon_{ft}$ plus $2n\eta_0 +
+  2^{-B-12}\max(\bar f, \bar t_m + E_m)$ and each $\nu_i$ plus $2\eta_0$; $(\epsilon_{f+t}, \zeta) = G_{\rm ADD}(\pi^f,
   \psi_m;\ 2(e^{\hat b} - 1 - \hat b) + e^{\hat b}(e^{E + \delta} - 1) + E_m + 2n\eta_0)$ with $\hat b = b + \delta$;
-  $\bar c^* = e^E - 1$, $\Delta = e^E(e^\delta - 1) + 2n\eta_0(1 + \tau_m + E_m)$, $(\epsilon_c, \chi') = G_{\rm
-  ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + \Delta + \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + \Delta +
+  $\bar c^* = e^E - 1$, $E_\delta = e^E(e^\delta - 1) + 2n\eta_0(1 + \bar t_m + E_m)$, $(\epsilon_c, \chi') = G_{\rm
+  ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + E_\delta + \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + E_\delta +
   \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$, $C = \bar c^* + E_c$, $(\cdot, \zeta') = G_{\rm ADD}(\pi^f, \psi_m;\
   C)$ and $\chi = \max(\chi', \zeta')$ part by part;
-\item $v_q = 1/q$, $e_q = \phi'_q$, $\kappa_q = |A_q|$, and for $i = q-1, \dots, 2$
+\item $v_q = 1/q$, $e_q = \phi'_q$, $\pi^h_q = |F'_q|$, and for $i = q-1, \dots, 2$
   \begin{align*}
-  (\epsilon^p_i, \mu_i) &= G_{\rm MUL}\bigl(\chi, \kappa_{i+1};\ C(v_{i+1} + e_{i+1})\bigr), \\
-  (\epsilon^a_i, \kappa_i) &= G_{\rm ADD}\bigl(|A_i|, \mu_i;\ \tfrac1i + \phi'_i \\
+  (\epsilon^p_i, \mu_i) &= G_{\rm MUL}\bigl(\chi, \pi^h_{i+1};\ C(v_{i+1} + e_{i+1})\bigr), \\
+  (\epsilon^a_i, \pi^h_i) &= G_{\rm ADD}\bigl(|F'_i|, \mu_i;\ \tfrac1i + \phi'_i \\
   &\qquad + C(v_{i+1} + e_{i+1}) + \epsilon^p_i\bigr), \\
   e_i &= \phi'_i + Ce_{i+1} + \epsilon^p_i + \epsilon^a_i, \\
   v_i &= \tfrac1i + Cv_{i+1},
@@ -238,7 +238,7 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
   part bound;
 \item with $\bar h = C(v_2 + e_2) + \epsilon^h$,
   \begin{align*}
-  (\epsilon^h, \omega^h) &= G_{\rm MUL}\bigl(\chi, \kappa_2;\ C(v_2 + e_2)\bigr), \\
+  (\epsilon^h, \omega^h) &= G_{\rm MUL}\bigl(\chi, \pi^h_2;\ C(v_2 + e_2)\bigr), \\
   (\epsilon^g, \omega^g) &= G_{\rm ADDF}\bigl(\omega^h, 1;\ 1 + \bar h, 1 + \bar h + \textstyle\sum_{j \ge
   1}\omega^h_j\bigr), \\
     (\epsilon^r, \omega'_r) &= G_{\rm MUL}\bigl(\chi, \omega^g;\ C(1 + \bar h + \epsilon^g)\bigr),
@@ -264,18 +264,18 @@ of $n - 1$ parts rounded $n - 2$ times, so $|x - \tilde x| \le g\sum_{i \ge 1}|x
 y_0 - \ln x$ satisfies $|e_0| \le E(\ell)$, and $|y_0| \le \bar y$.
 
 \emph{The steps.} Lemmas~\ref{lem:expred} and~\ref{lem:core} apply to $-y_0$, with $X = \bar y/(1-u) \ge |y_h|$ and $|y_0 -
-y_h| \le 2u\bar y$. With $T = e^r - 1$ and $|t - T| \le E_m$, the computed $x'$ is within $2n\eta_0$ of $2^kx = e^{-e_0
+y_h| \le 2u\bar y$. With $t^* = e^r - 1$ and $|t - t^*| \le E_m$, the computed $x'$ is within $2n\eta_0$ of $2^kx = e^{-e_0
 - r_e}$, the two scalings moving each part by at most $2\eta_0$, so it lies within the bounds $\xi$ and $1 - \bar f$,
 and $f = x' - 1$ exactly (Lemma~\ref{lem:fexact}), with $|f| \le \bar f$ and parts bounded by $\pi^f$
-(Lemma~\ref{lem:g}(b)). $f + t = (x' - e^{-r}) + (e^{-r} + e^r - 2) + (t - T)$, where $|2^kx - e^{-r}| = e^{-r}|e^{-e_0
+(Lemma~\ref{lem:g}(b)). $f + t = (x' - e^{-r}) + (e^{-r} + e^r - 2) + (t - t^*)$, where $|2^kx - e^{-r}| = e^{-r}|e^{-e_0
 + r - r_e} - 1|$ and $e^{-r} + e^r - 2 = 2(\cosh r - 1) \le 2(e^{|r|} - 1 - |r|)$, which gives the bound of the inner
 ADD. The product $p$ is within $\epsilon_{ft}$ of $ft$: the scaled MUL has $2^{-e_f-e_t}$ times the bounds of $G_{\rm
 MUL}$, and the two scalings back move each part by at most $2\eta_0$. Where step (4) drops $p$, the smaller of $|f|$ and
 $|t|$ is at most $\sum_i|v_i| \le U_v < 2^{e_v+1} \le 2^{-B-13}$ (as in Lemma~\ref{lem:core}, or by the exemption for
 $U_v$), so $|ft| < 2^{-B-12}\max(|f|, |t|)$, and $c = \mathrm{ADD}(f, t)$. The exact value of the outer ADD, or of the
-one ADD, is $f + t + ft$ plus these errors, and $f + t + ft = x'(1 + t) - 1 = c^* + 2^kx(e^r - e^{r_e}) + x'(t - T) +
-(x' - 2^kx)(1 + T)$ with $c^* = 2^kxe^{r_e} - 1 = e^{-e_0} - 1$, $|c^*| \le \bar c^*$ and $|2^kx(e^r - e^{r_e})| =
-e^{-e_0}|e^{r - r_e} - 1|$, the last two terms within $\Delta$. So $|c - c^*| \le E_c$ and $|c|, |c^*| \le C$; where $p$
+one ADD, is $f + t + ft$ plus these errors, and $f + t + ft = x'(1 + t) - 1 = c^* + 2^kx(e^r - e^{r_e}) + x'(t - t^*) +
+(x' - 2^kx)(1 + t^*)$ with $c^* = 2^kxe^{r_e} - 1 = e^{-e_0} - 1$, $|c^*| \le \bar c^*$ and $|2^kx(e^r - e^{r_e})| =
+e^{-e_0}|e^{r - r_e} - 1|$, the last two terms within $E_\delta$. So $|c - c^*| \le E_c$ and $|c|, |c^*| \le C$; where $p$
 is dropped, $|f + t| \le C$ too, so $\zeta'$ bounds the parts of $c = \mathrm{ADD}(f, t)$, and $|c_i| \le \chi_i$ either
 way. Step (5) computes $h$ within $e_2$ of $H(c) = \sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, as in the proof of
 Lemma~\ref{lem:core}, each product $c \otimes v$ having $2^{-e_c}$ times the bounds of $G_{\rm MUL}$ before its scaling
@@ -294,12 +294,12 @@ $|y_0 - \ln x| \le E(\ell)$ this splits $\ell = |\ln x|$ into $[0, \ell_k^+]$ an
 - 2^{-46})(1-u)/(1+u)$ and $b = \ell + E(\ell)$. A case with $\ell_e^- < 2^{-60}$ is taken on $[0, \ell_e^+]$, and if
 moreover $\bar b = \min(2^{e+1}, \bar y_0) \le E(0)$, $\bar y_0$ the largest $|y_0|$ with $k = 0$, it takes the constant
 $b = \bar b$, since there $E(0)$ exceeds $|r|$ by far; either $b$ is linear in $\ell$, where their minimum would not be
-convex. For $k \ne 0$ the cases are those of Theorem~\ref{thm:exp} for $|r|$, with $\sigma$, $m$, $d'$, $a$ and $b$
+convex. For $k \ne 0$ the cases are those of Theorem~\ref{thm:exp} for $|r|$, with the sign of $r$, $m$, $d'$, $a$ and $b$
 fixed, at every $\ell \in [\ell_k^-, X]$.
 
 \emph{Convexity.} Evaluate the bounds with VecSum's second bound alone in Lemma~\ref{lem:g} ($V_j = \us(1+u)^{n-j}
 \sigma_{j-1}$, larger than the minimum), with $b'$ and $\pi'$ of Lemma~\ref{lem:core} without their minima, and with
-$\tau_j = 2^jb'$ for $\sigma = -1$ (larger than $1 - e^{-2^jb'}$), and likewise $\bar f = \max(\xi - 1, E + b + \delta +
+$\bar t_j = 2^jb'$ for $r \le 0$ (larger than $1 - e^{-2^jb'}$), and likewise $\bar f = \max(\xi - 1, E + b + \delta +
 2n\eta_0)$. Then every quantity above is built from $\ell$, for a fixed case, by sums with nonnegative coefficients, by
 products of nonnegative nondecreasing convex functions, which are convex, by maxima, and by $z \mapsto e^z$, $z \mapsto
 e^z - 1 - z$, $z \mapsto z^{q+1}/(1 - z)$ and $z \mapsto 1/(1-z)$ applied to nondecreasing convex arguments with $z <
@@ -347,17 +347,17 @@ multidouble's \texttt{ln\_f64}.
 
 \begin{proof}
 The scalings are exact, so $h = 2^em$ with $m \in (\mu/2, \mu]$, and $m - 1$ is exact (Sterbenz). Let $s_t = (m-1)/(m
-+ 1)$ and $\bar\sigma = (\mu - 1)/(\mu + 1)$, so $|s_t| \le \bar\sigma$, as $(2 - \mu)/(2 + \mu) < \bar\sigma$. No
++ 1)$ and $\bar s = (\mu - 1)/(\mu + 1)$, so $|s_t| \le \bar s$, as $(2 - \mu)/(2 + \mu) < \bar s$. No
 operation underflows, since $|s_t| \ge 2^{-55}$ for $m \ne 1$. By \eqref{eq:rn}, $s = s_t(1 + \theta_s)$ with
 $|\theta_s| \le (1 + \us)/(1 - \us) - 1 = 2u$, and $z = s_t^2(1 + \theta_z)$ with $|\theta_z| \le (1 + 2u)^2(1 + \us)
-- 1$, so $z \le \bar z = \bar\sigma^2(1 + \theta_z)$. Let $V_j(z) = \sum_{i=j}^9z^{i-j}/(2i+1)$. Each $v$ after the
+- 1$, so $z \le \bar z = \bar s^2(1 + \theta_z)$. Let $V_j(z) = \sum_{i=j}^9z^{i-j}/(2i+1)$. Each $v$ after the
 step with index $j$ is $V_j(z)(1 + \vartheta_j)$, with $|\vartheta_9| \le \us$ and $1 + |\vartheta_j| \le (1 + (\bar
 zV_{j+1}(\bar z)|\vartheta_{j+1}| + \us[j > 0]/(2j+1))/V_j(\bar z))(1 + \us)$, since every term is positive and the
 share of $zV_{j+1}$ in $V_j$ grows with $z$ while $|\vartheta_{j+1}| \ge \us$. As $i/(2i+1) < \frac12$, $V_0' \le 1/(2(1
 - z))$, and $V_0 \ge 1$, so $V_0(z)$ is within the relative $\theta_V = \theta_z\bar z/(2(1 - \bar z))$ of
-$V_0(s_t^2)$. And $\ln m = 2\,\mathrm{artanh}\,s_t = 2s_tV_\infty(s_t^2)$, where $0 \le V_\infty - V_0 \le \tau_V
-V_\infty$, $\tau_V = \bar z^{10}/(21(1 - \bar z))$. So $w = \RN(2sv) = (1 + \theta_w)\ln m$ with $|\theta_w| \le
-\varepsilon_w = (1 + 2u)(1 + |\vartheta_0|)(1 + \theta_V)(1 + \us)/(1 - \tau_V) - 1$. If $e = 0$, the result is $w$, and
+$V_0(s_t^2)$. And $\ln m = 2\,\mathrm{artanh}\,s_t = 2s_tV_\infty(s_t^2)$, where $0 \le V_\infty - V_0 \le \theta_\infty
+V_\infty$, $\theta_\infty = \bar z^{10}/(21(1 - \bar z))$. So $w = \RN(2sv) = (1 + \theta_w)\ln m$ with $|\theta_w| \le
+\varepsilon_w = (1 + 2u)(1 + |\vartheta_0|)(1 + \theta_V)(1 + \us)/(1 - \theta_\infty) - 1$. If $e = 0$, the result is $w$, and
 $s = w = 0$ for $h = 1$. Otherwise $|\ln h| \ge |e|\ln 2 - \ln\mu \ge \ln 2 - \ln\mu$, and the result is $(ec_{\rm L} +
 w)(1 + \theta)$ with $|\theta| \le \us$, within $\us|\ln h| + (1 + \us)(|e||c_{\rm L} - \ln 2| + \varepsilon_w\ln\mu)$
 of $\ln h$, relative to $|\ln h|$ at most $\us + (1 + \us)(|c_{\rm L} - \ln 2| + \varepsilon_w\ln\mu)/(\ln 2 -
@@ -383,7 +383,7 @@ and $|y_0 - \ln x| \le \eta_{\rm b}|\ln x_h| + u|v| + \eta_0 + v^2/(2(1-u)) + u|
 Lemma~\ref{lem:lnb}, with $|\ln x_h| \le \ell + \delta_1$; and if $x_h \ne 1$ then $|x - 1| \ge u/2$, so for $\ell <
 u(1-u)/2$, $x_h = 1$, $\ln_{\rm b}(1) = 0$, $y_0 = x_l$ and $|y_0 - \ln x| \le x_l^2/(2(1 - |x_l|))$. As $E(\ell)$ has
 two pieces, the chords of Theorem~\ref{thm:log} are taken on each. The reduction's
-error is $\alpha_{\rm M}K|c_\ell|$ for $P$, $\alpha_{\rm F}$ times the magnitudes of the two sums, and $K\eta_\ell$; the
+error is $\alpha_{\rm M}\bar k|c_\ell|$ for $P$, $\alpha_{\rm F}$ times the magnitudes of the two sums, and $\bar k\eta_\ell$; the
 remaining steps follow the recursions of Lemma~\ref{lem:core} and Theorems~\ref{thm:exp} and~\ref{thm:log}, and the
 values are those of \texttt{explog\_consts.py}.
 \end{proof}

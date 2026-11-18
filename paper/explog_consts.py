@@ -203,16 +203,16 @@ class DoubleWord:
 def start_eta(p=53, J=9):
     """a bound of |ln_f64(h) - ln h| / |ln h| for every positive finite h != 1 (ln_f64(1) = 0): h = 2^e m exactly,
     m in [mu/2, mu] (mu = RN(sqrt 2)), s = RN((m - 1) / RN(m + 1)), z = RN(s^2), v by J fused multiply-adds from
-    RN(1/(2J+1)), w = RN(2 s v), y = RN(e LN2 + w), LN2 = RN(ln 2). The relative errors are taken at |s| = sigma,
-    z = sigma^2 (1 + theta_z), where each is largest; for e != 0, |e ln 2 + ln m| >= |e| ln 2 - ln mu, least at
+    RN(1/(2J+1)), w = RN(2 s v), y = RN(e LN2 + w), LN2 = RN(ln 2). The relative errors are taken at |s| = sbar,
+    z = sbar^2 (1 + theta_z), where each is largest; for e != 0, |e ln 2 + ln m| >= |e| ln 2 - ln mu, least at
     |e| = 1."""
     u = Fr(1, 2 ** p)
     us = u / (1 + u)
     mu = Fr(1.4142135623730951)
-    sigma = (mu - 1) / (mu + 1)
+    sbar = (mu - 1) / (mu + 1)
     th_s = 2 * u                                        # s = s_t (1 + d2) / (1 + d1)
     th_z = (1 + th_s) ** 2 * (1 + us) - 1               # z = s_t^2 (1 + th_z)
-    zmax = up(sigma ** 2 * (1 + th_z))
+    zmax = up(sbar ** 2 * (1 + th_z))
     # Horner with positive terms: v_j = RN(z v_(j+1) + c_j), c_j = RN(1/(2j+1)) (c_0 = 1 exact); the relative error
     # of v_j against V_j(z) = sum_(i >= j) z^(i-j) / (2i+1) is at most rel_j
     V = [Fr(0)] * (J + 2)
@@ -246,7 +246,7 @@ SQRT2_LO = Fr(14142135623730950488, 10 ** 19)   # below sqrt 2
 # ---------------------------------------------------------------------------------------------------------------
 
 class Exp:
-    """exp at the model's precision: squaring threshold tau = 2^-s, Taylor degree at most d, input ladder H(theta);
+    """exp at the model's precision: squaring threshold 2^-s (tau below), Taylor degree at most d, input ladder H(theta);
     the degree is d(e) = min(d, ceil(B / (-e - 1))) for |r'| < 2^(e+1), B = 53 n + 12"""
 
     def __init__(self, M, s, d, theta=2):
@@ -350,7 +350,7 @@ class Exp:
         # m squarings t <- 2 t + t^2
         for j in range(m):
             Tj = self.tj(j, bp, sigma, convex)
-            # |2 + 2 T_j| <= 2 (1 + Tj) for r > 0, and 2 (1 - |T_j|) <= 2 e^(-2^j |r'|) for r < 0
+            # |2 + 2 t*_j| <= 2 (1 + Tj) for r > 0, and 2 (1 - |t*_j|) <= 2 e^(-2^j |r'|) for r < 0
             g = 1 + Tj if sigma > 0 else (Fr(1) if a == 0 else 1 / exp_lo(a * sc * 2 ** j))
             em, mp = M.mul(tp, tp, up((Tj + E) ** 2))
             Z = up(self.tj(j + 1, bp, sigma, convex) + 2 * E + 2 * Tj * E + E * E + em)
@@ -587,8 +587,8 @@ def k0_fn(Lg, e1, e0, m, d, sigma, a, hi, cap, llo):
 
 def chord(Ef, lo, hi):
     """for E convex on [lo, hi]: max of E(l)/l there is at an end; for lo = 0, E(l) <= E(0) + l slope. Each E passed
-    here is a case's bound as Log.bin evaluates it in convex mode (VecSum's second bound alone, no minima, tau_j = 2^j
-    b' for sigma = -1), which the paper's appendix, proof of the log theorem, "Convexity", shows nondecreasing and
+    here is a case's bound as Log.bin evaluates it in convex mode (VecSum's second bound alone, no minima, tbar_j = 2^j
+    b' for r <= 0), which the paper's appendix, proof of the log theorem, "Convexity", shows nondecreasing and
     convex in l; its rounding up at the two ends keeps the chord above E. check() samples that property, and proves
     nothing."""
     if lo == 0:
