@@ -308,7 +308,7 @@ Each precision costs more than the one below it:
 On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12 times, and a 24-order
 solve on 32 values 8.3 times, with four refinement steps against two.
 
-On the NEON lanes the elementary functions take 50 to 81% less time per value than on the scalar types:
+On the NEON lanes the elementary functions take 58 to 81% less time per value than on the scalar types:
 
 ![Time per value of exp, ln, sin, cos, tan and sin_cos on the 8-lane types against the scalar types](docs/lane-speedups.svg)
 

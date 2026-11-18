@@ -1,31 +1,31 @@
 {"isa": "neon", "values": 1024, "runs": 15}
-{"type": "double-double", "func": "exp", "range": "", "scalar_ns": 304.36, "lanes_ns": 64.37}
-{"type": "double-double", "func": "ln", "range": "", "scalar_ns": 359.70, "lanes_ns": 68.32}
-{"type": "double-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 146.73, "lanes_ns": 58.59}
-{"type": "double-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 137.78, "lanes_ns": 53.87}
-{"type": "double-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 239.18, "lanes_ns": 79.35}
-{"type": "double-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 220.42, "lanes_ns": 77.56}
-{"type": "double-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 164.88, "lanes_ns": 77.88}
-{"type": "double-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 165.45, "lanes_ns": 82.15}
-{"type": "double-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 464.03, "lanes_ns": 187.99}
-{"type": "double-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 210.25, "lanes_ns": 92.33}
-{"type": "quad-double", "func": "exp", "range": "", "scalar_ns": 957.24, "lanes_ns": 374.92}
-{"type": "quad-double", "func": "ln", "range": "", "scalar_ns": 1385.99, "lanes_ns": 476.44}
-{"type": "quad-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 1016.56, "lanes_ns": 330.40}
-{"type": "quad-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 1002.93, "lanes_ns": 329.67}
-{"type": "quad-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 2036.58, "lanes_ns": 626.46}
-{"type": "quad-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 1899.86, "lanes_ns": 592.24}
-{"type": "quad-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 969.44, "lanes_ns": 392.70}
-{"type": "quad-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 969.44, "lanes_ns": 394.73}
-{"type": "quad-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 1896.93, "lanes_ns": 696.13}
-{"type": "quad-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 1784.18, "lanes_ns": 663.29}
-{"type": "octo-double", "func": "exp", "range": "", "scalar_ns": 8435.18, "lanes_ns": 3260.99}
-{"type": "octo-double", "func": "ln", "range": "", "scalar_ns": 9655.64, "lanes_ns": 3664.51}
-{"type": "octo-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 7443.85, "lanes_ns": 2887.17}
-{"type": "octo-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 7451.74, "lanes_ns": 2897.05}
-{"type": "octo-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 15202.72, "lanes_ns": 5811.12}
-{"type": "octo-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 14679.12, "lanes_ns": 5572.06}
-{"type": "octo-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 6909.67, "lanes_ns": 3020.67}
-{"type": "octo-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 6916.54, "lanes_ns": 3046.14}
-{"type": "octo-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 13999.72, "lanes_ns": 5962.40}
-{"type": "octo-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 13506.88, "lanes_ns": 5704.39}
+{"type": "double-double", "func": "exp", "range": "", "scalar_ns": 385.38, "lanes_ns": 72.47}
+{"type": "double-double", "func": "ln", "range": "", "scalar_ns": 489.71, "lanes_ns": 100.75}
+{"type": "double-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 174.19, "lanes_ns": 64.49}
+{"type": "double-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 155.76, "lanes_ns": 56.32}
+{"type": "double-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 275.35, "lanes_ns": 81.05}
+{"type": "double-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 250.61, "lanes_ns": 83.50}
+{"type": "double-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 135.13, "lanes_ns": 48.75}
+{"type": "double-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 135.46, "lanes_ns": 49.11}
+{"type": "double-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 213.34, "lanes_ns": 70.92}
+{"type": "double-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 200.24, "lanes_ns": 68.03}
+{"type": "quad-double", "func": "exp", "range": "", "scalar_ns": 950.68, "lanes_ns": 375.37}
+{"type": "quad-double", "func": "ln", "range": "", "scalar_ns": 1369.95, "lanes_ns": 479.08}
+{"type": "quad-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 991.62, "lanes_ns": 313.44}
+{"type": "quad-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 982.22, "lanes_ns": 313.11}
+{"type": "quad-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 1996.66, "lanes_ns": 608.48}
+{"type": "quad-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 1876.51, "lanes_ns": 574.22}
+{"type": "quad-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 899.98, "lanes_ns": 320.76}
+{"type": "quad-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 898.84, "lanes_ns": 320.96}
+{"type": "quad-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 1828.37, "lanes_ns": 618.33}
+{"type": "quad-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 1712.81, "lanes_ns": 585.00}
+{"type": "octo-double", "func": "exp", "range": "", "scalar_ns": 8456.30, "lanes_ns": 3270.47}
+{"type": "octo-double", "func": "ln", "range": "", "scalar_ns": 9685.10, "lanes_ns": 3672.77}
+{"type": "octo-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 7414.88, "lanes_ns": 2869.10}
+{"type": "octo-double", "func": "cos", "range": "1/4 <= |x| < 1", "scalar_ns": 7411.30, "lanes_ns": 2873.54}
+{"type": "octo-double", "func": "tan", "range": "1/4 <= |x| < 1", "scalar_ns": 15147.95, "lanes_ns": 5806.48}
+{"type": "octo-double", "func": "sin_cos", "range": "1/4 <= |x| < 1", "scalar_ns": 14620.52, "lanes_ns": 5571.66}
+{"type": "octo-double", "func": "sin", "range": "1 <= |x| < 1024", "scalar_ns": 6826.82, "lanes_ns": 2891.81}
+{"type": "octo-double", "func": "cos", "range": "1 <= |x| < 1024", "scalar_ns": 6830.12, "lanes_ns": 2887.94}
+{"type": "octo-double", "func": "tan", "range": "1 <= |x| < 1024", "scalar_ns": 13896.77, "lanes_ns": 5805.54}
+{"type": "octo-double", "func": "sin_cos", "range": "1 <= |x| < 1024", "scalar_ns": 13359.54, "lanes_ns": 5583.01}
