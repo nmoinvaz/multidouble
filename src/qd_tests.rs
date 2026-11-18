@@ -1,6 +1,6 @@
 //! Tests of the quad-double arithmetic (`qd`, `qv`) against exact dyadic arithmetic (`exact`), which shares no code
-//! with the algorithms under test: the inputs are built from exact random values by greedy rounding, not by
-//! quad-double arithmetic, and every reference result is exact.
+//! with the algorithms under test. The inputs are built from exact random values by greedy rounding, not by quad-double
+//! arithmetic, and every reference result is exact.
 //!
 //! ```text
 //! cargo test --release --lib qd_                                   accuracy, scalar/8-lane agreement, decimal I/O
@@ -10,10 +10,10 @@
 //! cargo test --release --lib qd_diag -- --ignored --nocapture      the two exceedances of the first runs:
 //!     QD's accurate add against `QD::ieee_add` by cancellation depth, and the accumulator's error by source
 //! ```
-//! QD_N sets the samples per operation and input category (default 4000), QD_SEED the seed (default 1), QD_REPORT=1
-//! prints the tables. RUSTFLAGS selects the `v8` backend: "-C target-cpu=native" (AVX-512 here), "-C
-//! target-feature=+avx2,+fma" (AVX2), none (portable). The digest line of qd_accuracy hashes every scalar result; it
-//! is the same on every backend, and the 8-lane results equal the scalar ones bit for bit.
+//! QD_N sets the samples per operation and input category (default 4000), QD_SEED the seed (default 1), and QD_REPORT=1
+//! prints the tables. RUSTFLAGS selects the `v8` backend, "-C target-cpu=native" (AVX-512 here),
+//! "-C target-feature=+avx2,+fma" (AVX2) or none (portable). The digest line of qd_accuracy hashes every scalar result.
+//! It is the same on every backend, and the 8-lane results equal the scalar ones bit for bit.
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::V8;
@@ -24,7 +24,7 @@ use crate::qd::mutate;
 use crate::qd::{QdAcc, QD};
 use std::cmp::Ordering;
 
-/// 2^-209, the unit of the error tables
+/// 2^-209, the unit of the error tables.
 fn unit() -> f64 {
     2f64.powi(-209)
 }
@@ -45,7 +45,7 @@ fn set_mutation(id: u32) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// random exact inputs
+// Random exact inputs
 // -------------------------------------------------------------------------------------------------------------
 
 pub(crate) struct Rng(u64);
@@ -54,7 +54,7 @@ impl Rng {
     pub(crate) fn new(seed: u64) -> Rng {
         Rng(seed.wrapping_mul(0x2545F4914F6CDD1D) ^ 0x9E3779B97F4A7C15)
     }
-    /// splitmix64
+    /// The splitmix64 generator.
     pub(crate) fn next(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
         let mut z = self.0;
@@ -70,7 +70,7 @@ impl Rng {
     }
 }
 
-/// exact random value ±(1 + f)·2^e, f a random 255-bit fraction
+/// An exact random value ±(1 + f)·2^e, f a random 255-bit fraction.
 pub(crate) fn rand_dy(r: &mut Rng, e: i64) -> Dy {
     let m = BigU(vec![r.next(), r.next(), r.next(), r.next() | (1u64 << 63)]);
     Dy {
@@ -80,13 +80,13 @@ pub(crate) fn rand_dy(r: &mut Rng, e: i64) -> Dy {
     }
 }
 
-/// rand_dy with the binade drawn from lo..=hi
+/// rand_dy with the binade drawn from lo..=hi.
 pub(crate) fn rde(r: &mut Rng, lo: i64, hi: i64) -> Dy {
     let e = r.int(lo, hi);
     rand_dy(r, e)
 }
 
-/// sum of 1-4 small integers k_i 2^(e - g_i) with random gaps (exact sums and zero error terms are common)
+/// A sum of 1-4 small integers k_i 2^(e - g_i) with random gaps, for which exact sums and zero error terms are common.
 fn sparse_dy(r: &mut Rng, e: i64) -> Dy {
     let n = r.int(1, 4);
     let mut v = Dy::zero();
@@ -105,7 +105,7 @@ fn sparse_dy(r: &mut Rng, e: i64) -> Dy {
     }
 }
 
-/// 2^k (1 + s 2^-j f), j in a set around the part boundaries (j = 0: exactly 2^k)
+/// 2^k (1 + s 2^-j f), j in a set around the part boundaries, or exactly 2^k for j = 0.
 fn near_pow2(r: &mut Rng, k: i64) -> Dy {
     const J: [i64; 12] = [0, 1, 52, 53, 54, 105, 106, 107, 158, 159, 211, 212];
     let j = if r.coin() {
@@ -154,7 +154,7 @@ enum Cat {
     Gap,
 }
 
-/// the categories whose results' bits `QD_DIGEST` pins
+/// The categories whose results' bits `QD_DIGEST` pins.
 const CATS: [Cat; 7] = [
     Cat::Wide,
     Cat::Cancel,
@@ -165,7 +165,7 @@ const CATS: [Cat; 7] = [
     Cat::Computed,
 ];
 
-/// every category of the accuracy checks: `CATS` and the gap category, whose results' bits `GAP_DIGEST` pins
+/// Every category of the accuracy checks, `CATS` and the gap category, whose results' bits `GAP_DIGEST` pins.
 const ALL_CATS: [Cat; 8] = [
     Cat::Wide,
     Cat::Cancel,
@@ -190,8 +190,8 @@ fn cat_name(c: Cat) -> &'static str {
     }
 }
 
-/// a renormalized value with gaps: one to four nonzero parts, each 54 to 56 or 60 to 200 bits below the one above,
-/// zeros only at the end (the parts `QD`'s arithmetic expects)
+/// A renormalized value with gaps, one to four nonzero parts, each 54 to 56 or 60 to 200 bits below the one above, with
+/// zeros only at the end (the parts `QD`'s arithmetic expects).
 fn gapped(r: &mut Rng) -> QD {
     let mut e = r.int(-20, 20);
     let k = r.int(1, 4) as usize;
@@ -203,8 +203,8 @@ fn gapped(r: &mut Rng) -> QD {
     QD::from_sum(x[0], x[1], x[2], x[3])
 }
 
-/// Control for the gap category: two values whose parts are not renormalized (b has a zero between nonzero parts) make
-/// the sloppy add miss its bound by about 1e14 units; with b renormalized by `QD::from_sum` it is within.
+/// Control for the gap category. Two values whose parts are not renormalized (b has a zero between nonzero parts) make
+/// the sloppy add miss its bound by about 1e14 units. With b renormalized by `QD::from_sum` it is within.
 #[test]
 fn qd_noncanonical_add_control() {
     let q = |h: [u64; 4]| QD {
@@ -228,14 +228,15 @@ fn qd_noncanonical_add_control() {
     );
 }
 
-/// one input pair (a, b) for an operation of the given kind (b unused by sqrt)
+/// One input pair (a, b) for an operation of the given kind, b unused by sqrt.
 fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
     use Cat::*;
     use Kind::*;
     let one = Dy::from_f64(1.0);
     if cat == Gap {
-        // a product of a gapped value deposits its partial products out of magnitude order and a (1/a) nearly cancels
-        // them, where the octo-double multiply lost terms until multidouble 4.8.1
+        // A product of a gapped value deposits its partial products out of magnitude order, and a (1/a) nearly cancels
+        // them. On such products the octo-double multiply with a quick-two-sum second pass loses terms
+        // (`od::mutate::RENORM_FAST`).
         let a = gapped(r);
         return match kind {
             Add => (a, gapped(r)),
@@ -252,9 +253,9 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
         };
     }
     if cat == Computed {
-        // operands produced by quad-double arithmetic (QD-renormalized parts, not greedy ones): x y (1/y); for the
-        // adds b = -(x y (1/y)) or b = -(a + d) (sloppy add, |d| = 2^-k |a|), so a + b is small with misaligned
-        // parts, as in a residual's subtraction of two nearly equal values computed along different routes
+        // Operands produced by quad-double arithmetic (QD-renormalized parts, not greedy ones), as x y (1/y). For the
+        // adds b = -(x y (1/y)) or b = -(a + d) (sloppy add, |d| = 2^-k |a|), so a + b is small with misaligned parts,
+        // as in a residual's subtraction of two nearly equal values computed along different routes.
         let route = |r: &mut Rng, x: QD| -> QD {
             let y = qd_of(&rde(r, -2, 2));
             (x * y) * (QD::ONE / y)
@@ -281,7 +282,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
         (Wide, Sqrt) => (rde(r, -800, 800).abs(), one),
         (Wide, Sqr) => (rde(r, -400, 400), one),
         (Wide, _) => (rde(r, -400, 400), rde(r, -400, 400)),
-        // a + b small: b = -a + d with |d| = 2^-k |a|
+        // A small a + b, from b = -a + d with |d| = 2^-k |a|.
         (Cancel, Add) => {
             let e = r.int(-50, 50);
             let a = rand_dy(r, e);
@@ -289,13 +290,13 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
             let b = a.neg().add(&d);
             (a, b)
         }
-        // products near 1: (1 + d1)(1 - d2)
+        // Products near 1, (1 + d1)(1 - d2).
         (Cancel, Mul) => {
             let d1 = rde(r, -230, -1).abs();
             let d2 = rde(r, -230, -1).abs();
             (one.add(&d1), one.sub(&d2))
         }
-        // quotients near 1: b = a (1 + d)
+        // Quotients near 1, from b = a (1 + d).
         (Cancel, Div) => {
             let a = rde(r, -50, 50);
             let d = rde(r, -230, -1);
@@ -359,7 +360,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (QD, QD) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// operations, their references and thresholds
+// Operations, their references and thresholds
 // -------------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -420,12 +421,12 @@ fn op_kind(op: Op) -> Kind {
     }
 }
 
-/// Cray-style measure |error| / (|a| + |b|) instead of the relative error
+/// Whether the operation takes the Cray-style measure |error| / (|a| + |b|) instead of the relative error.
 fn op_cray(op: Op) -> bool {
     matches!(op, Op::SloppyAdd | Op::AddF | Op::AddDd)
 }
 
-/// pass threshold in units of 2^-209 (fixed before the runs)
+/// The pass threshold in units of 2^-209, fixed before the runs.
 fn op_thr(op: Op) -> f64 {
     match op {
         Op::IeeeAdd => 1.0,
@@ -477,7 +478,7 @@ fn apply_v(op: Op, a: QV, b: QV) -> QV {
     }
 }
 
-/// the second operand as the operation sees it
+/// The second operand as the operation sees it.
 fn b_exact(op: Op, b: QD) -> Dy {
     match op {
         Op::AddF | Op::MulF => Dy::from_f64(b.x[0]),
@@ -486,11 +487,11 @@ fn b_exact(op: Op, b: QD) -> Dy {
     }
 }
 
-/// (err, scale, rel, allow): the check is err <= thr·u·scale + allow, the reported value err / scale; rel is the
-/// relative error of the result (= err / scale except for the Cray-style measure). In the near-underflow inputs allow
-/// is 16·2^-1074 on the result (its parts cannot go below 2^-1074), carried to err: 16·2^-1074 for add and mul,
-/// 16·2^-1074 |b| for div (err = |r b - a|), 32·2^-1074 |r| for sqrt (err = |r^2 - a|); div and sqrt add
-/// 16·2^-1074 more for their remainders, which are formed at the scale of a.
+/// (err, scale, rel, allow) of a result. The check is err <= thr 2^-209 scale + allow, and the reported value
+/// err / scale. rel is the relative error of the result, err / scale except for the Cray-style measure. For the
+/// near-underflow inputs allow is 16·2^-1074 on the result, as its parts cannot go below 2^-1074, carried to err. That
+/// is 16·2^-1074 for add and mul, 16·2^-1074 |b| for div (err = |r b - a|) and 32·2^-1074 |r| for sqrt
+/// (err = |r^2 - a|), and div and sqrt add 16·2^-1074 more for their remainders, which are formed at the scale of a.
 fn exact_err(op: Op, a: QD, b: QD, r: QD, under: bool) -> (Dy, Dy, f64, Dy) {
     let (ae, be, re) = (a.exact(), b_exact(op, b), r.exact());
     let tiny = Dy::from_f64(16.0).ldexp(-1074);
@@ -524,7 +525,7 @@ fn exact_err(op: Op, a: QD, b: QD, r: QD, under: bool) -> (Dy, Dy, f64, Dy) {
             (err, ae.abs(), rel, allow)
         }
         Kind::Sqrt => {
-            // r = sqrt(a)(1 + d): r^2 - a = a (2d + d^2)
+            // With r = sqrt(a)(1 + d), r^2 - a = a (2d + d^2).
             let err = re.mul(&re).sub(&ae).abs();
             let scale = ae.abs().ldexp(1);
             let rel = err.ratio(&scale);
@@ -560,15 +561,16 @@ pub(crate) struct Res {
     pub what: String,
     pub cat: &'static str,
     pub n: usize,
-    /// max and 99.9th percentile of the check's measure, in units of 2^-209
+    /// Max of the check's measure, in units of 2^-209.
     pub max: f64,
+    /// 99.9th percentile of the check's measure, in units of 2^-209.
     pub p999: f64,
-    /// max of the relative error (= the measure except for the Cray-style adds), in units of 2^-209
+    /// Max of the relative error, the measure except for the Cray-style adds, in units of 2^-209.
     pub rel_max: f64,
     pub thr: f64,
-    /// samples outside the bound
+    /// Samples outside the bound.
     pub fails: usize,
-    /// lanes whose 8-lane result differs from the scalar one in any bit
+    /// Lanes whose 8-lane result differs from the scalar one in any bit.
     pub mism: usize,
     pub digest: u64,
 }
@@ -621,13 +623,13 @@ fn print_table(title: &str, rs: &[Res]) {
     }
 }
 
-/// inputs of one operation and category (generated with no mutation active)
+/// Inputs of one operation and category, generated with no mutation active.
 fn inputs(op: Op, cat: Cat, n: usize, seed: u64) -> Vec<(QD, QD)> {
     let mut r = Rng::new(seed ^ ((op as u64) << 32) ^ ((cat as u64) << 40));
     (0..n).map(|_| gen(&mut r, op_kind(op), cat)).collect()
 }
 
-/// scalar and 8-lane results of one operation on the inputs
+/// Scalar and 8-lane results of one operation on the inputs.
 fn results(op: Op, inp: &[(QD, QD)]) -> (Vec<QD>, Vec<QD>) {
     let rs: Vec<QD> = inp.iter().map(|&(a, b)| apply_s(op, a, b)).collect();
     let mut rv = Vec::with_capacity(inp.len());
@@ -644,7 +646,7 @@ fn results(op: Op, inp: &[(QD, QD)]) -> (Vec<QD>, Vec<QD>) {
     (rs, rv)
 }
 
-/// accuracy and agreement of every operation in every category, with mutation `id` active during the arithmetic
+/// Accuracy and agreement of every operation in every category, with mutation `id` active during the arithmetic.
 pub(crate) fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for op in OPS {
@@ -694,12 +696,13 @@ pub(crate) fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// the dot accumulator
+// The dot accumulator
 // -------------------------------------------------------------------------------------------------------------
 
 const ACC_CATS: [&str; 4] = ["random", "cancel", "wide", "mixed"];
 
-/// accuracy of QDotAcc / QdAcc on dot products of length len (8 per sample, one per lane): |error| / sum |a_i b_i|
+/// Accuracy of QDotAcc and QdAcc on dot products of length len, 8 per sample (one per lane), as |error| / sum
+/// |a_i b_i|.
 pub(crate) fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for len in [1usize, 4, 16, 64, 128] {
@@ -711,7 +714,7 @@ pub(crate) fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
             let nsamp = (n / 8).max(1) * 8 / len.clamp(1, 16);
             let nsamp = nsamp.max(8) / 8 * 8;
             for _ in 0..nsamp / 8 {
-                // 8 lanes x len terms
+                // 8 lanes x len terms.
                 let mut a = vec![[QD::ZERO; 8]; len];
                 let mut b = vec![[QD::ZERO; 8]; len];
                 for lane in 0..8 {
@@ -719,7 +722,7 @@ pub(crate) fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                         let (x, y) = match *cat {
                             "wide" => (rde(&mut r, -100, 100), rde(&mut r, -100, 100)),
                             "cancel" if i >= len / 2 && len > 1 => {
-                                // a_i b_i = -(a_k b_k)(1 + d): pairs that nearly cancel
+                                // Pairs that nearly cancel, a_i b_i = -(a_k b_k)(1 + d).
                                 let k = i - len / 2;
                                 let ak = a[k][lane].exact();
                                 let d = rde(&mut r, -200, -1);
@@ -799,10 +802,10 @@ pub(crate) fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// conversions and decimal input/output
+// Conversions and decimal input/output
 // -------------------------------------------------------------------------------------------------------------
 
-/// (negative, digits as integer, exponent of the last digit, number of digits) of "-d.ddde±xx"
+/// (negative, digits as integer, exponent of the last digit, number of digits) of "-d.ddde±xx".
 fn split_sci(s: &str) -> (bool, BigU, i64, usize) {
     let (neg, s) = if let Some(t) = s.strip_prefix('-') {
         (true, t)
@@ -816,7 +819,7 @@ fn split_sci(s: &str) -> (bool, BigU, i64, usize) {
     (neg, BigU::from_dec(&digits), e - frac as i64, digits.len())
 }
 
-/// value of a decimal n·10^e times 10^s (s >= -e so the result is an integer): exact Dy
+/// The value of a decimal n·10^e times 10^s as an exact Dy, an integer for s >= -e.
 fn dec_scaled(neg: bool, n: &BigU, e: i64, s: i64) -> Dy {
     assert!(e + s >= 0);
     let m = n.mul(&BigU::pow_small(10, (e + s) as u64));
@@ -827,7 +830,7 @@ fn dec_scaled(neg: bool, n: &BigU, e: i64, s: i64) -> Dy {
     }
 }
 
-/// ulp of a finite nonzero f64
+/// The ulp of a finite nonzero f64.
 fn ulp(x: f64) -> Dy {
     let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
     Dy::from_f64(1.0).ldexp(if e == 0 { -1074 } else { e - 1075 })
@@ -836,7 +839,7 @@ fn ulp(x: f64) -> Dy {
 pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     let mut r = Rng::new(seed ^ 0x10);
-    // parsing: random decimals, 1-90 digits, exponents -250..300
+    // Parsing of random decimals of 1-90 digits and exponents -250..300.
     let (mut ms, mut fails, mut greedy_fails) = (Vec::new(), 0, 0);
     for _ in 0..n {
         let nd = r.int(1, 90) as usize;
@@ -851,7 +854,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         set_mutation(id);
         let q = QD::parse(&s).unwrap();
         set_mutation(0);
-        // |q - v| relative, exactly: scale both by 10^max(0, -e10)
+        // |q - v| relative, exactly, with both scaled by 10^max(0, -e10).
         let sh = (-e10).max(0);
         let v = dec_scaled(neg, &BigU::from_dec(&d), e10, sh);
         let qs = q.exact().mul(&Dy {
@@ -865,7 +868,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         if rel > 0.25 {
             fails += 1;
         }
-        // greedy round-to-nearest: |q - v| <= ulp(x3)/2 (zero if x3 is zero), scaled the same way
+        // Greedy round-to-nearest gives |q - v| <= ulp(x3)/2, or zero if x3 is zero, scaled the same way.
         let last = q.x.iter().rposition(|c| *c != 0.0).unwrap();
         let half = ulp(q.x[last]).ldexp(-1).mul(&Dy {
             neg: false,
@@ -904,7 +907,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         digest: 0,
     });
 
-    // printing: correctly rounded to the digits asked for (half to even), exactly checked
+    // Printing is correctly rounded to the digits asked for (half to even), checked exactly.
     let mut print_fails = 0;
     let mut np = 0;
     for _ in 0..n / 4 {
@@ -914,7 +917,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
             let s = x.to_sci(digits);
             let (neg, m, e, nd) = split_sci(&s);
             let xv = x.exact();
-            // |x - m 10^e| <= 5·10^(e-1), all scaled by 10^(1-e) when e < 1
+            // |x - m 10^e| <= 5·10^(e-1), all scaled by 10^(1-e) when e < 1.
             let sh = (1 - e).max(0);
             let xs = xv.mul(&Dy {
                 neg: false,
@@ -944,7 +947,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         digest: 0,
     });
 
-    // round trips: all exact digits, and 70 digits, back to the same four parts
+    // Round trips through all exact digits, and through 70 digits, give back the same four parts.
     let (mut rt_exact, mut rt70) = (0, 0);
     for _ in 0..n / 4 {
         let x = qd_of(&rde(&mut r, -280, 280));
@@ -982,7 +985,7 @@ pub(crate) fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         digest: 0,
     });
 
-    // conversions: to_dd within 2^-105 relative, to_f64 within one ulp (and how often not the nearest)
+    // The conversions, to_dd within 2^-105 relative and to_f64 within one ulp, and how often to_f64 is not the nearest.
     let (mut dd_fails, mut f_fails, mut f_not_nearest, mut conv_mism) = (0, 0, 0, 0);
     let mut lanes = Vec::new();
     for _ in 0..n {
@@ -1080,7 +1083,7 @@ fn print_io(rs: &[Res]) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// the tests
+// The tests
 // -------------------------------------------------------------------------------------------------------------
 
 #[test]
@@ -1090,7 +1093,7 @@ fn qd_constants() {
     let tau = "6.28318530717958647692528676655900576839433879875021164194988918461563281257241799725606965068423413596";
     assert!(same(QD::parse(tau).unwrap(), QD::TWO_PI));
     assert_eq!(QD::EPS, unit());
-    // QD::PI is 5.7e-66 below pi: its 66-digit value (from mpmath on its four parts) ends in ...230
+    // QD::PI is 5.7e-66 below pi, so its 66-digit value (from mpmath on its four parts) ends in ...230.
     assert_eq!(
         QD::PI.to_sci(66),
         "3.14159265358979323846264338327950288419716939937510582097494459230e+00"
@@ -1102,7 +1105,7 @@ fn qd_constants() {
     assert_eq!(QD::from_f64(-0.0).to_sci(3), "-0.00e+00");
     assert_eq!(QD::parse("1e400").unwrap().x[0], f64::INFINITY);
     assert!(same(QD::parse("-0").unwrap(), QD::from_f64(-0.0)));
-    // powi and recip agree with repeated products to rounding
+    // powi and recip agree with repeated products to rounding.
     let x = QD::parse("1.0000001234567890123456789").unwrap();
     let p = x.powi(5);
     let q = x * x * x * x * x;
@@ -1137,12 +1140,12 @@ fn qd_accuracy() {
     }
 }
 
-/// the digest of the results (`Res::digest`) of every row in `CATS`, in order
+/// The digest of the results (`Res::digest`) of every row in `CATS`, in order.
 fn digest(rs: &[Res]) -> u64 {
     fold_digest(rs.iter().filter(|r| r.cat != "gap"))
 }
 
-/// the digest of the results of the gap category's rows, in order
+/// The digest of the results of the gap category's rows, in order.
 fn digest_gap(rs: &[Res]) -> u64 {
     fold_digest(rs.iter().filter(|r| r.cat == "gap"))
 }
@@ -1151,19 +1154,18 @@ fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
     rs.fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
 }
 
-/// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with
-/// 4.1.1, and again when `ieee_add` began keeping its accumulator after four parts are emitted
-/// and when `sqrt` began from the double-double square root: every operation's bits in every
-/// category, pinned, and the lanes' with them, which must be the scalar ones. Every backend gives
-/// these bits.
+/// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with 4.1.1, again when
+/// `ieee_add` began keeping its accumulator after four parts are emitted, and when `sqrt` began from the double-double
+/// square root. It pins every operation's bits in every category, and the lanes' with them, which must be the scalar
+/// ones. Every backend gives these bits.
 const QD_DIGEST: u64 = 0x1dbb_0446_2879_f4bc;
 
-/// The digest of the gap category's results at the same size and seed, recorded with 4.8.2 and
-/// again when `sqrt` began from the double-double square root.
+/// The digest of the gap category's results at the same size and seed, recorded with 4.8.2 and again when `sqrt` began
+/// from the double-double square root.
 const GAP_DIGEST: u64 = 0xb516_56c3_befa_2572;
 
-/// Control for the pinned digest: with the O(eps^3) term a0 b2 of the product dropped
-/// (`mutate::SLOPPY_MUL_Q3`), the results' digest is not the pinned one.
+/// Control for the pinned digest. With the O(eps^3) term a0 b2 of the product dropped (`mutate::SLOPPY_MUL_Q3`), the
+/// results' digest is not the pinned one.
 #[cfg(feature = "mutate")]
 #[test]
 fn qd_digest_control() {
@@ -1171,11 +1173,11 @@ fn qd_digest_control() {
 }
 
 /// Near-cancelling sums where QD's accurate add drops v when all parts are read with three emitted (up to 86 u), and
-/// where the first repair here (u + v rounded to one double) still left up to 11 u. They were found by checking the
-/// upstream C++ library (github.com/BL-highprecision/qd) against mpmath with a = round(x), b = round(-x + d), x and d
-/// random with 424 bits, |d| ~ 2^-k |x|, k = 1..30, which this file's random categories had missed. Each sum must be
-/// within 1 u of the exact one, the 8-lane add must agree with the scalar one bit for bit, and QD's literal algorithm
-/// must miss by more than 1 u on at least one of them (the control).
+/// where rounding u + v to one double, a partial repair, still leaves up to 11 u. They come from checking the upstream
+/// C++ library (github.com/BL-highprecision/qd) against mpmath with a = round(x), b = round(-x + d), x and d random
+/// with 424 bits, |d| ~ 2^-k |x|, k = 1..30, inputs that this file's random categories miss. Each sum must be within
+/// 1 u of the exact one, the 8-lane add must agree with the scalar one bit for bit, and QD's literal algorithm must
+/// miss by more than 1 u on at least one of them (the control).
 #[test]
 fn qd_ieee_add_regression() {
     let cases: [([u64; 4], [u64; 4]); 11] = [
@@ -1384,13 +1386,13 @@ fn qd_ieee_add_regression() {
     );
 }
 
-/// `QD::ieee_add` when the loop ends with four parts emitted while input parts remain: QD adds the parts not read to
+/// `QD::ieee_add` when the loop ends with four parts emitted while input parts remain. QD adds the parts not read to
 /// x[3] and drops its accumulator u, v, which after the emitted parts overlap can hold the result's last 50 bits. On
-/// b and on a, a2 (a and a2 differ in a's last bit; a ends with three parts emitted, a2 with four) QD's literal
-/// algorithm misses by 2^46 u on both, and a version with only the three-parts repair still misses on a2. Same-sign
-/// sums, no cancellation, found by the library survey of research/libraries on branch wip/discover-b. Each sum must be
-/// within 1 u of the exact one, the lanes must agree with the scalar add bit for bit, and QD's literal algorithm must
-/// miss on both (the control).
+/// the pairs (a, b) and (a2, b), where a and a2 differ in a's last bit and a ends with three parts emitted, a2 with
+/// four, QD's literal algorithm misses by 2^46 u, and a version with only the three-parts repair still misses on
+/// (a2, b). The sums have one sign and no cancellation, and come from the library survey of research/libraries on
+/// branch wip/discover-b. Each sum must be within 1 u of the exact one, the lanes must agree with the scalar add bit
+/// for bit, and QD's literal algorithm must miss on both (the control).
 #[test]
 fn qd_ieee_add_four_parts_emitted() {
     let b = [
@@ -1494,8 +1496,8 @@ fn qd_controls() {
     assert!(silent.is_empty(), "controls that did not fire: {silent:?}");
 }
 
-/// Inputs and results for hp/qd_check.py: QD_DUMP=DIR writes ops.bin (rows of 12 f64: a, b, scalar result) with
-/// index ops.txt, and io.txt (parse and print cases).
+/// Inputs and results for hp/qd_check.py. QD_DUMP=DIR writes ops.bin (rows of 12 f64, for a, b and the scalar result)
+/// with index ops.txt, and io.txt (parse and print cases).
 #[test]
 #[ignore]
 fn qd_dump() {
@@ -1503,7 +1505,7 @@ fn qd_dump() {
     let dir = std::env::var("QD_DUMP").expect("QD_DUMP=directory");
     let n = env_usize("QD_N", 2000) / 8 * 8;
     let seed = env_usize("QD_SEED", 1) as u64;
-    // QD_MUTATE=id (feature mutate): break one algorithm during the arithmetic, for the control of qd_check.py
+    // QD_MUTATE=id (feature mutate) breaks one algorithm during the arithmetic, for the control of qd_check.py.
     let id = env_usize("QD_MUTATE", 0) as u32;
     std::fs::create_dir_all(&dir).unwrap();
     let mut bin = std::io::BufWriter::new(std::fs::File::create(format!("{dir}/ops.bin")).unwrap());
@@ -1522,7 +1524,7 @@ fn qd_dump() {
             }
         }
     }
-    // dot accumulator: 8 lanes of length-16 sums, rows a(4) b(4) per term, then the 8 results
+    // The dot accumulator, 8 lanes of length-16 sums, as rows a(4) b(4) per term, then the 8 results.
     let mut r = Rng::new(seed ^ 0xd07);
     let len = 16;
     writeln!(idx, "dot\t{}\t{}\t{}", len, n / 8, (8.0 + len as f64) / 8.0).unwrap();
@@ -1553,7 +1555,7 @@ fn qd_dump() {
             }
         }
     }
-    // decimal: parse lines "P <string> <4 parts as hex bits>" and print lines "S <4 parts> <digits> <string>"
+    // Decimal parse lines "P <string> <4 parts as hex bits>" and print lines "S <4 parts> <digits> <string>".
     let mut io = std::io::BufWriter::new(std::fs::File::create(format!("{dir}/io.txt")).unwrap());
     for _ in 0..n {
         let nd = r.int(1, 90) as usize;
@@ -1586,11 +1588,12 @@ fn qd_dump() {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// throughput
+// Throughput
 // -------------------------------------------------------------------------------------------------------------
 
-/// cargo test --release --lib bench_qd -- --ignored --nocapture: nanoseconds per lane and operation, one thread,
-/// 16 independent vectors per pass (throughput, not latency); each row the minimum of 5 timings
+/// Nanoseconds per lane and operation, one thread, 16 independent vectors per pass (throughput, not latency), each row
+/// the minimum of 5 timings.
+/// `cargo test --release --lib bench_qd -- --ignored --nocapture`
 #[test]
 #[ignore]
 fn bench_qd() {
@@ -1612,7 +1615,7 @@ fn bench_qd() {
     let fy: Vec<V8> = qy.iter().map(|q| q.c[0]).collect();
     let fz: Vec<V8> = qz.iter().map(|q| q.c[0]).collect();
     let per = (reps * NV * 8) as f64;
-    // x[i] = body(x[i], i) over NV independent chains, reps passes
+    // x[i] = body(x[i], i) over NV independent chains, reps passes.
     macro_rules! time {
         ($x:expr, $body:expr) => {{
             let mut best = f64::INFINITY;
@@ -1631,7 +1634,7 @@ fn bench_qd() {
             best
         }};
     }
-    // 16-term sums of products through an accumulator, finished: ns per lane and term
+    // 16-term sums of products through an accumulator, finished, in ns per lane and term.
     macro_rules! dot {
         ($a:expr, $b:expr, $zero:expr) => {{
             let mut best = f64::INFINITY;
@@ -1716,11 +1719,11 @@ fn bench_qd() {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// diagnostics of the two exceedances of the pre-registered thresholds
+// Diagnostics of the two exceedances of the pre-registered thresholds
 // -------------------------------------------------------------------------------------------------------------
 
-/// QD's accurate add exactly as in QD 2.3 (qd_inline.h, ieee_add), for comparison with `QD::ieee_add`, which keeps
-/// u + v where this keeps u when all parts are read with three emitted
+/// QD's accurate add exactly as in QD 2.3 (qd_inline.h, ieee_add), for comparison with `QD::ieee_add`. When all parts
+/// are read with three emitted, `QD::ieee_add` keeps u + v where this keeps u.
 fn ieee_add_qd_literal(a: QD, b: QD) -> QD {
     use crate::dd::quick_two_sum;
     use crate::qd::renorm4;
@@ -1789,8 +1792,8 @@ fn ieee_add_qd_literal(a: QD, b: QD) -> QD {
     }
 }
 
-/// QD_N samples (default 200000) of near-cancelling a + b (a + b = 2^-k a): the accurate add's relative error by
-/// depth k, QD's algorithm as published and `QD::ieee_add`
+/// On QD_N samples (default 200000) of near-cancelling sums a + b = 2^-k a, the accurate add's relative error by depth
+/// k, for QD's algorithm as published and for `QD::ieee_add`.
 #[test]
 #[ignore]
 fn qd_diag_accurate_add() {
@@ -1828,9 +1831,9 @@ fn qd_diag_accurate_add() {
     }
 }
 
-/// The dot accumulator's error split: as built; its levels summed exactly (no finish); and with levels 3-4 replaced
-/// by the exact sum of the level-3 increments (recomputed by a scalar copy of QdAcc::add_prod), which leaves only
-/// the products' truncation; |error| / sum |a_i b_i| in units of 2^-209
+/// The dot accumulator's error, |error| / sum |a_i b_i| in units of 2^-209, split three ways. It is taken as built,
+/// with the levels summed exactly (no finish), and with levels 3-4 replaced by the exact sum of the level-3 increments
+/// (recomputed by a scalar copy of QdAcc::add_prod), which leaves only the products' truncation.
 #[test]
 #[ignore]
 fn qd_diag_accumulator() {
@@ -1855,7 +1858,7 @@ fn qd_diag_accumulator() {
                     let t = qa.exact().mul(&qb.exact());
                     x = x.add(&t);
                     s = s.add(&t.abs());
-                    // the level-3 increment of QdAcc::add_prod, recomputed (same operations)
+                    // The level-3 increment of QdAcc::add_prod, recomputed by the same operations.
                     let (a, b) = (qa.x, qb.x);
                     let (p00, e00) = two_prod(a[0], b[0]);
                     let (p01, e01) = two_prod(a[0], b[1]);
@@ -1882,10 +1885,10 @@ fn qd_diag_accumulator() {
                     acc = acc.add_prod(qa, qb);
                 }
                 let e_built = acc.finish().exact().sub(&x).abs().ratio(&s) / unit();
-                // levels 0-2 as built, level 3 exact, summed exactly: the error left is the products' truncation
+                // Levels 0-2 as built and level 3 exact, summed exactly, leave the products' truncation as the error.
                 let ex = Dy::sum(&acc.s[..3]).add(&lvl3);
                 let e_exact3 = ex.sub(&x).abs().ratio(&s) / unit();
-                // the four levels as built, summed exactly (no finish): the error left is level 3's rounding
+                // The five levels as built, summed exactly (no finish), leave level 3's rounding as the error.
                 let e_nofin = Dy::sum(&acc.s).sub(&x).abs().ratio(&s) / unit();
                 m3 = m3.max(e_nofin);
                 m4 = m4.max(Dy::from_f64(acc.s[3]).ratio(&s) / unit());
