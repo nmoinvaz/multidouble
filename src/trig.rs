@@ -45,11 +45,24 @@
 //! |x_0| > 2^52 gives NaN: the reduction of larger arguments (M. H. Payne, R. N. Hanek, "Radian reduction for
 //! trigonometric functions", ACM SIGNUM Newsletter 18(1), 1983) is not implemented.
 //!
+//! The lane types `DV`, `QV` and `OV` have the same four functions, and each lane's result is bitwise the scalar
+//! function of its value, so the bounds above hold per lane. The reduction runs lane by lane in the integer code. The
+//! evaluation runs on all lanes at once, each with its own choices: its series and number of terms, its powers of two
+//! and its quadrant. Horner's scheme runs the longest series and masks each step per lane, so that a lane with k terms
+//! starts at its own leading coefficient and keeps its sum through the steps past its k. The quadrants, the early
+//! returns and the unscaled quotients of `tan` are blended per lane. Each lane thus performs the scalar's sequence of
+//! roundings.
+//!
 //! With the cargo feature `mutate`, `mutate::set(id)` breaks one step on purpose in the current thread, for the
 //! controls of the accuracy tests; without it the hooks are compile-time `false`.
 use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
-use crate::od::OD;
+use crate::dv::{self, DV};
+use crate::od::{alg, OD};
+use crate::ov::OV;
 use crate::qd::QD;
+use crate::qv::QV;
+use crate::simd::Simd;
+use crate::v8::{M8, V8};
 use std::ops::Neg;
 
 #[rustfmt::skip]
@@ -67,16 +80,22 @@ pub mod mutate {
     pub const COS_SHORT: u32 = 4;
     /// tan: the divisor's last part dropped
     pub const TAN_DIV_SHORT: u32 = 5;
+    /// lanes only: Horner's steps masked by lane 0's number of terms on every lane
+    pub const LANE_TERMS: u32 = 6;
+    /// lanes only: lane 0's quadrant on every lane
+    pub const LANE_QUADRANT: u32 = 7;
     /// number of ids
-    pub const N: u32 = 5;
+    pub const N: u32 = 7;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 6] = [
+    pub const NAMES: [&str; 8] = [
         "none",
         "reduction: last part of r dropped",
         "reduction: pi/2 cut to 64 (n + 1) + 1 bits",
         "sin r: two terms fewer",
         "cos r: two terms fewer",
         "tan: divisor's last part dropped",
+        "lanes: Horner's mask from lane 0's terms",
+        "lanes: lane 0's quadrant on every lane",
     ];
 
     #[cfg(feature = "mutate")]
@@ -296,11 +315,12 @@ pub(crate) fn reduce<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// the evaluation, once for the three types
+// the evaluation, once for the three types and their lanes
 // ---------------------------------------------------------------------------------------------------------------
 
 /// the arithmetic the functions need, by type, and the choices they make by lane: one lane for the scalar types (`bool`
-/// masks, `usize` integers, `f64` scales, `one_lane!`)
+/// masks, `usize` integers, `f64` scales, `one_lane!`), eight for the lane types (`M8` masks, integers and scales as
+/// `V8`, `eight_lanes!`)
 pub(crate) trait Ext: Copy + Neg<Output = Self> {
     /// 2^-(53 n / 2), n the number of parts: below it sin r = r and cos r = 1 to within u^N/6 and u^N/2
     const TINY: f64;
@@ -648,6 +668,110 @@ macro_rules! one_lane {
     };
 }
 
+/// the choices of eight lanes, for the lane types' `Ext`: integers as exact f64 lanes, each lane's table entries and
+/// powers of two from the scalar functions
+macro_rules! eight_lanes {
+    () => {
+        type M = M8<S>;
+        type K = V8<S>;
+        type F = V8<S>;
+        #[inline(always)]
+        fn early(self) -> (M8<S>, M8<S>) {
+            let a = self.lead().abs();
+            let nan = self.finite().not().or(a.gt(V8::splat(LIMIT)));
+            (nan, nan.not().and(V8::splat(Self::TINY).gt(a)))
+        }
+        #[inline(always)]
+        fn buckets(self) -> (M8<S>, V8<S>) {
+            let a = self.lead().abs();
+            let j = a.to_array().map(|v| {
+                if v < Self::TINY {
+                    (Self::KS.len() - 1) as f64
+                } else {
+                    bucket(v) as f64
+                }
+            });
+            (V8::splat(Self::TINY).gt(a), V8::from_array(j))
+        }
+        #[inline(always)]
+        fn mask(b: bool) -> M8<S> {
+            let z = V8::zero();
+            if b {
+                z.eq(z)
+            } else {
+                z.ne(z)
+            }
+        }
+        #[inline(always)]
+        fn all(m: M8<S>) -> bool {
+            m.bits() == 0xff
+        }
+        #[inline(always)]
+        fn any(m: M8<S>) -> bool {
+            m.bits() != 0
+        }
+        #[inline(always)]
+        fn or(m: M8<S>, n: M8<S>) -> M8<S> {
+            m.or(n)
+        }
+        #[inline(always)]
+        fn quadrant(q: V8<S>, f: fn(usize) -> bool) -> M8<S> {
+            let q = q.to_array();
+            let lane0 = mutate::on(mutate::LANE_QUADRANT);
+            let set = q.map(|v| {
+                let v = if lane0 { q[0] } else { v };
+                f(v as usize) as u8 as f64
+            });
+            V8::from_array(set).eq(V8::splat(1.0))
+        }
+        #[inline(always)]
+        fn terms(c: M8<S>, j: V8<S>) -> V8<S> {
+            let (c, j) = (c.bits(), j.to_array());
+            V8::from_array(std::array::from_fn(|l| {
+                let j = j[l] as usize;
+                if c >> l & 1 == 1 {
+                    terms(Self::KC, j, mutate::COS_SHORT) as f64
+                } else {
+                    terms(Self::KS, j, mutate::SIN_SHORT) as f64
+                }
+            }))
+        }
+        #[inline(always)]
+        fn kmax(k: V8<S>) -> usize {
+            k.hmax() as usize
+        }
+        #[inline(always)]
+        fn active(k: V8<S>, i: usize) -> M8<S> {
+            let k = if mutate::on(mutate::LANE_TERMS) {
+                k.bcast(0)
+            } else {
+                k
+            };
+            k.ge(V8::splat((i + 2) as f64))
+        }
+        #[inline(always)]
+        fn lead_coef(c: M8<S>, k: V8<S>) -> Self {
+            let (c, k) = (c.bits(), k.to_array());
+            Self::rows(std::array::from_fn(|l| {
+                let t = if c >> l & 1 == 1 {
+                    &tables::COS
+                } else {
+                    &tables::SIN
+                };
+                &t[k[l] as usize - 1]
+            }))
+        }
+        #[inline(always)]
+        fn pow2_j(j: V8<S>, m: i32) -> V8<S> {
+            V8::from_array(j.to_array().map(|v| pow2(m * (v as i32 + 1))))
+        }
+        #[inline(always)]
+        fn unit_where(u: M8<S>, p: V8<S>) -> V8<S> {
+            u.sel(V8::splat(1.0), p)
+        }
+    };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // the three types
 // ---------------------------------------------------------------------------------------------------------------
@@ -854,3 +978,361 @@ macro_rules! trig_methods {
 trig_methods!(DD, "7.85 u^2 (u = 2^-53, proven)", "28.5 u^2 (proven)");
 trig_methods!(QD, "32 u^4 (u = 2^-53, tested)", "64 u^4 (tested)");
 trig_methods!(OD, "3.17 u^8 (u = 2^-53, proven)", "6.42 u^8 (proven)");
+
+// ---------------------------------------------------------------------------------------------------------------
+// the three lane types
+// ---------------------------------------------------------------------------------------------------------------
+
+/// `reduce` on each lane: (k mod 4 as f64, the parts of r). Where every lane has |x_0 RN(2/pi)| < 1/2, k = 0 and r = x,
+/// as `reduce` decides from round(x_0 RN(2/pi)) = 0, with no lane taken apart.
+#[inline(always)]
+fn reduce_lanes<S: Simd, const N: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
+    let k0 = V8::splat(0.5).gt(c[0].mul(V8::splat(tables::TWO_OVER_PI)).abs());
+    if k0.bits() == 0xff {
+        return (V8::zero(), *c);
+    }
+    let a = c.map(|v| v.to_array());
+    let mut q = [0.0; 8];
+    let mut r = [[0.0; 8]; N];
+    for l in 0..8 {
+        let (ql, rl) = reduce::<N>(&std::array::from_fn(|i| a[i][l]));
+        q[l] = ql as f64;
+        for i in 0..N {
+            r[i][l] = rl[i];
+        }
+    }
+    (V8::from_array(q), r.map(V8::from_array))
+}
+
+/// |v| < inf on every lane of every part
+#[inline(always)]
+fn finite_lanes<S: Simd>(c: &[V8<S>]) -> M8<S> {
+    let inf = V8::splat(f64::INFINITY);
+    let mut m = inf.gt(c[0].abs());
+    for v in &c[1..] {
+        m = m.and(inf.gt(v.abs()));
+    }
+    m
+}
+
+/// `dw_times_dw3` on all lanes, bitwise per lane
+#[inline(always)]
+fn dw_times_dw3_lanes<S: Simd>(x: DV<S>, y: DV<S>) -> DV<S> {
+    let (ch, cl1) = dv::two_prod(x.hi, y.hi);
+    let tl0 = x.lo.mul(y.lo);
+    let tl1 = x.hi.fma(y.lo, tl0);
+    let cl2 = x.lo.fma(y.hi, tl1);
+    let cl3 = cl1.add(cl2);
+    let (h, l) = dv::quick_two_sum(ch, cl3);
+    DV { hi: h, lo: l }
+}
+
+/// `dw_plus_fp` on all lanes, bitwise per lane
+#[inline(always)]
+fn dw_plus_fp_lanes<S: Simd>(x: DV<S>, y: V8<S>) -> DV<S> {
+    let (sh, sl) = dv::two_sum(x.hi, y);
+    let v = x.lo.add(sl);
+    let (h, l) = dv::quick_two_sum(sh, v);
+    DV { hi: h, lo: l }
+}
+
+impl<S: Simd> DV<S> {
+    /// lane l the leading two parts of the table entry r\[l\]
+    #[inline(always)]
+    fn rows(r: [&[f64; 8]; 8]) -> Self {
+        DV {
+            hi: V8::from_array(r.map(|c| c[0])),
+            lo: V8::from_array(r.map(|c| c[1])),
+        }
+    }
+}
+
+impl<S: Simd> Ext for DV<S> {
+    const TINY: f64 = <DD as Ext>::TINY;
+    const KS: &'static [u8] = <DD as Ext>::KS;
+    const KC: &'static [u8] = <DD as Ext>::KC;
+    eight_lanes!();
+    #[inline(always)]
+    fn lead(self) -> V8<S> {
+        self.hi
+    }
+    #[inline(always)]
+    fn finite(self) -> M8<S> {
+        finite_lanes(&[self.hi, self.lo])
+    }
+    #[inline(always)]
+    fn coef(c: &[f64; 8]) -> Self {
+        DV::splat(DD::coef(c))
+    }
+    #[inline(always)]
+    fn zero() -> Self {
+        DV::zero()
+    }
+    #[inline(always)]
+    fn one() -> Self {
+        DV::splat(DD::one())
+    }
+    #[inline(always)]
+    fn nan() -> Self {
+        DV::splat(DD::nan())
+    }
+    #[inline(always)]
+    fn mul(self, b: Self) -> Self {
+        dw_times_dw3_lanes(self, b)
+    }
+    #[inline(always)]
+    fn add(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn one_plus(self) -> Self {
+        dw_plus_fp_lanes(self, V8::splat(1.0))
+    }
+    #[inline(always)]
+    fn div(self, b: Self) -> Self {
+        self.fast_div(b)
+    }
+    #[inline(always)]
+    fn reduce(self) -> (V8<S>, Self) {
+        let (q, [h, l]) = reduce_lanes(&[self.hi, self.lo]);
+        // a double-word number, as `DD`'s
+        let (hi, lo) = dv::quick_two_sum(h, l);
+        (q, DV { hi, lo })
+    }
+    #[inline(always)]
+    fn drop_last(self) -> Self {
+        DV {
+            hi: self.hi,
+            lo: V8::zero(),
+        }
+    }
+    #[inline(always)]
+    fn scale(self, p: V8<S>) -> Self {
+        DV {
+            hi: self.hi.mul(p),
+            lo: self.lo.mul(p),
+        }
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        DV {
+            hi: m.sel(a.hi, b.hi),
+            lo: m.sel(a.lo, b.lo),
+        }
+    }
+}
+
+impl<S: Simd> QV<S> {
+    /// lane l the leading four parts of the table entry r\[l\]
+    #[inline(always)]
+    fn rows(r: [&[f64; 8]; 8]) -> Self {
+        let mut c = [V8::zero(); 4];
+        for i in 0..4 {
+            c[i] = V8::from_array(r.map(|c| c[i]));
+        }
+        QV { c }
+    }
+}
+
+impl<S: Simd> Ext for QV<S> {
+    const TINY: f64 = <QD as Ext>::TINY;
+    const KS: &'static [u8] = <QD as Ext>::KS;
+    const KC: &'static [u8] = <QD as Ext>::KC;
+    eight_lanes!();
+    #[inline(always)]
+    fn lead(self) -> V8<S> {
+        self.c[0]
+    }
+    #[inline(always)]
+    fn finite(self) -> M8<S> {
+        finite_lanes(&self.c)
+    }
+    #[inline(always)]
+    fn coef(c: &[f64; 8]) -> Self {
+        QV::splat(QD::coef(c))
+    }
+    #[inline(always)]
+    fn zero() -> Self {
+        QV::zero()
+    }
+    #[inline(always)]
+    fn one() -> Self {
+        QV::splat(QD::one())
+    }
+    #[inline(always)]
+    fn nan() -> Self {
+        QV::splat(QD::nan())
+    }
+    #[inline(always)]
+    fn mul(self, b: Self) -> Self {
+        self * b
+    }
+    #[inline(always)]
+    fn add(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn one_plus(self) -> Self {
+        self.add_f(1.0)
+    }
+    #[inline(always)]
+    fn div(self, b: Self) -> Self {
+        self / b
+    }
+    #[inline(always)]
+    fn reduce(self) -> (V8<S>, Self) {
+        let (q, c) = reduce_lanes(&self.c);
+        (q, QV { c })
+    }
+    #[inline(always)]
+    fn drop_last(self) -> Self {
+        let mut c = self.c;
+        c[3] = V8::zero();
+        QV { c }
+    }
+    #[inline(always)]
+    fn scale(self, p: V8<S>) -> Self {
+        let mut c = self.c;
+        for v in c.iter_mut() {
+            *v = v.mul(p);
+        }
+        QV { c }
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        let mut c = b.c;
+        for i in 0..4 {
+            c[i] = m.sel(a.c[i], b.c[i]);
+        }
+        QV { c }
+    }
+}
+
+impl<S: Simd> OV<S> {
+    /// lane l the table entry r\[l\]
+    #[inline(always)]
+    fn rows(r: [&[f64; 8]; 8]) -> Self {
+        let mut c = [V8::zero(); 8];
+        for i in 0..8 {
+            c[i] = V8::from_array(r.map(|c| c[i]));
+        }
+        OV { c }
+    }
+}
+
+impl<S: Simd> Ext for OV<S> {
+    const TINY: f64 = <OD as Ext>::TINY;
+    const KS: &'static [u8] = <OD as Ext>::KS;
+    const KC: &'static [u8] = <OD as Ext>::KC;
+    eight_lanes!();
+    #[inline(always)]
+    fn lead(self) -> V8<S> {
+        self.c[0]
+    }
+    #[inline(always)]
+    fn finite(self) -> M8<S> {
+        finite_lanes(&self.c)
+    }
+    #[inline(always)]
+    fn coef(c: &[f64; 8]) -> Self {
+        OV::splat(OD::coef(c))
+    }
+    #[inline(always)]
+    fn zero() -> Self {
+        OV::zero()
+    }
+    #[inline(always)]
+    fn one() -> Self {
+        OV::splat(OD::one())
+    }
+    #[inline(always)]
+    fn nan() -> Self {
+        OV::splat(OD::nan())
+    }
+    #[inline(always)]
+    fn mul(self, b: Self) -> Self {
+        self * b
+    }
+    #[inline(always)]
+    fn add(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn one_plus(self) -> Self {
+        self.add_f(1.0)
+    }
+    #[inline(always)]
+    fn div(self, b: Self) -> Self {
+        self / b
+    }
+    #[inline(always)]
+    fn reduce(self) -> (V8<S>, Self) {
+        let (q, c) = reduce_lanes(&self.c);
+        (q, OV { c })
+    }
+    #[inline(always)]
+    fn drop_last(self) -> Self {
+        let mut c = self.c;
+        c[7] = V8::zero();
+        OV { c }
+    }
+    #[inline(always)]
+    fn scale(self, p: V8<S>) -> Self {
+        OV {
+            c: alg::mul_pwr2(&self.c, p),
+        }
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        let mut c = b.c;
+        for i in 0..8 {
+            c[i] = m.sel(a.c[i], b.c[i]);
+        }
+        OV { c }
+    }
+}
+
+macro_rules! trig_lane_methods {
+    ($t:ident, $s:literal) => {
+        impl<S: Simd> $t<S> {
+            #[doc = concat!("sin x on every lane, each lane bitwise `", $s, "::sin` of its value, with its bounds (see ",
+                "`trig`)")]
+            #[inline]
+            pub fn sin(self) -> Self {
+                S::vectorize(
+                    #[inline(always)]
+                    || sin(self),
+                )
+            }
+            #[doc = concat!("cos x on every lane, each lane bitwise `", $s, "::cos` of its value")]
+            #[inline]
+            pub fn cos(self) -> Self {
+                S::vectorize(
+                    #[inline(always)]
+                    || cos(self),
+                )
+            }
+            #[doc = concat!("tan x on every lane, each lane bitwise `", $s, "::tan` of its value. `x.tan()` on this ",
+                "type is this function; the tangent of `dual::Lane` is `Lane::tan(x)`.")]
+            #[inline]
+            pub fn tan(self) -> Self {
+                S::vectorize(
+                    #[inline(always)]
+                    || tan(self),
+                )
+            }
+            /// (sin x, cos x) on every lane from one reduction, bitwise `(self.sin(), self.cos())`
+            #[inline]
+            pub fn sin_cos(self) -> (Self, Self) {
+                S::vectorize(
+                    #[inline(always)]
+                    || sin_cos(self),
+                )
+            }
+        }
+    };
+}
+
+trig_lane_methods!(DV, "DD");
+trig_lane_methods!(QV, "QD");
+trig_lane_methods!(OV, "OD");
