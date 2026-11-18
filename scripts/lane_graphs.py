@@ -101,11 +101,15 @@ for i, fam in enumerate(families):
 
 better_hint(svg, left, top, pw, ph, where="axis", label="faster", reverse=True)
 
-# points of interest
-k = ("double-double", "ln", "")
-callout(svg, xmap(change[k]), ys[("ln", "")], "largest gain", dx=36, dy=22)
-k = ("double-double", "sin", "1 <= |x| < 1024")
-callout(svg, xmap(change[k]), ys[("sin", "1 <= |x| < 1024")], "the π/2 reduction stays scalar", dx=40, dy=-14)
+# points of interest: the largest and the smallest gain, ringed where their markers were drawn
+best = min(change, key=change.get)
+worst = max(change, key=change.get)
+first_row = min(ys.values())
+for key, label, dx, dy in ((best, "largest gain", 36, 22), (worst, "smallest gain", 40, -14)):
+    i = families.index(key[0])
+    yy, xx = dodged[i][key[1:]]
+    # a label below the top row would sit on the next row's markers, so it goes above
+    callout(svg, xx, yy, label, dx=dx, dy=-16 if ys[key[1:]] == first_row else dy)
 
 body_bottom = top + ph + 44
 height = footnote(svg, [f"multidouble {commit}", "examples/lane_speedups.rs"], host_specs(), args.warn,
