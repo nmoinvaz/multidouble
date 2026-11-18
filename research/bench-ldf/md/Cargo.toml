@@ -1,0 +1,17 @@
+[package]
+name = "md-bench-ldf"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# not part of any workspace
+[workspace]
+
+[dependencies]
+multidouble = { path = "../../.." }
+
+# the profile of multidouble's own benches (benches use fat LTO, one codegen unit)
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"
