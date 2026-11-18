@@ -15,6 +15,8 @@
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
 //! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
 //!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
+//! * [`trig`]: `sin`, `cos`, `tan` and `sin_cos` of [`dd::DD`], [`qd::QD`] and [`od::OD`], reducing by pi/2 to 1216
+//!   fraction bits in exact integer arithmetic for |x_0| up to 2^52.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
 //!   ([`precision::Quad`]) and octo-double ([`precision::Octo`]), naming each kind of type once and delegating to
@@ -74,6 +76,7 @@ pub mod precision;
 pub mod qd;
 pub mod qv;
 pub mod simd;
+pub mod trig;
 pub mod v8;
 
 /// The lane types on the compile-time backend [`simd::Native`], for code that does not dispatch.
