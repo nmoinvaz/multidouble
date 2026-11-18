@@ -486,7 +486,7 @@ Assume~\ref{as:fp} and $(n^2+n)u < 1$. Let the operands' parts satisfy $|a_i| \l
 ($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$, and let $P_m =
 \sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, $\lambda_m \ge |a_m + b_m|$ for ADD and
 $\lambda_m = \alpha_m\beta_0$ for MULF, with $P_{-1} = \lambda_{-1} = 0$, and $m < n$ in the row of $A_m$:
-\begin{center}
+\[
 \begin{tabular}{@{}lll@{}}
 \toprule
 & MUL & ADD, MULF \\
@@ -498,7 +498,7 @@ $Q$ & $n^2 + n - 1$ & $n-1$ \\
 $\Delta$ & $\sum_{m > n}P_m$ & $0$ \\
 \bottomrule
 \end{tabular}
-\end{center}
+\]
 Let $X_m$ and $R$ be those of Lemma~\ref{lem:l}. For
 ADDF, with $\lambda_0 \ge |a_0 + b|$, let $\epsilon_0 = u\lambda_0$, $\epsilon_m = u(\alpha_m + \epsilon_{m-1})$, $X_0
 = (1+u)\lambda_0$, $X_m = (1+u)(\alpha_m + \epsilon_{m-1})$ for $1 \le m < n$, $X_n = \epsilon_{n-1}$ and $R = \Delta =
