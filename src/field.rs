@@ -13,8 +13,8 @@
 //! long jet sums (`cs_splits`), bitwise the same. The order-k sums of a series formed one jet coefficient at a time
 //! (`cs_at`, `cs_range_at`, `cs_w_at`) have the same pieces: one lane vector (`cs_lane_at`, `cs_w_lane_at`), and the
 //! lane vectors on separate threads (`cs_at_par`, `cs_range_at_par`, `cs_w_at_par`, when `cs_at_splits`, which weighs
-//! a product by its precision's cost), bitwise the same. A matrix product is `MatLane::dmat_apply`: the double-double columns through the accumulator by default, the
-//! columns' f64 copy for the f64 lanes.
+//! a product by its precision's cost), bitwise the same. A matrix product is `MatLane::dmat_apply`: the double-double
+//! columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
 use crate::dv::{DotAcc, DV};
@@ -811,7 +811,7 @@ pub fn cs_w_par<T: Lane, const B: usize>(
 
 /// Work per lane vector, in products of jet coefficients weighted by `cs_at_cost`, from which `cs_at_par`,
 /// `cs_range_at_par` and `cs_w_at_par` form the B lane vectors on separate threads: 48 octo-double products. At 48 the
-/// split of an `OJet<28>` sum gained 1.1–2.4× on four threads of a loaded Apple M5, and at 24 nothing.
+/// split of an `OJet<28>` sum gained 1.2–2.4× on four threads of a loaded Apple M5, and at 24 nothing.
 pub const CS_AT_PAR_MIN: usize = 48 * 64;
 
 /// The weight of one product of T's jet coefficients in `CS_AT_PAR_MIN`, about its time against a double-double one:
@@ -871,6 +871,10 @@ fn cs_split_at<T: Lane, const B: usize>(
 /// `cs_at`, bitwise, with a jet's lane vectors formed on separate threads of rayon's current pool when the sum is long
 /// enough (`cs_at_splits`); every other sum is `cs_at`'s. Each lane vector's terms are summed in `cs_at`'s order by
 /// one task, so the split changes no bit, whatever the pool's size.
+/// Per-thread state stays on the caller: a counting lane (`Counted`) makes the counts of a split sum on the threads
+/// that form it, and a mutation selected on the caller (`od`, `qd` and `dual::mutate`, but `CS_AT_SPLIT`) does not
+/// reach a split sum's tasks. The bits are the serial sum's when the caller and rayon's workers share the
+/// floating-point environment: a flush-to-zero set on the caller alone changes the serial sum and not the split one.
 ///
 /// ```
 /// use multidouble::dd::DD;
