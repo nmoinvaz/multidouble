@@ -259,8 +259,8 @@ thresholds the tests check.
   takes one Newton step on exp from the double-double logarithm, which starts from `explog`'s own binary64 logarithm,
   within a proven 5.915 u. The double-double ones use the double-word operations whose bounds are published (Joldes,
   Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved formally, rather than `*`). The
-  octo-double bounds are proved in the paper (Theorems 34 and 36), the double-double ones in its Proposition 38 and the
-  start's in its Lemma 37. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall
+  octo-double bounds are proved in the paper (Theorems 39 and 41), the double-double ones in its Proposition 43 and the
+  start's in its Lemma 42. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall
   below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the
   octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products
   of small factors are formed from the factors scaled below 2, and an emulator with every product hooked finds none
