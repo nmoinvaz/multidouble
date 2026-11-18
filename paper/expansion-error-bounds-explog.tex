@@ -175,7 +175,8 @@ products and Horner's inner steps add terms smaller by factors of $|t|$ or $|r'|
 \paragraph{LOG$_{n,s,d,q}$} For an $n$-part $x$ with $x_0 > 0$:
 \begin{enumerate}
 \item[(1)] $y_0 = (y_h, y_l)$, the double-word logarithm (Proposition~\ref{prop:ddexplog}) of $\FastTwoSum(x_0, \RN(x_1
-  + \RN(x_2 + \dots)))$.
+  + \RN(x_2 + \dots)))$; or, if $x_0 \ge 2^{1023}$, where that $\FastTwoSum$ can round past the largest finite value,
+  the double-word logarithm of the same for $x/2$, plus $c_L$, ln 2's greedy two parts, by AccurateDWPlusDW.
 \item[(2)] $(k, t)$ by steps (1)--(4) of EXP$_{n,s,d}$ on $(-y_h, -y_l, 0, \dots, 0)$.
 \item[(3)] $x' = 2^kx$, scaled in two steps, and $f = \mathrm{ADDF}(x', -1)$.
 \item[(4)] With $e_v$ the exponent of $U_v = \RN(\RN(\sum_i|v_i|)(1 + 2^{-48}))$ for $v = f, t$, as $U$ in step (2) of
@@ -211,9 +212,9 @@ and the renormalization is exact by Theorem~\ref{thm:t1}(a): a lossy last step w
 Assume (A2$'$), $p = 53$, $\rho = \theta u \le 1/4$, $(n^2+n)u < 1$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
 $x_0 > 0$ and $|\ln x| \le X$, and let the result $y$ of LOG$_{n,s,d,q}$ be finite. Let $\epsilon_{\rm DW}$ and
 $\Phi_{\rm DW}$ be the double-word logarithm's bounds of Proposition~\ref{prop:ddexplog}, $g = (n-2)u/(1 - (n-2)u)$, $w
-= g\rho/(1 - 2\rho - g\rho)$, $\delta_0 = w/(1-w)$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 +
-\Phi_{\rm DW}$. For $\ell \ge |\ln x|$ and a case as in
-Theorem~\ref{thm:exp}, of the reduction of $-y_0$, define:
+= g\rho/(1 - 2\rho - g\rho)$, $\delta_0 = w/(1-w)$, $\alpha_{\rm A} = 3u^2/(1 - 4u)$, $\eta_L = |\ln 2 - c_{L,0} -
+c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\rm DW} + \alpha_{\rm A}(\ell + 1) +
+\eta_L + 2^{-2000}$. For $\ell \ge |\ln x|$ and a case as in Theorem~\ref{thm:exp}, of the reduction of $-y_0$, define:
 \begin{itemize}
 \item $\bar y = \ell + E(\ell)$, and $\pi^y$ the part bounds of a two-part expansion on $H(1)$ with value at most $\bar
   y$; for $k = 0$, $\pi = \pi^y$, $\delta = 0$ and $b \le \bar y$; for $k \ne 0$, $\pi = \pi^r$ and $\delta$ those of
@@ -258,10 +259,13 @@ $\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, an
 
 \begin{proof}
 \emph{The start.} Proposition~\ref{prop:ddexplog} gives $|y_0 - \ln\tilde x| \le \epsilon_{\rm DW}|\ln\tilde x| +
-\Phi_{\rm DW}$ for the double-word $\tilde x$ of step (1). Its tail is the sum of $n - 1$ parts rounded $n - 2$ times,
-so $|x - \tilde x| \le g\sum_{i \ge 1}|x_i| \le g\rho x_0/(1-\rho)$, $\tilde x \ge x - g\rho x_0/(1 - \rho) \ge x_0(1 -
-2\rho - g\rho)/(1 - \rho)$, and $|\ln x - \ln\tilde x| \le \delta_0$; so $e_0 = y_0 - \ln x$ satisfies $|e_0| \le
-E(\ell)$, and $|y_0| \le \bar y$.
+\Phi_{\rm DW}$ for the double-word $\tilde x$ of step (1) where $x_0 < 2^{1023}$. Where $x_0 \ge 2^{1023}$, the same
+holds for the start's first term against $\ln(x/2)$, the halving moving each part of $x$ by at most $\eta_0$, which
+changes $\ln x$ by less than $2^{-2000}$; that term is at most $\ell + 1$ in magnitude, so AccurateDWPlusDW adds at most
+$\alpha_{\rm A}(\ell + 1)$ and $c_L$ adds $\eta_L$, and $|y_0 - \ln x|$ is again within $E(\ell)$. Its tail is the sum
+of $n - 1$ parts rounded $n - 2$ times, so $|x - \tilde x| \le g\sum_{i \ge 1}|x_i| \le g\rho x_0/(1-\rho)$, $\tilde x
+\ge x - g\rho x_0/(1 - \rho) \ge x_0(1 - 2\rho - g\rho)/(1 - \rho)$, and $|\ln x - \ln\tilde x| \le \delta_0$; so $e_0 =
+y_0 - \ln x$ satisfies $|e_0| \le E(\ell)$, and $|y_0| \le \bar y$.
 
 \emph{The steps.} Lemmas~\ref{lem:red} and~\ref{lem:core} apply to $-y_0$, with $X = \bar y/(1-u) \ge |y_h|$ and $|y_0 -
 y_h| \le 2u\bar y$. With $T = e^r - 1$ and $|t - T| \le E_m$, the computed $x'$ is within $2n\eta_0$ of $2^kx = e^{-e_0
