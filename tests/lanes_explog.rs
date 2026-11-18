@@ -1,23 +1,23 @@
 //! `exp` and `ln` of the 8-lane types `DV`, `QV` and `OV` against the scalar functions of `DD`, `QD` and `OD`, bit for
-//! bit in every lane, on every backend this CPU runs. A NaN that arithmetic makes matches any NaN, as in
-//! tests/lanes.rs, since Rust leaves its sign and payload unspecified; the special values' results, a NaN x_0's exp
-//! (x_0 itself) and ln's NaN among them, are made without arithmetic and must match bit for bit. Most vectors mix
-//! kinds of argument, so that their lanes take different reductions k, squaring counts, Taylor degrees, branches of ln
-//! and special values in one call; every fourth takes one kind in all lanes. The kinds: for exp, random over the range,
-//! near 0 (subnormal included), near k ln 2 and (k + 1/2) ln 2, within 3 ulps of ln f64::MAX with tails near half an
-//! ulp, near underflow, subnormal, moderate, and the special values with NaN payloads; for ln, random over the range,
-//! near 1, near sqrt(2) 2^k, subnormal, within 3 ulps of f64::MAX with tails near half an ulp (the start's x/2 branch),
-//! powers of 2, moderate, and the special values. Lower parts are absent, on the ladder with gaps, or at the top of the
-//! ladder. Every eighth vector checks each lane's own powers of two in the exact scalings: lane 0 takes e^0 or ln 1,
-//! which scale by 1, and the other lanes take arguments whose results' last parts lie near the bottom of the range,
-//! where a scaling by another lane's power of two changes them (exp of one part near 2^-197, ln of 1 and one or two
-//! parts near 2^-330).
+//! bit in every lane, NaNs included, on every backend this CPU runs. Most vectors mix kinds of argument, so that their
+//! lanes take different reductions k, squaring counts, Taylor degrees, branches of ln and special values in one call;
+//! every fourth takes one kind in all lanes. The kinds: for exp, random over the range, near 0 (subnormal included),
+//! near k ln 2 and (k + 1/2) ln 2, within 3 ulps of ln f64::MAX with tails near half an ulp, near underflow, subnormal,
+//! moderate, and the special values with NaN payloads; for ln, random over the range, near 1, near sqrt(2) 2^k,
+//! subnormal, within 3 ulps of f64::MAX with tails near half an ulp (the start's x/2 branch), powers of 2, moderate,
+//! and the special values; with the special values, arguments off the ladder whose run makes NaNs (exp with a second
+//! part far above the first's ulp, and in a release build ln of parts that cancel). Lower parts are absent, on the
+//! ladder with gaps, or at the top of the ladder. Every eighth vector checks each lane's own powers of two in the exact
+//! scalings: lane 0 takes e^0 or ln 1, which scale by 1, and the other lanes take arguments whose results' last parts
+//! lie near the bottom of the range, where a scaling by another lane's power of two changes them (exp of one part near
+//! 2^-197, ln of 1 and one or two parts near 2^-330).
 //!
 //! Control (feature `mutate`): with `explog::mutate::LANE_STEP`, each lane skipping the first step of its Horner sum,
-//! the check fails for every type and function; with `LANE_POW2_POLY`, `LANE_POW2_FT` and `LANE_POW2_SERIES`, every
-//! lane taking lane 0's powers of two in one scaling, the octo-double check fails for the function that scales (the
-//! double-double and quad-double results end above the subnormals, so a wrong power of two cannot show there); with
-//! each of the scalar functions' mutations, which the lanes share, it still passes.
+//! the check fails for every type and function, and so it does with `LANE_NAN`, the lanes with a NaN part left as the
+//! lanes' arithmetic gives them with their NaNs' signs flipped; with `LANE_POW2_POLY`, `LANE_POW2_FT` and
+//! `LANE_POW2_SERIES`, every lane taking lane 0's powers of two in one scaling, the octo-double check fails for the
+//! function that scales (the double-double and quad-double results end above the subnormals, so a wrong power of two
+//! cannot show there); with each of the scalar functions' mutations, which the lanes share, it still passes.
 //!
 //! ```text
 //! cargo test --release --test lanes_explog
@@ -38,7 +38,7 @@ use multidouble::simd::{self, Kernel, Simd};
 const COUNT: [usize; 3] = [16000, 8000, 2400];
 
 fn same(a: f64, b: f64) -> bool {
-    a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())
+    a.to_bits() == b.to_bits()
 }
 
 /// 2^e for -1074 <= e <= 1023, from its bits
@@ -119,6 +119,21 @@ fn arg(r: &mut Rng, f: F, kind: u64, n: usize) -> [f64; 8] {
     };
     let x0 = match (f, kind) {
         (_, SPECIAL) => {
+            if r.next_u64().is_multiple_of(4) {
+                // off the ladder, where the run can overflow and make NaNs: exp with a second part far above the
+                // first's ulp, and in a release build ln of a value that cancels to nothing (its NaN start reaches
+                // the scalar powers of two, which a debug build checks)
+                if f == F::Exp {
+                    p[0] = -700.0 + 1400.0 * r.unit();
+                    p[1] = sign(r) * p[0].abs() * pow2i(30 + (r.next_u64() % 30) as i32);
+                    return p;
+                }
+                if !cfg!(debug_assertions) {
+                    p[0] = (1.0 + r.unit()) * pow2i(-1000 - (r.next_u64() % 22) as i32);
+                    (p[1], p[2]) = (-p[0], -0.0);
+                    return p;
+                }
+            }
             let s = if f == F::Exp { &EXP_SPECIAL[..] } else { &LN_SPECIAL[..] };
             p[0] = s[(r.next_u64() % s.len() as u64) as usize];
             return p;
@@ -346,9 +361,7 @@ fn rows<S: Simd, V: Lanes<S>>(div: usize, scaling: bool) -> Vec<Row> {
             for j in 0..8 {
                 let want = V::scalar(f, &x[j]);
                 row.lanes += 1;
-                // a special value's result is made without arithmetic, so a NaN there has defined bits too
-                let strict = kinds[j] == SPECIAL;
-                if !(0..V::N).all(|i| same(y[j][i], want[i]) && (!strict || y[j][i].to_bits() == want[i].to_bits())) {
+                if !(0..V::N).all(|i| same(y[j][i], want[i])) {
                     row.misses += 1;
                     if row.first.len() < 3 {
                         row.first.push(format!(
@@ -411,9 +424,9 @@ fn lanes_match_scalar_bit_for_bit() {
     });
 }
 
-/// The controls (feature `mutate`): the lanes' own breaks fail the check on every backend, the skipped Horner step for
-/// every type and function and lane 0's powers of two for the octo-double function that scales, and the scalar
-/// functions' breaks, which the lanes take alike, leave it passing.
+/// The controls (feature `mutate`): the lanes' own breaks fail the check on every backend, the skipped Horner step and
+/// the flipped NaN signs for every type and function and lane 0's powers of two for the octo-double function that
+/// scales, and the scalar functions' breaks, which the lanes take alike, leave it passing.
 #[cfg(feature = "mutate")]
 #[test]
 fn control_fires() {
@@ -426,20 +439,22 @@ fn control_fires() {
             let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
             assert!(bad.is_empty(), "under '{}': {bad:#?}", mutate::NAMES[id as usize]);
         }
-        mutate::set(mutate::LANE_STEP);
-        let rows = every_backend(4, false);
-        mutate::set(0);
-        for (isa, r) in &rows {
-            println!(
-                "control '{}': {isa:<8} {:<7} {} of {} lanes differ",
-                mutate::NAMES[mutate::LANE_STEP as usize],
-                r.what,
-                r.misses,
-                r.lanes
-            );
+        for id in [mutate::LANE_STEP, mutate::LANE_NAN] {
+            mutate::set(id);
+            let rows = every_backend(4, false);
+            mutate::set(0);
+            for (isa, r) in &rows {
+                println!(
+                    "control '{}': {isa:<8} {:<7} {} of {} lanes differ",
+                    mutate::NAMES[id as usize],
+                    r.what,
+                    r.misses,
+                    r.lanes
+                );
+            }
+            let silent: Vec<_> = rows.iter().filter(|(_, r)| r.misses == 0).collect();
+            assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
         }
-        let silent: Vec<_> = rows.iter().filter(|(_, r)| r.misses == 0).collect();
-        assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
         for (id, row) in [
             (mutate::LANE_POW2_POLY, "ov Exp"),
             (mutate::LANE_POW2_FT, "ov Ln"),
