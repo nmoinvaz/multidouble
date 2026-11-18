@@ -36,6 +36,10 @@ $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$ for $q = 0, 1, 2, 3$, COS$_n$ returns $Y
 $Y_{\rm s}$, and TAN$_n$ returns DIV$(Y_{\rm s}, Y_{\rm c})$ for even $q$ and $-$DIV$(Y_{\rm c}, Y_{\rm s})$ for odd
 $q$. At $n = 8$ these are multidouble's \texttt{OD::sin}, \texttt{cos} and \texttt{tan}. Its \texttt{DD} versions run the
 same steps with DWTimesDW3 for MUL, AccurateDWPlusDW for ADD, DWPlusFP for ADDF and DWDivDW2 for DIV~\cite{JMP17}.
+The emulator of the earlier sections, running these steps, returns the bits of both on 600 inputs each, with ladders
+at their top, results next to multiples of $\pi/2$ and arguments up to $2^{52}$. Controls that halve the sine series or
+skip the correction of $k$ mismatch (\texttt{trig\_bits.py}).
+
 \begin{lemma}\label{lem:red}
 Assume~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$, and let $(q, r) = \mathrm{RED}(x)$.
 Then $|k| < 2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\pi/2$ and $A = |k|\,2^{-1217}$:
