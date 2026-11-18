@@ -16,7 +16,7 @@ plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth.
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
 | `example_n3.py` | the worked example of Section IV on `fpemu.py`, with a control that must fail |
 | `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with controls that skip its last step and its two-sum of the leading parts |
-| `trig_bits.py` | the sine, cosine and tangent of the trig appendix on `fpemu.py`, at eight parts and with the double-word algorithms at two, against multidouble's `OD` and `DD` functions, bit for bit, with controls that halve the sine series and skip the reduction's correction of k |
+| `trig_bits.py` | the sine, cosine and tangent of the trig appendix on `fpemu.py`, at eight parts and with the double-word algorithms at two, against multidouble's `OD` and `DD` functions, bit for bit, with controls that halve the sine series and skip the reduction's correction of k; `a2` scans every bucket of the reduced argument from 2^-212 to 1 for results outside binary64 (Remark 36), with the unscaled steps as its control; its output is `trig_bits_a2.txt` |
 | `accumulator/` | the accumulator of Theorems 5 and 27 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`) and the error recomputed without the emulator (`acc_crate_err.py`); outputs in `accumulator/out/` |
 
 From this folder:
@@ -34,6 +34,7 @@ python3 sqrt_bits.py 2000 1 accumulator/acc_check/Cargo.toml control2   # prints
 python3 trig_bits.py      # prints 600 inputs, 0 mismatches, for n = 8 and n = 2
 python3 trig_bits.py 300 1 accumulator/acc_check/Cargo.toml control    # most mismatch, exit 0
 python3 trig_bits.py 600 1 accumulator/acc_check/Cargo.toml control2   # some mismatch, exit 0
+python3 trig_bits.py a2 32  # trig_bits_a2.txt, prints a2: PASS (about a minute and a half)
 python3 sloppy_consts.py # Theorem 30, the sloppy multiply's bound, 2^31.9242 u^8 |a_0 b_0| at n = 8
 python3 sloppy_consts.py check  # prints PASS
 python3 sloppy_emu.py bound     # prints PASS; also bits and control
