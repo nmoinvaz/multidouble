@@ -261,9 +261,10 @@ check.
   formally, rather than `*`). The octo-double bounds are proved in the paper's appendix on exp and log. Each bound has
   a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the
   relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for
-  the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. Small arguments and arguments near 1 keep
-  every product inside the normal range, the products of small factors being formed from the factors scaled to [1, 2),
-  so only a part far below the one above it can make one underflow, as for the other operations.
+  the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled
+  below 2, and an emulator with every product hooked finds none below the normal range at any binade of the argument,
+  the closest 48 binades above it (the paper's appendix on exp and log); a part far below the one above it can make
+  one underflow, as for the other operations.
   `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|. Against a 1700-bit
   reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the double-double exp and
   ln, 0.86 u⁴ and 0.41 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the
