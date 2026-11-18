@@ -28,14 +28,15 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 | `od::OD`, `ov::OV` | octo-double, scalar and on 8 lanes, with exact decimal parsing and printing: the quad-double algorithms carried to eight parts and written once for both |
 | `dv::DotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
 
-The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln`, and
-`sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216 bits in exact integer arithmetic, and
-every type has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and underflow. Two operations
-trade accuracy for speed. `DD::fast_div` divides with two divisions instead of three, within a proven 15 u² + 56 u³
-barring underflow and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and gives up 7 to 9 of the
-424 bits. An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip
-the zero parts' products and give the promoted operation's bits, a NaN's sign and payload aside. The API documentation
-lists the rest, such as division by a shared divisor and conversion to arrays of parts.
+The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln` (also
+on the lanes), and `sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216 bits in exact
+integer arithmetic, and every type has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and
+underflow. Two operations trade accuracy for speed. `DD::fast_div` divides with two divisions instead of three, within a
+proven 15 u² + 56 u³ barring underflow and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and
+gives up 7 to 9 of the 424 bits. An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and
+`OdAcc::add_prod_dd`, which skip the zero parts' products and give the promoted operation's bits, a NaN's sign and
+payload aside. The API documentation lists the rest, such as division by a shared divisor and conversion to arrays of
+parts.
 
 ### Packed storage
 
@@ -291,7 +292,7 @@ cargo bench --bench arith                                       # scalar against
 cargo bench --bench linalg                                      # double-double LU against f64 LU, and the octo-double LU
 cargo bench --bench jet                                         # OJet<24> against QJet<24>: product, sums, the jet solve
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
-cargo test --release --test explog timing -- --ignored --nocapture      # exp and ln, time per call
+cargo test --release --test explog timing -- --ignored --nocapture      # exp and ln, scalar and lanes, time per value
 ```
 
 Each precision costs more than the one below it:
