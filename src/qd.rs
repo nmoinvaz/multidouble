@@ -12,9 +12,10 @@
 //! The operators use the library's default configuration: `+`, `-` the sloppy add, `*` the sloppy multiply, `/` the
 //! sloppy divide; `ieee_add`, `accurate_mul` and `accurate_div` are the others.
 //!
-//! Two repairs of QD, both found by the tests: the accurate add keeps u + v where
-//! QD keeps u alone (when all parts are read with three emitted), and sqrt scales its argument by an exact power of
-//! four into [1, 4) (QD's iteration lost accuracy above about 2^860 and below about 2^-860).
+//! Three repairs of QD. The accurate add keeps u + v where QD keeps u alone (when all parts are read with three
+//! emitted), found by the tests, and keeps its accumulator as a fifth term where QD drops it (when four parts are
+//! emitted before every part is read), found by a survey of other libraries. sqrt scales its argument by an exact
+//! power of four into [1, 4) (QD's iteration lost accuracy above about 2^860 and below about 2^-860).
 //!
 //! `QdAcc` is a sum-of-products accumulator (the scalar twin of `qv::QDotAcc`, see there for its error). Decimal
 //! parsing and printing are exact (via `exact`): `parse` rounds the decimal value to four parts by greedy
@@ -389,10 +390,11 @@ impl QD {
         }
     }
 
-    /// QD's accurate add (merge by magnitude, double-length accumulator), IEEE-style error bound, with one change:
-    /// when every part has been read with three already emitted, the last part is u + v where QD keeps u alone
-    /// (QD's version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, this
-    /// one 0.12 u in 200000)
+    /// QD's accurate add (merge by magnitude, double-length accumulator), IEEE-style error bound, with two changes.
+    /// When every part has been read with three already emitted, the last part is u + v where QD keeps u alone (QD's
+    /// version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, this one 0.12 u in 200000). When four
+    /// parts are emitted before every part is read, u, v and the parts not read form a fifth term, where QD drops u
+    /// and v (`qd_ieee_add_four_parts_emitted`).
     #[inline]
     // the merge keeps QD's branch order, in which the first and last branches take the same part
     #[allow(clippy::if_same_then_else)]
@@ -463,7 +465,7 @@ impl QD {
         }
         if k == 4 {
             // Four parts emitted, but u, v and the parts not read still hold part of the sum. QD adds the parts not
-            // read into x[3] and drops u and v. After cancellation the emitted parts can overlap, so u can lie well
+            // read into x[3] and drops u and v. The emitted parts can overlap, in same-sign sums too, so u can lie well
             // above the last bit of the result (QD: 2^46 units of 2^-210). So u, v and the parts not read are summed
             // into a fifth term and the five renormalized.
             let mut e = v;

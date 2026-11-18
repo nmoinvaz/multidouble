@@ -1,6 +1,6 @@
 //! 8 lanes of quad-double: four `V8` registers (structure of arrays, part k of the 8 lanes in `c[k]`), with the
 //! algorithms of the scalar `qd::QD` and bitwise the same results lane by lane, on every `v8` backend (AVX-512,
-//! 2 x AVX2, portable).
+//! 2 x AVX2, 4 x SSE2, 4 x NEON, portable).
 //!
 //! The QD library's algorithms branch on the data in two places, and both are run here on all lanes with masks:
 //! - the renormalization's second pass skips zero error terms. Written with a per-lane slot index k (the part being
@@ -366,7 +366,7 @@ impl<S: Simd> QV<S> {
     }
 
     /// the accurate merge add, as QD::ieee_add (QD's algorithm with its last part u + v when all parts are read with
-    /// three emitted; see the module doc and QD::ieee_add)
+    /// three emitted, and its accumulator kept as a fifth term when four are emitted first; see QD::ieee_add)
     #[inline]
     pub fn ieee_add(self, b: Self) -> Self {
         S::vectorize(

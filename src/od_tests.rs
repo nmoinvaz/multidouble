@@ -465,7 +465,7 @@ fn ladder(a: &OD) -> bool {
 }
 
 /// every product of parts that the operation forms is a multiple of 2^-1074, so that a rounding below 2^-1022 is
-/// exact and two-product is error-free (|e_a + e_b| >= -970 in exponents)
+/// exact and two-product is error-free (e_a + e_b >= -970 in exponents)
 fn products_fit(a: &[f64], b: &[f64], max_order: usize) -> bool {
     a.iter().enumerate().all(|(i, &x)| {
         b.iter()
@@ -534,7 +534,7 @@ fn b_exact(op: Op, b: OD) -> Dy {
     }
 }
 
-/// (err, scale, rel, allow): the check is err <= thr·u·scale + allow, the reported value err / scale; rel is the
+/// (err, scale, rel, allow): the check is err <= thr 2^-418 scale + allow, the reported value err / scale; rel is the
 /// relative error of the result (= err / scale except for the Cray-style measure). In the near-underflow inputs
 /// allow is 16·2^-1074 on the result (its parts cannot go below 2^-1074), carried to err as in `qd_tests`.
 fn exact_err(op: Op, a: OD, b: OD, r: OD, under: bool) -> (Dy, Dy, f64, Dy) {
@@ -2088,11 +2088,11 @@ fn overlap(x: OD) -> f64 {
 }
 
 /// Pass, set after a first run against `od`'s earlier statement (every part at most half the ulp of the one above it
-/// for every operation), which the adds miss after cancellation: on `od_accuracy`'s inputs (OD_N per operation and
-/// category, scalar and lanes), every finite result of the multiply, od x f64, the divide and the square root has
-/// |x_(i+1)| <= ulp(x_i)/2, and of the adds (od + od, od + f64) |x_(i+1)| <= ulp(x_i), with no nonzero part after a
-/// zero one. Controls: a value whose second part is twice the first's ulp fails both, one whose second part is a
-/// whole ulp fails the half-ulp bound only, and one with a nonzero part after a zero one fails both.
+/// for every operation), which the adds miss after cancellation: on `od_accuracy`'s inputs of the categories in `CATS`
+/// (OD_N per operation and category, scalar and lanes), every finite result of the multiply, od x f64, the divide and
+/// the square root has |x_(i+1)| <= ulp(x_i)/2, and of the adds (od + od, od + f64) |x_(i+1)| <= ulp(x_i), with no
+/// nonzero part after a zero one. Controls: a value whose second part is twice the first's ulp fails both, one whose
+/// second part is a whole ulp fails the half-ulp bound only, and one with a nonzero part after a zero one fails both.
 #[test]
 fn od_results_do_not_overlap() {
     let n = env_usize("OD_N", 2000) / 8 * 8;

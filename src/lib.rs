@@ -10,8 +10,8 @@
 //!   the CPU has, detected at run time; [`native`] has the lane types on the backend the build's target features
 //!   select at compile time.
 //! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DotAcc`] a sum-of-products accumulator.
-//! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with two
-//!   repairs found by this crate's tests), exact decimal parsing and printing;
+//! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with
+//!   three repairs), exact decimal parsing and printing;
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
 //! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
 //!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
@@ -28,7 +28,7 @@
 //! * [`jet`]: truncated power series over these lanes, in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
 //!   and octo-double ([`jet::OJet`]), with their scalar parameter arithmetic ([`jet::Series`], [`jet::QSeries`],
 //!   [`jet::OSeries`]): one generic code gives its own Taylor coefficients in a parameter.
-//! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
+//! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation,
 //!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
 //!   arithmetic of power-series methods.

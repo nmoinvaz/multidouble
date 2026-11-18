@@ -1,8 +1,8 @@
 //! Exact arithmetic on dyadic rationals ±m·2^e (m an unsigned big integer) and on m / 10^k, with no dependency.
 //!
-//! Used by `qd` for decimal parsing (the exact decimal value, then the four components by greedy round-to-nearest) and
-//! printing (the exact decimal expansion of the four-component sum, correctly rounded to the digits asked for), and by
-//! the quad-double tests as their error-free reference. Nothing here is on a hot path; clarity over speed.
+//! Used by `qd` and `od` for decimal parsing (the exact decimal value, then the components by greedy round-to-nearest)
+//! and printing (the exact decimal expansion of the components' sum, correctly rounded to the digits asked for), and
+//! by the tests as their error-free reference. Nothing here is on a hot path; clarity over speed.
 use std::cmp::Ordering;
 
 /// Unsigned big integer, little-endian 64-bit limbs, no high zero limbs.
@@ -459,7 +459,7 @@ impl Dy {
         let (a, b, _) = self.align(o);
         a.cmp(&b)
     }
-    /// |self| ≈ f·2^k with f in [1, 2) (f to f64 precision), None for zero
+    /// |self| ≈ f·2^k with f in [1, 2] (f to f64 precision; 2 when the top 64 bits round up), None for zero
     pub fn approx(&self) -> Option<(f64, i64)> {
         let l = self.m.bits() as i64;
         if l == 0 {
@@ -543,8 +543,8 @@ impl Dy {
     }
 }
 
-/// Signed rational n / (10^k · 2^t) (n a signed big integer, t of either sign), for the greedy conversion of a
-/// decimal to f64 components.
+/// Signed rational n / (10^k · 2^t) (n an unsigned big integer, the sign in neg, t of either sign), for the greedy
+/// conversion of a decimal to f64 components.
 #[derive(Clone, Debug)]
 pub struct DecRat {
     pub neg: bool,

@@ -7,9 +7,10 @@
 //! * `F8`, `Fu`: the same in plain f64 (one `V8` per value / tangent), for the mixed-precision Newton's f64 Jacobian.
 //!   Constants and inputs, which the trait passes as double-double, enter as their hi parts.
 //! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
-//!   trajectory computed once (and to double-double accuracy) for all of them.
+//!   trajectory computed once (and to double-double accuracy) for all of them. `Fun<N>` is the same in plain f64.
 //! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
 //! * `Ou`: value + one tangent, both octo-double (`crate::ov::OV`): exact Jacobian columns to octo-double accuracy.
+//!   `Oun<N>` carries N octo-double tangents, each bit for bit an `Ou` evaluation's.
 //! * `crate::ov::OV`: values in octo-double (`VAL_OD`), with double-double constants and inputs, as `QV` is.
 //! * `Dc`: a double-double value with a complex tangent (real and imaginary parts, each double-double): the
 //!   derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
@@ -166,9 +167,9 @@ pub trait Lane:
     type S: Simd;
     type Acc: Copy;
     const TANGENT: bool;
-    /// values in plain f64 (`F8`, `Fu`): double-double constants and inputs enter rounded to their hi parts
+    /// values in plain f64 (`F8`, `Fu`, `Fun`): double-double constants and inputs enter rounded to their hi parts
     const VAL_F64: bool = false;
-    /// tangents in plain f64 (`Fu`, `Dtn`)
+    /// tangents in plain f64 (`Fu`, `Fun`, `Dtn`)
     const TAN_F64: bool = false;
     /// number of f64 tangents (`tan64`; 0 unless TAN_F64)
     const NT: usize = 0;
@@ -176,7 +177,7 @@ pub trait Lane:
     /// a lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`; a jet's
     /// solve goes order by order, `NJ`)
     const VAL_QD: bool = false;
-    /// values in octo-double (`crate::ov::OV`, `Ou`, `crate::jet::OJet<N>`): as for `VAL_QD`, a solve with a
+    /// values in octo-double (`crate::ov::OV`, `Ou`, `Oun`, `crate::jet::OJet<N>`): as for `VAL_QD`, a solve with a
     /// double-double LU is refined for such a lane with the residual formed in its arithmetic, with about twice the
     /// steps, as each gains about cond(A) 2^-104 (a jet's solve goes order by order,
     /// `crate::field::FieldSolve::solve_lanes_jet_refine_od`). Lanes that set it leave `VAL_QD` unset, so code that
@@ -220,8 +221,8 @@ pub trait Lane:
         self.set_coef(k, c.to_dv())
     }
     /// coefficient k in octo-double, for code generic over `Lane` that reads an octo-double jet's coefficients without
-    /// rounding them (`coef` and `coef_qd` do): the jet's own on `crate::jet::OJet<N>`, the octo-double value on `OV`
-    /// and value and tangent on `Ou`, and `coef_qd(k)`, exactly, on every other lane
+    /// rounding them (`coef` and `coef_qd` do): the jet's own on `crate::jet::OJet<N>`, the octo-double value on `OV`,
+    /// value and tangents on `Ou` and `Oun`, and `coef_qd(k)`, exactly, on every other lane
     #[inline(always)]
     fn coef_od(self, k: usize) -> OV<Self::S> {
         OV::from_qv(self.coef_qd(k))
@@ -277,7 +278,8 @@ pub trait Lane:
     /// a + x y into a, with the accumulator and the operands borrowed: bitwise `acc`. Moving them copies the jets'
     /// accumulators and coefficients, several kilobytes each (`[QDotAcc; N]` and N quad-double coefficients for
     /// `crate::jet::QJet<N>`), once per term of a sum. The default is `acc`. The jets, `Dtn` and `Fun` add in place,
-    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`, `crate::ov::OV` through `crate::ov::ODotAcc::add_prod_mut`.
+    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`, `crate::ov::OV`, `Ou` and `Oun` through
+    /// `crate::ov::ODotAcc::add_prod_mut`.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         *a = Self::acc(*a, *x, *y);
@@ -2142,7 +2144,8 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
 // ---------------------------------------------------------------------------------------------------------------
 
 /// The kinds of lane operation `Counted` counts; `take_counts()[i]` is the count of `COUNTED_OPS[i]` (`op` names the
-/// indices). "x f64" covers `mulf` and `mul_pwr2`, "x const" `mulc` (and `muls`), "+ const" `addc`; `cst`, `splat`,
+/// indices). "x f64" covers `mulf`, `mul_pwr2` and `mulf_upto`, "x const" `mulc`, `muls` and `mulp`, "+ const" `addc`
+/// and `addp`; `cst`, `splat`,
 /// `bcast`, `val`, `tan`, `from_vt` and the f64 tangent accessors move data and are not counted.
 pub const COUNTED_OPS: [&str; 11] = [
     "add/sub", "mul", "div", "neg", "x const", "x f64", "+ const", "acc a b", "acc a c", "acc a", "finish",
@@ -2154,10 +2157,11 @@ pub mod op {
     pub const MUL: usize = 1;
     pub const DIV: usize = 2;
     pub const NEG: usize = 3;
-    /// `mulc`, `muls`
+    /// `mulc`, `muls`, `mulp`
     pub const MULC: usize = 4;
-    /// `mulf`, `mul_pwr2`
+    /// `mulf`, `mul_pwr2`, `mulf_upto`
     pub const MULF: usize = 5;
+    /// `addc`, `addp`
     pub const ADDC: usize = 6;
     pub const ACC: usize = 7;
     pub const ACCC: usize = 8;
