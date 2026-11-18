@@ -33,7 +33,11 @@ the results are exact, so we take $M > 0$. The hypothesis allows a part far
 below the one above it, and zero parts between nonzero ones, as long as the ladder relative to $a_0$ holds. If $a$
 satisfies $H(\theta)$ with $\rho = \theta u \le 1/4$, then
 \begin{equation}\label{eq:a0}
-|a| \ge |a_0|\Bigl(1 - \sum_{i \ge 1}\rho^i\Bigr) = \frac{1-2\rho}{1-\rho}\,|a_0|, \qquad |a| = \Bigl|\sum_i a_i\Bigr|.
+|a| \ge |a_0|\Bigl(1 - \sum_{i \ge 1}\rho^i\Bigr) = \frac{1-2\rho}{1-\rho}\,|a_0|, \qquad |a| = \Bigl|\sum_i a_i\Bigr|,
+\end{equation}
+and so its parts are bounded by its value:
+\begin{equation}\label{eq:abar}
+|a_i| \le \bar a_i\,|a|, \qquad \bar a_i = \rho^i\,\frac{1-\rho}{1-2\rho}.
 \end{equation}
 
 \section{The algorithms}
@@ -523,7 +527,7 @@ The square root of multidouble generalizes as SQRT$_{n,J}$: $s = 2^{\lfloor\log_
 \begin{theorem}\label{thm:t7}
 Assume~\ref{as:fp}, $(n^2+n)u < 1$, $\theta \ge 1$, $\rho = \theta u \le 1/4$, and let $x$ satisfy $H(\theta)$ with
 $x_0 > 0$. Let $A = \sum_i a_i$ and $y = A^{-1/2}$, and measure $r$ and $d$ in units of $y$, $a$ and $h$ in units of
-$A$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. Let $\bar a_i = \rho^i(1-\rho)/(1-2\rho)$, $\bar
+$A$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. With the $\bar a_i$ of \eqref{eq:abar}, let $\bar
 h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1-2\rho)}{1-\rho}\bigr)$ and $\pi^{(0)} =
 (1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let
 \begin{align*}
@@ -548,7 +552,7 @@ satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8
 
 \begin{proof}
 Since $s$ is a power of two, $a = x/s^2$ and $h = a/2$ are exact, $a$ satisfies $H(\theta)$, $\sqrt x = s\sqrt A$, and
-$a_0(1-2\rho)/(1-\rho) \le A \le a_0/(1-\rho)$ by \eqref{eq:a0}; so $|a_i| \le \bar a_iA$ and $|h_i| \le \bar h_iA$.
+$a_0(1-2\rho)/(1-\rho) \le A \le a_0/(1-\rho)$ by \eqref{eq:a0}; and $|a_i| \le \bar a_iA$ and $|h_i| \le \bar h_iA$ by \eqref{eq:abar}.
 
 \emph{Start.} By \eqref{eq:rn}, $r_0\sqrt{a_0} \in [1/(1+2u), 1+2u]$, and $\sqrt{A/a_0}$ lies between $\frac{1-2\rho}
 {1-\rho}$ and $\frac1{1-\rho}$; so $|r_0/y - 1| \le E_0$.
