@@ -1001,7 +1001,7 @@ macro_rules! trig_methods {
         impl $t {
             #[doc = concat!("sin x, within ", $sc, " relative and an absolute 5 |k| 2^-1217 < 2^-1163 for x on the ",
                 "ladder with |x_0| <= 2^52 (see `trig` for the hypotheses): a reduction by pi/2 to 1216 fraction bits ",
-                "in exact integer arithmetic, and a Taylor series. NaN for NaN, the infinities and |x_0| > 2^52; a ",
+                "with the bits of exact integer arithmetic, and a Taylor series. NaN for NaN, the infinities and |x_0| > 2^52; a ",
                 "zero gives itself.")]
             pub fn sin(self) -> $t {
                 sin(self)
