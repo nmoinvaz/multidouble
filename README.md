@@ -217,14 +217,20 @@ is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algor
 [the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵ of the first. The other bounds
 are the thresholds the tests check.
 
-- The sine, cosine and tangent are relative to the exact value for |x| up to 2⁵², next to the multiples of π/2 too,
-  as their reduction is exact up to π/2's 1216 fraction bits, an absolute 2⁻¹¹⁶³ aside. Beyond 2⁵² they return NaN.
-  The double-double bounds follow from the published bounds of the double-word algorithms they use (DWTimesDW3, which
-  Muller and Rideau (2022) bound by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the
-  paper's bounds of each operation, and the tests compare all three types against a 2200-bit reference. Random and
-  constructed arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.9 u² for the
-  double-double sin and cos and 4.1 u² for its tan, 1.3 u⁴ and 7.2 u⁴ for the quad-double ones, and 0.09 u⁸ for the
-  octo-double ones (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
+- The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number
+  for `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most
+  (C_T + 5|k|·2⁻¹²¹⁷/|sin x cos x|)|tan x|, with C and C_T in the table and k the multiple of π/2 removed, so that
+  5|k|·2⁻¹²¹⁷ < 2⁻¹¹⁶³. The theorem needs a run without underflow, and the functions scale small reduced arguments by
+  powers of two so that every reduced argument from the early return's threshold up (2⁻²¹² at eight parts) gives one,
+  as the paper checks at eight parts in every binade, unless a part of x lies far below the ladder. The reduction is exact up to π/2's 1216 fraction bits, so the
+  bounds hold next to the multiples of π/2 too. Beyond 2⁵² the functions return NaN. The double-double bounds follow
+  from the published bounds of the double-word algorithms they use (DWTimesDW3, which Muller and Rideau (2022) bound
+  by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the paper's bounds of each operation,
+  and the tests compare all three types against a 2200-bit reference. In the default test run, random and constructed
+  arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.82 u² for the double-double sin
+  and cos and 4.07 u² for its tan, 1.24 u⁴ and 7.18 u⁴ for the quad-double ones, and 0.48 u⁸ for the octo-double
+  ones, the early return's x²/2 just below 2⁻²¹², below 0.01 u⁸ for every other kind of argument
+  (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
 - The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
   promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
   measured on the residual of its quotient.
