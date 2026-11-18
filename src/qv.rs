@@ -1,26 +1,26 @@
-//! 8 lanes of quad-double: four `V8` registers (structure of arrays, part k of the 8 lanes in `c[k]`), with the
-//! algorithms of the scalar `qd::QD` and bitwise the same results lane by lane, on every `v8` backend (AVX-512,
-//! 2 x AVX2, portable).
+//! 8 lanes of quad-double in four `V8` registers, a structure of arrays with part k of the 8 lanes in `c[k]`. They run
+//! the algorithms of the scalar `qd::QD` with its bits lane by lane, on every `v8` backend (AVX-512, 2 x AVX2, SSE2,
+//! NEON, portable).
 //!
-//! The QD library's algorithms branch on the data in two places, and both are run here on all lanes with masks:
-//! - the renormalization's second pass skips zero error terms. Written with a per-lane slot index k (the part being
-//!   filled), each step is: `(t, e) = quick_two_sum(s[k], c); s[k] = t; s[k+1] = e; k += (e != 0);` with the
-//!   five-part version's last step at k = 3 keeping only t (QD's `s3 += c4`). k is held as threshold masks
-//!   (k >= 1, k >= 2, k >= 3) and the slots updated by selects; the zero test is the same `!=` as QD's.
-//! - the accurate add merges the eight parts by magnitude. Each lane keeps its own read positions i, j (as f64) and
-//!   output position k; every step reads `a[i]`, `b[j]` by selects, and lanes that have finished are frozen. The loop
-//!   runs at most seven steps and stops early once all eight lanes are done.
+//! The QD library's algorithms branch on the data in two places, and both run here on all lanes with masks.
+//! - The renormalization's second pass skips zero error terms. With a per-lane slot index k, the part being filled,
+//!   each step is `(t, e) = quick_two_sum(s[k], c); s[k] = t; s[k+1] = e; k += (e != 0);`, and the five-part version's
+//!   last step at k = 3 keeps only t (QD's `s3 += c4`). k is held as threshold masks (k >= 1, k >= 2, k >= 3), and
+//!   selects update the slots. The zero test is the same `!=` as QD's.
+//! - The accurate add merges the eight parts by magnitude. Each lane keeps its own read positions i, j (as f64) and
+//!   output position k. Every step reads `a[i]` and `b[j]` by selects, and lanes that have finished are frozen. The
+//!   loop runs at most seven steps and stops early once all eight lanes are done.
 //!
-//! `QDotAcc` accumulates a sum of quad-double products, in the spirit of `dv::DotAcc`: each product is expanded to
-//! its partial products by order (a0b0; a0b1, a1b0 and the error of a0b0; ...; the O(eps^3) products by FMA, the
-//! O(eps^4) ones dropped, as in the sloppy multiply), and level l of the accumulator (l = 0..3) sums the order-l
-//! terms with error-free two-sums whose errors go to level l + 1; level 4 sums in plain f64 (Ogita-Rump-Oishi SumK,
-//! per order). `finish` adds the five levels with qd + f64. The two-sum errors of adding into a running level sum are
-//! relative to that sum, not to the terms, so the levels grow (level 3 to about n^1.5 2^-159 sum |a_i b_i|): a first
-//! design that summed level 3 in plain f64, with those errors mixed into the per-term ones, gave errors growing
-//! like n (72 u at n = 512, u = 2^-209). Here every running-sum error enters the next level by its own two-sum,
-//! level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of `finish`.
-//! It costs about a third of a sloppy multiply plus a sloppy add.
+//! `QDotAcc` accumulates a sum of quad-double products in the spirit of `dv::DotAcc`. Each product is expanded into its
+//! partial products by order. Order 0 is a0b0, order 1 is a0b1, a1b0 and the error of a0b0, and so on, with the
+//! O(eps^3) products by FMA and the O(eps^4) ones dropped, as in the sloppy multiply. Level l of the accumulator
+//! (l = 0..3) sums the order-l terms by error-free two-sums whose errors go to level l + 1, and level 4 sums in plain
+//! f64, as Ogita, Rump and Oishi's SumK does per order. `finish` adds the five levels with qd + f64. The two-sum errors
+//! of adding into a running level sum are relative to that sum, not to the terms, so the levels grow, level 3 to about
+//! n^1.5 2^-159 sum |a_i b_i|. Summing level 3 in plain f64, with those errors mixed into the per-term ones, gives
+//! errors growing like n (72 u at n = 512, u = 2^-209). So every running-sum error enters the next level by its own
+//! two-sum, level 4 is the only plain sum, and the error is that of the dropped O(eps^4) partial products and of
+//! `finish`. It costs about a third of a sloppy multiply plus a sloppy add.
 use crate::dd::DD;
 use crate::dual::dd_param;
 use crate::dv::{quick_two_sum, two_prod, two_sum, DV};
@@ -29,10 +29,10 @@ use crate::simd::{self, Kernel, Simd};
 use crate::v8::{Divisor, M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-// Inlining: the hot operations (renormalizations, sloppy add and multiply, times and plus f64, the accumulator) run
-// through `Simd::hot`, forced inline on AVX2 and AVX-512 and left to the compiler on the other backends. The other
-// large operations are never forced, and run inside `Simd::vectorize`, so that a copy the compiler keeps out of line
-// still runs with the backend's instructions.
+// The hot operations (renormalizations, sloppy add and multiply, times and plus f64, the accumulator) run through
+// `Simd::hot`, which forces them inline on AVX2 and AVX-512 and leaves them to the compiler on the other backends. The
+// other large operations are never forced and run inside `Simd::vectorize`, so that a copy the compiler keeps out of
+// line still runs with the backend's instructions.
 
 #[derive(Clone, Copy, Debug)]
 pub struct QV<S: Simd> {
@@ -59,7 +59,7 @@ fn is_inf<S: Simd>(x: V8<S>) -> M8<S> {
     x.abs().eq(V8::splat(f64::INFINITY))
 }
 
-/// QD's renormalization of four parts, all lanes (see the module doc)
+/// Renormalizes four parts on all lanes by QD's algorithm, masked as the module doc describes.
 #[inline(always)]
 pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4] {
     S::hot(
@@ -75,10 +75,9 @@ pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4
             } else {
                 quick_two_sum(c0, s)
             };
-            // second pass: slots s0..s3, k >= 1 where c1 != 0
+            // The second pass fills slots s0..s3, with k >= 1 where c1 != 0.
             let (mut s0, mut s1, mut s2, mut s3) = (c0, c1, z, z);
-            // k1 hidden from the optimizer (`Simd::opaque`), so that the masks built from it stay
-            // bitwise operations on NEON
+            // `Simd::opaque` hides k1 from the optimizer, so the masks built from it stay bitwise operations on NEON.
             let k1 = c1.ne(z).opaque();
             // step c2 (k in {0, 1})
             let (t, e) = quick_two_sum(k1.sel(s1, s0), c2);
@@ -91,7 +90,7 @@ pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4
             } else {
                 (k1.or(ne), k1.and(ne))
             };
-            // step c3 (k in {0, 1, 2}): k >= 1 is ka, k >= 2 is kb
+            // Step c3 has k in {0, 1, 2}, with ka for k >= 1 and kb for k >= 2.
             let (t, e) = quick_two_sum(kb.sel(s2, ka.sel(s1, s0)), c3);
             s0 = ka.sel(s0, t);
             s1 = kb.sel(s1, ka.sel(t, e));
@@ -102,7 +101,7 @@ pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4
     )
 }
 
-/// `qd::grow_expansion` on all lanes
+/// Applies `qd::grow_expansion` to all lanes.
 #[inline(always)]
 fn grow_expansion<S: Simd>(e: &mut [V8<S>; 8], m: usize, b: V8<S>) {
     let mut q = b;
@@ -114,8 +113,8 @@ fn grow_expansion<S: Simd>(e: &mut [V8<S>; 8], m: usize, b: V8<S>) {
     e[m] = q;
 }
 
-/// `qd::renorm4_any` on all lanes, bitwise the same per lane: `renorm4` of the parts where that is exact and normalized
-/// or the parts are not all finite, `renorm4` of their Grow-Expansion elsewhere
+/// Applies `qd::renorm4_any` to all lanes with its bits per lane. A lane keeps `renorm4` of its parts where that is
+/// exact and normalized or the parts are not all finite, and takes `renorm4` of their Grow-Expansion elsewhere.
 #[inline(always)]
 pub fn renorm4_any<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4] {
     let r = renorm4(c0, c1, c2, c3);
@@ -142,7 +141,7 @@ pub fn renorm4_any<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S
     std::array::from_fn(|k| keep.sel(r[k], g[k]))
 }
 
-/// QD's renormalization of five parts to four, all lanes (see the module doc)
+/// Renormalizes five parts to four on all lanes by QD's algorithm, masked as the module doc describes.
 #[inline(always)]
 pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -> [V8<S>; 4] {
     S::hot(
@@ -160,8 +159,7 @@ pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -
                 quick_two_sum(c0, s)
             };
             let (mut s0, mut s1, mut s2, mut s3) = (c0, c1, z, z);
-            // k1 hidden from the optimizer (`Simd::opaque`), so that the masks built from it stay
-            // bitwise operations on NEON
+            // `Simd::opaque` hides k1 from the optimizer, so the masks built from it stay bitwise operations on NEON.
             let k1 = c1.ne(z).opaque();
             // step c2 (k in {0, 1})
             let (t, e) = quick_two_sum(k1.sel(s1, s0), c2);
@@ -182,7 +180,7 @@ pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -
             s3 = kb.sel(e, s3);
             let ne = e.ne(z);
             let (ka, kb, kc) = (ka.or(ne), kb.or(ka.and(ne)), kb.and(ne));
-            // step c4 (k in {0..3}; at k = 3 only the sum is kept)
+            // Step c4 has k in {0..3}, and at k = 3 only the sum is kept.
             let (t, e) = quick_two_sum(kc.sel(s3, kb.sel(s2, ka.sel(s1, s0))), c4);
             s0 = ka.sel(s0, t);
             s1 = kb.sel(s1, ka.sel(t, e));
@@ -193,13 +191,13 @@ pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -
     )
 }
 
-/// a0 b3 + a1 b2 + a2 b1 + a3 b0 by FMA in QD's order (as qd::eps3)
+/// Sums a0 b3 + a1 b2 + a2 b1 + a3 b0 by FMA in QD's order, as `qd::eps3` does.
 #[inline(always)]
 fn eps3<S: Simd>(a: &[V8<S>; 4], b: &[V8<S>; 4]) -> V8<S> {
     a[3].fma(b[0], a[2].fma(b[1], a[1].fma(b[2], a[0].mul(b[3]))))
 }
 
-/// a1 b3 + a2 b2 + a3 b1 by FMA in QD's order (as qd::eps4)
+/// Sums a1 b3 + a2 b2 + a3 b1 by FMA in QD's order, as `qd::eps4` does.
 #[inline(always)]
 fn eps4<S: Simd>(a: &[V8<S>; 4], b: &[V8<S>; 4]) -> V8<S> {
     a[3].fma(b[1], a[2].fma(b[2], a[1].mul(b[3])))
@@ -228,25 +226,26 @@ impl<S: Simd> QV<S> {
             c: [V8::splat(x.hi), V8::splat(x.lo), z, z],
         }
     }
-    /// exact
+    /// Converts exactly.
     #[inline(always)]
     pub fn from_dv(x: DV<S>) -> Self {
         let z = V8::zero();
         QV { c: [x.hi, x.lo, z, z] }
     }
-    /// double-double, to about 2^-106 relative (as QD::to_dd)
+    /// Converts to double-double to about 2^-106 relative, as `QD::to_dd` does.
     #[inline(always)]
     pub fn to_dv(self) -> DV<S> {
         let (h, l) = quick_two_sum(self.c[0], self.c[1].add(self.c[2].add(self.c[3])));
         DV { hi: h, lo: l }
     }
-    /// nearest f64 (as QD::to_f64: a zero tail leaves the leading part as it is, so a zero keeps its sign)
+    /// Returns the nearest f64 as `QD::to_f64` does. A zero tail returns the leading part unchanged, so a zero keeps
+    /// its sign.
     #[inline(always)]
     pub fn to_v8(self) -> V8<S> {
         let t = self.c[1].add(self.c[2].add(self.c[3]));
         t.eq(V8::zero()).sel(self.c[0], self.c[0].add(t))
     }
-    /// from the four parts' arrays (8 values each)
+    /// Loads from the four parts' arrays, 8 values each.
     #[inline(always)]
     pub fn load(c0: &[f64], c1: &[f64], c2: &[f64], c3: &[f64]) -> Self {
         QV {
@@ -299,14 +298,14 @@ impl<S: Simd> QV<S> {
             x: [a[0][j], a[1][j], a[2][j], a[3][j]],
         })
     }
-    /// all lanes = lane j
+    /// Sets all lanes to lane j.
     #[inline(always)]
     pub fn bcast(self, j: usize) -> Self {
         QV {
             c: self.c.map(|v| v.bcast(j)),
         }
     }
-    /// |leading part|
+    /// Returns the absolute value of the leading part.
     #[inline(always)]
     pub fn abs_hi(self) -> V8<S> {
         self.c[0].abs()
@@ -324,7 +323,7 @@ impl<S: Simd> QV<S> {
             },
         )
     }
-    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
+    /// Multiplies by a power of two b (`dd::is_pwr2`), scaling every part exactly barring overflow and underflow.
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> Self {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
@@ -338,7 +337,7 @@ impl<S: Simd> QV<S> {
     // additions
     // ---------------------------------------------------------------------------------------------------------
 
-    /// the sloppy add (the default `+`), as QD::sloppy_add
+    /// Adds by the sloppy add, the default `+`, as `QD::sloppy_add` does.
     #[inline(always)]
     pub fn sloppy_add(self, b: Self) -> Self {
         S::hot(
@@ -365,8 +364,8 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// the accurate merge add, as QD::ieee_add (QD's algorithm with its last part u + v when all parts are read with
-    /// three emitted; see the module doc and QD::ieee_add)
+    /// Adds by the accurate merge add as `QD::ieee_add` does, QD's algorithm with both of its repairs. The module doc
+    /// describes the masks.
     #[inline]
     pub fn ieee_add(self, b: Self) -> Self {
         S::vectorize(
@@ -383,8 +382,8 @@ impl<S: Simd> QV<S> {
                         x.abs().gt(y.abs())
                     }
                 };
-                // a's and b's parts not yet read, as queues: qa[0] is a[i], the next part of a, and qb[0] is b[j]. A
-                // read shifts its queue and fills it with zeros.
+                // The queues qa and qb hold a's and b's parts not yet read. qa[0] is a[i], the next part of a, and
+                // qb[0] is b[j]. A read shifts its queue and fills it with zeros.
                 let shift =
                     |q: [V8<S>; 4], m: M8<S>| [m.sel(q[1], q[0]), m.sel(q[2], q[1]), m.sel(q[3], q[2]), m.sel(z, q[3])];
                 // the first two parts
@@ -402,14 +401,15 @@ impl<S: Simd> QV<S> {
                 qa = shift(qa, ta);
                 qb = shift(qb, ta.not());
                 let (mut u, mut v) = quick_two_sum(u, v);
-                // the parts emitted, last in x[3]: an emission shifts x left, so a lane's k parts end in x[4 - k..]
+                // x holds the parts emitted, the last in x[3]. An emission shifts x left, so a lane's k parts end in
+                // x[4 - k..].
                 let mut x = [z; 4];
                 let mut k = z;
                 let mut done = z.ne(z); // all false
                 for it in 0..7 {
                     let ea = i.ge(four);
                     let eb = j.ge(four);
-                    // all parts read: the lane stops, and u, v are placed after its parts below
+                    // A lane that has read all parts stops, and u, v are placed after its parts below.
                     done = done.or(ea.and(eb));
                     let act = done.not();
                     // the next part by magnitude
@@ -431,7 +431,7 @@ impl<S: Simd> QV<S> {
                     u = act.sel(both.sel(aa, s), u);
                     v = act.sel(zb.sel(bb, aa), v);
                     let ret = both.sel(s, z);
-                    // a part that does not fit: x[k++] = ret
+                    // A part that does not fit is emitted, x[k++] = ret.
                     let w = act.and_ne(ret, z);
                     x = [
                         w.sel(x[1], x[0]),
@@ -441,13 +441,13 @@ impl<S: Simd> QV<S> {
                     ];
                     k = k.add_where(w, one);
                     done = done.or(k.ge(four));
-                    // a lane stops after four emissions or eight reads, so not before the fourth step
+                    // A lane stops after four emissions or eight reads, so not before the fourth step.
                     if it >= 3 && done.bits() == 0xff {
                         break;
                     }
                 }
-                // every lane has stopped. A lane that read every part with k < 4 emitted has x[k] = u, x[k + 1] = v
-                // (k < 3), or x[3] = u and v as a fifth term (k = 3), as QD::ieee_add.
+                // Every lane has stopped. A lane that read every part with k < 4 emitted has x[k] = u and x[k + 1] = v
+                // (k < 3), or x[3] = u and v as a fifth term (k = 3), as in `QD::ieee_add`.
                 let (k0, k1, k2, k3) = (k.eq(z), k.eq(one), k.eq(V8::splat(2.0)), k.eq(V8::splat(3.0)));
                 let full = k.ge(four);
                 let x = [
@@ -456,8 +456,8 @@ impl<S: Simd> QV<S> {
                     k0.sel(z, k1.sel(v, k2.sel(u, k3.sel(x[3], x[2])))),
                     k0.sel(z, k1.sel(z, k2.sel(v, k3.sel(u, x[3])))),
                 ];
-                // lanes that emitted four parts: u, v and the parts not read, a's first, in order, form a fifth term
-                // (QD::ieee_add); the others have read every part
+                // In lanes that emitted four parts, u, v and the parts not read, a's first and in order, form a fifth
+                // term as in `QD::ieee_add`. The other lanes have read every part.
                 let mut e = v;
                 for m in 0..4 {
                     e = e.add_where(V8::splat(4.0 - m as f64).gt(i), qa[m]);
@@ -489,7 +489,7 @@ impl<S: Simd> QV<S> {
         self.ieee_add(-b)
     }
 
-    /// qd + exact f64 vector, as QD::add_f
+    /// Adds an exact f64 vector, as `QD::add_f` does.
     #[inline(always)]
     pub fn add_v(self, b: V8<S>) -> Self {
         S::hot(
@@ -512,7 +512,7 @@ impl<S: Simd> QV<S> {
         self.add_v(V8::splat(b))
     }
 
-    /// qd + dd, as QD::add_dd
+    /// Adds double-double lanes, as `QD::add_dd` does.
     #[inline]
     pub fn add_dv(self, b: DV<S>) -> Self {
         S::vectorize(
@@ -537,7 +537,7 @@ impl<S: Simd> QV<S> {
     // multiplications
     // ---------------------------------------------------------------------------------------------------------
 
-    /// times an exact f64 vector, as QD::mul_f
+    /// Multiplies by an exact f64 vector, as `QD::mul_f` does.
     #[inline(always)]
     pub fn mul_v(self, b: V8<S>) -> Self {
         S::hot(
@@ -566,7 +566,7 @@ impl<S: Simd> QV<S> {
         self.mul_v(V8::splat(b))
     }
 
-    /// times double-double lanes, as QD::mul_dd
+    /// Multiplies by double-double lanes, as `QD::mul_dd` does.
     #[inline]
     pub fn mul_dv(self, b: DV<S>) -> Self {
         S::vectorize(
@@ -597,7 +597,7 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// the sloppy multiply (the default `*`), as QD::sloppy_mul
+    /// Multiplies by the sloppy multiply, the default `*`, as `QD::sloppy_mul` does.
     #[inline(always)]
     pub fn sloppy_mul(self, b: Self) -> Self {
         S::hot(
@@ -637,7 +637,7 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// the accurate multiply, as QD::accurate_mul
+    /// Multiplies by the accurate multiply, as `QD::accurate_mul` does.
     #[inline]
     pub fn accurate_mul(self, b: Self) -> Self {
         S::vectorize(
@@ -688,7 +688,7 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// the square, as QD::sqr
+    /// Squares as `QD::sqr` does.
     #[inline]
     pub fn sqr(self) -> Self {
         S::vectorize(
@@ -730,7 +730,7 @@ impl<S: Simd> QV<S> {
     // division, square root
     // ---------------------------------------------------------------------------------------------------------
 
-    /// the sloppy divide (the default `/`), as QD::sloppy_div
+    /// Divides by the sloppy divide, the default `/`, as `QD::sloppy_div` does.
     #[inline]
     pub fn sloppy_div(self, b: Self) -> Self {
         S::vectorize(
@@ -750,8 +750,8 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// self / b for r = b.c\[0\].divisor(), bitwise the same as `/` (the sloppy divide). Its four quotients by b.c\[0\]
-    /// go through r, so several divisions by one b share it (on AVX-512 its reciprocal).
+    /// Divides self by b, given r = b.c\[0\].divisor(), with the bits of `/`, the sloppy divide. Its four quotients by
+    /// b.c\[0\] go through r, so several divisions by one b share it. On AVX-512 r holds the reciprocal of b.c\[0\].
     #[inline]
     pub fn div_by(self, b: Self, r: Divisor<S>) -> Self {
         S::vectorize(
@@ -771,7 +771,7 @@ impl<S: Simd> QV<S> {
         )
     }
 
-    /// the accurate divide, as QD::accurate_div
+    /// Divides by the accurate divide, as `QD::accurate_div` does.
     #[inline]
     pub fn accurate_div(self, b: Self) -> Self {
         S::vectorize(
@@ -798,7 +798,7 @@ impl<S: Simd> QV<S> {
         QV::splat_f(1.0) / self
     }
 
-    /// the square root, as QD::sqrt (scaled by a power of four into [1, 4); zero lanes give zero)
+    /// Returns the square root as `QD::sqrt` does, scaled by a power of four into [1, 4). Zero lanes give zero.
     #[inline]
     pub fn sqrt(self) -> Self {
         S::vectorize(
@@ -812,7 +812,7 @@ impl<S: Simd> QV<S> {
                 let a = QV {
                     c: self.c.map(|v| v.mul(inv).mul(inv)),
                 };
-                // `DD::sqrt` of a's two leading parts, a0 in [1, 4), as QD::sqrt
+                // `DD::sqrt` of a's two leading parts, with a0 in [1, 4), as in `QD::sqrt`.
                 let sh = a.c[0].sqrt();
                 let rho = a.c[1].add(sh.neg().fma(sh, a.c[0]));
                 let (h, l) = quick_two_sum(sh, rho.div(sh.add(sh)));
@@ -821,7 +821,7 @@ impl<S: Simd> QV<S> {
                 let r = if mutate::on(mutate::SQRT_ITER) {
                     yq
                 } else {
-                    // one Newton step with its second-order term (QD::sqrt)
+                    // One Newton step with its second-order term, as in `QD::sqrt`.
                     let r = a.sloppy_add(-yq.sqr());
                     let t = r.to_dv() / y.mul_pwr2(2.0);
                     let t2 = t.hi.mul(t.hi).div(y.hi.add(y.hi));
@@ -838,7 +838,8 @@ impl<S: Simd> QV<S> {
 impl<S: Simd> Neg for QV<S> {
     type Output = Self;
     #[inline(always)]
-    /// as QD's: the leading part's sign bit flipped, the lower three as -x + 0 (a zero lower part is +0)
+    /// Negates as `QD` does, flipping the leading part's sign bit and taking the lower three to -x + 0, so a zero lower
+    /// part is +0.
     fn neg(self) -> Self {
         let z = V8::zero();
         let c = self.c;
@@ -880,7 +881,7 @@ impl<S: Simd> Div for QV<S> {
     }
 }
 
-/// Accumulator for sums of quad-double products (see the module doc); the 8-lane twin of `qd::QdAcc`.
+/// Accumulates sums of quad-double products as the module doc describes. It is the 8-lane twin of `qd::QdAcc`.
 #[derive(Clone, Copy, Debug)]
 pub struct QDotAcc<S: Simd> {
     pub s: [V8<S>; 5],
@@ -891,7 +892,7 @@ impl<S: Simd> QDotAcc<S> {
     pub fn zero() -> Self {
         QDotAcc { s: [V8::zero(); 5] }
     }
-    /// self + a b
+    /// Returns self + a b.
     #[inline(always)]
     pub fn add_prod(self, a: QV<S>, b: QV<S>) -> Self {
         S::hot(
@@ -899,10 +900,10 @@ impl<S: Simd> QDotAcc<S> {
             || self.plus_prod(&a, &b),
         )
     }
-    /// self + a b into self, with a and b borrowed: bitwise `add_prod`. The step runs through `Simd::hot` with only
-    /// the three references captured, so that where the compiler keeps it out of line (NEON, SSE2, portable) the call
-    /// copies nothing. Around an out-of-line `add_prod` the accumulator is copied in and the result out, 640 bytes per
-    /// product (NEON).
+    /// Adds a b into self with a and b borrowed, with the bits of `add_prod`. The step runs through `Simd::hot` with
+    /// only the three references captured, so that where the compiler keeps it out of line (NEON, SSE2, portable) the
+    /// call copies nothing. Around an out-of-line `add_prod` the accumulator is copied in and the result out, 640 bytes
+    /// per product on NEON.
     #[inline(always)]
     pub fn add_prod_mut(&mut self, a: &QV<S>, b: &QV<S>) {
         S::hot(
@@ -910,8 +911,8 @@ impl<S: Simd> QDotAcc<S> {
             || *self = self.plus_prod(a, b),
         )
     }
-    /// self + a b, the step of `add_prod` and `add_prod_mut`, inlined where it is used (`crate::jet::QJet`'s
-    /// accumulation runs its convolution as one `Simd::hot` step around it)
+    /// Returns self + a b, the step of `add_prod` and `add_prod_mut`, inlined where it is used. `crate::jet::QJet`'s
+    /// accumulation runs its convolution as one `Simd::hot` step around it.
     #[inline(always)]
     pub(crate) fn plus_prod(&self, a: &QV<S>, b: &QV<S>) -> Self {
         let (a, b) = (a.c, b.c);
@@ -948,7 +949,7 @@ impl<S: Simd> QDotAcc<S> {
             s: [s0, s1, s2, s3, self.s[4].add(x9.add(x10))],
         }
     }
-    /// self + a
+    /// Returns self + a.
     #[inline(always)]
     pub fn add(self, a: QV<S>) -> Self {
         S::hot(
@@ -992,10 +993,10 @@ impl<S: Simd> QDotAcc<S> {
 // quad-double lanes as a `Lane`
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Quad-double values as a `Lane`, so that code generic over `Lane` compiles and runs with quad-double lanes. The
-/// trait passes constants and inputs as double-double (`DV`): they enter exactly (`from_dv`) but carry only
-/// double-double accuracy, and `val` rounds back to double-double. So this instantiation computes in quad-double with
-/// double-double data.
+/// Quad-double values as a `Lane`, so that code generic over `Lane` compiles and runs with quad-double lanes. The trait
+/// passes constants and inputs as double-double (`DV`). They enter exactly (`from_dv`) but carry only double-double
+/// accuracy, and `val` rounds back to double-double. So this instantiation computes in quad-double with double-double
+/// data.
 impl<S: Simd> crate::dual::Lane for QV<S> {
     type S = S;
     type Acc = QDotAcc<S>;
@@ -1050,7 +1051,7 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     fn acc(a: QDotAcc<S>, x: Self, y: Self) -> QDotAcc<S> {
         a.add_prod(x, y)
     }
-    /// `acc` in place (`QDotAcc::add_prod_mut`)
+    /// Applies `acc` in place by `QDotAcc::add_prod_mut`.
     #[inline(always)]
     fn acc_mut(a: &mut QDotAcc<S>, x: &Self, y: &Self) {
         a.add_prod_mut(x, y);
@@ -1067,7 +1068,7 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
     fn fin(a: QDotAcc<S>) -> Self {
         a.finish()
     }
-    /// the quad-double value (k = 0), zero past it
+    /// Returns the quad-double value for k = 0 and zero past it.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<S> {
         if k == 0 {
@@ -1082,8 +1083,8 @@ impl<S: Simd> crate::dual::Lane for QV<S> {
 // quad-double vectors as four part arrays
 // ---------------------------------------------------------------------------------------------------------------
 
-/// y + a x on four-part arrays: 8 elements at a time on the backend S, the rest in scalar quad-double (bitwise the
-/// same per element)
+/// Computes y + a x on four-part arrays, 8 elements at a time on the backend S and the rest in scalar quad-double, with
+/// the same bits per element.
 struct AxpyParts<'a> {
     a: f64,
     x: [&'a [f64]; 4],
@@ -1125,10 +1126,10 @@ impl Kernel for AxpyParts<'_> {
     }
 }
 
-/// y + a x for quad-double vectors given as four part arrays (part q of element i at `x[q][i]`, as `QD::x`, the
-/// parts normalized as `QD` keeps them), a an f64: each element `QD::mul_f` then `+`, 8 at a time on the best
-/// backend the CPU has and the rest in scalar quad-double, bitwise the same per element. Returns the four parts of
-/// the result. Panics unless the eight arrays have one length.
+/// Computes y + a x for an f64 a and quad-double vectors given as four part arrays, part q of element i at `x[q][i]` as
+/// in `QD::x`, with the parts normalized as `QD` keeps them. Each element takes `QD::mul_f` then `+`, 8 at a time on
+/// the best backend the CPU has and the rest in scalar quad-double, with the same bits per element. Returns the four
+/// parts of the result. Panics unless the eight arrays have one length.
 pub fn axpy_parts(a: f64, x: [&[f64]; 4], y: [&[f64]; 4]) -> [Vec<f64>; 4] {
     let n = y[0].len();
     assert!(
