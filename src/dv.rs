@@ -116,6 +116,20 @@ impl<S: Simd> DV<S> {
     pub fn abs_hi(self) -> V8<S> {
         self.hi.abs()
     }
+    /// `DD::fast_div` on all lanes (two divisions, within 15 u^2 + 56 u^3), bitwise the same per lane
+    #[inline(always)]
+    pub fn fast_div(self, b: Self) -> Self {
+        let th = self.hi.div(b.hi);
+        let (ch, cl1) = two_prod(b.hi, th);
+        let (h, tl1) = quick_two_sum(ch, b.lo.mul(th));
+        let (rh, rl) = quick_two_sum(h, tl1.add(cl1));
+        let d = self.hi.sub(rh).add(self.lo.sub(rl));
+        let (h, l) = quick_two_sum(th, d.div(b.hi));
+        DV {
+            hi: h,
+            lo: l.add(V8::zero()),
+        }
+    }
     /// self / b for r = b.hi.divisor(), bitwise the same as `/`. Its three quotients by b.hi go through r, so
     /// several divisions by one b share it (on AVX-512 its reciprocal).
     #[inline(always)]

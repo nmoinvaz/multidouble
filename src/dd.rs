@@ -110,6 +110,26 @@ impl DD {
     pub fn recip(self) -> DD {
         DD::ONE / self
     }
+    /// self / b with two divisions where `/` has three: DWDivDW2, Algorithm 17 of J. Joldes, J.-M. Muller,
+    /// V. Popescu, "Tight and rigorous error bounds for basic building blocks of double-word arithmetic", ACM Trans.
+    /// Math. Softw. 44(2), 2017, doi:10.1145/3121432, with their Algorithm 7 for (b.hi + b.lo) th. Its relative error
+    /// is at most 15 u^2 + 56 u^3 (their Theorem 7.1), a bound J.-M. Muller and L. Rideau proved formally (ACM Trans.
+    /// Math. Softw. 48(1), 2022, doi:10.1145/3484514). `/` is tested to 8 u^2 and
+    /// measures about 2 u^2.
+    /// Barring underflow and overflow; a zero or non-finite divisor gives whatever its steps give. The low part is
+    /// never a negative zero (`Neg`'s canonical form).
+    #[inline(always)]
+    pub fn fast_div(self, b: DD) -> DD {
+        let th = self.hi / b.hi;
+        // (rh, rl) ~ (b.hi + b.lo) th
+        let (ch, cl1) = two_prod(b.hi, th);
+        let (h, tl1) = quick_two_sum(ch, b.lo * th);
+        let (rh, rl) = quick_two_sum(h, tl1 + cl1);
+        // self.hi - rh is exact (Sterbenz: rh is within (3u + 6u^2) self.hi of self.hi)
+        let d = (self.hi - rh) + (self.lo - rl);
+        let (h, l) = quick_two_sum(th, d / b.hi);
+        DD { hi: h, lo: l + 0.0 }
+    }
     /// the square: the two-product of hi, and 2 hi lo by one fused multiply-add, one rounding fewer than `self * self`
     #[inline(always)]
     pub fn sqr(self) -> DD {
