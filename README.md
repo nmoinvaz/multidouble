@@ -243,8 +243,9 @@ first. The other bounds are the thresholds the tests check.
   for the double-double add, multiply and divide.
 - The quad-double column is for the default operators `+`, `*` and `/`. The more accurate `ieee_add`, `accurate_mul` and
   `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴. The quad-double types use the QD library's algorithms (Hida, Li and Bailey,
-  ARITH-15, 2001) with two repairs found by these tests: the accurate add lost a term when all parts are read with three
-  emitted, and the square root, which lost accuracy far from 1, now scales its argument by a power of four.
+  ARITH-15, 2001) with three repairs: the accurate add lost a term when all parts are read with three emitted, and its
+  accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy far from
+  1, now scales its argument by a power of four.
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved, not yet refereed); cₙ grows like
   n⁹u⁹, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal `f64`, so
