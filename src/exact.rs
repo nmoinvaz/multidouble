@@ -1,11 +1,12 @@
 //! Exact arithmetic on dyadic rationals ±m·2^e (m an unsigned big integer) and on m / 10^k, with no dependency.
 //!
-//! Used by `qd` for decimal parsing (the exact decimal value, then the four components by greedy round-to-nearest) and
-//! printing (the exact decimal expansion of the four-component sum, correctly rounded to the digits asked for), and by
-//! the quad-double tests as their error-free reference. Nothing here is on a hot path; clarity over speed.
+//! `qd` uses it for decimal parsing (the exact decimal value, then the components by greedy round-to-nearest) and
+//! printing (the exact decimal expansion of the components' sum, correctly rounded to the digits asked for), for its
+//! own values and for `od`'s. `qd` and `od` give their exact values with it, and the tests use it as their error-free
+//! reference. Nothing here is on a hot path, so the code favors clarity over speed.
 use std::cmp::Ordering;
 
-/// Unsigned big integer, little-endian 64-bit limbs, no high zero limbs.
+/// Unsigned big integer in little-endian 64-bit limbs, with no high zero limbs.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct BigU(pub Vec<u64>);
 
@@ -31,7 +32,7 @@ impl BigU {
     pub fn is_zero(&self) -> bool {
         self.0.is_empty()
     }
-    /// number of significant bits (0 for zero)
+    /// Returns the number of significant bits, 0 for zero.
     pub fn bits(&self) -> u64 {
         match self.0.last() {
             None => 0,
@@ -42,7 +43,7 @@ impl BigU {
         let (w, b) = ((i / 64) as usize, i % 64);
         w < self.0.len() && (self.0[w] >> b) & 1 == 1
     }
-    /// any of the bits below bit n set
+    /// Tests whether any bit below bit n is set.
     pub fn any_below(&self, n: u64) -> bool {
         let (w, b) = ((n / 64) as usize, n % 64);
         for k in 0..w.min(self.0.len()) {
@@ -72,7 +73,7 @@ impl BigU {
         r.trim();
         r
     }
-    /// floor(self / 2^n)
+    /// Returns floor(self / 2^n).
     pub fn shr(&self, n: u64) -> BigU {
         let (w, b) = ((n / 64) as usize, n % 64);
         if w >= self.0.len() {
@@ -118,7 +119,7 @@ impl BigU {
         r.trim();
         r
     }
-    /// self - o, requires self >= o
+    /// Returns self - o and requires self >= o.
     pub fn sub(&self, o: &BigU) -> BigU {
         assert!(self.cmp(o) != Ordering::Less);
         let mut r = Vec::with_capacity(self.0.len());
@@ -157,7 +158,7 @@ impl BigU {
     pub fn mul_small(&self, k: u64) -> BigU {
         self.mul(&BigU::from_u64(k))
     }
-    /// (floor(self / d), self mod d), d > 0
+    /// Returns (floor(self / d), self mod d) for d > 0.
     pub fn divrem_small(&self, d: u64) -> (BigU, u64) {
         assert!(d > 0);
         let mut q = vec![0u64; self.0.len()];
@@ -185,7 +186,7 @@ impl BigU {
         }
         r
     }
-    /// (floor(self / 10^k), remainder != 0)
+    /// Returns (floor(self / 10^k), remainder != 0).
     pub fn div_pow10(&self, mut k: u64) -> (BigU, bool) {
         let mut q = self.clone();
         let mut sticky = false;
@@ -198,7 +199,7 @@ impl BigU {
         }
         (q, sticky)
     }
-    /// decimal digits ("0" for zero)
+    /// Returns the decimal digits, "0" for zero.
     pub fn to_dec(&self) -> String {
         if self.is_zero() {
             return "0".into();
@@ -216,7 +217,7 @@ impl BigU {
         }
         s
     }
-    /// from a string of decimal digits
+    /// Parses a string of decimal digits.
     pub fn from_dec(d: &str) -> BigU {
         let mut r = BigU::zero();
         for c in d.as_bytes().chunks(19) {
@@ -229,7 +230,7 @@ impl BigU {
     }
 }
 
-/// q·2^k for q < 2^54 when the result is exactly representable (or overflows to infinity)
+/// Returns q·2^k for q < 2^54 when the result is exactly representable, or infinity when it overflows.
 fn ldexp_exact(q: u64, k: i64) -> f64 {
     if q == 0 {
         return 0.0;
@@ -243,7 +244,7 @@ fn ldexp_exact(q: u64, k: i64) -> f64 {
     if lead >= -1022 {
         return f64::from_bits((((lead + 1023) as u64) << 52) | (q & ((1u64 << 52) - 1)));
     }
-    // subnormal: q·2^k = (q >> (-1074 - k))·2^-1074, exact by assumption
+    // A subnormal q·2^k = (q >> (-1074 - k))·2^-1074 is exact by assumption.
     let sh = -1074 - k;
     if sh >= 64 {
         return 0.0;
@@ -251,7 +252,8 @@ fn ldexp_exact(q: u64, k: i64) -> f64 {
     f64::from_bits(q >> sh)
 }
 
-/// Round-to-nearest-even of m·2^e (+ a positive amount below 2^e if sticky) to f64, with subnormals and overflow.
+/// Rounds m·2^e, plus a positive amount below 2^e if sticky, to the nearest f64 with ties to even, with subnormals and
+/// overflow.
 pub fn round_to_f64(m: &BigU, e: i64, sticky: bool) -> f64 {
     let l = m.bits() as i64;
     if l == 0 {
@@ -264,7 +266,7 @@ pub fn round_to_f64(m: &BigU, e: i64, sticky: bool) -> f64 {
     // bits of precision available at this exponent
     let p = if lead >= -1022 { 53 } else { lead + 1075 };
     let drop = l - p;
-    // with no bits dropped a sticky amount could exceed half an ulp: callers pass enough bits
+    // With no bits dropped a sticky amount could exceed half an ulp, so callers pass enough bits.
     assert!(!sticky || drop > 0, "round_to_f64: sticky with an exact mantissa");
     let (q, k) = if drop <= 0 {
         (m.0[0] << (-drop) as u64, e + drop) // exact (l <= p <= 53)
@@ -280,7 +282,7 @@ pub fn round_to_f64(m: &BigU, e: i64, sticky: bool) -> f64 {
     ldexp_exact(q, k)
 }
 
-/// q·2^k for q < 2^114 when the result is exactly representable in f128 (or overflows to infinity)
+/// Returns q·2^k for q < 2^114 when the result is exactly representable in f128, or infinity when it overflows.
 #[cfg(feature = "f128")]
 fn ldexp_exact_f128(q: u128, k: i64) -> f128 {
     if q == 0 {
@@ -295,7 +297,7 @@ fn ldexp_exact_f128(q: u128, k: i64) -> f128 {
     if lead >= -16382 {
         return f128::from_bits((((lead + 16383) as u128) << 112) | (q & ((1u128 << 112) - 1)));
     }
-    // subnormal: q·2^k = (q >> (-16494 - k))·2^-16494, exact by assumption
+    // A subnormal q·2^k = (q >> (-16494 - k))·2^-16494 is exact by assumption.
     let sh = -16494 - k;
     if sh >= 128 {
         return 0.0;
@@ -303,7 +305,8 @@ fn ldexp_exact_f128(q: u128, k: i64) -> f128 {
     f128::from_bits(q >> sh)
 }
 
-/// Round-to-nearest-even of m·2^e (+ a positive amount below 2^e if sticky) to f128, with subnormals and overflow.
+/// Rounds m·2^e, plus a positive amount below 2^e if sticky, to the nearest f128 with ties to even, with subnormals and
+/// overflow.
 #[cfg(feature = "f128")]
 pub fn round_to_f128(m: &BigU, e: i64, sticky: bool) -> f128 {
     let low = |b: &BigU| b.0.first().copied().unwrap_or(0) as u128 | (b.0.get(1).copied().unwrap_or(0) as u128) << 64;
@@ -347,7 +350,7 @@ impl Dy {
     pub fn is_zero(&self) -> bool {
         self.m.is_zero()
     }
-    /// exact value of a finite f64
+    /// Returns the exact value of a finite f64.
     pub fn from_f64(x: f64) -> Dy {
         assert!(x.is_finite(), "Dy::from_f64({x})");
         let b = x.to_bits();
@@ -365,7 +368,7 @@ impl Dy {
             e,
         }
     }
-    /// exact value of a finite f128
+    /// Returns the exact value of a finite f128.
     #[cfg(feature = "f128")]
     pub fn from_f128(x: f128) -> Dy {
         assert!(x.is_finite(), "Dy::from_f128({x:?})");
@@ -384,7 +387,7 @@ impl Dy {
             e,
         }
     }
-    /// exact sum of finite f64
+    /// Returns the exact sum of finite f64.
     pub fn sum(xs: &[f64]) -> Dy {
         xs.iter().fold(Dy::zero(), |a, &x| a.add(&Dy::from_f64(x)))
     }
@@ -459,7 +462,8 @@ impl Dy {
         let (a, b, _) = self.align(o);
         a.cmp(&b)
     }
-    /// |self| ≈ f·2^k with f in [1, 2) (f to f64 precision), None for zero
+    /// Returns (f, k) with |self| ≈ f·2^k and f in [1, 2], f to f64 precision, or None for zero. f is 2 when the top 64
+    /// bits round up to 2^64.
     pub fn approx(&self) -> Option<(f64, i64)> {
         let l = self.m.bits() as i64;
         if l == 0 {
@@ -473,7 +477,7 @@ impl Dy {
         };
         Some((t as f64 / 2f64.powi(63), self.e + l - 1))
     }
-    /// |self| / |o| as f64 (0 if self is zero, inf if o is zero); about 1e-16 relative
+    /// Returns |self| / |o| as f64 to about 1e-16 relative, 0 if self is zero and inf if o is zero.
     pub fn ratio(&self, o: &Dy) -> f64 {
         match (self.approx(), o.approx()) {
             (None, _) => 0.0,
@@ -490,7 +494,7 @@ impl Dy {
             }
         }
     }
-    /// value rounded to nearest f64
+    /// Rounds the value to the nearest f64.
     pub fn to_f64(&self) -> f64 {
         let v = round_to_f64(&self.m, self.e, false);
         if self.neg {
@@ -499,7 +503,7 @@ impl Dy {
             v
         }
     }
-    /// value rounded to nearest f128
+    /// Rounds the value to the nearest f128.
     #[cfg(feature = "f128")]
     pub fn to_f128(&self) -> f128 {
         let v = round_to_f128(&self.m, self.e, false);
@@ -509,8 +513,8 @@ impl Dy {
             v
         }
     }
-    /// four parts by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...): a normalized quad-double built
-    /// without any quad-double arithmetic
+    /// Splits the value into four parts by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), a normalized
+    /// quad-double built without any quad-double arithmetic.
     pub fn greedy4(&self) -> [f64; 4] {
         let mut r = self.clone();
         let mut x = [0.0; 4];
@@ -525,7 +529,7 @@ impl Dy {
         }
         x
     }
-    /// times 2^k
+    /// Multiplies by 2^k.
     pub fn ldexp(&self, k: i64) -> Dy {
         Dy {
             neg: self.neg,
@@ -533,7 +537,7 @@ impl Dy {
             e: self.e + k,
         }
     }
-    /// exact decimal: (negative, digits, exponent) with value = digits · 10^exponent
+    /// Returns the exact decimal (negative, digits, exponent) with value = digits · 10^exponent.
     pub fn to_decimal(&self) -> (bool, BigU, i64) {
         if self.e >= 0 {
             (self.neg, self.m.shl(self.e as u64), 0)
@@ -543,8 +547,8 @@ impl Dy {
     }
 }
 
-/// Signed rational n / (10^k · 2^t) (n a signed big integer, t of either sign), for the greedy conversion of a
-/// decimal to f64 components.
+/// Signed rational ±n / (10^k · 2^t), with n an unsigned big integer, the sign in neg, and t of either sign, for the
+/// greedy conversion of a decimal to f64 components.
 #[derive(Clone, Debug)]
 pub struct DecRat {
     pub neg: bool,
@@ -554,12 +558,13 @@ pub struct DecRat {
 }
 
 impl DecRat {
-    /// round to nearest f64
+    /// Rounds to the nearest f64.
     pub fn round(&self) -> f64 {
         if self.n.is_zero() {
             return 0.0;
         }
-        // q = floor(n · 2^sh / 10^k) with at least 64 significant bits, value = q · 2^(-sh - t) (+ sticky)
+        // q = floor(n · 2^sh / 10^k) has at least 64 significant bits, and the value is q · 2^(-sh - t) plus the sticky
+        // part.
         let est = self.n.bits() as i64 - (self.k as f64 * std::f64::consts::LOG2_10).floor() as i64;
         let sh = (70 - est).max(0) as u64;
         let (q, sticky) = self.n.shl(sh).div_pow10(self.k);
@@ -570,7 +575,7 @@ impl DecRat {
             v
         }
     }
-    /// self - c (c a finite f64)
+    /// Returns self - c for a finite f64 c.
     pub fn sub_f64(&self, c: f64) -> DecRat {
         let d = Dy::from_f64(c);
         if d.is_zero() {
