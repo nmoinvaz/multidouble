@@ -29,16 +29,16 @@
 //! f64::MAX + ulp/2 (an overflowing one is +inf, outside the bounds), and `OD::ln` by 9.926 u^8 |ln x| + 2^-509, for
 //! inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient below the
 //! normal range (the paper's (A2), apart from the scalings above, whose losses the bounds include, and the products
-//! that only choose k, m, the degree or a branch of ln), proved in the paper (paper/expansion-error-bounds.pdf, its
-//! appendix on exp and log) from Lemma 20 at every operation; `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 for a
+//! that only choose k, m, the degree or a branch of ln), proved in the paper (paper/expansion-error-bounds.pdf,
+//! Theorems 34 and 36) from Lemma 20 at every operation; `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 for a
 //! finite result, and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for double-words under the same condition, from the
-//! published bounds of the double-word operations they use and the proven bound of `ln_f64`. An emulator of these steps
-//! with every product hooked finds none below the normal range at any binade of the argument, the closest 48 binades
-//! above it (the paper's appendix on exp and log), so the argument's size does not break the condition there; a part
-//! far below the one above it can make a product underflow, as for the other operations. The constants come from
-//! `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no proven bounds, and are
-//! tested to: exp within 64 u^4 e^x + 4 2^-1074 for a finite result (the absolute term, as above, from the parts that
-//! fall below 2^-1022), ln to 64 u^4 |ln x|.
+//! published bounds of the double-word operations they use and the proven bound of `ln_f64` (Proposition 38 and Lemma
+//! 37). An emulator of these steps with every product hooked finds none below the normal range at any binade of the
+//! argument, the closest 48 binades above it (`paper/explog_bits.py scan`), so the argument's size does not break the
+//! condition there; a part far below the one above it can make a product underflow, as for the other operations. The
+//! constants come from `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no
+//! proven bounds, and are tested to: exp within 64 u^4 e^x + 4 2^-1074 for a finite result (the absolute term, as
+//! above, from the parts that fall below 2^-1022), ln to 64 u^4 |ln x|.
 //!
 //! Range: exp gives +inf for x_0 > 709.79 and +0 for x_0 < -745.2, and computes in between, where an overflowing
 //! result is +inf and an underflowing one loses its lower parts to the subnormals as the other operations do. ln
@@ -789,7 +789,7 @@ fn start_dd(x0: f64, dd: impl Fn() -> DD, half: impl Fn() -> DD) -> DD {
     }
 }
 
-/// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper/explog_consts.py), and 0 for h = 1: h = 2^e m
+/// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper, Lemma 37), and 0 for h = 1: h = 2^e m
 /// with m in (mu/2, mu], mu = RN(sqrt 2), m - 1 exact, and ln m = 2 atanh(s), s = (m - 1) / (m + 1), |s| <= 0.1716,
 /// by the first ten terms of its series in s^2 (by Horner's rule with fused multiply-adds), whose remainder is below
 /// 0.22 u relative; then e ln 2 is added by one fused multiply-add. No library logarithm is called, so the start of
