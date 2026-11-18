@@ -51,7 +51,9 @@
 //! and its quadrant. Horner's scheme runs the longest series and masks each step per lane, so that a lane with k terms
 //! starts at its own leading coefficient and keeps its sum through the steps past its k. The quadrants, the early
 //! returns and the unscaled quotients of `tan` are blended per lane. Each lane thus performs the scalar's sequence of
-//! roundings.
+//! roundings. A NaN's sign and payload follow the order of its operands, which the compiler may change, so a lane whose
+//! result has a NaN part, possible only for parts off the ladder or not finite, takes the scalar function's result:
+//! the bits match, NaNs included.
 //!
 //! With the cargo feature `mutate`, `mutate::set(id)` breaks one step on purpose in the current thread, for the
 //! controls of the accuracy tests; without it the hooks are compile-time `false`.
@@ -84,10 +86,13 @@ pub mod mutate {
     pub const LANE_TERMS: u32 = 6;
     /// lanes only: lane 0's quadrant on every lane
     pub const LANE_QUADRANT: u32 = 7;
+    /// lanes only: the lanes with a NaN part left as the lanes' arithmetic gives them, their NaNs' signs flipped, as
+    /// another order of the operands can give them
+    pub const LANE_NAN: u32 = 8;
     /// number of ids
-    pub const N: u32 = 7;
+    pub const N: u32 = 8;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 8] = [
+    pub const NAMES: [&str; 9] = [
         "none",
         "reduction: last part of r dropped",
         "reduction: pi/2 cut to 64 (n + 1) + 1 bits",
@@ -96,6 +101,7 @@ pub mod mutate {
         "tan: divisor's last part dropped",
         "lanes: Horner's mask from lane 0's terms",
         "lanes: lane 0's quadrant on every lane",
+        "lanes: NaN lanes from the lanes' arithmetic, NaN signs flipped",
     ];
 
     #[cfg(feature = "mutate")]
@@ -1309,33 +1315,147 @@ impl<S: Simd> Ext for OV<S> {
     }
 }
 
+/// The lane types' scalar values, for the lanes whose result has a NaN part. Such a result needs parts off the ladder
+/// or a NaN or infinite part. Its NaNs' signs and payloads follow the order of the operands, which the compiler may
+/// change (LLVM keeps no NaN's sign), so they differ between the lanes' arithmetic and the scalar's, and between
+/// backends. A NaN's sign reaches only NaN parts, as the masks treat a NaN alike whatever its sign, so those lanes take
+/// the scalar function's result, called out of line, and every other lane is the lanes' own.
+trait Scalars: Sized {
+    type Scalar: Copy;
+    /// the lanes with a NaN part, bit j for lane j
+    fn nan_lanes(self) -> u8;
+    /// every NaN part's sign flipped (`mutate::LANE_NAN`)
+    fn flip_nans(self) -> Self;
+    fn lane_of(self, j: usize) -> Self::Scalar;
+    /// self with lane j set to v
+    fn with_lane(self, j: usize, v: Self::Scalar) -> Self;
+}
+
+macro_rules! scalars {
+    ($t:ident, $s:ident, $n:literal, $parts:ident, $from:ident, $sparts:ident) => {
+        impl<S: Simd> Scalars for $t<S> {
+            type Scalar = $s;
+            #[inline(always)]
+            fn nan_lanes(self) -> u8 {
+                let parts = self.$parts();
+                let mut m = parts[0].ne(parts[0]);
+                for x in &parts[1..] {
+                    m = m.or(x.ne(*x));
+                }
+                m.bits()
+            }
+            fn flip_nans(self) -> Self {
+                $t::$from(self.$parts().map(|x| x.ne(x).sel(x.neg(), x)))
+            }
+            fn lane_of(self, j: usize) -> $s {
+                self.lane(j)
+            }
+            fn with_lane(self, j: usize, value: $s) -> Self {
+                let mut a: [[f64; 8]; $n] = self.$parts().map(|x| x.to_array());
+                let w = $sparts(value);
+                for i in 0..$n {
+                    a[i][j] = w[i];
+                }
+                $t::$from(a.map(V8::from_array))
+            }
+        }
+    };
+}
+
+impl<S: Simd> DV<S> {
+    #[inline(always)]
+    fn parts_v(self) -> [V8<S>; 2] {
+        [self.hi, self.lo]
+    }
+    fn from_parts_v(c: [V8<S>; 2]) -> Self {
+        DV { hi: c[0], lo: c[1] }
+    }
+}
+
+impl<S: Simd> QV<S> {
+    #[inline(always)]
+    fn parts_v(self) -> [V8<S>; 4] {
+        self.c
+    }
+    fn from_parts_v(c: [V8<S>; 4]) -> Self {
+        QV { c }
+    }
+}
+
+impl<S: Simd> OV<S> {
+    #[inline(always)]
+    fn parts_v(self) -> [V8<S>; 8] {
+        self.c
+    }
+    fn from_parts_v(c: [V8<S>; 8]) -> Self {
+        OV { c }
+    }
+}
+
+fn dd_parts(x: DD) -> [f64; 2] {
+    [x.hi, x.lo]
+}
+
+fn qd_parts(x: QD) -> [f64; 4] {
+    x.x
+}
+
+fn od_parts(x: OD) -> [f64; 8] {
+    x.x
+}
+
+scalars!(DV, DD, 2, parts_v, from_parts_v, dd_parts);
+scalars!(QV, QD, 4, parts_v, from_parts_v, qd_parts);
+scalars!(OV, OD, 8, parts_v, from_parts_v, od_parts);
+
+/// v, with the lanes that have a NaN part set to f of x's lane, f called through a pointer the compiler cannot see, so
+/// that it is the scalar function's own code
+#[inline(always)]
+fn scalar_nans<T: Scalars + Copy>(x: T, v: T, f: fn(T::Scalar) -> T::Scalar) -> T {
+    let m = v.nan_lanes();
+    if m == 0 {
+        return v;
+    }
+    if mutate::on(mutate::LANE_NAN) {
+        return v.flip_nans();
+    }
+    let f = std::hint::black_box(f);
+    let mut v = v;
+    for j in 0..8 {
+        if m >> j & 1 == 1 {
+            v = v.with_lane(j, f(x.lane_of(j)));
+        }
+    }
+    v
+}
+
 macro_rules! trig_lane_methods {
-    ($t:ident, $s:literal) => {
+    ($t:ident, $s:ident) => {
         impl<S: Simd> $t<S> {
-            #[doc = concat!("sin x on every lane, each lane bitwise `", $s, "::sin` of its value, with its bounds (see ",
-                "`trig`)")]
+            #[doc = concat!("sin x on every lane, each lane bitwise `", stringify!($s), "::sin` of its value, ",
+                        "with its bounds (see `trig`)")]
             #[inline]
             pub fn sin(self) -> Self {
                 S::vectorize(
                     #[inline(always)]
-                    || sin(self),
+                    || scalar_nans(self, sin(self), $s::sin),
                 )
             }
-            #[doc = concat!("cos x on every lane, each lane bitwise `", $s, "::cos` of its value")]
+            #[doc = concat!("cos x on every lane, each lane bitwise `", stringify!($s), "::cos` of its value")]
             #[inline]
             pub fn cos(self) -> Self {
                 S::vectorize(
                     #[inline(always)]
-                    || cos(self),
+                    || scalar_nans(self, cos(self), $s::cos),
                 )
             }
-            #[doc = concat!("tan x on every lane, each lane bitwise `", $s, "::tan` of its value. `x.tan()` on this ",
-                "type is this function; the tangent of `dual::Lane` is `Lane::tan(x)`.")]
+            #[doc = concat!("tan x on every lane, each lane bitwise `", stringify!($s), "::tan` of its value. ",
+                        "`x.tan()` on this type is this function; the tangent of `dual::Lane` is `Lane::tan(x)`.")]
             #[inline]
             pub fn tan(self) -> Self {
                 S::vectorize(
                     #[inline(always)]
-                    || tan(self),
+                    || scalar_nans(self, tan(self), $s::tan),
                 )
             }
             /// (sin x, cos x) on every lane from one reduction, bitwise `(self.sin(), self.cos())`
@@ -1343,13 +1463,32 @@ macro_rules! trig_lane_methods {
             pub fn sin_cos(self) -> (Self, Self) {
                 S::vectorize(
                     #[inline(always)]
-                    || sin_cos(self),
+                    || {
+                        let (s, c) = sin_cos(self);
+                        let m = s.nan_lanes() | c.nan_lanes();
+                        if m == 0 {
+                            return (s, c);
+                        }
+                        if mutate::on(mutate::LANE_NAN) {
+                            return (s.flip_nans(), c.flip_nans());
+                        }
+                        let f = std::hint::black_box($s::sin_cos as fn($s) -> ($s, $s));
+                        let (mut s, mut c) = (s, c);
+                        for j in 0..8 {
+                            if m >> j & 1 == 1 {
+                                let (a, b) = f(self.lane_of(j));
+                                s = s.with_lane(j, a);
+                                c = c.with_lane(j, b);
+                            }
+                        }
+                        (s, c)
+                    },
                 )
             }
         }
     };
 }
 
-trig_lane_methods!(DV, "DD");
-trig_lane_methods!(QV, "QD");
-trig_lane_methods!(OV, "OD");
+trig_lane_methods!(DV, DD);
+trig_lane_methods!(QV, QD);
+trig_lane_methods!(OV, OD);
