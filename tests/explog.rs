@@ -18,9 +18,10 @@
 //! quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the first run. The start of ln,
 //! `explog::ln_f64`, is checked against its proven 5.915 u. Inputs, n per category for the double-double, n/2 for the
 //! quad-double and n/4 for the octo-double: random over the range, near 0, near the reduction's boundaries (k + 1/2) ln
-//! 2 and its multiples k ln 2, near overflow and underflow, near 1 for ln, subnormal, with gaps and zero parts, at the
-//! top of the ladder (overlapping by a bit, not greedy, with random signs; not for the double-double, which must be a
-//! double-word), and the special values.
+//! 2 and its multiples k ln 2, near overflow (with tails past it) and underflow, near 1 and within 3 ulps of f64::MAX
+//! (with tails near half an ulp) for ln, subnormal, with gaps and zero parts, at the top of the ladder (overlapping by
+//! a bit, not greedy, with random signs; not for the double-double, which must be a double-word), and the special
+//! values.
 //!
 //! ```text
 //! cargo test --release --test explog                        the checks (EXPLOG_REPORT=1 prints the worst cases)
@@ -391,6 +392,18 @@ fn pow2i(e: i32) -> f64 {
     }
 }
 
+/// ulp(h): the gap below |h| to the next f64, for an |h| that is not a power of two (finite at f64::MAX)
+fn ulp(h: f64) -> f64 {
+    h.abs() - f64::from_bits(h.abs().to_bits() - 1)
+}
+
+/// whether e^x is at least f64::MAX + ulp(f64::MAX)/2, where a double rounds to +inf
+fn overflows<T: Ty>(x: T) -> bool {
+    let lim = Dy::from_f64(f64::MAX).add(&Dy::from_f64(pow2i(970)));
+    let r = exp_ref(&exact(x), None).expect("exp's inputs lie in the reference's domain");
+    r.dy().cmp_abs(&lim) != std::cmp::Ordering::Less
+}
+
 /// the unit u^n
 fn un<T: Ty>() -> f64 {
     2f64.powi(-53 * T::N as i32)
@@ -532,6 +545,7 @@ fn run_exp<T: Ty>(n: usize, seed: u64, bound: f64, proven: bool) -> Vec<Row> {
         "(k+1/2) ln 2",
         "k ln 2",
         "overflow",
+        "overflow edge",
         "underflow",
         "gaps",
     ];
@@ -560,6 +574,15 @@ fn run_exp<T: Ty>(n: usize, seed: u64, bound: f64, proven: bool) -> Vec<Row> {
                 "overflow" => greedy(&Dy::from_f64(
                     709.782712893384 - 2f64.powi(-((r.next_u64() % 40) as i32)),
                 )),
+                "overflow edge" => {
+                    // x_0 within 3 ulps of ln f64::MAX, with a tail near half its ulp either way: some results
+                    // overflow, as e^x exceeds f64::MAX + ulp/2, and the others must be finite and within the bound
+                    let x0 = f64::from_bits(709.782712893384f64.to_bits() - 3 + r.next_u64() % 6);
+                    let mut p = vec![0.0; T::N];
+                    p[0] = x0;
+                    p[1] = r.sym().signum() * ulp(x0) / 2.0 * (1.0 - r.unit() * pow2i(-40));
+                    T::from_parts(&p)
+                }
                 "underflow" => greedy(&Dy::from_f64(-708.0 - 37.0 * r.unit())),
                 "gaps" => {
                     let x0 = -745.0 + 1454.0 * r.unit();
@@ -577,11 +600,11 @@ fn run_exp<T: Ty>(n: usize, seed: u64, bound: f64, proven: bool) -> Vec<Row> {
             };
             let (e, fl, finite, room) = exp_err(x);
             row.n += 1;
-            // every result is held to C u^n e^x + n 2^-1074 (no input here overflows); `covered` counts those within
-            // the proven bound's hypotheses
+            // every finite result is held to C u^n e^x + n 2^-1074, and a result may be infinite only where e^x is
+            // at least f64::MAX + ulp/2; `covered` counts those within the proven bound's hypotheses
             let hyp = finite && (!proven || ladder(x));
             row.covered += hyp as usize;
-            if !finite || e > bound + fl {
+            if if finite { e > bound + fl } else { !overflows(x) } {
                 row.fails += 1;
             }
             // the worst relative error where the result has room for n normal parts
@@ -607,6 +630,7 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
         "near max",
         "gaps",
         "power of 2",
+        "top of range",
     ];
     if T::N > 2 {
         cats.push("top ladder");
@@ -616,7 +640,7 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
             what: format!("{} ln {cat}", T::NAME),
             ..Row::default()
         };
-        for _ in 0..n {
+        for i in 0..n {
             let x: T = match cat {
                 "random" => greedy(&rand_in(&mut r, -1021, 1024, false)),
                 "near 1" => {
@@ -635,6 +659,30 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
                 "gaps" => {
                     let x0 = (1.0 + r.unit()) * 2f64.powi((r.next_u64() % 1200) as i32 - 600);
                     gapped(&mut r, x0)
+                }
+                "top of range" => {
+                    // x_0 within 3 ulps of f64::MAX and a tail near half its ulp, where a double-double of x itself
+                    // could round past f64::MAX; the first is the input that found it, and a subnormal last part
+                    // takes some off the ladder
+                    let mut p = vec![0.0; T::N];
+                    p[0] = f64::from_bits(f64::MAX.to_bits() - r.next_u64() % 4);
+                    p[1] = ulp(p[0]) / 2.0
+                        * match r.next_u64() % 4 {
+                            0 => -1.0,
+                            1 => 1.0 - r.unit() * pow2i(-40),
+                            _ => 1.0,
+                        };
+                    if T::N > 2 {
+                        p[2] = r.sym() * pow2i(915 - (r.next_u64() % 40) as i32);
+                    }
+                    if r.next_u64().is_multiple_of(4) {
+                        p[T::N - 1] = pow2i(-1074);
+                    }
+                    if i == 0 && T::N > 2 {
+                        p = vec![0.0; T::N];
+                        (p[0], p[1], p[2]) = (f64::MAX, pow2i(970), -pow2i(915));
+                    }
+                    T::from_parts(&p)
                 }
                 "top ladder" => {
                     // over the range, near 1, or near sqrt 2
@@ -671,6 +719,9 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
                     row.max = e;
                     row.worst = format!("{:?}", x.parts());
                 }
+            } else if !e.is_finite() {
+                // outside the hypotheses a result may be inaccurate, but never infinite or NaN
+                row.fails += 1;
             }
         }
         rows.push(row);
@@ -763,7 +814,11 @@ fn exp_and_ln_within_bounds() {
     let bad: Vec<&Row> = rows.iter().filter(|r| r.fails > 0).collect();
     assert!(bad.is_empty(), "{bad:#?}");
     // the proven bounds are checked on most inputs, not a few
-    for r in rows.iter().filter(|r| !r.what.ends_with("underflow")) {
+    // (the top of the range is half off the ladder by design)
+    for r in rows
+        .iter()
+        .filter(|r| !r.what.ends_with("underflow") && !r.what.ends_with("top of range"))
+    {
         assert!(
             r.covered * 2 >= r.n,
             "{}: {} of {} inputs within the hypotheses",
@@ -823,10 +878,16 @@ fn controls_fire() {
         mutate::set(id);
         let rows = all_rows(64, 3);
         mutate::set(0);
+        // exp's mutations must fail an exp row, ln's an ln row, for each type
+        let f = if id == mutate::RED_TAIL || id == mutate::TAYLOR_HALF {
+            "exp"
+        } else {
+            "ln"
+        };
         for t in ["dd", "qd", "od"] {
             let failed: Vec<&str> = rows
                 .iter()
-                .filter(|r| r.what.starts_with(t) && r.fails > 0)
+                .filter(|r| r.what.starts_with(&format!("{t} {f} ")) && r.fails > 0)
                 .map(|r| r.what.as_str())
                 .collect();
             println!(
