@@ -114,6 +114,58 @@ fn div_within_bound() {
     println!("div: worst {worst:.3} u^2");
 }
 
+/// q b - a relative to a, in units of u^2: exactly the relative error of q as a / b
+fn quotient_err(q: DD, a: DD, b: DD) -> f64 {
+    exact(q).mul(&exact(b)).sub(&exact(a)).ratio(&exact(a)).abs() / U2
+}
+
+/// `fast_div` within Theorem 7.1 of Joldes, Muller and Popescu (2017), 15 u^2 + 56 u^3, on random quotients and
+/// on divisors just above and below a power of two, where the first quotient's error is largest
+#[test]
+fn fast_div_within_bound() {
+    let mut r = Rng(13);
+    let bound = 15.0 + 56.0 * 2f64.powi(-53);
+    let mut worst: f64 = 0.0;
+    for i in 0..N {
+        let a = r.dd(20);
+        let b = if i % 2 == 0 {
+            r.dd(20)
+        } else {
+            // b near 2^k (1 +- 2^-j)
+            let k = r.dd(20).hi.abs().log2().floor() as i32;
+            let j = 1 + (r.dd(0).hi.abs() * 50.0) as i32 % 52;
+            let s = if r.dd(0).hi > 0.0 { 1.0 } else { -1.0 };
+            DD::new(p2(k) * (1.0 + s * p2(-j)), r.dd(0).lo * p2(k))
+        };
+        let q = a.fast_div(b);
+        assert!(normalized(q));
+        let e = quotient_err(q, a, b);
+        worst = worst.max(e);
+        assert!(e <= bound, "{a:?} / {b:?}: {e} u^2");
+    }
+    println!("fast_div: worst {worst:.3} u^2");
+}
+
+/// The checks can fail: a quotient that ignores the dividend's low part breaks the bound, and so does one whose low
+/// part is moved by 32 u^2 of the quotient, which by the bound errs by at least 17 u^2.
+#[test]
+fn control_fires_for_fast_div() {
+    let mut r = Rng(14);
+    let caught = (0..1000).any(|_| {
+        let (a, b) = (r.dd(20), r.dd(20));
+        quotient_err(DD::from_f64(a.hi).fast_div(b), a, b) > 15.0
+    });
+    assert!(caught);
+    let shift = 32.0 * 2f64.powi(-106);
+    let moved = (0..1000).all(|_| {
+        let (a, b) = (r.dd(20), r.dd(20));
+        let q = a.fast_div(b);
+        let q = DD::new(q.hi, q.lo + shift * q.hi);
+        quotient_err(q, a, b) > 15.0 + 56.0 * 2f64.powi(-53)
+    });
+    assert!(moved);
+}
+
 /// a^n exactly, for n >= 0
 fn exact_pow(a: DD, n: u32) -> Dy {
     let x = exact(a);

@@ -275,6 +275,7 @@ impl Kernel for DvMatchesDd {
                 -vx,
                 vx.mul_f(s),
                 vx.div_by(vy, vy.hi.divisor()),
+                vx.fast_div(vy),
             ];
             for j in 0..8 {
                 let want = [
@@ -285,6 +286,7 @@ impl Kernel for DvMatchesDd {
                     -x[j],
                     x[j].mul_f(s),
                     x[j] / y[j],
+                    x[j].fast_div(y[j]),
                 ];
                 for (k, w) in want.iter().enumerate() {
                     let g = lanes[k].lane(j);

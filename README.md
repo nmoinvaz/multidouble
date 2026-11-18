@@ -31,7 +31,8 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
   `rcp14`, Newton steps and one correction), `DV::div_by` through `b.hi.divisor()`, `QV::div_by` through
   `b.c[0].divisor()`, and the octo-double division by a shared divisor. Each is bitwise the same as plain division.
 - `DD`, `QD` and `OD` have `sqrt`, `recip` and `powi` (an integer power by binary powering), `DD` and `QD` also `sqr`,
-  and the lanes `QV` and `OV` have `sqrt` and `recip`.
+  and the lanes `QV` and `OV` have `sqrt` and `recip`. `DD` and `DV` also have `fast_div`, which divides with two
+  divisions where `/` has three, within 15 u² + 56 u³, proven.
 - Sums of products have accumulators: `dv::DotAcc`, `qd::QdAcc` and `qv::QDotAcc` (`QDotAcc::add_prod_mut` adds a
   product in place), and `od::OdAcc` and `ov::ODotAcc`.
 - An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, and on the lanes
@@ -255,10 +256,11 @@ gives up in parentheses.
 | divide | 8 u² (3) | 32 u⁴ (5) | u⁸ (0), proven |
 | square root | 25/8 u² (1.6), proven | 32 u⁴ (5) | 3 u⁸ (1.6), proven |
 
-A proven bound holds for every input. The double-double add's is Theorem 3.1 of Joldes, Muller and Popescu (2017), and
-the double-double square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it
-is. The octo-double ones are in [the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵
-of the first. The other bounds are the thresholds the tests check.
+A proven bound holds for every input. The double-double add's is Theorem 3.1 of Joldes, Muller and Popescu (2017),
+`fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022) proved formally, and the double-double square root's
+is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it is. The octo-double ones are in
+[the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵ of the first. The other bounds
+are the thresholds the tests check.
 
 - The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
   promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is

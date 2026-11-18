@@ -51,6 +51,27 @@ fn scalar(c: &mut Criterion) {
         bch.iter(|| dd.iter().fold(DD::ONE, |s, &x| s * black_box(x)))
     });
     g.bench_function("dd div", |bch| bch.iter(|| dd.iter().fold(DD::ONE, |s, &x| s / x)));
+    g.bench_function("dd fast_div", |bch| {
+        bch.iter(|| dd.iter().fold(DD::ONE, |s, &x| s.fast_div(x)))
+    });
+    // independent quotients, so throughput rather than the latency of a chain
+    let mut ddq = vec![DD::ZERO; N];
+    g.bench_function("dd div, independent", |bch| {
+        bch.iter(|| {
+            for (k, o) in ddq.iter_mut().enumerate() {
+                *o = dd[k] / dd[N - 1 - k];
+            }
+            black_box(&ddq);
+        })
+    });
+    g.bench_function("dd fast_div, independent", |bch| {
+        bch.iter(|| {
+            for (k, o) in ddq.iter_mut().enumerate() {
+                *o = dd[k].fast_div(dd[N - 1 - k]);
+            }
+            black_box(&ddq);
+        })
+    });
     g.bench_function("qd add", |bch| {
         bch.iter(|| qd.iter().fold(QD::from_f64(0.0), |s, &x| s + x))
     });
@@ -156,6 +177,20 @@ impl Kernel for Lanes<'_, '_> {
                     || {
                         for (k, o) in out.iter_mut().enumerate() {
                             *o = dv[k] / dv[dv.len() - 1 - k];
+                        }
+                    },
+                );
+                black_box(&out);
+            })
+        });
+        g.bench_function("dv fast_div, independent", |bch| {
+            let mut out = vec![DV::<S>::zero(); dv.len()];
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        for (k, o) in out.iter_mut().enumerate() {
+                            *o = dv[k].fast_div(dv[dv.len() - 1 - k]);
                         }
                     },
                 );
