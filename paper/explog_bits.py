@@ -16,8 +16,8 @@ usage: explog_bits.py bits [N [seed [control]]]   N inputs per function and cate
                                                   multiply-adds and quotients whose binary64 result would differ from
                                                   the unbounded-exponent one (underflow), and the power-of-two
                                                   scalings that would leave the normal range; exits 1 on any of the
-                                                  former but x_0 Lambda and U's factor, which decide only k, m and
-                                                  d. control 'full_degree':
+                                                  former but x_0 Lambda and the factors of the U's, which decide
+                                                  only k, m, the degree or a branch of LOG. control 'full_degree':
                                                   the Taylor polynomial at full degree for every r, which must
                                                   underflow (the run exits 1 unless it does)."""
 import math
@@ -174,6 +174,38 @@ def dw_times_fp(a, b):
     return list(F.quick_two_sum(p, e))
 
 
+def flog2(x):
+    """floor(log2 x) for a rational x > 0, exactly"""
+    k = x.numerator.bit_length() - x.denominator.bit_length()
+    return k if x >= Q(2) ** k else k - 1
+
+
+def margin(a, b):
+    """how far the products a MUL forms from its operands' parts clear the underflow threshold, in binades: for a
+    two-product (i + j <= n - 1) e_ai + e_bj against -970, the classical condition for its error to be exact, and for a
+    rounded product (i + j = n) floor(log2 |a_i b_j|) against -1022 (min over nonzero parts; inf if none)"""
+    n = len(a)
+    va, vb = [val(t) for t in a], [val(t) for t in b]
+    m = math.inf
+    for i in range(n):
+        for j in range(n - i + 1):
+            if j < n and va[i] != 0 and vb[j] != 0:
+                if i + j <= n - 1:
+                    m = min(m, flog2(abs(va[i])) + flog2(abs(vb[j])) + 970)
+                else:
+                    m = min(m, flog2(abs(va[i] * vb[j])) + 1022)
+    return m
+
+
+def measured(mul):
+    """a MUL that, while scanning, records the least margin of the products it forms"""
+    def m(a, b):
+        if SCAN is not None:
+            SCAN['margin'] = min(SCAN['margin'], margin(a, b))
+        return mul(a, b)
+    return m
+
+
 class DW:
     n, S, DEG, Q, B = 2, 1, 27, 3, 118
 
@@ -181,7 +213,7 @@ class DW:
     def const(c):
         return list(c[:2])
 
-    plus, times = staticmethod(dw_add), staticmethod(dw_times_dw)
+    plus, times = staticmethod(dw_add), staticmethod(measured(dw_times_dw))
 
     @staticmethod
     def plus_one(a):
@@ -221,7 +253,7 @@ class OD:
     def const(c):
         return list(c[:8])
 
-    plus, times = staticmethod(F.od_add), staticmethod(F.od_mul)
+    plus, times = staticmethod(F.od_add), staticmethod(measured(F.od_mul))
 
     @staticmethod
     def plus_one(a):
@@ -297,15 +329,7 @@ def expm1_red(P, x):
         assert abs(val(kq)) < Q(1, 2)
     k = rnd_away(val(kq))
     r = x if k == 0 else P.reduce(x, fl(float(k)))
-    acc = PZ
-    for v in r:                                       # the crate's fold from the leading part down
-        acc = F.add(acc, F.fabs(v))
-    before = None if SCAN is None else SCAN['mul']
-    uq = F.mul(acc, fl(1 + 2.0 ** -48))
-    if SCAN is not None and SCAN['mul'] > before:
-        SCAN['k'] += 1                    # U below 2^-1022: e = -1023, m = 0, d = 1 whatever its rounding
-        assert val(acc) < Q(2) ** -1022
-    e = expo(uq)
+    e = bound_expo(r)
     m = max(0, e + P.S + 1)
     if m > 0:
         r = [p2(t, -m) for t in r]
@@ -347,18 +371,31 @@ def series(P, i):
     return P.from_f(fl(-0.25))
 
 
+def bound_expo(v):
+    """the crate's bound_expo: the exponent of U = RN(RN(sum |v_i|) (1 + 2^-48)), summed from the leading part down"""
+    acc = PZ
+    for t in v:
+        acc = F.add(acc, F.fabs(t))
+    before = None if SCAN is None else SCAN['mul']
+    uq = F.mul(acc, fl(1 + 2.0 ** -48))
+    if SCAN is not None and SCAN['mul'] > before:
+        SCAN['k'] += 1                    # U below 2^-1022: e = -1023 or -1022, a choice as with an unbounded exponent
+        assert val(acc) < Q(2) ** -1022
+    return expo(uq)
+
+
 def ln_of(P, x):
     y0 = P.ln_start(x)
     k, t = expm1_red(P, P.neg(y0))
     f = P.sub_one(scale2(P, x, k))
-    ef, et = expo(f[0]), expo(t[0])
-    if f[0][0] == 0 or t[0][0] == 0 or min(ef, et) < -P.B - 13:
+    ef, et = bound_expo(f), bound_expo(t)
+    if min(ef, et) < -P.B - 13:
         c = P.plus(f, t)
     else:
         p = P.times([p2(v, -ef) for v in f], [p2(v, -et) for v in t])
         c = P.plus(P.plus(f, t), [p2(p2(v, ef), et) for v in p])
-    ec = expo(c[0])
-    if c[0][0] == 0 or ec < -P.B - 13:
+    ec = bound_expo(c)
+    if ec < -P.B - 13:
         corr = c
     else:
         h = series(P, P.Q)
@@ -483,7 +520,7 @@ def scan_main(K, control=None):
     r = random.Random(7)
     worst = 0
     for fn, P in (('exp', OD), ('ln', OD), ('exp', DW), ('ln', DW)):
-        SCAN = dict(mul=0, fma=0, div=0, scale=0, k=0)
+        SCAN = dict(mul=0, fma=0, div=0, scale=0, k=0, margin=math.inf)
         count, where = 0, []
         if fn == 'exp':
             es = range(10, -1076, -1)
@@ -518,8 +555,8 @@ def scan_main(K, control=None):
         hits = SCAN['mul'] + SCAN['fma'] + SCAN['div'] - SCAN['k']
         worst = max(worst, hits)
         print(f'{"OD" if P is OD else "DD"} {fn}: {count} inputs over every binade{" (half at the top of the ladder)" if P.n > 2 else ""}; underflowing products {SCAN["mul"]}, '
-              f'FMAs {SCAN["fma"]}, quotients {SCAN["div"]}, of which {SCAN["k"]} are x_0 Lambda or U, deciding only k, m and d; scalings '
-              f'leaving the normal range {SCAN["scale"]}' + (f'; other underflows at binades {where}' if where else ''))
+              f'FMAs {SCAN["fma"]}, quotients {SCAN["div"]}, of which {SCAN["k"]} are x_0 Lambda or a U, deciding only k, m, d or a branch; scalings '
+              f'leaving the normal range {SCAN["scale"]}; the MULs\' products clear the threshold by {SCAN["margin"]} binades at least' + (f'; other underflows at binades {where}' if where else ''))
     SCAN = None
     if control:
         sys.exit(0 if worst else 1)
