@@ -864,6 +864,304 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
+// a double-double operand: od x dd, od + dd and the accumulator's od x dd against the promoted operations
+// -------------------------------------------------------------------------------------------------------------
+
+/// the operations with a double-double operand, each checked bit for bit against `*`, `+` or `add_prod` with the
+/// operand promoted (`OD::from_dd`, `OV::from_dv`)
+const DD_OPS: [&str; 3] = ["od x dd", "od + dd", "dot x dd"];
+
+/// every bit the same, a NaN equal to any NaN: Rust leaves the sign and payload of a NaN result unspecified, and the
+/// lanes and the scalar type already give NaNs of different signs on one input (as `same`)
+fn bits_eq(a: &[f64], b: &[f64]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()))
+}
+
+/// a double-double operand from b's two leading parts, a quarter of them with the low part +0 or -0 (an f64 constant)
+fn dd_from(r: &mut Rng, b: OD) -> DD {
+    match r.int(0, 7) {
+        0 => DD { hi: b.x[0], lo: 0.0 },
+        1 => DD { hi: b.x[0], lo: -0.0 },
+        _ => DD { hi: b.x[0], lo: b.x[1] },
+    }
+}
+
+/// the scalar result of a double-double operation (`DD_OPS[op]`) and its promoted reference, as their parts or the
+/// accumulator's nine levels then its sum; the accumulator starts from start
+fn dd_scalar(op: usize, a: OD, c: DD, start: OdAcc) -> (Vec<f64>, Vec<f64>) {
+    let p = OD::from_dd(c);
+    match op {
+        0 => (a.mul_dd(c).x.to_vec(), (a * p).x.to_vec()),
+        1 => (a.add_dd(c).x.to_vec(), (a + p).x.to_vec()),
+        _ => {
+            let (n, r) = (start.add_prod_dd(a, c), start.add_prod(a, p));
+            let cat = |s: OdAcc| [&s.s[..], &s.finish().x[..]].concat();
+            (cat(n), cat(r))
+        }
+    }
+}
+
+/// `dd_scalar` on 8 lanes, by lane
+fn dd_lanes(op: usize, a: &[OD; 8], c: &[DD; 8], start: &[OdAcc; 8]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+    let av = OV::from_lanes(a);
+    let cv = crate::dv::DV::<crate::simd::Native>::load(&c.map(|d| d.hi), &c.map(|d| d.lo));
+    let p = OV::from_dv(cv);
+    let lanes = |v: OV| -> Vec<Vec<f64>> { v.lanes().iter().map(|x| x.x.to_vec()).collect() };
+    match op {
+        0 => (lanes(av.mul_dv(cv)), lanes(av * p)),
+        1 => (lanes(av.add_dv(cv)), lanes(av + p)),
+        _ => {
+            let mut s0 = ODotAcc::zero();
+            for l in 0..9 {
+                s0.s[l] = V8::load(&start.map(|a| a.s[l]));
+            }
+            let mut n = s0;
+            n.add_prod_dv_mut(&av, &cv);
+            let n2 = s0.add_prod_dv(av, cv);
+            let r = s0.add_prod(av, p);
+            let cat = |s: ODotAcc| -> Vec<Vec<f64>> {
+                let f = s.finish().lanes();
+                (0..8)
+                    .map(|j| {
+                        let mut v: Vec<f64> = s.s.iter().map(|l| l.to_array()[j]).collect();
+                        v.extend_from_slice(&f[j].x);
+                        v
+                    })
+                    .collect()
+            };
+            // the by-value and in-place forms are one operation
+            let (nv, n2v) = (cat(n), cat(n2));
+            assert!(
+                nv.iter().zip(&n2v).all(|(x, y)| bits_eq(x, y)),
+                "add_prod_dv_mut vs add_prod_dv"
+            );
+            (nv, cat(r))
+        }
+    }
+}
+
+/// Every operation of `DD_OPS` in every input category, with mutation id active in the new operations only: per row,
+/// fails counts the results (scalar or lanes, levels and sums for the accumulator) that differ in any bit from the
+/// promoted operation run with no mutation, and mism the lanes that differ from the scalar result. The accumulator
+/// starts empty on even samples and from the previous sample's product on odd ones.
+fn run_dd(n: usize, seed: u64, id: u32) -> Vec<Res> {
+    let mut out = Vec::new();
+    for (op, name) in DD_OPS.iter().enumerate() {
+        for cat in ALL_CATS {
+            let base = if op == 1 { Op::Add } else { Op::Mul };
+            let inp = inputs(base, cat, n, seed);
+            let mut r = Rng::new(seed ^ ((op as u64) << 24) ^ ((cat as u64) << 40) ^ 0x0ddc);
+            let cs: Vec<DD> = inp.iter().map(|&(_, b)| dd_from(&mut r, b)).collect();
+            let starts: Vec<OdAcc> = (0..inp.len())
+                .map(|k| {
+                    if k.is_multiple_of(2) {
+                        OdAcc::zero()
+                    } else {
+                        OdAcc::zero().add_prod(inp[k - 1].0, inp[k - 1].1)
+                    }
+                })
+                .collect();
+            let (mut fails, mut mism) = (0, 0);
+            for (c8, k0) in inp.chunks(8).zip((0..).step_by(8)) {
+                let m = c8.len();
+                let a: [OD; 8] = std::array::from_fn(|j| if j < m { c8[j].0 } else { OD::ONE });
+                let c: [DD; 8] = std::array::from_fn(|j| if j < m { cs[k0 + j] } else { DD::ONE });
+                let st: [OdAcc; 8] = std::array::from_fn(|j| if j < m { starts[k0 + j] } else { OdAcc::zero() });
+                set_mutation(id);
+                let news: Vec<Vec<f64>> = (0..m).map(|j| dd_scalar(op, a[j], c[j], st[j]).0).collect();
+                let (newv, _) = dd_lanes(op, &a, &c, &st);
+                set_mutation(0);
+                let (_, refv) = dd_lanes(op, &a, &c, &st);
+                for j in 0..m {
+                    let refs = dd_scalar(op, a[j], c[j], st[j]).1;
+                    fails += !bits_eq(&news[j], &refs) as usize + !bits_eq(&newv[j], &refv[j]) as usize;
+                    mism += !bits_eq(&news[j], &newv[j]) as usize;
+                }
+            }
+            out.push(row(name, cat_name(cat), n, fails, mism));
+        }
+    }
+    out
+}
+
+/// Edge operands: zeros of either sign in any part, zero parts between nonzero ones, exact integers, values whose
+/// lower parts underflow or are subnormal, values near overflow, infinities and NaNs (one with a payload).
+fn od_edges() -> Vec<OD> {
+    let u = 2f64.powi(-53);
+    let nan_p = f64::from_bits(0x7ff8_0000_0000_1234);
+    let mut v = vec![
+        OD::ZERO,
+        OD::from_f64(-0.0),
+        OD { x: [-0.0; 8] },
+        OD {
+            x: [0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0],
+        },
+        OD::ONE,
+        OD::from_f64(-1.0),
+        OD::from_f64(3.0),
+        OD::from_f64(-7.0),
+        OD::from_f64(4503599627370497.0),
+        OD {
+            x: [1.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0],
+        },
+        OD {
+            x: [-1.0, 0.0, -0.0, 0.0, -0.0, 0.0, -0.0, 0.0],
+        },
+        OD {
+            x: [1.0, 0.0, u.powi(3), 0.0, 0.0, -u.powi(6), 0.0, 0.0],
+        },
+        OD {
+            x: [-1.5, u, 0.0, 0.0, 0.0, 0.0, 0.0, u.powi(8)],
+        },
+        OD {
+            x: [1.0, u, u * u, u.powi(3), u.powi(4), u.powi(5), u.powi(6), u.powi(7)],
+        },
+        OD {
+            x: [1e-300, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        OD {
+            x: [-1e-300, 1e-317, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        OD {
+            x: [2f64.powi(-1022), -5e-324, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        OD::from_f64(5e-324),
+        OD::from_f64(-1e-310),
+        OD {
+            x: [1e250, 1e233, -1e216, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        OD::from_f64(1e300),
+        OD::from_f64(-f64::MAX),
+        OD::from_f64(f64::INFINITY),
+        OD::from_f64(f64::NEG_INFINITY),
+        OD::from_f64(f64::NAN),
+        OD::from_f64(nan_p),
+        OD {
+            x: [1.0, nan_p, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        },
+        OD {
+            x: [1.0, 0.0, 0.0, f64::INFINITY, 0.0, 0.0, 0.0, 0.0],
+        },
+    ];
+    let mut r = Rng::new(0xed9e);
+    for _ in 0..12 {
+        let e = r.int(-30, 30);
+        v.push(od_of(&rand_dy(&mut r, e)));
+    }
+    for _ in 0..4 {
+        v.push(od_of(&rde(&mut r, -1060, -900)));
+        v.push(od_of(&rde(&mut r, 900, 1020)));
+    }
+    v
+}
+
+/// edge double-double operands, the same kinds as `od_edges`, the low part of either sign or zero
+fn dd_edges() -> Vec<DD> {
+    let d = |hi: f64, lo: f64| DD { hi, lo };
+    let u = 2f64.powi(-53);
+    vec![
+        d(0.0, 0.0),
+        d(-0.0, 0.0),
+        d(0.0, -0.0),
+        d(-0.0, -0.0),
+        d(1.0, 0.0),
+        d(1.0, -0.0),
+        d(-1.0, 0.0),
+        d(-1.0, -0.0),
+        d(3.0, -u * 1.5),
+        d(-7.0, u),
+        d(0.1, -5.551115123125783e-18),
+        d(1.0, u),
+        d(1.0, -u / 2.0),
+        d(2f64.powi(-1022), 0.0),
+        d(5e-324, 0.0),
+        d(-1e-300, 1e-317),
+        d(1e300, -1e283),
+        d(f64::MAX, 0.0),
+        d(f64::INFINITY, 0.0),
+        d(f64::NEG_INFINITY, -0.0),
+        d(f64::NAN, 0.0),
+        d(1.0, f64::NAN),
+    ]
+}
+
+/// The edge pairs (`od_edges` x `dd_edges`): the new operations' levels (`alg::expand_dd` against `alg::expand`) and
+/// results against the promoted ones, scalar and lanes, every bit. Returns the mismatches as (operation, a, c) and
+/// the number of comparisons.
+fn dd_edge_mismatches() -> (Vec<String>, usize) {
+    let (ods, dds) = (od_edges(), dd_edges());
+    let pairs: Vec<(OD, DD, OdAcc)> = ods
+        .iter()
+        .flat_map(|&a| dds.iter().map(move |&c| (a, c)))
+        .enumerate()
+        .map(|(k, (a, c))| {
+            let start = if k.is_multiple_of(3) {
+                OdAcc::zero()
+            } else {
+                OdAcc::zero().add_prod(ods[k % ods.len()], ods[(k / 7) % ods.len()])
+            };
+            (a, c, start)
+        })
+        .collect();
+    let (mut bad, mut n) = (Vec::new(), 0);
+    for &(a, c, start) in &pairs {
+        let lv = crate::od::alg::expand_dd(&a.x, c.hi, c.lo);
+        let lr = crate::od::alg::expand(&a.x, &OD::from_dd(c).x);
+        n += 1;
+        if !bits_eq(&lv, &lr) {
+            bad.push(format!("levels {:?} x {:?}: {lv:?} vs {lr:?}", a.x, c));
+        }
+        for op in 0..3 {
+            let (x, y) = dd_scalar(op, a, c, start);
+            n += 1;
+            if !bits_eq(&x, &y) {
+                bad.push(format!("{} {:?} {:?}: {x:?} vs {y:?}", DD_OPS[op], a.x, c));
+            }
+        }
+    }
+    for ch in pairs.chunks(8) {
+        let m = ch.len();
+        let a: [OD; 8] = std::array::from_fn(|j| ch[j.min(m - 1)].0);
+        let c: [DD; 8] = std::array::from_fn(|j| ch[j.min(m - 1)].1);
+        let st: [OdAcc; 8] = std::array::from_fn(|j| ch[j.min(m - 1)].2);
+        let cv = crate::dv::DV::<crate::simd::Native>::load(&c.map(|d| d.hi), &c.map(|d| d.lo));
+        let av = OV::from_lanes(&a);
+        let lv = crate::od::alg::expand_dd(&av.c, cv.hi, cv.lo);
+        let lr = crate::od::alg::expand(&av.c, &OV::from_dv(cv).c);
+        for j in 0..m {
+            n += 1;
+            let (x, y): (Vec<f64>, Vec<f64>) = (
+                lv.iter().map(|l| l.to_array()[j]).collect(),
+                lr.iter().map(|l| l.to_array()[j]).collect(),
+            );
+            if !bits_eq(&x, &y) {
+                bad.push(format!("lanes: levels {:?} x {:?}", a[j].x, c[j]));
+            }
+        }
+        for op in 0..3 {
+            let (x, y) = dd_lanes(op, &a, &c, &st);
+            for j in 0..m {
+                n += 2;
+                if !bits_eq(&x[j], &y[j]) {
+                    bad.push(format!(
+                        "lanes: {} {:?} {:?}: {:?} vs {:?}",
+                        DD_OPS[op], a[j].x, c[j], x[j], y[j]
+                    ));
+                }
+                // the lanes are the scalar operation
+                if !bits_eq(&x[j], &dd_scalar(op, a[j], c[j], st[j]).0) {
+                    bad.push(format!("lanes vs scalar: {} {:?} {:?}", DD_OPS[op], a[j].x, c[j]));
+                }
+            }
+        }
+    }
+    (bad, n)
+}
+
+// -------------------------------------------------------------------------------------------------------------
 // conversions, comparisons and decimal input/output
 // -------------------------------------------------------------------------------------------------------------
 
@@ -1226,6 +1524,56 @@ fn od_accumulator() {
     }
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{bad:?}");
+}
+
+/// Pass: od x dd (`OD::mul_dd`, `OV::mul_dv`), od + dd (`add_dd`, `add_dv`) and the accumulators' od x dd
+/// (`OdAcc::add_prod_dd`, `ODotAcc::add_prod_dv` and `add_prod_dv_mut`) are bit for bit the operations with the
+/// operand promoted to octo-double, levels included, on every input category (OD_N per row) and on the edge pairs,
+/// whose zeros' signs, infinities and NaNs must match too (`bits_eq`). Control: `od_dd_control`.
+#[test]
+fn od_dd_operand_is_the_promoted_operation() {
+    let n = env_usize("OD_N", 2000) / 8 * 8;
+    let seed = env_usize("OD_SEED", 1) as u64;
+    let rs = run_dd(n, seed, 0);
+    if report() {
+        print_rows(
+            "a double-double operand: results differing from the promoted operation (fails)",
+            &rs,
+        );
+    }
+    let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
+    assert!(bad.is_empty(), "{bad:?}");
+    let (bad, count) = dd_edge_mismatches();
+    println!("edge pairs: {count} comparisons, {} mismatches", bad.len());
+    assert!(
+        bad.is_empty(),
+        "{} of {count}: {:?}",
+        bad.len(),
+        &bad[..bad.len().min(8)]
+    );
+}
+
+/// Control for `od_dd_operand_is_the_promoted_operation`: with the second level of od x dd and od + dd one ulp up
+/// (`mutate::DD_ULP`; a subnormal or zero level stays), every operation fails in every input category, and the edge
+/// pairs fail.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_dd_control() {
+    let rs = run_dd(400, 3, mutate::DD_ULP);
+    for r in &rs {
+        println!("{:<9} {:<10} {} of {} results differ", r.what, r.cat, r.fails, 2 * r.n);
+    }
+    let quiet: Vec<String> = rs
+        .iter()
+        .filter(|r| r.fails == 0)
+        .map(|r| format!("{}/{}", r.what, r.cat))
+        .collect();
+    assert!(quiet.is_empty(), "rows where no result changed: {quiet:?}");
+    set_mutation(mutate::DD_ULP);
+    let (bad, count) = dd_edge_mismatches();
+    set_mutation(0);
+    println!("edge pairs under the control: {} of {count} differ", bad.len());
+    assert!(!bad.is_empty());
 }
 
 /// the largest |x_(i+1)| / ulp(x_i) over x's nonzero parts and their successors, infinite when a nonzero part follows a
@@ -1608,6 +1956,7 @@ fn od_controls() {
         let mut rs = run_ops(n, 7, id);
         rs.extend(run_acc(n / 4, 7, id));
         rs.extend(run_io(n / 2, 7, id));
+        rs.extend(run_dd(n / 4, 7, id));
         let failed: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
         let worst = failed.iter().map(|r| r.max).fold(0.0, f64::max);
         let lanes: usize = failed.iter().map(|r| r.mism).sum();

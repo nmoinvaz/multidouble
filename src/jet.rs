@@ -1219,10 +1219,9 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     /// every coefficient times the constant lane vector c
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
-        let c = OV::from_dv(c);
         let mut v = self.c;
         for x in v.iter_mut() {
-            *x = *x * c;
+            *x = x.mul_dv(c);
         }
         OJet { c: v }
     }
@@ -1248,7 +1247,7 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
         let mut j = self;
-        j.c[0] = self.c[0] + OV::from_dv(c);
+        j.c[0] = self.c[0].add_dv(c);
         j
     }
     /// every coefficient's 8 lanes set to its lane j
@@ -1308,10 +1307,9 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     /// a + x c, c a constant lane vector
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
-        let c = OV::from_dv(c);
         let mut a = a;
         for k in 0..N {
-            a[k].add_prod_mut(&x.c[k], &c);
+            a[k].add_prod_dv_mut(&x.c[k], &c);
         }
         a
     }
