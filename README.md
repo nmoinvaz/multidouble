@@ -213,72 +213,64 @@ gives up in parentheses.
 | sin, cos | 7.85 u² (3.0), proven | 32 u⁴ (5) | 3.17 u⁸ (1.7), proven |
 | tan | 28.5 u² (4.8), proven | 64 u⁴ (6) | 6.42 u⁸ (2.7), proven |
 
-A proven bound holds for every input that meets its hypotheses: for the octo-double the paper's, parts on the ladder
-|xᵢ| ≤ (2u)ⁱ|x₀| and no underflow in the run's products, and for the double-double a double-word. For exp they also need
-a finite result, eˣ below f64::MAX + ulp(f64::MAX)/2 (x below about ln f64::MAX), above which exp returns +inf as
-`f64::exp` does; ln's hold for every positive finite x. The double-double add's is Theorem 3.1 of Joldes, Muller and
-Popescu (2017) [[1]](#ref-jmp17), `fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022) [[2]](#ref-mr22)
-proved formally, and the double-double square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023)
-[[3]](#ref-llmpr23), whose Algorithm 8 it is. The octo-double ones are in [the paper](paper/expansion-error-bounds.pdf),
-where the add, multiply, divide and square root each have a second term at most 2⁻¹⁵ of the first. The exp and ln rows
-give the relative coefficient alone: their bounds also have an absolute term, given below, which is larger only for tiny
-results and near x = 1. The other bounds are the thresholds the tests check.
+A proven bound holds for every input that meets its hypotheses: for the octo-double, parts on the ladder |xᵢ| ≤
+(2u)ⁱ|x₀| and no underflow in the run, and for the double-double, a double-word. The double-double add's bound is
+Theorem 3.1 of Joldes, Muller and Popescu (2017) [[1]](#ref-jmp17), `fast_div`'s is their Theorem 7.1, which Muller and
+Rideau (2022) [[2]](#ref-mr22) proved formally, the square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and
+Rideau (2023) [[3]](#ref-llmpr23), and the elementary functions' follow from the published bounds of the double-word
+operations they use. The octo-double bounds are proved in [the paper](paper/expansion-error-bounds.pdf), where the add,
+multiply, divide and square root each have a second term at most 2⁻¹⁵ of the first. The quad-double bounds are the
+thresholds the tests check, for the default `+`, `*` and `/`; `ieee_add`, `accurate_mul` and `accurate_div` keep 8 u⁴, 8
+u⁴ and 16 u⁴.
 
-- The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number for
-  `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most (C_T + 5|k|·2⁻¹²¹⁷/|sin x
-  cos x|)|tan x|, with C and C_T in the table and k the multiple of π/2 removed, so that 5|k|·2⁻¹²¹⁷ < 2⁻¹¹⁶³. The
-  theorem needs a run without underflow, and the functions scale small reduced arguments by powers of two so that every
-  reduced argument from the early return's threshold up (2⁻²¹² at eight parts) gives one, as the paper checks at eight
-  parts in every binade, unless a part of x lies far below the ladder. The reduction is exact up to π/2's 1216 fraction
-  bits, so the bounds hold next to the multiples of π/2 too. Those bits come from Machin's formula [[4]](#ref-machin),
-  π/4 = 4 arctan(1/5) − arctan(1/239), in exact integer arithmetic, checked against Gauss's, π/4 = 12 arctan(1/18) + 8
-  arctan(1/57) − 5 arctan(1/239). Beyond 2⁵² the functions return NaN. The double-double bounds follow from the
-  published bounds of the double-word algorithms they use [[1]](#ref-jmp17) (DWTimesDW3, which Muller and Rideau (2022)
-  [[2]](#ref-mr22) bound by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the paper's
-  bounds of each operation, and the tests compare all three types against a 2200-bit reference. In the default test run,
-  random and constructed arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.82 u² for
-  the double-double sin and cos and 4.07 u² for its tan, 1.24 u⁴ and 7.18 u⁴ for the quad-double ones, and 0.48 u⁸ for
-  the octo-double ones, the early return's x²/2 just below 2⁻²¹², below 0.01 u⁸ for every other kind of argument.
-- The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
-  promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
-  measured on the residual of its quotient.
-- The octo-double add, multiply and divide reach their bounds on the paper's worst-case inputs, and the tests check the
-  proven bounds of the add and multiply on every input that meets the paper's hypotheses. Random inputs stay far inside:
-  below 0.01 u⁸ for every octo-double operation, and up to 1.66 u², 3.12 u² and 1.54 u² for the double-double add,
-  multiply and divide.
-- The quad-double column is for the default operators `+`, `*` and `/`. The more accurate `ieee_add`, `accurate_mul` and
-  `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴. The quad-double types use the QD library's algorithms (Hida, Li and Bailey,
-  ARITH-15, 2001) [[5]](#ref-hlb01) with three repairs: the accurate add lost a term when all parts are read with three
-  emitted, and its accumulator when four parts are emitted before every part is read, and the square root, which lost
-  accuracy far from 1, now scales its argument by a power of four.
-- The sloppy multiply has no level below the eighth part. Its error is the 64 roundings at that level and the dropped
-  products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30), where
-  `*` errs by u⁸. The bound is a triangle inequality: random operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and
-  a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
-- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, with ln 2 split into a
-  head whose multiples are exact and a tail, as Cody and Waite do [[6]](#ref-cw80), sums a Taylor polynomial whose
-  degree falls with the reduced argument, and squares in the form t ← 2t + t², as the QD library's exp does; ln takes
-  one Newton step on exp, as its log does [[7]](#ref-qd), from the double-double logarithm, which starts from `explog`'s
-  own binary64 logarithm, within a proven 5.915 u. The double-double ones use the double-word operations whose bounds
-  are published (Joldes, Muller and Popescu, 2017 [[1]](#ref-jmp17); the product DWTimesDW2, whose bound Muller and
-  Rideau proved formally [[2]](#ref-mr22), rather than `*`). The octo-double bounds are proved in the paper (Theorems 39
-  and 41), the double-double ones in its Proposition 43 and the start's in its Lemma 42. Each bound has a second,
-  absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the relative term only
-  where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln,
-  which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled
-  below 2, and an emulator with every product hooked finds none below the normal range at any binade of the argument,
-  the closest 48 binades above it; a part far below the one above it can make one underflow, as for the other
-  operations. The ln column is relative to |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per category
-  give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double, and 0.25
-  u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included.
-- Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
-  accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
-  like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
-  `f64`, so octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow an absolute 16×2⁻¹⁰⁷⁴.
-- `ODLu` solves to about 10⁻¹³³ cond(A) for condition numbers up to 10³⁰, 2⁻²²⁰ times the quad-double LU's error. `OJet`
-  coefficients are within 10⁻¹²³ of the sum of their terms' magnitudes, where the quad-double jet errs by 2×10⁻⁶⁴, and
-  its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps. `Ou` gives derivatives
-  within 10⁻¹²³, and its value is `OV`'s bit for bit.
+The elementary functions' bounds also have a range and an absolute term. The absolute term exceeds the relative one only
+for exp below eˣ = 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double) and for ln where |ln x| < 2⁻⁸⁸ (2⁻⁹⁶⁸), and the ln bound is
+relative to |ln x|.
+
+| Function | Range | Absolute term, double-double | Absolute term, octo-double |
+|---|---|---|---|
+| sin, cos | \|x₀\| ≤ 2⁵², NaN beyond | 5\|k\|·2⁻¹²¹⁷ | 5\|k\|·2⁻¹²¹⁷ |
+| tan | \|x₀\| ≤ 2⁵², NaN beyond | 5\|k\|·2⁻¹²¹⁷/\|sin x cos x\|, relative | 5\|k\|·2⁻¹²¹⁷/\|sin x cos x\|, relative |
+| exp | eˣ below f64::MAX + ulp/2, +inf above | 2·2⁻¹⁰⁷⁴ | 8·2⁻¹⁰⁷⁴ |
+| ln | every positive finite x | 2⁻¹⁰⁷¹ | 2⁻⁵⁰⁹ |
+
+Here k is the multiple of π/2 that the reduction removes, so 5|k|·2⁻¹²¹⁷ < 2⁻¹¹⁶³. The reduction is exact up to π/2's
+1216 fraction bits, which come from Machin's formula [[4]](#ref-machin), π/4 = 4 arctan(1/5) − arctan(1/239), checked
+against Gauss's, π/4 = 12 arctan(1/18) + 8 arctan(1/57) − 5 arctan(1/239), so the bounds hold next to the multiples of
+π/2 too. exp reduces by k ln 2, with ln 2 split into a head whose multiples are exact and a tail, as Cody and Waite do
+[[5]](#ref-cw80), and squares as t ← 2t + t², as the QD library's exp does; ln takes one Newton step on exp, as its log
+does [[6]](#ref-qd), from a binary64 logarithm of its own, proved within 5.915 u, so no bound rests on the platform's
+`ln`. The functions scale small arguments by powers of two so that no product underflows, unless a part of x lies far
+below the ladder. The paper proves the octo-double bounds in Theorems 34, 39 and 41.
+
+The largest errors the tests measured, against exact arithmetic or a reference of 1700 to 2200 bits:
+
+| Operation | double-double | quad-double | octo-double |
+|---|---|---|---|
+| add, multiply, divide | 1.66, 3.12, 1.54 u² | | below 0.01 u⁸ |
+| exp, ln | 1.04, 1.27 u² | 0.55, 0.58 u⁴ | 0.25, 0.0070 u⁸ |
+| sin and cos, tan | 1.82, 4.07 u² | 1.24, 7.18 u⁴ | 0.48 u⁸ |
+
+The double-double add is measured relative to the result, the quad-double `+` and the octo-double add's second term
+against |a| + |b|, and the double-double divide on the residual of its quotient. The octo-double add, multiply and
+divide reach their bounds on the paper's worst-case inputs, and random inputs stay far inside. The octo-double sin, cos
+and tan reach 0.48 u⁸ only just below 2⁻²¹², from the early return's x²/2, and stay below 0.01 u⁸ elsewhere.
+
+The quad-double types use the QD library's algorithms (Hida, Li and Bailey, ARITH-15, 2001) [[7]](#ref-hlb01) with three
+repairs, two to the accurate add and one to the square root, which now scales its argument by a power of four.
+`OD::sloppy_mul` errs by at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (the paper's Theorem 30), where `*` errs by
+u⁸; random operands give at most 98 u⁸|a₀b₀| and a hill climb 582 u⁸|a₀b₀|.
+
+Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
+accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
+like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal `f64`,
+so octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow an absolute 16×2⁻¹⁰⁷⁴.
+
+| Type | Accuracy |
+|---|---|
+| `ODLu` | about 10⁻¹³³ cond(A) for condition numbers up to 10³⁰, 2⁻²²⁰ times the quad-double LU's error |
+| `OJet` | coefficients within 10⁻¹²³ of the sum of their terms' magnitudes, where the quad-double jet errs by 2×10⁻⁶⁴; its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps |
+| `Ou` | derivatives within 10⁻¹²³, and its value is `OV`'s bit for bit |
 
 Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms, and exp and ln, one at a
 time, and the tests run with it check that each breakage fails a test. The integration tests also feed deliberately
@@ -344,13 +336,13 @@ Jacobian at the speed of SIMD f64 code, and at large D, where rounding is amplif
    [doi:10.1145/3568672](https://doi.org/10.1145/3568672).
 4. <a id="ref-machin"></a>W. Jones, *Synopsis Palmariorum Matheseos*, J. Wale, London, 1706, p. 263, which gives John
    Machin's series for π.
-5. <a id="ref-hlb01"></a>Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating point
+5. <a id="ref-cw80"></a>W. J. Cody, Jr., W. Waite, *Software Manual for the Elementary Functions*, Prentice-Hall,
+   Englewood Cliffs, NJ, 1980, ISBN 0-13-822064-6.
+6. <a id="ref-qd"></a>Y. Hida, X. S. Li, D. H. Bailey, the QD library, `exp` and `log` in `src/dd_real.cpp` and
+   `src/qd_real.cpp`, [github.com/BL-highprecision/QD](https://github.com/BL-highprecision/QD).
+7. <a id="ref-hlb01"></a>Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating point
    arithmetic", 15th IEEE Symposium on Computer Arithmetic (ARITH-15), 155–162, 2001,
    [doi:10.1109/ARITH.2001.930115](https://doi.org/10.1109/ARITH.2001.930115).
-6. <a id="ref-cw80"></a>W. J. Cody, Jr., W. Waite, *Software Manual for the Elementary Functions*, Prentice-Hall,
-   Englewood Cliffs, NJ, 1980, ISBN 0-13-822064-6.
-7. <a id="ref-qd"></a>Y. Hida, X. S. Li, D. H. Bailey, the QD library, `exp` and `log` in `src/dd_real.cpp` and
-   `src/qd_real.cpp`, [github.com/BL-highprecision/QD](https://github.com/BL-highprecision/QD).
 
 ## License
 
