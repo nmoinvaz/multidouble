@@ -1,4 +1,4 @@
-% The exponential and the logarithm of n-part expansions (multidouble's OD::exp and OD::ln at n = 8), by Lemma 20 at
+% The exponential and the logarithm of n-part expansions (multidouble's OD::exp and OD::ln at n = 8), by Lemma 13 at
 % every operation, and of double-words (DD::exp and DD::ln), from the published bounds of the double-word operations.
 % \input after the trigonometric section of expansion-error-bounds.tex, whose macros and labels it uses.
 % Constants: explog_consts.py.
@@ -81,14 +81,9 @@ Assume (A2$'$), (A3) and $n \le 31$. Let $r$ be an $n$-part expansion with $a
 and $U < \bar c = 2^{e+1}$. Write $[m > 0]$ for 1 if $m > 0$ and 0 otherwise. Let $b' = 2^{-m}\min(b, \bar c) +
 n\eta_0[m > 0]$ and $\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\bar t_j = e^{2^jb'} - 1$
 and $g_j = 1 + \bar t_j$ if $r \ge 0$, and $\bar t_j = 1 - e^{-2^jb'}$ and $g_j = e^{-2^ja2^{-m}}$ if $r \le 0$. Let
-$v_{d'} = 1/d'!$, $e_{d'} = \phi_{d'}$, $\pi^q_{d'} = |F_{d'}|$, and for $j = d'-1, \dots, 2$
-\begin{align*}
-(\epsilon^p_j, \mu_j) &= G_{\rm MUL}\bigl(\pi', \pi^q_{j+1};\ b'(v_{j+1} + e_{j+1})\bigr), \\
-(\epsilon^a_j, \pi^q_j) &= G_{\rm ADD}\bigl(|F_j|, \mu_j;\ \tfrac1{j!} + \phi_j + b'(v_{j+1} + e_{j+1}) +
-\epsilon^p_j\bigr), \\
-e_j &= \phi_j + b'e_{j+1} + \epsilon^p_j + \epsilon^a_j, \qquad v_j = \tfrac1{j!} + b'v_{j+1}.
-\end{align*}
-Let $(\epsilon', \omega') = G_{\rm MUL}(\pi', \pi^q_2;\ b'(v_2 + e_2))$, $(\epsilon'', \omega) = G_{\rm MUL}(\pi',
+$v_{d'} = 1/d'!$ and $v_j = 1/j! + b'v_{j+1}$, and let $e_2$ and $\pi^q_2$ be the $e_2$ and $\pi^{(2)}$ of
+Lemma~\ref{lem:horner} for the coefficients $F_j$ of $1/j!$, $2 \le j \le d'$, and $z = r'$: there $\epsilon_z = 0$,
+$\bar z = b'$ and $\pi^z = \pi'$. Let $(\epsilon', \omega') = G_{\rm MUL}(\pi', \pi^q_2;\ b'(v_2 + e_2))$, $(\epsilon'', \omega) = G_{\rm MUL}(\pi',
 \omega';\ b'(b'(v_2 + e_2) + \epsilon'))$,
 \begin{align*}
 E^- &= \epsilon'' + b'(\epsilon' + b'e_2) + E^{\rm tr}_{d'} + 2n\eta_0[m > 0], \\
@@ -112,10 +107,8 @@ $U$ is the sum of $n$ magnitudes rounded $n - 1$ times, then times $1 + 2^{-48}$
 above), and $|r|, |r_i| < \bar c$. The scaling by $2^{-m}$ is exact but for parts that fall below $2^{-1022}$, each
 moved by at most $\eta_0$; so $|r'| \le b'$ and $|r'_i| \le \pi'_i$, and the computed $r'$ is within $n\eta_0$ of
 $2^{-m}r$, which moves $e^{r'} - 1$ by at most $2n\eta_0$. Let $q^*_j = \sum_{i=j}^{d'} r'^{i-j}/i!$, so $|q^*_j| \le v_j$.
-By induction from $j = d'$, the computed $q$ after the pass with index $j$ satisfies $|q - q^*_j| \le e_j$ and has parts
-bounded by $\pi^q_j$: the exact product $r'q$ has magnitude at most $b'(v_{j+1} + e_{j+1})$, Lemma~\ref{lem:g} bounds
-its rounding by $\epsilon^p_j$, the exact sum $F_j + \RN(r'q)$ has magnitude at most the stated bound, and $q - q^*_j =
-(F_j - 1/j!) + r'(q_{\rm old} - q^*_{j+1}) + $ the two roundings. Likewise $r'w$, formed as $2^{e'}\mathrm{MUL}(\hat r,
+By Lemma~\ref{lem:horner} the $q$ of the last pass satisfies $|q - q^*_2| \le e_2$ and has parts bounded by $\pi^q_2$,
+so $|w - r'q^*_2| \le \epsilon' + b'e_2$. Then $r'w$, formed as $2^{e'}\mathrm{MUL}(\hat r,
 w)$, satisfies $|r'w - r'^2q^*_2| \le \epsilon'' + b'\epsilon' + b'^2e_2$ before the scaling back, the scaled MUL and ADD
 having $2^{-e'}$ times the bounds used here, and $r' + r'^2q^*_2 = \sum_{i=1}^{d'}r'^i/i!$ differs from $e^{r'} - 1$ by at
 most $E^{\rm tr}_{d'}$. The scaling back by $2^{e'}$ moves each part by at most $\eta_0$. So the first $t$
@@ -226,17 +219,11 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
   ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + E_\delta + \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + E_\delta +
   \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$, $C = \bar c^* + E_c$, $(\cdot, \zeta') = G_{\rm ADD}(\pi^f, \psi_m;\
   C)$ and $\chi = \max(\chi', \zeta')$ part by part;
-\item $v_q = 1/q$, $e_q = \phi'_q$, $\pi^h_q = |F'_q|$, and for $i = q-1, \dots, 2$
-  \begin{align*}
-  (\epsilon^p_i, \mu_i) &= G_{\rm MUL}\bigl(\chi, \pi^h_{i+1};\ C(v_{i+1} + e_{i+1})\bigr), \\
-  (\epsilon^a_i, \pi^h_i) &= G_{\rm ADD}\bigl(|F'_i|, \mu_i;\ \tfrac1i + \phi'_i \\
-  &\qquad + C(v_{i+1} + e_{i+1}) + \epsilon^p_i\bigr), \\
-  e_i &= \phi'_i + Ce_{i+1} + \epsilon^p_i + \epsilon^a_i, \\
-  v_i &= \tfrac1i + Cv_{i+1},
-  \end{align*}
-  each $G_{\rm MUL}$ of step (5), here and in the next item, with $n\eta_0$ added to its error and $\eta_0$ to each
-  part bound;
-\item with $\bar h = C(v_2 + e_2) + \epsilon^h$,
+\item $v_q = 1/q$ and $v_i = 1/i + Cv_{i+1}$, and $e_2$ and $\pi^h_2$ the $e_2$ and $\pi^{(2)}$ of
+  Lemma~\ref{lem:horner} for the coefficients $F'_i$ of $(-1)^{i+1}/i$, $2 \le i \le q$, and $z = c$, its products
+  scaled as $c \otimes v$ with the loss $\eta = \eta_0$: there $\epsilon_z = 0$, $\bar z = C$ and $\pi^z = \chi$;
+\item with $\bar h = C(v_2 + e_2) + \epsilon^h$, and each $G_{\rm MUL}$ with $n\eta_0$ added to its error and $\eta_0$
+  to each part bound,
   \begin{align*}
   (\epsilon^h, \omega^h) &= G_{\rm MUL}\bigl(\chi, \pi^h_2;\ C(v_2 + e_2)\bigr), \\
   (\epsilon^g, \omega^g) &= G_{\rm ADDF}\bigl(\omega^h, 1;\ 1 + \bar h, 1 + \bar h + \textstyle\sum_{j \ge
@@ -277,8 +264,8 @@ one ADD, is $f + t + ft$ plus these errors, and $f + t + ft = x'(1 + t) - 1 = c^
 (x' - 2^kx)(1 + t^*)$ with $c^* = 2^kxe^{r_e} - 1 = e^{-e_0} - 1$, $|c^*| \le \bar c^*$ and $|2^kx(e^r - e^{r_e})| =
 e^{-e_0}|e^{r - r_e} - 1|$, the last two terms within $E_\delta$. So $|c - c^*| \le E_c$ and $|c|, |c^*| \le C$; where $p$
 is dropped, $|f + t| \le C$ too, so $\zeta'$ bounds the parts of $c = \mathrm{ADD}(f, t)$, and $|c_i| \le \chi_i$ either
-way. Step (5) computes $h$ within $e_2$ of $H(c) = \sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, as in the proof of
-Lemma~\ref{lem:core}, each product $c \otimes v$ having $2^{-e_c}$ times the bounds of $G_{\rm MUL}$ before its scaling
+way. By Lemma~\ref{lem:horner}, step (5) computes $h$ within $e_2$ of $H(c) =
+\sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, each product $c \otimes v$ having $2^{-e_c}$ times the bounds of $G_{\rm MUL}$ before its scaling
 back, which moves each part by at most $\eta_0$. Then $\gamma - S_q(c) = (\gamma - cg) + c(g - 1 - \hat h) + c(\hat h -
 ch) + c^2(h - H(c))$ for $\hat h = c \otimes h$ and $g = \mathrm{ADDF}(\hat h, 1)$, where $S_q(c) = c(1 + cH(c)) =
 \sum_{i=1}^q(-1)^{i+1}c^i/i$, so $|\gamma - S_q(c)| \le \epsilon^r + C(\epsilon^g + \epsilon^h + Ce_2)$. Finally
