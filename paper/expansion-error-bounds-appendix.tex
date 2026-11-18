@@ -631,7 +631,9 @@ gives the errors and part bounds from the bounds $\bar Z$ listed.
 The leading constant 3 at $n = 8$ is $u^n/2$ from each of $m$ and $g$ (through $c$), $u^n$ from the last ADD and $u^n$
 from the final MUL; the error before the last step enters squared, $E_3 \approx 1.1 \cdot 10^6u^8$ for SQRT$_{8,4}$ at
 $\theta = 2$ and $E_1 \le 2^{-303}$ for SQRT$^{\rm DD}_8$. In units of $2^{-418}$ the bound is $(3/64)(1 + 2^{-15})$ unit, and multidouble's test measure $|z^2s^2 - x|/(2x)$
-is at most $\delta_J + \delta_J^2/2$. Whether 3 is attained is not known.
+is at most $\delta_J + \delta_J^2/2$. An input whose parts were chosen one at a time, so that the levels of the last
+product are $1, u, \dots, u^7$ and a ninth just below $u^8$ that the renormalization drops, errs by $(1 - 5u)u^8$
+(Table~\ref{tab:inputs}); whether 3 is attained is not known.
 \end{remark}
 
 \section{Sharpness}
@@ -689,4 +691,42 @@ so the loss of $u^n$ is the renormalization's: every step of its second pass emi
 as the rounding allows. Random inputs at $n = 8$ give errors below $0.01\,u^8$ in multidouble's tests; the worst case of each of the four operations is $u^8|Z|(1 - O(u))$, $1/64$ unit of
 $2^{-418}$.
 \end{remark}
+
+\paragraph{The square root and the elementary functions} Their last operations act on computed values, so the simple
+inputs above do not give them a chain of ties. Inputs that do were constructed for multidouble's octo-double
+(Table~\ref{tab:inputs}). The last product of the square root, $r\,a$, has the scaled input $a$ as a factor, so $a$'s
+parts were chosen one at a time, each so that the next level of the product is the next power of $u$, with $a$ near $(1
++ u + \dots + u^8)^2$; its ninth level, just below $u^8$, is the part that the renormalization drops. For the other functions,
+Newton's method in octo-double arithmetic gave an $x$ with $f(x)$ just past $\pm2^E(1 + cu + u + \dots + u^7)$, $c$ a
+multiple of 4, and among the values of $x$'s last part nearby, those whose result is $\pm2^E(1 + cu, u, \dots, u^7)$
+were kept, and the one with the largest error. Each input lies on the ladder, with normal parts. The last operation's own error is at most $(1 +
+2^{-25})u^8$ times its exact result (Theorems~\ref{thm:t3} and~\ref{thm:t6}), so the cosine and the tangent exceed
+$u^8|Z|$ because their earlier operations err in the same direction.
+
+\begin{table*}[tp]
+\centering
+\caption{Inputs on which multidouble's octo-double square root, sine, cosine, tangent, exponential and logarithm err by
+about $u^8|Z|$, $Z$ the exact result: the bits of the input's parts, the result $z$, and the error $|Z - z|/(u^8|Z|)$,
+rounded down (computed, \texttt{table1\_inputs.py}).}
+\label{tab:inputs}
+\footnotesize
+\begin{tabular}{@{}llll@{}}
+\toprule
+& input, $x_0, \dots, x_3$ above $x_4, \dots, x_7$ & result & error \\
+\midrule
+$\sqrt x$ & \texttt{3ff0000000000001 3967fdf3b645a1cb 38b0624dd2f1af00 35f0000000000004} & $(1, u, \dots, u^7)$ & $1 - 5u$ \\
+& \texttt{32b0000000000003 2c3bff7ced916873 2b60624dd2f1be00 28b0000000000009} & & \\ \addlinespace
+$\sin x$ & \texttt{3ee000000000aaab 3b75555eeef6eef2 381729d2975900e8 348a195a54a29eb4} & $2^{-17}(1, u, \dots, u^7)$ & $0.999999995$ \\
+& \texttt{3128cc3a41f5cda2 ad6de6f5c4da02df 29dad523df82f39d 261efb1a1688e432} & & \\ \addlinespace
+$\cos x$ & \texttt{3ff941fb6999a8d4 3c98b0c392810f09 b93572503683ff67 b58f05686f022788} & $-2^{-7}(1 + 4u, u, \dots, u^7)$ & $1.00069$ \\
+& \texttt{b1ca742cfa0db1ed 2e6693f13d61b2d3 ab0bccc00c1d973a a7a798c3c05b350e} & & \\ \addlinespace
+$\tan x$ & \texttt{3e0000000000000e 3aaffaaaaaaaaaac b748f55222222223 b3eb04e88ad1ad57} & $2^{-31}(1 + 28u, u, \dots, u^7)$ & $1.00138$ \\
+& \texttt{307dc840ac82561c 2d0b1f36bfab0d59 299bd6c73c83ad94 a5fdb97f61d2dd6c} & & \\ \addlinespace
+$e^x$ & \texttt{3cd1fffffffffffe b97dffffffffffe3 3617fffffffffe78 3290000000005734} & $(1 + 8u, u, \dots, u^7)$ & $1 - 8.2u$ \\
+& \texttt{af399999999ea6ee abd1111110c3fec7 286c09c092a9409b 25442702796c90a9} & & \\ \addlinespace
+$\ln x$ & \texttt{3fef80feabfeefa4 3c7804fa722c50e6 b90d33e543ae606f b5a9c51096bddb1f} & $-2^{-6}(1 + 24u, u, \dots, u^7)$ & $0.99998$ \\
+& \texttt{b220568c7ee0a0ac aeb561138ac7c121 2b51118a13c0f359 27f77c36d87db0bc} & & \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
