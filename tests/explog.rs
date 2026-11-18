@@ -11,7 +11,7 @@
 //! (scripts/explog_vectors.py, tests/data/explog_vectors.txt); a reference cut to 60 Taylor terms must fail both.
 //!
 //! The bounds, with u = 2^-53, are checked on every input that meets their hypotheses on x (`covered`; for exp, on
-//! every input): the proven ones of the paper's Theorems 34 and 36 and Proposition 38 (paper/explog_consts.py),
+//! every input): the proven ones of the paper's Theorems 39 and 41 and Proposition 43 (paper/explog_consts.py),
 //! `OD::exp` 3.661 u^8 e^x + 8 2^-1074 and `OD::ln` 9.926 u^8 |ln x| + 2^-509, `DD::exp` 5.465 u^2 e^x + 2 2^-1074 and
 //! `DD::ln` 15.351 u^2 |ln x| + 2^-1071, for x on the ladder |x_i| <= (2u)^i |x_0| (for the double-double a
 //! double-word) with normal parts; the theorems also ask that no product inside the run underflow, apart from those
@@ -786,7 +786,7 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
     rows
 }
 
-/// the start's bound (paper, Lemma 37): `ln_f64` within `LN_F64` u of ln h relative (ln_f64(1) = 0 exactly), on
+/// the start's bound (paper, Lemma 42): `ln_f64` within `LN_F64` u of ln h relative (ln_f64(1) = 0 exactly), on
 /// random normal and subnormal arguments, near 1, near the boundaries sqrt(2) 2^k of its reduction, at powers of 2 and
 /// at `START_PINNED`; the count of misses and the worst error in units of u, with its result times 1 + nudge (the
 /// control)

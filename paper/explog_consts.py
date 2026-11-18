@@ -1,4 +1,4 @@
-"""Theorems 34 and 36, Lemma 37 and Proposition 38 of expansion-error-bounds.pdf: the error bounds of exp and ln
+"""Theorems 39 and 41, Lemma 42 and Proposition 43 of expansion-error-bounds.pdf: the error bounds of exp and ln
 (src/explog.rs) in exact rationals. For the octo-double algorithms at any number of parts n, Lemma 20 bounds every
 operation's error and its result's parts from its operands' part bounds, and the bounds are carried through every step;
 for the double-double ones, the published relative bounds of the double-word operations. A scaling by a power of two
@@ -197,7 +197,7 @@ class DoubleWord:
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the start of the logarithm: the crate's binary64 logarithm (ln_f64), Lemma 37
+# the start of the logarithm: the crate's binary64 logarithm (ln_f64), Lemma 42
 # ---------------------------------------------------------------------------------------------------------------
 
 def start_eta(p=53, J=9):
@@ -827,7 +827,7 @@ if __name__ == '__main__':
         sys.exit(0 if check() else 1)
     print('the crate (u = 2^-53; exp relative; log relative to |ln x|, plus an absolute term)')
     eta, se = start_eta()
-    print(f'the start ln_f64 (Lemma 37): within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
+    print(f'the start ln_f64 (Lemma 42): within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
           f'{up_dec(se["ew"] / u)} u')
     w, info, red = dd_exp()
     rdd, fdd, _ = dd_log()

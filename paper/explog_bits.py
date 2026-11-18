@@ -1,5 +1,5 @@
 """The exponential and the logarithm of Appendix L on fpemu.py, written from the appendix's steps: EXP and LOG at n = 8
-(`OD::exp`, `OD::ln`) and their double-word forms (`DD::exp`, `DD::ln`, Proposition 38), checked bit for bit against
+(`OD::exp`, `OD::ln`) and their double-word forms (`DD::exp`, `DD::ln`, Proposition 43), checked bit for bit against
 multidouble (accumulator/acc_check, modes exp8, ln8, expdd and lndd) and against the bounds, and scanned for
 underflow.
 
@@ -139,7 +139,7 @@ def rnd_away(q):
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the double-word operations (Proposition 37) and the expansion ones (fpemu)
+# the double-word operations (Proposition 43) and the expansion ones (fpemu)
 # ---------------------------------------------------------------------------------------------------------------
 
 def dw_add(a, b):
@@ -295,7 +295,7 @@ class OD:
 
 
 def ln_f64(h):
-    """the start's binary64 logarithm (Lemma 37)"""
+    """the start's binary64 logarithm (Lemma 42)"""
     e0 = 0
     if abs(val(h)) < MIN_NORMAL:
         h, e0 = p2(h, 54), -54

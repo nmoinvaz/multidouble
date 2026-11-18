@@ -1,4 +1,4 @@
-"""Reviewer scratch: Theorem 36 recomputed from the appendix's text with separate code (see indep_exp.py). The
+"""Reviewer scratch: Theorem 41 recomputed from the appendix's text with separate code (see indep_exp.py). The
 'Convexity' paragraph's modifications are applied: VecSum's second bound alone, b' and pi'_0 without their minima,
 tau_j = 2^j b' for sigma = -1, and f-bar's second branch as E + b + delta."""
 import math, sys
@@ -56,7 +56,7 @@ def piy(yb):
     return [t, u * t] + [Fr(0)] * (n - 2)
 
 def red36(yb):
-    """Lemma 32 for -y0: X = y-bar, gamma = 2 u y-bar, alpha = pi^y"""
+    """Lemma 37 for -y0: X = y-bar, gamma = 2 u y-bar, alpha = pi^y"""
     K = 1075
     beta = yb * (abs(Lam - 1 / LN2) + u * Lam)
     gamma = 2 * u * yb
