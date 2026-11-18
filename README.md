@@ -30,13 +30,13 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 
 The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln` (also
 on the lanes, a computed NaN's sign and payload aside), and `sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵²,
-reduced by π/2 to 1216 bits in exact integer arithmetic, and every type has `mul_pwr2`, a scaling by a power of two that
-is exact barring overflow and underflow. Two operations trade accuracy for speed. `DD::fast_div` divides with two
-divisions instead of three, within a proven 15 u² + 56 u³ barring underflow and overflow, and `OD::sloppy_mul` takes
-about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits. An octo-double meets a double-double through
-`OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip the zero parts' products and give the promoted
-operation's bits, a NaN's sign and payload aside. The API documentation lists the rest, such as division by a shared
-divisor and conversion to arrays of parts.
+reduced by π/2 to 1216 bits in exact integer arithmetic. The lanes have `sin`, `cos`, `tan` and `sin_cos` too, and every
+type has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and underflow. Two operations trade
+accuracy for speed. `DD::fast_div` divides with two divisions instead of three, within a proven 15 u² + 56 u³ barring
+underflow and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits.
+An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip the zero
+parts' products and give the promoted operation's bits, a NaN's sign and payload aside. The API documentation lists the
+rest, such as division by a shared divisor and conversion to arrays of parts.
 
 ### Packed storage
 
