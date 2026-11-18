@@ -48,3 +48,15 @@ pub(crate) fn dw_times_dw2<L: Limb>(a: (L, L), b: (L, L)) -> (L, L) {
     let cl2 = a.1.fma(b.0, tl);
     quick_two_sum(ch, cl1.add(cl2))
 }
+
+/// a b for double-words: DWTimesDW3, Algorithm 12 of Joldes, Muller and Popescu (2017), within
+/// (4u^2 + u^3/2) / (1 + u)^2 relative by Theorem 2.8 of J.-M. Muller and L. Rideau (ACM Trans. Math. Softw. 48(1),
+/// 2022, doi:10.1145/3484514)
+#[inline(always)]
+pub(crate) fn dw_times_dw3<L: Limb>(a: (L, L), b: (L, L)) -> (L, L) {
+    let (ch, cl1) = two_prod(a.0, b.0);
+    let tl0 = a.1.mul(b.1);
+    let tl1 = a.0.fma(b.1, tl0);
+    let cl2 = a.1.fma(b.0, tl1);
+    quick_two_sum(ch, cl1.add(cl2))
+}
