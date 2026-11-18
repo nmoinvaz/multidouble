@@ -274,10 +274,15 @@ class OD:
 
     @staticmethod
     def ln_start(x):
+        top = val(x[0]) >= Q(2) ** 1023
+        if top:                           # the double-double of x could round past f64::MAX: start from x/2, add ln 2
+            x = [p2(v, -1) for v in x]
         t = x[7]
         for i in range(6, 0, -1):
             t = F.add(x[i], t)
         y = ln_of(DW, list(F.quick_two_sum(x[0], t)))
+        if top:
+            y = dw_add(y, [fl(v) for v in EC.constants()['dd']])
         return y + [PZ] * 6
 
     @staticmethod
@@ -451,6 +456,10 @@ def inputs(fn, n, N, seed):
             if n > 2:
                 xs.append(ladder_top(r, (1 + r.random()) * 2.0 ** r.randint(-900, 900), n))
                 xs.append(ladder_top(r, 1.0 + r.choice((-1, 1)) * 2.0 ** -r.randint(1, 52), n))
+                # the top of the range, where the start takes x/2: x_0 within 3 ulps of f64::MAX, a tail near half an
+                # ulp
+                x0 = struct.unpack('<d', struct.pack('<Q', 0x7fefffffffffffff - r.randint(0, 3)))[0]
+                xs.append([x0, math.ulp(x0) / 2, r.choice((-1.0, 1.0)) * 2.0 ** (915 - r.randint(0, 40))] + [0.0] * (n - 3))
     return xs
 
 
