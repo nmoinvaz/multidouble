@@ -74,7 +74,7 @@ remainder of the greedy rounding is at most $u_*$ times the one before, so $|r -
 \end{proof}
 
 The evaluation is a program of the operations of Lemma~\ref{lem:g}, and its bounds are the $G_{\rm OP}$ of that lemma
-applied in turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket
+applied in turn, with $r$ in units of $|r|$, $z$ in units of $r^2$, and the Horner sums absolute. For bucket
 $j$ with $R = R_j$ and $K = K_{\rm s}(j)$, let $\sigma_k$ be the magnitudes of the parts of $\hat s_k$, $\delta_k =
 |\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar a, \bar a;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} =
 \sigma_{K-1}$, and for $k = K-2, \dots, 1$
@@ -107,7 +107,7 @@ bucket $|r_0| < T_n$, $\delta_{\rm S} = T^2/(6 - T^2)$ and $\delta_{\rm C} = T^2
 2^{-50})$.
 
 \begin{lemma}\label{lem:sincosr}
-Assume~\ref{as:fp} and $(n^2+n)u < 1$, and let $r$ be in bucket $j$ with $|r| \le R_j$ and $|r_i| \le
+Assume~\ref{as:fp} and (A3), and let $r$ be in bucket $j$ with $|r| \le R_j$ and $|r_i| \le
 \bar a_i|r|$. Then $|\textrm{SINR}(r) - \sin r| \le \delta_{\rm S}|\sin r|$ and $|\textrm{COSR}(r) - \cos r| \le
 \delta_{\rm C}\cos r$, and the parts of SINR$(r)$ and COSR$(r)$ are at most $\psi_{\rm s}|r|$ and $\psi_{\rm c}$.
 \end{lemma}
@@ -115,7 +115,7 @@ Assume~\ref{as:fp} and $(n^2+n)u < 1$, and let $r$ be in bucket $j$ with $|r| \l
 \begin{proof}
 Let $z_{\rm e} = r^2$ and $p^{\rm e}_k = \sum_{l=k}^{K-1}s_lz_{\rm e}^{\,l-k}$. Since $z_{\rm e} \le R^2 < 1$, the terms
 of $p^{\rm e}_k$ alternate in sign and decrease, so $|p^{\rm e}_k| \le |s_k|$. Lemma~\ref{lem:g} gives $|z - z_{\rm
-e}| \le \epsilon_z\rho^2$, part bounds $\zeta\rho^2$, and $|z| \le (1+\epsilon_z)R^2$. By induction from $k = K-1$,
+e}| \le \epsilon_zr^2$, part bounds $\zeta r^2$, and $|z| \le (1+\epsilon_z)R^2$. By induction from $k = K-1$,
 $|p_k - p^{\rm e}_k| \le E_k$ and $p_k$ has part bounds $\pi^{(k)}$: with $m = \mathrm{MUL}(z, p_{k+1})$,
 \[
 p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (\hat s_k - s_k) + \hat\epsilon_m
@@ -123,25 +123,25 @@ p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1
 \]
 where $\hat\epsilon_m = m - zp_{k+1}$ and $\hat\epsilon_a = p_k - (m + \hat s_k)$ are bounded by Lemma~\ref{lem:g},
 whose third arguments bound $|zp_{k+1}|$ and $|m + \hat s_k|$. The same expansion gives $|t - z_{\rm e}p^{\rm e}_1|
-\le E_t\rho^2$ for $t = \mathrm{MUL}(z, p_1)$, and $|w - rz_{\rm e}p^{\rm e}_1| \le (E_t + \epsilon_w)\rho^3 \le
-R^2(E_t + \epsilon_w)\rho$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\omega\rho^3$ are at most $R^2\omega\rho$.
+\le E_tr^2$ for $t = \mathrm{MUL}(z, p_1)$, and $|w - rz_{\rm e}p^{\rm e}_1| \le (E_t + \epsilon_w)|r|^3 \le
+R^2(E_t + \epsilon_w)|r|$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\omega|r|^3$ are at most $R^2\omega|r|$.
 The series' remainder after $K$ terms is at most its first omitted term, so $|r + rz_{\rm e}p^{\rm e}_1 - \sin r| \le
-\rho R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D\rho$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
-w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, and
-$|r + w| \le |\sin r| + D\rho$, so $|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
-(A2) both scalings are exact, so in units of $2^\sigma\rho$ the bounds are those above. COSR is the same
+|r|R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D|r|$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
+w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $|r|$, and
+$|r + w| \le |\sin r| + D|r|$, so $|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}|r|$; and $|r| \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
+(A2) both scalings are exact, so in units of $2^\sigma|r|$ the bounds are those above. COSR is the same
 with $|c_1| = \frac12$ and the absolute units of ADDF, and $\cos r \ge \cos_- R$. For $|r_0| < T_n$, $|\sin r - r| \le
-\rho^3/6$ and $|1 - \cos r| \le \rho^2/2$.
+|r|^3/6$ and $|1 - \cos r| \le r^2/2$.
 \end{proof}
 
 For the quotient, let $\theta_j \ge 1$ be the least value, rounded up, with $\psi_{{\rm s},i} \le (\theta_ju)^i\lambda_{\rm s}$
 and $\psi_{{\rm c},i} \le (\theta_ju)^i\lambda_{\rm c}$ for $i \ge 1$, where $\lambda_{\rm s} = (1 - R^2/6)(1 -
 \delta_{\rm S}) - \sum_{i \ge 1}\psi_{{\rm s},i}$ and $\lambda_{\rm c} = \cos_-R\,(1 - \delta_{\rm C}) - \sum_{i \ge
 1}\psi_{{\rm c},i}$ bound the leading parts from below ($\theta_j = 2$ for $|r_0| < T_n$), and let $\delta_{\rm D} =
-u^n + K_nu^{n+1}$ with $K_n$ that of Theorem~\ref{thm:t6} at $\theta = \theta_j$.
+u^n + K_nu^{n+1}$ with $K_n$ that of Theorem~\ref{thm:t6} at $\theta = \theta_j$, which needs $\theta_ju \le 1/4$.
 
 \begin{theorem}\label{thm:trig}
-Assume~\ref{as:fp} with $p = 53$, $n$ even with $(n^2+n)u < 1$, and let $x$ be finite with $|x_0| \le 2^{52}$
+Assume~\ref{as:fp} with $p = 53$ and (A3), $n$ even, and let $x$ be finite with $|x_0| \le 2^{52}$
 satisfying $H(2)$, $f \in \{\sin, \cos\}$, $A = |k|\,2^{-1217}$ and $\epsilon = 1 + 2u^n$. For each bucket $j$, let
 \begin{align*}
 C_j &= \epsilon\max\bigl(\delta_{\rm S} + \epsilon u^n,\ \delta_{\rm C} + \epsilon u^nR_j\tan_+ R_j\bigr), \\
@@ -196,7 +196,7 @@ constants are greedy.
 
 The values are those of \texttt{trig\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers. It
 evaluates one bucket per pair $(K_{\rm s}(j), K_{\rm c}(j))$, the one with the largest $R_j$: every bound above holds
-for all $\rho \le R_j$, and the buckets with the same series lengths lie in its range. It checks that the series
+for all $|r| \le R_j$, and the buckets with the same series lengths lie in its range. It checks that the series
 lengths and constants it derives are those of multidouble's tables.
 \end{proof}
 

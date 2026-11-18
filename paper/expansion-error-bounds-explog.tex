@@ -57,7 +57,7 @@ x - k\ln 2$, and assume $\alpha_0 = \rho_e + \gamma + K|\ln 2 - c_h| < \frac12$.
   \end{align*}
   Then $|r - r_e| \le \delta$ and $|r_i| \le \pi^r_i$.
 \end{enumerate}
-For $x$ on $H(\theta)$, $\alpha_i = \rho^iX$ and $\gamma = \rho X/(1-\rho)$ serve, $\rho = \theta u$.
+For $x$ on $H(\theta)$, $\alpha_i = \rho^iX$ and $\gamma = \rho X/(1-\rho)$ serve.
 \end{lemma}
 
 \begin{proof}
@@ -76,7 +76,7 @@ $|r - r_e| \le \epsilon_2 + \epsilon_1 + K\eta_\ell$.
 \end{proof}
 
 \begin{lemma}\label{lem:core}
-Assume (A2$'$), $(n^2+n)u < 1$ and $n \le 31$. Let $r$ be an $n$-part expansion of sign $\sigma \in \{1, -1\}$ with $a
+Assume (A2$'$), (A3) and $n \le 31$. Let $r$ be an $n$-part expansion of sign $\sigma \in \{1, -1\}$ with $a
 \le |r| \le b$ and $|r_i| \le \pi_i$, and let steps (2)--(4) of EXP$_{n,s,d}$ run on it with $m$ squarings, degree $d'$
 and $U < \bar c = 2^{e+1}$. Write $[m > 0]$ for 1 if $m > 0$ and 0 otherwise. Let $b' = 2^{-m}\min(b, \bar c) +
 n\eta_0[m > 0]$ and $\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\tau_j = e^{2^jb'} - 1$
@@ -129,7 +129,7 @@ bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $T_m = e^r - 1$
 \end{proof}
 
 \begin{theorem}\label{thm:exp}
-Assume (A2$'$), $p = 53$, $\rho = \theta u \le 1/4$, $(n^2+n)u < 1$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
+Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
 $|x_0| \le X$, and let $y$ be the finite result of EXP$_{n,s,d}$. For a case, take $k = 0$ or $k \ne 0$, an exponent $e$
 of step (2) (one for each $m \ge 1$; for $m = 0$, all those of one degree $d'$), a sign $\sigma$ of $r$, and an interval
 $[a, b]$ of the values of $|r|$ that can select $e$; for $k = 0$ let $\pi$ be the part bounds of an expansion on
@@ -204,7 +204,7 @@ and the renormalization is exact by Theorem~\ref{thm:t1}(a): a lossy last step w
 \end{proof}
 
 \begin{theorem}\label{thm:log}
-Assume (A2$'$), $p = 53$, $\rho = \theta u \le 1/4$, $(n^2+n)u < 1$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
+Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
 $x_0 > 0$ and $|\ln x| \le X$, and let the result $y$ of LOG$_{n,s,d,q}$ be finite. Let $\epsilon_{\rm DW}$ and
 $\Phi_{\rm DW}$ be the double-word logarithm's bounds of Proposition~\ref{prop:ddexplog}, $g = (n-2)u/(1 - (n-2)u)$, $w
 = g\rho/(1 - 2\rho - g\rho)$, $\delta_0 = w/(1-w)$, $\alpha_{\rm A} = 3u^2/(1 - 4u)$, $\eta_L = |\ln 2 - c_{L,0} -
