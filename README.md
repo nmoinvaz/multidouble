@@ -36,8 +36,9 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
   product in place), and `od::OdAcc` and `ov::ODotAcc`.
 - An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, and on the lanes
   `OV::mul_dv`, `OV::add_dv` and `ODotAcc::add_prod_dv`: bitwise the operations with the double-double promoted to
-  eight parts, without the products and sums of its six zero parts (the product and the dot product's term about 1.5
-  times as fast). The octo-double lanes' constants (`Lane::mulc`, `addc`, `accc`) go through them.
+  eight parts (a NaN's sign and payload aside), without the products and sums of its six zero parts (the product and
+  the dot product's term about 1.5 times as fast). The octo-double lanes' constants (`Lane::mulc`, `addc`, `accc`) go
+  through them.
 - Values kept as one array per part convert with `dd::split` and `dd::join` (hi and lo arrays) and `qd::to_parts` and
   `qd::from_parts` (four arrays). `qv::axpy_parts` and `ov::axpy_parts` compute y + a x on four or eight part arrays,
   and `OV::new` renormalizes eight parts on the lanes.

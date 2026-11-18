@@ -453,11 +453,14 @@ pub(crate) mod alg {
         L::renorm(expand(a, b))
     }
 
-    /// `expand(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise, without the partial products of b's six
-    /// zero parts: 13 two-products of the 28. Those products deposit zeros at levels 3..8. The carry of a0 b0's error
-    /// (`dep` from level 1) leaves no -0 at levels 2..8, as a two-sum's error is never -0, so the zero deposits after
-    /// it change nothing. Before it, `expand`'s levels 2..8 differ from these at most in the sign of a zero, which
-    /// that carry erases.
+    /// `expand(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise up to NaNs' signs and payloads, without
+    /// the partial products of b's six zero parts: 15 two-products of the 36, and one product of the order-8 sum's
+    /// seven. For finite parts of a those products deposit zeros at levels 3..8. The carry of a0 b0's error (`dep`
+    /// from level 1) leaves no -0 at levels 2..8, as a two-sum's error is never -0, so the zero deposits after it
+    /// change nothing. Before it, `expand`'s levels 2..8 differ from these at most in the sign of a zero, which that
+    /// carry erases. An infinite or NaN part makes some skipped products NaN. A non-finite a0 makes e0 NaN, whose
+    /// carry fills levels 1..8. A non-finite a_i, i >= 1, makes the kept a_i b0's error NaN, whose carry fills
+    /// levels i + 1..8, where every skipped NaN lands.
     #[inline(always)]
     pub fn expand_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 9] {
         L::outline(
@@ -507,9 +510,11 @@ pub(crate) mod alg {
         L::renorm(expand_dd(a, b0, b1))
     }
 
-    /// `add(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise, without the two-sums of a's parts 2..7 with
-    /// zero and the carries of their zero errors. Such a two-sum returns the part, a -0 as +0, and the carry of
-    /// a0 + b0's error erases that difference as in `expand_dd`.
+    /// `add(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise up to NaNs' signs and payloads, without the
+    /// two-sums of a's parts 2..7 with zero and the carries of their errors. For a finite part such a two-sum returns
+    /// the part, a -0 as +0, with a zero error, and the carry of a0 + b0's error erases that difference as in
+    /// `expand_dd`. For an infinite or NaN part its error is NaN, and that carry, passing the part's level, makes
+    /// every level below it NaN.
     #[inline(always)]
     pub fn add_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 8] {
         L::outline(
