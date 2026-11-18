@@ -458,13 +458,18 @@ impl<S: Simd> QV<S> {
                         break;
                     }
                 }
-                // the parts not read go into x[3], a's first, in order
+                // lanes that emitted four parts: u, v and the parts not read, a's first, in order, form a fifth term
+                // (QD::ieee_add); the others have read every part
+                let full = k.ge(four);
+                let mut e = v;
                 for kk in 0..4 {
-                    x[3] = x[3].add_where(V8::splat(kk as f64 + 1.0).gt(i), a[kk]);
+                    e = e.add_where(V8::splat(kk as f64 + 1.0).gt(i), a[kk]);
                 }
                 for kk in 0..4 {
-                    x[3] = x[3].add_where(V8::splat(kk as f64 + 1.0).gt(j), b[kk]);
+                    e = e.add_where(V8::splat(kk as f64 + 1.0).gt(j), b[kk]);
                 }
+                let fifth = full.sel(u.add(e), fifth);
+                let five = five.or(full);
                 let r4 = renorm4(x[0], x[1], x[2], x[3]);
                 if five.bits() == 0 {
                     return QV { c: r4 };
