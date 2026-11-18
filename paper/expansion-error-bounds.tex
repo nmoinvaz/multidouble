@@ -316,6 +316,10 @@ $a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ \\
 $a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ \\
 & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\ \addlinespace
 $\sqrt a$ & $3.00004\,u^8|Z|$ \\
+& not known \\ \addlinespace
+$\sin x$, $\cos x$ & $3.17\,u^8|Z| + 2^{-1163}$, $|x_0| \le 2^{52}$ \\
+& not known \\ \addlinespace
+$\tan x$ & $6.42\,u^8|Z|$, Theorem~\ref{thm:trig} \\
 & not known \\
 \bottomrule
 \end{tabular}
@@ -474,6 +478,9 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 \item \textbf{Sloppy multiplication.} Summing the last level in plain arithmetic, as QD's sloppy multiplication
   does, raises the multiplication's bound from about $u^8|Z|$ to $2^{31.93}u^8|a_0b_0|$ at eight parts
   (Theorem~\ref{thm:sloppy}).
+\item \textbf{Elementary functions.} Built on these operations, with an exact reduction by $\pi/2$ and Taylor
+  series, the sine and cosine err by at most $3.17\,u^8$ and the tangent by $6.42\,u^8$ relative, for arguments up to
+  $2^{52}$ (Theorem~\ref{thm:trig}).
 \item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
   far below the one above it can make a product of two small parts underflow.
 \item \textbf{Open questions.} The second-order constants come from triangle inequalities and are not claimed to be
@@ -520,6 +527,7 @@ section on sums of products and tested it with its own code.
 \input{expansion-error-bounds-appendix}
 \input{expansion-error-bounds-accumulator}
 \input{expansion-error-bounds-sloppy}
+\input{expansion-error-bounds-trig}
 
 \begin{thebibliography}{99}
 \bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
