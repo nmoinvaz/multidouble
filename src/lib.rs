@@ -109,6 +109,8 @@ pub mod native {
 mod od_tests;
 #[cfg(test)]
 mod qd_tests;
+#[cfg(test)]
+mod trig_tests;
 
 /// The README's examples, compiled and run as doctests.
 #[doc = include_str!("../README.md")]
