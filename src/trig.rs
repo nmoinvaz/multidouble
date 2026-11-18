@@ -46,14 +46,15 @@
 //! trigonometric functions", ACM SIGNUM Newsletter 18(1), 1983) is not implemented.
 //!
 //! The lane types `DV`, `QV` and `OV` have the same four functions, and each lane's result is bitwise the scalar
-//! function of its value, so the bounds above hold per lane. The reduction runs lane by lane in the integer code. The
-//! evaluation runs on all lanes at once, each with its own choices: its series and number of terms, its powers of two
-//! and its quadrant. Horner's scheme runs the longest series and masks each step per lane, so that a lane with k terms
-//! starts at its own leading coefficient and keeps its sum through the steps past its k. The quadrants, the early
-//! returns and the unscaled quotients of `tan` are blended per lane. Each lane thus performs the scalar's sequence of
-//! roundings. A NaN's sign and payload follow the order of its operands, which the compiler may change, so a lane whose
-//! result has a NaN part, possible only for parts off the ladder or not finite, takes the scalar function's result:
-//! the bits match, NaNs included.
+//! function of its value, so the bounds above hold per lane. The reduction runs on all lanes at once in f64 limbs
+//! (`fast_reduce`), and a lane whose greedy parts that one does not decide runs the integer code. The evaluation runs
+//! on all lanes at once, each with its own choices: its series and number of terms, its powers of two and its quadrant.
+//! Horner's scheme runs the longest series and masks each step per lane, so that a lane with k terms starts at its own
+//! leading coefficient and keeps its sum through the steps past its k. The quadrants, the early returns and the
+//! unscaled quotients of `tan` are blended per lane. Each lane thus performs the scalar's sequence of roundings. A
+//! NaN's sign and payload follow the order of its operands, which the compiler may change, so a lane whose result has a
+//! NaN part, possible only for parts off the ladder or not finite, takes the scalar function's result: the bits match,
+//! NaNs included.
 //!
 //! With the cargo feature `mutate`, `mutate::set(id)` breaks one step on purpose in the current thread, for the
 //! controls of the accuracy tests; without it the hooks are compile-time `false`.
@@ -70,6 +71,7 @@ use std::ops::Neg;
 
 #[rustfmt::skip]
 pub(crate) mod tables;
+pub(crate) mod fast_reduce;
 
 /// Deliberate breakage for the controls (feature `mutate`; ids below, 0 = none).
 pub mod mutate {
@@ -92,10 +94,16 @@ pub mod mutate {
     pub const LANE_NAN: u32 = 8;
     /// lanes only: lane 0's powers of two on every lane
     pub const LANE_POW2: u32 = 9;
+    /// lanes only: the fast reduction's rounding test skipped, so that every lane takes its parts
+    pub const REDUCE_FAST_UNCHECKED: u32 = 10;
+    /// lanes only: the fast reduction's test with no allowance for its own error (eps = 0)
+    pub const REDUCE_FAST_EPS: u32 = 11;
+    /// lanes only: the fast reduction's pi/2 without its last two digits (52 bits), its test unchanged
+    pub const REDUCE_FAST_PI: u32 = 12;
     /// number of ids
-    pub const N: u32 = 9;
+    pub const N: u32 = 12;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 10] = [
+    pub const NAMES: [&str; 13] = [
         "none",
         "reduction: last part of r dropped",
         "reduction: pi/2 cut to 64 (n + 1) + 1 bits",
@@ -106,6 +114,9 @@ pub mod mutate {
         "lanes: lane 0's quadrant on every lane",
         "lanes: NaN lanes from the lanes' arithmetic, NaN signs flipped",
         "lanes: lane 0's powers of two on every lane",
+        "lanes: fast reduction's test skipped",
+        "lanes: fast reduction's test with eps = 0",
+        "lanes: fast reduction's pi/2 without its last two digits",
     ];
 
     #[cfg(feature = "mutate")]
@@ -995,25 +1006,52 @@ trig_methods!(OD, "3.17 u^8 (u = 2^-53, proven)", "6.42 u^8 (proven)");
 // the three lane types
 // ---------------------------------------------------------------------------------------------------------------
 
-/// `reduce` on each lane: (k mod 4 as f64, the parts of r). Where every lane has |x_0 RN(2/pi)| < 1/2, k = 0 and r = x,
-/// as `reduce` decides from round(x_0 RN(2/pi)) = 0, with no lane taken apart.
+/// `reduce` on each lane: (k mod 4 as f64, the parts of r), bitwise. Where every lane has |x_0 RN(2/pi)| < 1/2, k = 0
+/// and r = x, as `reduce` decides from round(x_0 RN(2/pi)) = 0, with no lane taken apart. Otherwise the lanes with
+/// k != 0 take the fast reduction on L limbs (`fast_reduce`), and those whose parts it does not decide take `reduce`.
 #[inline(always)]
-fn reduce_lanes<S: Simd, const N: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
-    let k0 = V8::splat(0.5).gt(c[0].mul(V8::splat(tables::TWO_OVER_PI)).abs());
+fn reduce_lanes<S: Simd, const N: usize, const L: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
+    let t = c[0].mul(V8::splat(tables::TWO_OVER_PI));
+    let k0 = V8::splat(0.5).gt(t.abs());
     if k0.bits() == 0xff {
         return (V8::zero(), *c);
     }
-    let a = c.map(|v| v.to_array());
-    let mut q = [0.0; 8];
-    let mut r = [[0.0; 8]; N];
+    let k = fast_reduce::round_away(t);
+    let (f, ok) = fast_reduce::fast::<V8<S>, N, L>(c, k);
+    let mut q = k0.sel(V8::zero(), fast_reduce::mod4(k));
+    let mut r = *c;
+    for i in 0..N {
+        r[i] = k0.sel(c[i], f[i]);
+    }
+    // every lane with k != 0 under the mutation of `reduce`'s pi/2, which the fast reduction does not follow
+    let left = if mutate::on(mutate::REDUCE_PI_SHORT) {
+        !k0.bits()
+    } else {
+        !(ok.bits() | k0.bits())
+    };
+    if left != 0 {
+        exact_lanes(c, left, &mut q, &mut r);
+    }
+    (q, r)
+}
+
+/// the lanes of (q, r) set in m replaced by `reduce` of those of x
+#[inline(always)]
+fn exact_lanes<S: Simd, const N: usize>(x: &[V8<S>; N], m: u8, q: &mut V8<S>, r: &mut [V8<S>; N]) {
+    let a = x.map(|v| v.to_array());
+    let mut qa = q.to_array();
+    let mut ra = r.map(|v| v.to_array());
     for l in 0..8 {
-        let (ql, rl) = reduce::<N>(&std::array::from_fn(|i| a[i][l]));
-        q[l] = ql as f64;
-        for i in 0..N {
-            r[i][l] = rl[i];
+        if m >> l & 1 == 1 {
+            let (ql, rl) = reduce::<N>(&std::array::from_fn(|i| a[i][l]));
+            qa[l] = ql as f64;
+            for i in 0..N {
+                ra[i][l] = rl[i];
+            }
         }
     }
-    (V8::from_array(q), r.map(V8::from_array))
+    *q = V8::from_array(qa);
+    *r = ra.map(V8::from_array);
 }
 
 /// |v| < inf on every lane of every part
@@ -1087,7 +1125,7 @@ impl<S: Simd> Ext for DV<S> {
     }
     #[inline(always)]
     fn reduce(self) -> (V8<S>, Self) {
-        let (q, [h, l]) = reduce_lanes(&[self.hi, self.lo]);
+        let (q, [h, l]) = reduce_lanes::<S, 2, { fast_reduce::limbs(2) }>(&[self.hi, self.lo]);
         // a double-word number, as `DD`'s
         let (hi, lo) = dv::quick_two_sum(h, l);
         (q, DV { hi, lo })
@@ -1174,7 +1212,7 @@ impl<S: Simd> Ext for QV<S> {
     }
     #[inline(always)]
     fn reduce(self) -> (V8<S>, Self) {
-        let (q, c) = reduce_lanes(&self.c);
+        let (q, c) = reduce_lanes::<S, 4, { fast_reduce::limbs(4) }>(&self.c);
         (q, QV { c })
     }
     #[inline(always)]
@@ -1260,7 +1298,7 @@ impl<S: Simd> Ext for OV<S> {
     }
     #[inline(always)]
     fn reduce(self) -> (V8<S>, Self) {
-        let (q, c) = reduce_lanes(&self.c);
+        let (q, c) = reduce_lanes::<S, 8, { fast_reduce::limbs(8) }>(&self.c);
         (q, OV { c })
     }
     #[inline(always)]
