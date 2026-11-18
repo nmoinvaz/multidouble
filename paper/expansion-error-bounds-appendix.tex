@@ -179,10 +179,10 @@ level $n$ (those of (iii) and the last steps of the deps), and assume $T_m u < 1
 $0 \le m \le n-1$,
 \begin{gather*}
 C_m = \frac{T_m u\,D_m}{1 - T_m u}, \qquad D_{m+1} = A_{m+1} + C_m, \\
-R = \frac{Q u\,D_n}{1 - Qu}.
+X_m = \frac{D_m}{1 - T_m u}\ (m < n), \qquad X_n = \frac{D_n}{1 - Qu}, \qquad R = QuX_n.
 \end{gather*}
-Then: (a) at every moment $|s_m| \le X_m$, where $X_m = D_m/(1 - T_m u)$ for $m < n$ and $X_n = D_n/(1-Qu)$; (b) the
-carries out of level $m$ have absolute sum at most $C_m$; (c) at the end, $\sum_m s_m = Y - \sum r$, where $Y$ is the sum (with signs)
+Then: (a) at every moment $|s_m| \le X_m$; (b) the carries out of
+level $m$ have absolute sum at most $C_m$; (c) at the end, $\sum_m s_m = Y - \sum r$, where $Y$ is the sum (with signs)
 of the $y$ of (i) and (iii) and the $t$ of (ii), and the rounding errors $r$ at level $n$ satisfy $\sum|r| \le R$.
 \end{lemma}
 
