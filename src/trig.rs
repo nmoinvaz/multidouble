@@ -1033,13 +1033,20 @@ trig_methods!(OD, "3.17 u^8 (u = 2^-53, proven)", "6.42 u^8 (proven)");
 
 /// `reduce` on each lane: (k mod 4 as f64, the parts of r), bitwise. Where every lane has |x_0 RN(2/pi)| < 1/2, k = 0
 /// and r = x, as `reduce` decides from round(x_0 RN(2/pi)) = 0, with no lane taken apart. Otherwise the lanes with
-/// k != 0 take the fast reduction on L limbs (`fast_reduce`), and those whose parts it does not decide take `reduce`.
+/// k != 0 take the fast reduction on L limbs (`fast_reduce`), and those whose parts it does not decide take
+/// `reduce_exact`; or, if there are three of them or fewer, each takes `reduce`.
 #[inline(always)]
 pub(crate) fn reduce_lanes<S: Simd, const N: usize, const L: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
     let t = c[0].mul(V8::splat(tables::TWO_OVER_PI));
     let k0 = V8::splat(0.5).gt(t.abs());
     if k0.bits() == 0xff {
         return (V8::zero(), *c);
+    }
+    // up to three lanes with k != 0 cost less one by one, by the scalar `reduce`
+    if (!k0.bits()).count_ones() <= 3 {
+        let (mut q, mut r) = (V8::zero(), *c);
+        scalar_lanes(c, !k0.bits(), &mut q, &mut r, reduce::<N, L>);
+        return (q, r);
     }
     let (k, f, ok) = fast_reduce::fast::<V8<S>, N, L>(c, fast_reduce::round_away(t));
     let mut q = k0.sel(V8::zero(), fast_reduce::mod4(k));
@@ -1054,20 +1061,26 @@ pub(crate) fn reduce_lanes<S: Simd, const N: usize, const L: usize>(c: &[V8<S>; 
         !(ok.bits() | k0.bits())
     };
     if left != 0 {
-        exact_lanes(c, left, &mut q, &mut r);
+        scalar_lanes(c, left, &mut q, &mut r, reduce_exact::<N>);
     }
     (q, r)
 }
 
-/// the lanes of (q, r) set in m replaced by `reduce` of those of x
+/// the lanes of (q, r) set in m replaced by f, `reduce` or `reduce_exact`, of those of x
 #[inline(always)]
-fn exact_lanes<S: Simd, const N: usize>(x: &[V8<S>; N], m: u8, q: &mut V8<S>, r: &mut [V8<S>; N]) {
+fn scalar_lanes<S: Simd, const N: usize>(
+    x: &[V8<S>; N],
+    m: u8,
+    q: &mut V8<S>,
+    r: &mut [V8<S>; N],
+    f: impl Fn(&[f64; N]) -> (u32, [f64; N]),
+) {
     let a = x.map(|v| v.to_array());
     let mut qa = q.to_array();
     let mut ra = r.map(|v| v.to_array());
     for l in 0..8 {
         if m >> l & 1 == 1 {
-            let (ql, rl) = reduce_exact::<N>(&std::array::from_fn(|i| a[i][l]));
+            let (ql, rl) = f(&std::array::from_fn(|i| a[i][l]));
             qa[l] = ql as f64;
             for i in 0..N {
                 ra[i][l] = rl[i];
