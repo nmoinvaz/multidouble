@@ -478,8 +478,11 @@ class Log:
     def series(self, cp, Cb):
         """corr = c (1 + c h), h = A_2 + c (A_3 + c A_4 ...), each product with c formed at c 2^-ec (exact scalings,
         and a loss of at most ETA0 per part scaled back below 2^-1022): its error against S_q(c) = c (1 + c H(c)),
-        |corr| bound and parts. Below 2^-(B + 13), corr = c, whose truncation is bounded in bin()."""
+        |corr| bound and parts. Below 2^-(B + 13), corr = c, whose truncation is bounded in bin(); so it is for q = 1,
+        where S_1(c) = c."""
         M, q, n = self.M, self.q, self.M.n
+        if q == 1:
+            return Fr(0), Cb, cp
         lossp = n * ETA0
         hp, he = M.const(self.A[q][0]), self.A[q][1]
         hv = Fr(1, q)
@@ -747,7 +750,7 @@ def od_log(n, s, d, q, eps_dd, fl_dd, theta=2, verbose=False):
     rows = log_bound(Lg, e1, e0, verbose=verbose)
     rel = max(r[6] for r in rows)
     floor = max(r[7] for r in rows)
-    return rel, floor, rows, delta
+    return rel, floor, rows, (e1, e0, delta)
 
 
 def degree(n, s, p=53):
@@ -827,21 +830,23 @@ if __name__ == '__main__':
           f'{up_dec(se["ew"] / u)} u')
     w, info, red = dd_exp()
     rdd, fdd, _ = dd_log()
-    print(f'DD s,d,q = {DD_PARAMS}: exp <= {fmt(w, u, 2)} u^2 (quoted {ceil3(w / u ** 2)}), worst at '
-          f'{"k = 0" if info["k0"] else "k != 0"}, d {info["d"]}, sign {info["sigma"]}, '
+    print(f'DD s,d,q = {DD_PARAMS}: exp <= {fmt(w, u, 2)} u^2 e^x + 2 2^-1074 (quoted {ceil3(w / u ** 2)}), '
+          f'worst at {"k = 0" if info["k0"] else "k != 0"}, d {info["d"]}, sign {info["sigma"]}, '
           f'|r| in [{float(info["a"]):.4f}, '
           f'{float(info["b"]):.4f}]; log <= {fmt(rdd, u, 2)} u^2 |ln x| + 2^{lg2_up(fdd)} (quoted '
           f'{ceil3(rdd / u ** 2)} u^2 and 2^{lg2_up(fdd, 0)})')
     wdd = w
     s, d, q = OD_PARAMS
     w, info, red = od_exp(8, s, d)
-    print(f'OD s,d,q = {OD_PARAMS}: exp <= {fmt(w, u, 8)} u^8 (quoted {ceil3(w / u ** 8)}), worst at '
-          f'{"k = 0" if info["k0"] else "k != 0"}, m {info["m"]}, d {info["d"]}, sign {info["sigma"]}, |r| in '
+    print(f'OD s,d,q = {OD_PARAMS}: exp <= {fmt(w, u, 8)} u^8 e^x + 8 2^-1074 (quoted {ceil3(w / u ** 8)}), '
+          f'worst at {"k = 0" if info["k0"] else "k != 0"}, m {info["m"]}, d {info["d"]}, sign {info["sigma"]}, '
+          f'|r| in '
           f'[{float(info["a"]):.4f}, {float(info["b"]):.4f}]; reduction {fmt(red["dr"], u, 8)} u^8')
-    rel, floor, rows, delta = od_log(8, s, d, q, rdd, fdd)
+    rel, floor, rows, (e1, e0, delta) = od_log(8, s, d, q, rdd, fdd)
     print(f'OD log <= {fmt(rel, u, 8)} u^8 |ln x| + 2^{lg2_up(floor)} (quoted {ceil3(rel / u ** 8)} u^8 and '
-          f'2^{lg2_up(floor, 0)}); start within {fmt(rdd, u, 2)} u^2 |ln to_dd(x)| + 2^{lg2_up(fdd)} '
-          f'of ln to_dd(x), |ln x - ln to_dd(x)| <= 2^{lg2_up(delta)}')
+          f'2^{lg2_up(floor, 0)}); start within {fmt(e1, u, 2)} u^2 |ln x| + 2^{lg2_up(e0)} of ln x on either branch '
+          f'(the DD log of to_dd(x), |ln x - ln to_dd(x)| <= 2^{lg2_up(delta)}, or for x_0 >= 2^1023 that of x/2 '
+          f'plus LN2_DD)')
     # where each quoted bound's absolute term exceeds its relative one: e^x below n 2^-1074 / (C u^n), |ln x| below
     # 2^a / (C u^n), as quoted (C and 2^a rounded up); the printed limits are rounded up too
     A_od, A_dd = Fr(2) ** int(lg2_up(floor, 0)), Fr(2) ** int(lg2_up(fdd, 0))
@@ -862,5 +867,5 @@ if __name__ == '__main__':
         d, q = degree(n, s), order(n, rdd)
         w, _, _ = od_exp(n, s, d)
         rel, floor, _, _ = od_log(n, s, d, q, rdd, fdd)
-        print(f'n={n:2d} d={d} q={q}: exp <= {fmt(w, u, n)} u^n, log <= {fmt(rel, u, n)} u^n |ln x| + '
-              f'2^{lg2_up(floor)}')
+        print(f'n={n:2d} d={d} q={q}: exp <= {fmt(w, u, n)} u^n e^x + {n} 2^-1074, log <= {fmt(rel, u, n)} u^n '
+              f'|ln x| + 2^{lg2_up(floor)}')
