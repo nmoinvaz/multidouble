@@ -1,26 +1,26 @@
 //! Tests of the octo-double arithmetic (`od`, `ov`) against exact dyadic arithmetic (`exact`), which shares no code
-//! with the algorithms under test: the inputs are built from exact random values by greedy rounding to eight parts,
-//! not by octo-double arithmetic, and every reference result is exact.
+//! with the algorithms under test. The inputs are built from exact random values by greedy rounding to eight parts, not
+//! by octo-double arithmetic, and every reference result is exact.
 //!
 //! ```text
 //! cargo test --release --lib od_                                  accuracy, scalar/8-lane agreement, decimal I/O
 //! cargo test --release --lib --features mutate od_controls        every deliberate breakage must fail a check
 //! ```
-//! OD_N sets the samples per operation and input category (default 2000), OD_SEED the seed (default 1),
-//! OD_REPORT=1 prints the tables. The thresholds, in units of 2^-418 (`OD::EPS`), were fixed before the first run:
-//! 1 for the adds (relative to |a| + |b|, Cray-style, as QD's `+`), the multiply and od x f64, 2 for the divide and
-//! the square root: the quad-double tests' (`qd_tests`) thresholds of the accurate operations. Dot products of n
+//! OD_N sets the samples per operation and input category (default 2000), OD_SEED the seed (default 1), and OD_REPORT=1
+//! prints the tables. The thresholds, in units of 2^-418 (`OD::EPS`), were fixed before the first run. They are 1 for
+//! the adds (relative to |a| + |b|, Cray-style, as QD's `+`), the multiply and od x f64, and 2 for the divide and the
+//! square root, the thresholds of the accurate operations in the quad-double tests (`qd_tests`). Dot products of n
 //! terms are checked against the accumulator's proven bound, (|Z| + c_n W) u^8 with W = sum |a_i b_i| (`acc_thr`).
 //!
 //! The adds, the multiply and od x f64 have a proven bound, u^8 (1 + 2^-14) with u = 2^-53, which is 1/64 unit and
-//! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`), and the square root one of
+//! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`). The square root has one of
 //! 3.0000319 u^8 (`SQRT_PROVEN_THR`). Every input within those hypotheses is checked against its bound too
-//! (`PROVEN_THR`), and `od_worst_case_inputs` reaches the first. Random inputs stay
-//! near 10^-4 units, the ladder category's inputs included, because the error is set by the result's parts.
+//! (`PROVEN_THR`), and `od_worst_case_inputs` reaches the first. Random inputs stay near 10^-4 units, the ladder
+//! category's inputs included, because the error is set by the result's parts.
 //!
 //! The opt-in sloppy multiply (`OD::sloppy_mul`) and its dot products are checked against 4 units (`SLOPPY_THR`, fixed
-//! before the first run) and their proven bounds, 2^31.93 u^8 |a_0 b_0| per product (`SLOPPY_C`, `SLOPPY_DOT_C`;
-//! Theorem 30 of paper/expansion-error-bounds.pdf).
+//! before the first run) and against their proven bounds, 2^31.93 u^8 |a_0 b_0| per product
+//! (`SLOPPY_C`, `SLOPPY_DOT_C`, Theorem 30 of paper/expansion-error-bounds.pdf).
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::{ODotAcc, OV, V8};
@@ -31,22 +31,22 @@ use crate::qd::QD;
 use crate::qd_tests::Rng;
 use std::cmp::Ordering;
 
-/// 2^-418, the unit of the error tables
+/// 2^-418, the unit of the error tables.
 fn unit() -> f64 {
     OD::EPS
 }
 
-/// the environment variable k as a number, or d
+/// The environment variable k as a number, or d.
 fn env_usize(k: &str, d: usize) -> usize {
     std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d)
 }
 
-/// OD_REPORT=1: print the tables
+/// Whether OD_REPORT=1 asks for the tables to be printed.
 fn report() -> bool {
     std::env::var("OD_REPORT").map(|v| v == "1").unwrap_or(false)
 }
 
-/// select mutation id (0 = none) for the current thread
+/// Selects mutation id for the current thread, 0 for none.
 fn set_mutation(id: u32) {
     #[cfg(feature = "mutate")]
     mutate::set(id);
@@ -54,16 +54,16 @@ fn set_mutation(id: u32) {
     assert_eq!(id, 0, "mutations need the mutate feature");
 }
 
-/// a random bit
+/// A random bit.
 fn coin(r: &mut Rng) -> bool {
     r.next() & 1 == 1
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// random exact inputs
+// Random exact inputs
 // -------------------------------------------------------------------------------------------------------------
 
-/// exact random value ±(1 + f)·2^e, f a random 511-bit fraction (more bits than eight parts hold)
+/// An exact random value ±(1 + f)·2^e, f a random 511-bit fraction, more bits than eight parts hold.
 fn rand_dy(r: &mut Rng, e: i64) -> Dy {
     let mut m: Vec<u64> = (0..8).map(|_| r.next()).collect();
     m[7] |= 1u64 << 63;
@@ -74,13 +74,13 @@ fn rand_dy(r: &mut Rng, e: i64) -> Dy {
     }
 }
 
-/// rand_dy with the binade drawn from lo..=hi
+/// rand_dy with the binade drawn from lo..=hi.
 fn rde(r: &mut Rng, lo: i64, hi: i64) -> Dy {
     let e = r.int(lo, hi);
     rand_dy(r, e)
 }
 
-/// sum of 1-8 small integers k_i 2^(e - g_i) with random gaps (exact sums and zero error terms are common)
+/// A sum of 1-8 small integers k_i 2^(e - g_i) with random gaps, for which exact sums and zero error terms are common.
 fn sparse_dy(r: &mut Rng, e: i64) -> Dy {
     let n = r.int(1, 8);
     let mut v = Dy::zero();
@@ -99,7 +99,7 @@ fn sparse_dy(r: &mut Rng, e: i64) -> Dy {
     }
 }
 
-/// 2^k (1 + s 2^-j f), j in a set around the part boundaries (j = 0: exactly 2^k)
+/// 2^k (1 + s 2^-j f), j in a set around the part boundaries, or exactly 2^k for j = 0.
 fn near_pow2(r: &mut Rng, k: i64) -> Dy {
     const J: [i64; 16] = [0, 1, 52, 53, 54, 105, 106, 159, 212, 265, 318, 371, 423, 424, 425, 430];
     let j = if coin(r) {
@@ -123,8 +123,8 @@ fn near_pow2(r: &mut Rng, k: i64) -> Dy {
     }
 }
 
-/// eight parts by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...): a normalized octo-double built
-/// without any octo-double arithmetic (a lower part that rounds to zero is +0 and ends the parts)
+/// Eight parts by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), a normalized octo-double built without
+/// any octo-double arithmetic. A lower part that rounds to zero is +0 and ends the parts.
 fn greedy8(d: &Dy) -> [f64; 8] {
     let mut r = d.clone();
     let mut x = [0.0; 8];
@@ -142,7 +142,7 @@ fn greedy8(d: &Dy) -> [f64; 8] {
     x
 }
 
-/// a dyadic as eight greedy parts
+/// A dyadic as eight greedy parts.
 fn od_of(d: &Dy) -> OD {
     OD { x: greedy8(d) }
 }
@@ -168,7 +168,7 @@ enum Cat {
     Ladder,
 }
 
-/// the categories whose results' bits `OD_DIGEST` pins and whose results' parts do not overlap
+/// The categories whose results' bits `OD_DIGEST` pins and whose results' parts do not overlap.
 const CATS: [Cat; 7] = [
     Cat::Wide,
     Cat::Cancel,
@@ -179,8 +179,8 @@ const CATS: [Cat; 7] = [
     Cat::Computed,
 ];
 
-/// every category of the accuracy checks: `CATS`, and the gap and ladder categories, whose results' bits `GAP_DIGEST`
-/// and `LADDER_DIGEST` pin
+/// Every category of the accuracy checks, `CATS` and the gap and ladder categories, whose results' bits `GAP_DIGEST`
+/// and `LADDER_DIGEST` pin.
 const ALL_CATS: [Cat; 9] = [
     Cat::Wide,
     Cat::Cancel,
@@ -193,7 +193,7 @@ const ALL_CATS: [Cat; 9] = [
     Cat::Ladder,
 ];
 
-/// the category's name in the tables
+/// The category's name in the tables.
 fn cat_name(c: Cat) -> &'static str {
     match c {
         Cat::Wide => "wide",
@@ -208,8 +208,8 @@ fn cat_name(c: Cat) -> &'static str {
     }
 }
 
-/// a value with a part far below the one above it: x0 + x1 with x1 2^-60 to 2^-400 below x0, or greedy parts with
-/// those below the first zeroed at random (zero parts between nonzero ones)
+/// A value with a part far below the one above it, either x0 + x1 with x1 2^-60 to 2^-400 below x0, or greedy parts
+/// with those below the first zeroed at random (zero parts between nonzero ones).
 fn gapped(r: &mut Rng) -> OD {
     let e = r.int(-20, 20);
     let mut x = greedy8(&rand_dy(r, e));
@@ -226,15 +226,15 @@ fn gapped(r: &mut Rng) -> OD {
     OD { x }
 }
 
-/// A value whose parts sit near the top of the ladder that the proven bounds allow, |x_i| from 1/2 to 1 ulp of the
-/// part above, signs at random. Greedy parts sit about 2^-8 lower over eight parts, so their products' order-8
-/// terms are far below u^8 |ab|, where this value's are a few u^8 |ab|, as in the worst case.
+/// A value whose parts sit near the top of the ladder that the proven bounds allow, |x_i| from 1/2 to 1 ulp of the part
+/// above, signs at random. Greedy parts sit about 2^-8 lower over eight parts, so their products' order-8 terms are far
+/// below u^8 |ab|, where this value's are a few u^8 |ab|, as in the worst case.
 fn topped(r: &mut Rng) -> OD {
     let mut x = [0.0; 8];
     let e = r.int(-20, 20);
     x[0] = rand_dy(r, e).to_f64();
     for i in 1..8 {
-        // m in [1/2, 1) with 53 bits, or 1 (a part of a whole ulp) one time in eight
+        // m in [1/2, 1) with 53 bits, or 1 (a part of a whole ulp) one time in eight.
         let m = if r.int(0, 7) == 0 {
             1.0
         } else {
@@ -246,7 +246,7 @@ fn topped(r: &mut Rng) -> OD {
     OD { x }
 }
 
-/// one input pair (a, b) for an operation of the given kind (b unused by sqrt)
+/// One input pair (a, b) for an operation of the given kind, b unused by sqrt.
 fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
     use Cat::*;
     use Kind::*;
@@ -259,8 +259,8 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
         };
     }
     if cat == Gap {
-        // a product of a gapped value sends the levels to the renormalization out of magnitude order; a (1/a)
-        // nearly cancels them (the square root's last Newton step forms such a product)
+        // A product of a gapped value sends the levels to the renormalization out of magnitude order. a (1/a) nearly
+        // cancels them, and the square root's last Newton step forms such a product.
         let a = gapped(r);
         return match kind {
             Add => (a, gapped(r)),
@@ -276,9 +276,9 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
         };
     }
     if cat == Computed {
-        // operands produced by octo-double arithmetic (renormalized parts, not greedy ones): x y (1/y); for the adds
-        // b = -(x y (1/y)) or b = -(a + d) (|d| = 2^-k |a|), so a + b is small with misaligned parts, as in a
-        // residual's subtraction of two nearly equal values computed along different routes
+        // Operands produced by octo-double arithmetic (renormalized parts, not greedy ones), as x y (1/y). For the adds
+        // b = -(x y (1/y)) or b = -(a + d) with |d| = 2^-k |a|, so a + b is small with misaligned parts, as in a
+        // residual's subtraction of two nearly equal values computed along different routes.
         let route = |r: &mut Rng, x: OD| -> OD {
             let y = od_of(&rde(r, -2, 2));
             (x * y) * (OD::ONE / y)
@@ -304,9 +304,9 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
     let (a, b): (Dy, Dy) = match (cat, kind) {
         (Wide, Sqrt) => (rde(r, -800, 800).abs(), one),
         (Wide, Add) => (rde(r, -400, 400), rde(r, -400, 400)),
-        // products and quotients within 2^-600..2^600, where all eight parts of the result are normal
+        // Products and quotients within 2^-600..2^600, where all eight parts of the result are normal.
         (Wide, _) => (rde(r, -300, 300), rde(r, -300, 300)),
-        // a + b small: b = -a + d with |d| = 2^-k |a|
+        // A small a + b, from b = -a + d with |d| = 2^-k |a|.
         (Cancel, Add) => {
             let e = r.int(-50, 50);
             let a = rand_dy(r, e);
@@ -314,13 +314,13 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
             let b = a.neg().add(&d);
             (a, b)
         }
-        // products near 1: (1 + d1)(1 - d2)
+        // Products near 1, (1 + d1)(1 - d2).
         (Cancel, Mul) => {
             let d1 = rde(r, -440, -1).abs();
             let d2 = rde(r, -440, -1).abs();
             (one.add(&d1), one.sub(&d2))
         }
-        // quotients near 1: b = a (1 + d)
+        // Quotients near 1, from b = a (1 + d).
         (Cancel, Div) => {
             let a = rde(r, -50, 50);
             let d = rde(r, -440, -1);
@@ -342,7 +342,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
             }
         }
         (Overflow, Sqrt) => (rde(r, 990, 1022).abs(), one),
-        // the parts reach the subnormals: the eighth part is near 2^-1074 well before the first is
+        // The parts reach the subnormals, the eighth near 2^-1074 well before the first.
         (Underflow, Add) => (rde(r, -1020, -620), rde(r, -1020, -620)),
         (Underflow, Mul) => {
             let t = r.int(-1020, -620);
@@ -382,7 +382,7 @@ fn gen(r: &mut Rng, kind: Kind, cat: Cat) -> (OD, OD) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// operations, their references and thresholds
+// Operations, their references and thresholds
 // -------------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -397,7 +397,7 @@ enum Op {
 
 const OPS: [Op; 6] = [Op::Add, Op::AddF, Op::Mul, Op::MulF, Op::Div, Op::Sqrt];
 
-/// the operation's name in the tables
+/// The operation's name in the tables.
 fn op_name(op: Op) -> &'static str {
     match op {
         Op::Add => "add",
@@ -409,7 +409,7 @@ fn op_name(op: Op) -> &'static str {
     }
 }
 
-/// the kind of exact reference the operation is checked against
+/// The kind of exact reference the operation is checked against.
 fn op_kind(op: Op) -> Kind {
     match op {
         Op::Add | Op::AddF => Kind::Add,
@@ -419,12 +419,12 @@ fn op_kind(op: Op) -> Kind {
     }
 }
 
-/// Cray-style measure |error| / (|a| + |b|) instead of the relative error
+/// Whether the operation takes the Cray-style measure |error| / (|a| + |b|) instead of the relative error.
 fn op_cray(op: Op) -> bool {
     matches!(op, Op::Add | Op::AddF)
 }
 
-/// pass threshold in units of 2^-418 (fixed before the runs)
+/// The pass threshold in units of 2^-418, fixed before the runs.
 fn op_thr(op: Op) -> f64 {
     match op {
         Op::Add | Op::AddF | Op::Mul | Op::MulF => 1.0,
@@ -432,15 +432,15 @@ fn op_thr(op: Op) -> f64 {
     }
 }
 
-/// The proven bound of add, od + f64, mul and od x f64, in units of 2^-418: u^8 (1 + 2^-14) with u = 2^-53, relative
-/// to |ab| for the products and to |a| + |b| for the adds. It holds for operands within `proven`'s hypotheses.
+/// The proven bound of add, od + f64, mul and od x f64 in units of 2^-418, u^8 (1 + 2^-14) with u = 2^-53, relative to
+/// |ab| for the products and to |a| + |b| for the adds. It holds for operands within `proven`'s hypotheses.
 const PROVEN_THR: f64 = (1.0 + 1.0 / 16384.0) / 64.0;
 
 /// The square root's proven bound, 3.0000319 u^8 (Theorem 22 of paper/expansion-error-bounds.pdf, theta = 2), rounded
 /// up, in units of 2^-418. The test's measure |r^2 - x| / (2x) exceeds the relative error by at most its square.
 const SQRT_PROVEN_THR: f64 = 3.000_032 / 64.0;
 
-/// the proven bound of an operation, for the inputs `proven` admits
+/// The proven bound of an operation, for the inputs `proven` admits.
 fn proven_thr(op: Op) -> f64 {
     match op {
         Op::Sqrt => SQRT_PROVEN_THR,
@@ -448,7 +448,7 @@ fn proven_thr(op: Op) -> f64 {
     }
 }
 
-/// exponent of the last bit of a finite nonzero x
+/// The exponent of the last bit of a finite nonzero x.
 fn lsb(x: f64) -> i64 {
     let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
     if e == 0 {
@@ -458,14 +458,14 @@ fn lsb(x: f64) -> i64 {
     }
 }
 
-/// |a_i| <= 2^(-52 i) |a_0| for every part, exactly: the ladder that every ulp-nonoverlapping value has
+/// Whether |a_i| <= 2^(-52 i) |a_0| for every part, exactly, the ladder that every ulp-nonoverlapping value has.
 fn ladder(a: &OD) -> bool {
     let a0 = Dy::from_f64(a.x[0]);
     (1..8).all(|i| Dy::from_f64(a.x[i]).cmp_abs(&a0.ldexp(-52 * i as i64)) != Ordering::Greater)
 }
 
-/// every product of parts that the operation forms is a multiple of 2^-1074, so that a rounding below 2^-1022 is
-/// exact and two-product is error-free (|e_a + e_b| >= -970 in exponents)
+/// Whether every product of parts that the operation forms is a multiple of 2^-1074 (e_a + e_b >= -970 for the parts'
+/// exponents), so that a rounding below 2^-1022 is exact and two-product is error-free.
 fn products_fit(a: &[f64], b: &[f64], max_order: usize) -> bool {
     a.iter().enumerate().all(|(i, &x)| {
         b.iter()
@@ -474,11 +474,11 @@ fn products_fit(a: &[f64], b: &[f64], max_order: usize) -> bool {
     })
 }
 
-/// The operands are within the hypotheses of the proven bound: finite, both octo-double operands on the ladder, every
-/// rounding either normal or exact, and the leading parts well below overflow. Only the operation's inputs are
-/// read, so division, whose intermediate quotients these do not bound, is left out. The square root works on its
-/// argument scaled into [1, 4), so a positive argument whose nonzero parts are within 2^-500 of the leading one keeps
-/// every intermediate far from underflow.
+/// Whether the operands are within the hypotheses of the proven bound. They must be finite, both octo-double operands
+/// on the ladder, every rounding either normal or exact, and the leading parts well below overflow. Only the
+/// operation's inputs are read, so division, whose intermediate quotients these do not bound, is left out. The square
+/// root works on its argument scaled into [1, 4), so a positive argument whose nonzero parts are within 2^-500 of the
+/// leading one keeps every intermediate far from underflow.
 fn proven(op: Op, a: OD, b: OD) -> bool {
     let fin = |x: &OD| x.x.iter().all(|v| v.is_finite());
     let big = |x: f64| x.abs() >= 2f64.powi(500);
@@ -502,7 +502,7 @@ fn proven(op: Op, a: OD, b: OD) -> bool {
     }
 }
 
-/// the scalar operation
+/// The scalar operation.
 fn apply_s(op: Op, a: OD, b: OD) -> OD {
     match op {
         Op::Add => a + b,
@@ -514,7 +514,7 @@ fn apply_s(op: Op, a: OD, b: OD) -> OD {
     }
 }
 
-/// the 8-lane operation
+/// The 8-lane operation.
 fn apply_v(op: Op, a: OV, b: OV) -> OV {
     match op {
         Op::Add => a + b,
@@ -526,7 +526,7 @@ fn apply_v(op: Op, a: OV, b: OV) -> OV {
     }
 }
 
-/// the second operand as the operation sees it
+/// The second operand as the operation sees it.
 fn b_exact(op: Op, b: OD) -> Dy {
     match op {
         Op::AddF | Op::MulF => Dy::from_f64(b.x[0]),
@@ -534,9 +534,10 @@ fn b_exact(op: Op, b: OD) -> Dy {
     }
 }
 
-/// (err, scale, rel, allow): the check is err <= thr·u·scale + allow, the reported value err / scale; rel is the
-/// relative error of the result (= err / scale except for the Cray-style measure). In the near-underflow inputs
-/// allow is 16·2^-1074 on the result (its parts cannot go below 2^-1074), carried to err as in `qd_tests`.
+/// (err, scale, rel, allow) of a result. The check is err <= thr 2^-418 scale + allow, and the reported value
+/// err / scale. rel is the relative error of the result, err / scale except for the Cray-style measure. For the
+/// near-underflow inputs allow is 16·2^-1074 on the result, as its parts cannot go below 2^-1074, carried to err as in
+/// `qd_tests`.
 fn exact_err(op: Op, a: OD, b: OD, r: OD, under: bool) -> (Dy, Dy, f64, Dy) {
     let (ae, be, re) = (a.exact(), b_exact(op, b), r.exact());
     let tiny = Dy::from_f64(16.0).ldexp(-1074);
@@ -570,7 +571,7 @@ fn exact_err(op: Op, a: OD, b: OD, r: OD, under: bool) -> (Dy, Dy, f64, Dy) {
             (err, ae.abs(), rel, allow)
         }
         Kind::Sqrt => {
-            // r = sqrt(a)(1 + d): r^2 - a = a (2d + d^2)
+            // With r = sqrt(a)(1 + d), r^2 - a = a (2d + d^2).
             let err = re.mul(&re).sub(&ae).abs();
             let scale = ae.abs().ldexp(1);
             let rel = err.ratio(&scale);
@@ -579,20 +580,20 @@ fn exact_err(op: Op, a: OD, b: OD, r: OD, under: bool) -> (Dy, Dy, f64, Dy) {
     }
 }
 
-/// err <= thr 2^-418 scale + allow, exactly
+/// Whether err <= thr 2^-418 scale + allow, exactly.
 fn within(err: &Dy, scale: &Dy, thr: f64, allow: &Dy) -> bool {
     let lim = scale.mul(&Dy::from_f64(thr * unit())).add(allow);
     err.cmp_abs(&lim) != Ordering::Greater
 }
 
-/// every part the same bits (any NaN equal to any NaN)
+/// Whether every part has the same bits, any NaN equal to any NaN.
 fn same(a: OD, b: OD) -> bool {
     a.x.iter()
         .zip(b.x.iter())
         .all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()))
 }
 
-/// FNV-1a over the bits of the parts
+/// FNV-1a over the bits of the parts, every NaN hashed as `f64::NAN`.
 fn fnv(h: &mut u64, x: OD) {
     for v in x.x {
         let v = if v.is_nan() { f64::NAN } else { v };
@@ -609,37 +610,41 @@ struct Res {
     what: String,
     cat: &'static str,
     n: usize,
-    /// max and 99.9th percentile of the check's measure, in units of 2^-418
+    /// Max of the check's measure, in units of 2^-418.
     max: f64,
+    /// 99.9th percentile of the check's measure, in units of 2^-418.
     p999: f64,
-    /// max of the relative error (= the measure except for the Cray-style adds), in units of 2^-418
+    /// Max of the relative error, the measure except for the Cray-style adds, in units of 2^-418.
     rel_max: f64,
     thr: f64,
-    /// samples outside the bound
+    /// Samples outside the bound.
     fails: usize,
-    /// lanes whose 8-lane result differs from the scalar one in any bit
+    /// Lanes whose 8-lane result differs from the scalar one in any bit.
     mism: usize,
     digest: u64,
-    /// the samples within the proven bound's hypotheses, checked against `PROVEN_THR`
+    /// The samples within the proven bound's hypotheses, checked against `PROVEN_THR`.
     proven: Proven,
 }
 
-/// samples within the proven bound's hypotheses: their number, the worst measure in units of 2^-418, those outside
+/// Samples within the proven bound's hypotheses.
 #[derive(Clone, Debug, Default)]
 struct Proven {
+    /// Their number.
     n: usize,
+    /// The worst measure, in units of 2^-418.
     max: f64,
+    /// Those outside the bound.
     fails: usize,
 }
 
 impl Res {
-    /// no sample outside the bounds and no lane different from the scalar result
+    /// Whether no sample is outside the bounds and no lane differs from the scalar result.
     fn ok(&self) -> bool {
         self.fails == 0 && self.proven.fails == 0 && self.mism == 0
     }
 }
 
-/// the q-quantile of v (sorted in place)
+/// The q-quantile of v, which it sorts in place.
 fn pct(v: &mut [f64], q: f64) -> f64 {
     if v.is_empty() {
         return 0.0;
@@ -648,7 +653,7 @@ fn pct(v: &mut [f64], q: f64) -> f64 {
     v[((v.len() - 1) as f64 * q).floor() as usize]
 }
 
-/// a number for the tables
+/// A number for the tables.
 fn fmt_u(x: f64) -> String {
     if x == 0.0 {
         "0".into()
@@ -661,7 +666,7 @@ fn fmt_u(x: f64) -> String {
     }
 }
 
-/// print the rows of an accuracy table
+/// Prints the rows of an accuracy table.
 fn print_table(title: &str, rs: &[Res]) {
     println!("{title}");
     println!(
@@ -687,13 +692,13 @@ fn print_table(title: &str, rs: &[Res]) {
     }
 }
 
-/// inputs of one operation and category (generated with no mutation active)
+/// Inputs of one operation and category, generated with no mutation active.
 fn inputs(op: Op, cat: Cat, n: usize, seed: u64) -> Vec<(OD, OD)> {
     let mut r = Rng::new(seed ^ ((op as u64) << 32) ^ ((cat as u64) << 40) ^ 0x0c70);
     (0..n).map(|_| gen(&mut r, op_kind(op), cat)).collect()
 }
 
-/// scalar and 8-lane results of one operation on the inputs
+/// Scalar and 8-lane results of one operation on the inputs.
 fn results(op: Op, inp: &[(OD, OD)]) -> (Vec<OD>, Vec<OD>) {
     let rs: Vec<OD> = inp.iter().map(|&(a, b)| apply_s(op, a, b)).collect();
     let mut rv = Vec::with_capacity(inp.len());
@@ -710,7 +715,7 @@ fn results(op: Op, inp: &[(OD, OD)]) -> (Vec<OD>, Vec<OD>) {
     (rs, rv)
 }
 
-/// accuracy and agreement of every operation in every category, with mutation `id` active during the arithmetic
+/// Accuracy and agreement of every operation in every category, with mutation `id` active during the arithmetic.
 fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for op in OPS {
@@ -769,18 +774,18 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// the dot accumulator
+// The dot accumulator
 // -------------------------------------------------------------------------------------------------------------
 
 const ACC_CATS: [&str; 4] = ["random", "cancel", "wide", "mixed"];
 
 /// The accumulator's proven bound for len products of operands on the ladder |a_i| <= 2^(-52 i) |a_0|, in units of
-/// 2^-418 relative to W = sum |a_i b_i|: |Z - x| <= (|Z| + c W) u^8 <= (1 + c) W / 64 units. c is the second term's
-/// constant, rounded up, for len = 1, 4, 16 and 64 at n = 8, p = 53, theta = 2 (2^-14.92, 2^-14.28, 2^-10.55,
-/// 2^2.68). The paper's W sums the leading parts' |a_0 b_0|, within a factor 1 + 5u of the W here, which the rounding
-/// up absorbs. c grows like len^9 u, so the bound stays near u^8 W only up to about 50 products, and a sum of 2048
-/// constructed terms reaches 2^23.8 u^8 |Z|. The proof is the paper's section on sums of products
-/// (paper/expansion-error-bounds-accumulator.tex), and paper/accumulator/ computes the constants.
+/// 2^-418 relative to W = sum |a_i b_i|. It is |Z - x| <= (|Z| + c W) u^8 <= (1 + c) W / 64 units for the exact sum Z.
+/// c is the second term's constant, rounded up, for len = 1, 4, 16 and 64 at n = 8, p = 53, theta = 2
+/// (2^-14.92, 2^-14.28, 2^-10.55, 2^2.68). The paper's W sums the leading parts' |a_0 b_0|, within a factor 1 + 5u of
+/// the W here, which the rounding up absorbs. c grows like len^9 u, so the bound stays near u^8 W only up to about 50
+/// products, and a sum of 2048 constructed terms reaches 2^23.8 u^8 |Z|. The proof is the paper's section on sums of
+/// products (paper/expansion-error-bounds-accumulator.tex), and paper/accumulator/ computes the constants.
 fn acc_thr(len: usize) -> f64 {
     let c = match len {
         1 => 3.3e-5,
@@ -792,8 +797,9 @@ fn acc_thr(len: usize) -> f64 {
     (1.0 + c) / 64.0
 }
 
-/// accuracy of ODotAcc / OdAcc on dot products of length len (8 per sample, one per lane): |error| / sum |a_i b_i|;
-/// with sloppy, of their sloppy products (`add_prod_sloppy`), against `SLOPPY_THR` and their proven bound
+/// Accuracy of ODotAcc and OdAcc on dot products of length len, 8 per sample (one per lane), as |error| / sum
+/// |a_i b_i|. With sloppy, the products are the sloppy ones (`add_prod_sloppy`), checked against `SLOPPY_THR` and their
+/// proven bound.
 fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
     let mut out = Vec::new();
     for len in [1usize, 4, 16, 64] {
@@ -812,7 +818,7 @@ fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
                         let (x, y) = match *cat {
                             "wide" => (rde(&mut r, -100, 100), rde(&mut r, -100, 100)),
                             "cancel" if i >= len / 2 && len > 1 => {
-                                // a_i b_i = -(a_k b_k)(1 + d): pairs that nearly cancel
+                                // Pairs that nearly cancel, a_i b_i = -(a_k b_k)(1 + d).
                                 let k = i - len / 2;
                                 let ak = a[k][lane].exact();
                                 let d = rde(&mut r, -400, -1);
@@ -835,7 +841,7 @@ fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
                         let mut m = acc;
                         m.add_prod_sloppy_mut(&x, &y);
                         let v = acc.add_prod_sloppy(x, y);
-                        // the by-value and in-place forms are one operation
+                        // The by-value and in-place forms are one operation.
                         assert!(
                             (0..9).all(|l| v.s[l].to_array().map(f64::to_bits) == m.s[l].to_array().map(f64::to_bits)),
                             "add_prod_sloppy_mut vs add_prod_sloppy"
@@ -882,8 +888,8 @@ fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
                         fails += 1;
                     }
                     if sloppy {
-                        // (|Z| + c_K W) u^8, W = sum |a_i b_i| here (the bound's W, sum |a_i0 b_i0|, is within 2^-50 of
-                        // it on these greedy operands, which the constant's last digits cover)
+                        // (|Z| + c_K W) u^8 with W = sum |a_i b_i|. The bound's W, sum |a_i0 b_i0|, is within 2^-50 of
+                        // it on these greedy operands, which the constant's last digits cover.
                         let lim = x
                             .abs()
                             .add(&s.mul(&Dy::from_f64(SLOPPY_DOT_C)))
@@ -919,15 +925,15 @@ fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// a double-double operand: od x dd, od + dd and the accumulator's od x dd against the promoted operations
+// A double-double operand, od x dd, od + dd and the accumulator's od x dd against the promoted operations
 // -------------------------------------------------------------------------------------------------------------
 
-/// the operations with a double-double operand, each checked bit for bit against `*`, `+` or `add_prod` with the
-/// operand promoted (`OD::from_dd`, `OV::from_dv`)
+/// The operations with a double-double operand, each checked bit for bit against `*`, `+` or `add_prod` with the
+/// operand promoted (`OD::from_dd`, `OV::from_dv`).
 const DD_OPS: [&str; 3] = ["od x dd", "od + dd", "dot x dd"];
 
-/// every bit the same, a NaN equal to any NaN: Rust leaves the sign and payload of a NaN result unspecified, and the
-/// lanes and the scalar type already give NaNs of different signs on one input (as `same`)
+/// Whether every bit is the same, a NaN equal to any NaN (as `same`). Rust leaves the sign and payload of a NaN result
+/// unspecified, and the lanes and the scalar type already give NaNs of different signs on one input.
 fn bits_eq(a: &[f64], b: &[f64]) -> bool {
     a.len() == b.len()
         && a.iter()
@@ -935,7 +941,7 @@ fn bits_eq(a: &[f64], b: &[f64]) -> bool {
             .all(|(x, y)| x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()))
 }
 
-/// a double-double operand from b's two leading parts, a quarter of them with the low part +0 or -0 (an f64 constant)
+/// A double-double operand from b's two leading parts, a quarter of them with the low part +0 or -0 (an f64 constant).
 fn dd_from(r: &mut Rng, b: OD) -> DD {
     match r.int(0, 7) {
         0 => DD { hi: b.x[0], lo: 0.0 },
@@ -944,8 +950,8 @@ fn dd_from(r: &mut Rng, b: OD) -> DD {
     }
 }
 
-/// the scalar result of a double-double operation (`DD_OPS[op]`) and its promoted reference, as their parts or the
-/// accumulator's nine levels then its sum; the accumulator starts from start
+/// The scalar result of a double-double operation (`DD_OPS[op]`) and its promoted reference, as their parts, or as the
+/// accumulator's nine levels then its sum. The accumulator starts from start.
 fn dd_scalar(op: usize, a: OD, c: DD, start: OdAcc) -> (Vec<f64>, Vec<f64>) {
     let p = OD::from_dd(c);
     match op {
@@ -959,7 +965,7 @@ fn dd_scalar(op: usize, a: OD, c: DD, start: OdAcc) -> (Vec<f64>, Vec<f64>) {
     }
 }
 
-/// `dd_scalar` on 8 lanes, by lane
+/// `dd_scalar` on 8 lanes, by lane.
 fn dd_lanes(op: usize, a: &[OD; 8], c: &[DD; 8], start: &[OdAcc; 8]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let av = OV::from_lanes(a);
     let cv = crate::dv::DV::<crate::simd::Native>::load(&c.map(|d| d.hi), &c.map(|d| d.lo));
@@ -987,7 +993,7 @@ fn dd_lanes(op: usize, a: &[OD; 8], c: &[DD; 8], start: &[OdAcc; 8]) -> (Vec<Vec
                     })
                     .collect()
             };
-            // the by-value and in-place forms are one operation
+            // The by-value and in-place forms are one operation.
             let (nv, n2v) = (cat(n), cat(n2));
             assert!(
                 nv.iter().zip(&n2v).all(|(x, y)| bits_eq(x, y)),
@@ -998,9 +1004,9 @@ fn dd_lanes(op: usize, a: &[OD; 8], c: &[DD; 8], start: &[OdAcc; 8]) -> (Vec<Vec
     }
 }
 
-/// Every operation of `DD_OPS` in every input category, with mutation id active in the new operations only: per row,
-/// fails counts the results (scalar or lanes, levels and sums for the accumulator) that differ in any bit from the
-/// promoted operation run with no mutation, and mism the lanes that differ from the scalar result. The accumulator
+/// Every operation of `DD_OPS` in every input category, with mutation id active in the double-double operations only.
+/// Per row, fails counts the results (scalar or lanes, levels and sums for the accumulator) that differ in any bit from
+/// the promoted operation run with no mutation, and mism the lanes that differ from the scalar result. The accumulator
 /// starts empty on even samples and from the previous sample's product on odd ones.
 fn run_dd(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
@@ -1043,31 +1049,31 @@ fn run_dd(n: usize, seed: u64, id: u32) -> Vec<Res> {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// the sloppy multiply
+// The sloppy multiply
 // -------------------------------------------------------------------------------------------------------------
 
-/// u^8 = 2^-424
+/// u^8 = 2^-424.
 fn u8() -> f64 {
     2f64.powi(-424)
 }
 
-/// The sloppy multiply's proven bound for operands within `proven`'s hypotheses for the multiply: |ab - x| <= C u^8
-/// |a_0 b_0|, C = R_s + Delta u = 2^31.9242 = 4.075102e9 (Theorem 30(b) of paper/expansion-error-bounds.pdf, theta =
-/// 2, computed by `paper/sloppy_consts.py`), rounded up.
+/// The sloppy multiply's proven bound for operands within `proven`'s hypotheses for the multiply, |ab - x| <= C u^8
+/// |a_0 b_0|. C = R_s + Delta u = 2^31.9242 = 4.075102e9 (Theorem 30(b) of paper/expansion-error-bounds.pdf, theta = 2,
+/// computed by `paper/sloppy_consts.py`), rounded up.
 const SLOPPY_C: f64 = 4.0752e9;
 
-/// The sloppy dot's proven bound for up to 64 terms (Theorem 30(c) of paper/expansion-error-bounds.pdf): |Z - x| <=
-/// (|Z| + c W) u^8, W = sum |a_i0 b_i0|, c the largest of `paper/sloppy_consts.py`'s c_K for K = 1, 4, 16 and 64
+/// The sloppy dot's proven bound for up to 64 terms, |Z - x| <= (|Z| + c W) u^8 with W = sum |a_i0 b_i0| (Theorem 30(c)
+/// of paper/expansion-error-bounds.pdf). c is the largest of `paper/sloppy_consts.py`'s c_K for K = 1, 4, 16 and 64
 /// (4.075102e9 + 6.4), rounded up.
 const SLOPPY_DOT_C: f64 = 4.0752e9;
 
-/// Pass threshold of the sloppy multiply's and the sloppy dot's measured error, in units of 2^-418 relative to |ab|
-/// (to W for the dot), fixed before the first run: 4 units, 256 u^8. Expected from the level-7 content of the ladder
-/// category, whose parts sit at the top of the ladder: 64 roundings of a level of about 10 u^7 |ab|.
+/// The pass threshold of the sloppy multiply's and the sloppy dot's measured error, 4 units of 2^-418 (256 u^8)
+/// relative to |ab|, or to W for the dot, fixed before the first run. It is expected from the level-7 content of the
+/// ladder category, whose parts sit at the top of the ladder, as 64 roundings of a level of about 10 u^7 |ab|.
 const SLOPPY_THR: f64 = 4.0;
 
-/// accuracy of the sloppy multiply (scalar and lanes) on the multiply's inputs of every category, against
-/// `SLOPPY_THR` and, within `proven`'s hypotheses, the proven bound; with mutation id active
+/// Accuracy of the sloppy multiply (scalar and lanes) on the multiply's inputs of every category, with mutation id
+/// active, against `SLOPPY_THR` and, within `proven`'s hypotheses, the proven bound.
 fn run_sloppy(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for cat in ALL_CATS {
@@ -1125,8 +1131,9 @@ fn run_sloppy(n: usize, seed: u64, id: u32) -> Vec<Res> {
     out
 }
 
-/// Edge operands: zeros of either sign in any part, zero parts between nonzero ones, exact integers, values whose
-/// lower parts underflow or are subnormal, values near overflow, infinities and NaNs (one with a payload).
+/// Edge operands. They include zeros of either sign in any part, zero parts between nonzero ones, exact integers,
+/// values whose lower parts underflow or are subnormal, values near overflow, and infinities and NaNs (one with a
+/// payload).
 fn od_edges() -> Vec<OD> {
     let u = 2f64.powi(-53);
     let nan_p = f64::from_bits(0x7ff8_0000_0000_1234);
@@ -1184,7 +1191,7 @@ fn od_edges() -> Vec<OD> {
             x: [1.0, 0.0, 0.0, f64::INFINITY, 0.0, 0.0, 0.0, 0.0],
         },
     ];
-    // a non-finite value or a -0 in each part: the skipped products are then not all zeros
+    // A non-finite value or a -0 in each part, for which the skipped products are not all zeros.
     let full = [
         -1.25,
         u,
@@ -1214,7 +1221,7 @@ fn od_edges() -> Vec<OD> {
     v
 }
 
-/// edge double-double operands, the same kinds as `od_edges`, the low part of either sign or zero
+/// Edge double-double operands, the same kinds as `od_edges`, the low part of either sign or zero.
 fn dd_edges() -> Vec<DD> {
     let d = |hi: f64, lo: f64| DD { hi, lo };
     let u = 2f64.powi(-53);
@@ -1248,9 +1255,9 @@ fn dd_edges() -> Vec<DD> {
     ]
 }
 
-/// The edge pairs (`od_edges` x `dd_edges`): the new operations' levels (`alg::expand_dd` against `alg::expand`) and
-/// results against the promoted ones, scalar and lanes, every bit. Returns the mismatches as (operation, a, c) and
-/// the number of comparisons.
+/// The edge pairs (`od_edges` x `dd_edges`), with the double-double operations' levels (`alg::expand_dd` against
+/// `alg::expand`) and results checked against the promoted ones, scalar and lanes, every bit. Returns the mismatches as
+/// (operation, a, c) and the number of comparisons.
 fn dd_edge_mismatches() -> (Vec<String>, usize) {
     let (ods, dds) = (od_edges(), dd_edges());
     let pairs: Vec<(OD, DD, OdAcc)> = ods
@@ -1311,7 +1318,7 @@ fn dd_edge_mismatches() -> (Vec<String>, usize) {
                         DD_OPS[op], a[j].x, c[j], x[j], y[j]
                     ));
                 }
-                // the lanes are the scalar operation
+                // The lanes are the scalar operation.
                 if !bits_eq(&x[j], &dd_scalar(op, a[j], c[j], st[j]).0) {
                     bad.push(format!("lanes vs scalar: {} {:?} {:?}", DD_OPS[op], a[j].x, c[j]));
                 }
@@ -1321,7 +1328,7 @@ fn dd_edge_mismatches() -> (Vec<String>, usize) {
     (bad, n)
 }
 
-/// the sloppy multiply of the pairs on the lanes, 8 at a time
+/// The sloppy multiply of the pairs on the lanes, 8 at a time.
 fn sloppy_lanes(inp: &[(OD, OD)]) -> Vec<OD> {
     let mut rv = Vec::with_capacity(inp.len());
     for c in inp.chunks(8) {
@@ -1337,14 +1344,14 @@ fn sloppy_lanes(inp: &[(OD, OD)]) -> Vec<OD> {
     rv
 }
 
-/// |ab - x| / (u^8 |a_0 b_0|) of the sloppy multiply (scalar), exactly, for the hill climb
+/// |ab - x| / (u^8 |a_0 b_0|) of the sloppy multiply (scalar), exactly, for the hill climb.
 fn sloppy_err(a: OD, b: OD) -> f64 {
     let x = a.exact().mul(&b.exact());
     let m = Dy::from_f64(a.x[0]).mul(&Dy::from_f64(b.x[0])).abs();
     a.sloppy_mul(b).exact().sub(&x).abs().ratio(&m) / u8()
 }
 
-/// one part of a value at the top of the ladder: s m ulp(prev), m in [1/2, 1] with 53 bits
+/// One part of a value at the top of the ladder, s m ulp(prev) with m in [1/2, 1] of 53 bits.
 fn top_part(r: &mut Rng, prev: f64) -> f64 {
     let m = if r.int(0, 7) == 0 {
         1.0
@@ -1355,8 +1362,8 @@ fn top_part(r: &mut Rng, prev: f64) -> f64 {
     s * m * ulp(prev).to_f64()
 }
 
-/// A hill climb on the sloppy multiply's error relative to u^8 |a_0 b_0|: from `topped` pairs, change one part at a
-/// time (a new mantissa and sign at the top of the ladder, its sign alone, or a zero), and keep the change when the
+/// A hill climb on the sloppy multiply's error relative to u^8 |a_0 b_0|. From `topped` pairs it changes one part at a
+/// time (a new mantissa and sign at the top of the ladder, its sign alone, or a zero) and keeps the change when the
 /// error grows. Returns the worst pair and its error.
 fn sloppy_climb(seed: u64, starts: usize, steps: usize) -> (OD, OD, f64) {
     let mut r = Rng::new(seed);
@@ -1382,7 +1389,7 @@ fn sloppy_climb(seed: u64, starts: usize, steps: usize) -> (OD, OD, f64) {
                     )
                 }
             }
-            // the parts below a changed one stay on the ladder only if the ladder holds: keep the pair if it does
+            // A change can take the parts below it off the ladder, so the pair is kept only if both stay on it.
             if !ladder(&a2) || !ladder(&b2) {
                 continue;
             }
@@ -1399,16 +1406,16 @@ fn sloppy_climb(seed: u64, starts: usize, steps: usize) -> (OD, OD, f64) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// conversions, comparisons and decimal input/output
+// Conversions, comparisons and decimal input/output
 // -------------------------------------------------------------------------------------------------------------
 
-/// ulp of a finite nonzero f64
+/// The ulp of a finite nonzero f64.
 fn ulp(x: f64) -> Dy {
     let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
     Dy::from_f64(1.0).ldexp(if e == 0 { -1074 } else { e - 1075 })
 }
 
-/// a decimal digit string's value times 10^(e10 + sh) as an exact integer Dy (e10 + sh >= 0)
+/// A decimal digit string's value times 10^(e10 + sh) as an exact integer Dy (e10 + sh >= 0).
 fn dec_scaled(neg: bool, digits: &str, e10: i64, sh: i64) -> Dy {
     assert!(e10 + sh >= 0);
     let m = BigU::from_dec(digits).mul(&BigU::pow_small(10, (e10 + sh) as u64));
@@ -1419,7 +1426,7 @@ fn dec_scaled(neg: bool, digits: &str, e10: i64, sh: i64) -> Dy {
     }
 }
 
-/// 10^k, exactly
+/// 10^k, exactly.
 fn pow10(k: i64) -> Dy {
     Dy {
         neg: false,
@@ -1428,7 +1435,7 @@ fn pow10(k: i64) -> Dy {
     }
 }
 
-/// a one-row result
+/// A one-row result.
 fn row(what: &str, cat: &'static str, n: usize, fails: usize, mism: usize) -> Res {
     Res {
         what: what.into(),
@@ -1445,11 +1452,12 @@ fn row(what: &str, cat: &'static str, n: usize, fails: usize, mism: usize) -> Re
     }
 }
 
-/// decimal parsing and printing, round trips, the conversions to DD, QD and f64, and the order, against exact arithmetic, with mutation id active
+/// Decimal parsing and printing, round trips, the conversions to DD, QD and f64, and the order, against exact
+/// arithmetic, with mutation id active.
 fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     let mut r = Rng::new(seed ^ 0x0d10);
-    // parsing: random decimals of 1-160 digits, exponents -250..300, greedy round-to-nearest checked exactly
+    // Parsing of random decimals of 1-160 digits and exponents -250..300, its greedy round-to-nearest checked exactly.
     let mut greedy_fails = 0;
     for _ in 0..n {
         let nd = r.int(1, 160) as usize;
@@ -1467,8 +1475,8 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
         let sh = (-e10).max(0);
         let v = dec_scaled(neg, &d, e10, sh);
         let err = q.exact().mul(&pow10(sh)).sub(&v).abs();
-        // |q - v| <= ulp(x7)/2 when all eight parts are used, else at most half the least subnormal (a remainder
-        // that rounds to zero ends the parts); a zero lower part is +0
+        // |q - v| <= ulp(x7)/2 when all eight parts are used, else at most half the least subnormal, as a remainder
+        // that rounds to zero ends the parts. A zero lower part is +0.
         let last = q.x.iter().rposition(|c| *c != 0.0).unwrap();
         let sub = Dy::from_f64(1.0).ldexp(-1075);
         let bound = if last == 7 { ulp(q.x[7]).ldexp(-1) } else { sub }.mul(&pow10(sh));
@@ -1478,8 +1486,8 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     }
     out.push(row("parse", "greedy RN", n, greedy_fails, 0));
 
-    // printing: correctly rounded, exactly checked; round trips through all the exact digits and through 140
-    // (424 bits and the gaps between the parts' bits, about 7 on average), where every part is normal
+    // Printing is correctly rounded, checked exactly. Round trips go through all the exact digits and through 140 (424
+    // bits and the gaps between the parts' bits, about 7 on average), where every part is normal.
     let (mut print_fails, mut np, mut rt_exact, mut rt140) = (0, 0, 0, 0);
     for _ in 0..n / 4 {
         let x = od_of(&rde(&mut r, -1000, 1000));
@@ -1518,7 +1526,8 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     out.push(row("round trip", "exact", n / 4, rt_exact, 0));
     out.push(row("round trip", "140 digits", n / 4, rt140, 0));
 
-    // conversions: to_dd within 2^-105 relative, to_qd within 2^-210, to_f64 within one ulp; the lanes bit for bit
+    // The conversions, to_dd within 2^-105 relative, to_qd within 2^-210 and to_f64 within one ulp, and the lanes bit
+    // for bit.
     let (mut fails, mut conv_mism) = (0, 0);
     let mut lanes = Vec::new();
     for _ in 0..n {
@@ -1556,8 +1565,8 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     }
     out.push(row("to_dd, to_qd, to_f64", "random", n, fails, conv_mism));
 
-    // comparisons: the lexicographic order against the exact one, on pairs that differ in one part (often a low
-    // one), scalar and lanes
+    // The lexicographic order against the exact one, scalar and lanes, on pairs that differ in one part (often a low
+    // one).
     let (mut cmp_fails, mut cmp_mism) = (0, 0);
     let mut pairs = Vec::new();
     for _ in 0..n {
@@ -1607,7 +1616,7 @@ fn run_io(n: usize, seed: u64, id: u32) -> Vec<Res> {
     out
 }
 
-/// print the rows of the decimal, conversion and order checks
+/// Prints the rows of the decimal, conversion and order checks.
 fn print_rows(title: &str, rs: &[Res]) {
     println!("{title}");
     for r in rs {
@@ -1619,10 +1628,10 @@ fn print_rows(title: &str, rs: &[Res]) {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// the tests
+// The tests
 // -------------------------------------------------------------------------------------------------------------
 
-/// constants, decimal digits of pi, powers, special values, the power-of-two scaling and the conversions
+/// Constants, decimal digits of pi, powers, special values, the power-of-two scaling and the conversions.
 #[test]
 fn od_constants_and_special_values() {
     assert_eq!(OD::EPS, 2f64.powi(-418));
@@ -1630,7 +1639,7 @@ fn od_constants_and_special_values() {
         format!("{:.124}", OD::ONE / OD::from_f64(3.0)),
         format!("3.{}e-01", "3".repeat(124))
     );
-    // 140 digits of pi parse to parts whose first four are QD's pi (both greedy), and print back
+    // 140 digits of pi parse to parts whose first four are QD's pi (both greedy), and print back.
     let pi = "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798\
               21480865132823066470938446095505822317253594";
     let p = OD::parse(pi).unwrap();
@@ -1639,7 +1648,7 @@ fn od_constants_and_special_values() {
     assert_eq!(OD::from_f64(-0.0).to_sci(3), "-0.00e+00");
     assert_eq!(OD::parse("1e400").unwrap().x[0], f64::INFINITY);
     assert!(same(OD::parse("-0").unwrap(), OD::from_f64(-0.0)));
-    // powi and recip against repeated products, sqrt against its square
+    // powi and recip against repeated products, sqrt against its square.
     let x = OD::parse("1.0000001234567890123456789").unwrap();
     let q = x * x * x * x * x;
     assert!((x.powi(5) - q).abs().to_f64() < 1e-123, "{}", (x.powi(5) - q).to_f64());
@@ -1647,13 +1656,13 @@ fn od_constants_and_special_values() {
     let two = OD::from_f64(2.0);
     assert!((two.sqrt() * two.sqrt() - two).abs().to_f64() < 1e-124);
     assert_eq!(two.recip().x, OD::from_f64(0.5).x);
-    // zeros, negatives, infinities
+    // Zeros, negatives, infinities.
     assert!(same(OD::ZERO.sqrt(), OD::ZERO));
     assert!((-two).sqrt().x.iter().any(|v| v.is_nan()));
     assert!((OD::from_f64(f64::INFINITY) + two).x[0].is_infinite());
     assert!(same(-OD::ZERO, OD::from_f64(-0.0)));
     assert!((-OD::ONE).x[1..].iter().all(|v| v.to_bits() == 0));
-    // mul_pwr2 is exact and bitwise mul_f by the power of two
+    // mul_pwr2 is exact and bitwise mul_f by the power of two.
     let y = od_of(
         &Dy::from_f64(1.0)
             .add(&Dy::from_f64(1.0).ldexp(-300))
@@ -1661,19 +1670,19 @@ fn od_constants_and_special_values() {
     );
     assert!(same(y.mul_pwr2(0.25), y.mul_f(0.25)));
     assert!(same(y.mul_pwr2(2f64.powi(-600)).mul_pwr2(2f64.powi(600)), y));
-    // conversions back and forth
+    // Conversions back and forth.
     let d = DD::new(1.0, 2f64.powi(-60));
     assert_eq!(OD::from_dd(d).to_dd(), d);
     assert_eq!(OD::from_qd(QD::PI).to_qd().x, QD::PI.x);
     assert_eq!(p.to_f64(), std::f64::consts::PI);
-    // the parts of slices round trip
+    // The parts of slices round trip.
     let v = vec![p, x, y];
     let parts = crate::od::to_parts(&v);
     let back = crate::od::from_parts(std::array::from_fn(|k| &parts[k][..]));
     assert!(v.iter().zip(&back).all(|(a, b)| same(*a, *b)));
 }
 
-/// every operation in every input category against exact arithmetic, and the lanes against the scalar type
+/// Every operation in every input category against exact arithmetic, and the lanes against the scalar type.
 #[test]
 fn od_accuracy() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -1689,7 +1698,7 @@ fn od_accuracy() {
     println!("od digest {digest:016x} (n {n}, seed {seed}, isa {})", V8::ISA);
     let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
     assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
-    // the proven bound is checked on most inputs of the four operations it covers, not on a few
+    // The proven bound is checked on most inputs of the four operations it covers, not on a few.
     for op in [Op::Add, Op::AddF, Op::Mul, Op::MulF] {
         let covered: usize = rs.iter().filter(|r| r.what == op_name(op)).map(|r| r.proven.n).sum();
         assert!(
@@ -1713,12 +1722,12 @@ fn od_accuracy() {
     }
 }
 
-/// the digest of the results (`Res::digest`) of every row in `CATS`, in order
+/// The digest of the results (`Res::digest`) of every row in `CATS`, in order.
 fn digest(rs: &[Res]) -> u64 {
     fold_digest(rs.iter().filter(|r| CATS.iter().any(|&c| cat_name(c) == r.cat)))
 }
 
-/// the digest of the results of one category's rows, in order
+/// The digest of the results of one category's rows, in order.
 fn digest_cat(rs: &[Res], cat: &str) -> u64 {
     fold_digest(rs.iter().filter(|r| r.cat == cat))
 }
@@ -1727,29 +1736,28 @@ fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
     rs.fold(0xcbf29ce484222325u64, |h, r| (h ^ r.digest).wrapping_mul(0x100000001b3))
 }
 
-/// The digest of `od_accuracy`'s results at its default size and seed (2000, 1), recorded with
-/// 4.1.1 and again when `sqrt` began from the double-double square root: every operation's bits in
-/// every category, pinned, and the lanes' with them, which must be the scalar ones. Every backend
-/// gives these bits.
+/// The digest of `od_accuracy`'s results at its default size and seed (2000, 1), recorded with 4.1.1 and again when
+/// `sqrt` began from the double-double square root. It pins every operation's bits in every category, and the lanes'
+/// with them, which must be the scalar ones. Every backend gives these bits.
 const OD_DIGEST: u64 = 0xfb89_5d1d_a057_c861;
 
-/// The digest of the gap category's results at the same size and seed, recorded with 4.8.1, whose renormalization's
-/// second pass by two-sums made them correct, and again when `sqrt` began from the double-double square root.
+/// The digest of the gap category's results at the same size and seed, recorded with 4.8.1 (the second pass by
+/// two-sums) and again when `sqrt` began from the double-double square root.
 const GAP_DIGEST: u64 = 0xc9db_20d6_a82f_28af;
 
 /// The digest of the ladder category's results at the same size and seed, recorded with 4.8.2 and again when `sqrt`
 /// began from the double-double square root.
 const LADDER_DIGEST: u64 = 0xb02b_b2f9_037d_22c4;
 
-/// Control for the pinned digest: with the order-6 term a2 b3 of the product dropped
-/// (`mutate::MUL_E23`), the results' digest is not the pinned one.
+/// Control for the pinned digest. With the order-6 term a2 b3 of the product dropped (`mutate::MUL_E23`), the results'
+/// digest is not the pinned one.
 #[cfg(feature = "mutate")]
 #[test]
 fn od_digest_control() {
     assert!(digest(&run_ops(2000, 1, mutate::MUL_E23)) != OD_DIGEST);
 }
 
-/// the dot accumulators against exact sums, 1 to 64 terms
+/// The dot accumulators against exact sums, 1 to 64 terms.
 #[test]
 fn od_accumulator() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -1765,10 +1773,10 @@ fn od_accumulator() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
-/// Pass: od x dd (`OD::mul_dd`, `OV::mul_dv`), od + dd (`add_dd`, `add_dv`) and the accumulators' od x dd
-/// (`OdAcc::add_prod_dd`, `ODotAcc::add_prod_dv` and `add_prod_dv_mut`) are bit for bit the operations with the
-/// operand promoted to octo-double, levels included, on every input category (OD_N per row) and on the edge pairs,
-/// whose zeros' signs, infinities and NaNs must match too (`bits_eq`). Control: `od_dd_control`.
+/// od x dd (`OD::mul_dd`, `OV::mul_dv`), od + dd (`add_dd`, `add_dv`) and the accumulators' od x dd
+/// (`OdAcc::add_prod_dd`, `ODotAcc::add_prod_dv` and `add_prod_dv_mut`) are bit for bit the operations with the operand
+/// promoted to octo-double, levels included. This holds on every input category (OD_N per row) and on the edge pairs,
+/// whose zeros' signs, infinities and NaNs must match too (`bits_eq`). The control is `od_dd_control`.
 #[test]
 fn od_dd_operand_is_the_promoted_operation() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -1792,9 +1800,9 @@ fn od_dd_operand_is_the_promoted_operation() {
     );
 }
 
-/// Control for `od_dd_operand_is_the_promoted_operation`: with the second level of od x dd and od + dd one ulp up
-/// (`mutate::DD_ULP`; a subnormal or zero level stays), every operation fails in every input category, and the edge
-/// pairs fail.
+/// Control for `od_dd_operand_is_the_promoted_operation`. With the second level of od x dd and od + dd one ulp up
+/// (`mutate::DD_ULP`, which leaves a subnormal or zero level as it is), every operation fails in every input category,
+/// and the edge pairs fail.
 #[cfg(feature = "mutate")]
 #[test]
 fn od_dd_control() {
@@ -1816,9 +1824,9 @@ fn od_dd_control() {
 }
 
 /// The sloppy multiply (`OD::sloppy_mul`, `OV::sloppy_mul`) on the multiply's inputs of every category, scalar and
-/// lanes: pass when every result is within `SLOPPY_THR` (4 units, fixed before the first run), every input within
-/// `proven`'s hypotheses within the proven bound `SLOPPY_C` u^8 |a_0 b_0|, the bound checked on most inputs, and the
-/// lanes bitwise the scalar results. OD_REPORT=1 prints the table and the default `*`'s worst error beside it.
+/// lanes. It passes when every result is within `SLOPPY_THR` (4 units, fixed before the first run), every input within
+/// `proven`'s hypotheses is within the proven bound `SLOPPY_C` u^8 |a_0 b_0|, the bound is checked on most inputs, and
+/// the lanes are bitwise the scalar results. OD_REPORT=1 prints the table and the default `*`'s worst error beside it.
 #[test]
 fn od_sloppy_mul() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -1857,9 +1865,9 @@ fn od_sloppy_mul() {
     );
 }
 
-/// Dot products of sloppy products (`ODotAcc::add_prod_sloppy`, `OdAcc::add_prod_sloppy`), 1 to 64 terms, against
-/// exact sums: pass when every sum is within `SLOPPY_THR` of W = sum |a_i b_i| and within the proven bound (|Z| +
-/// `SLOPPY_DOT_C` W) u^8, and the lanes bitwise the scalar sums.
+/// Dot products of sloppy products (`ODotAcc::add_prod_sloppy`, `OdAcc::add_prod_sloppy`), 1 to 64 terms, against exact
+/// sums. It passes when every sum is within `SLOPPY_THR` of W = sum |a_i b_i| and within the proven bound
+/// (|Z| + `SLOPPY_DOT_C` W) u^8, and the lanes are bitwise the scalar sums.
 #[test]
 fn od_sloppy_dot() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -1885,10 +1893,10 @@ fn od_sloppy_dot() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
-/// The sloppy multiply's worst cases: the default's worst-case product (`od_worst_case_inputs`), the product of the
-/// 4.8.1 gap case with its reciprocal (`gap_cases`), the all-positive top of the ladder (every part a whole ulp of the
-/// one above), and a hill climb from the ladder category's inputs (OD_CLIMB starts of 300 steps, default 8). Pass:
-/// every error within the proven bound, scalar and lanes alike. The worst is printed, in u^8 |a_0 b_0|.
+/// The sloppy multiply's worst cases, the default's worst-case product (`od_worst_case_inputs`), the gap case a (1/a)
+/// of `gap_cases`, the all-positive top of the ladder (every part a whole ulp of the one above), and a hill climb from
+/// the ladder category's inputs (OD_CLIMB starts of 300 steps, default 8). It passes when every error is within the
+/// proven bound, scalar and lanes alike, and prints the worst, in u^8 |a_0 b_0|.
 #[test]
 fn od_sloppy_worst_case() {
     let u = 2f64.powi(-53);
@@ -1949,12 +1957,12 @@ fn od_sloppy_worst_case() {
     );
 }
 
-/// Control for the sloppy multiply's checks: with the carries out of level 6 dropped (`mutate::SLOPPY_C6`, the
-/// truncation one level too high, an error of about u^7 |ab| whenever one of them is nonzero), the proven bound and
-/// the threshold each fail more than half of the ladder row's samples and of the sloppy dot's random row of length 4,
-/// and the hill climb's worst exceeds the bound. A single carry out of level 6 is zero on most ladder inputs (their
-/// parts lie on one grid of bits, so most additions at level 6 are exact), so one carry dropped is not a reliable
-/// control: in the paper's emulator the carry of a1 b5's deposit fired on 18 of 60 such inputs, all of them on 51.
+/// Control for the sloppy multiply's checks. With the carries out of level 6 dropped (`mutate::SLOPPY_C6`, the
+/// truncation one level too high, an error of about u^7 |ab| whenever one of them is nonzero), the proven bound and the
+/// threshold each fail more than half of the ladder row's samples and of the sloppy dot's random row of length 4, and
+/// the hill climb's worst exceeds the bound. A single carry out of level 6 is zero on most ladder inputs, as their
+/// parts lie on one grid of bits and most additions at level 6 are exact, so one carry dropped is not a reliable
+/// control. In the paper's emulator the carry of a1 b5's deposit fired on 18 of 60 such inputs, and all of them on 51.
 #[cfg(feature = "mutate")]
 #[test]
 fn od_sloppy_control() {
@@ -1984,9 +1992,10 @@ fn od_sloppy_control() {
     assert!(e > SLOPPY_C, "{e}");
 }
 
-/// Timing of the sloppy multiply and dot term against the default ones on the native lanes, alternating in one run:
-/// OD_REPS repetitions (default 15) of 4096 dependent products and of a 4096-term dot product each, with eight-part
-/// operands. Prints the time per lane operation (8 products) of each, min, median and max, and the ratio's.
+/// Timing of the sloppy multiply and dot term against the default ones on the native lanes, alternating in one run. It
+/// takes OD_REPS repetitions (default 15) of 4096 dependent products and of a 4096-term dot product each, with
+/// eight-part operands, and prints the time per lane operation (8 products) of each, min, median and max, and the
+/// ratio's.
 /// `cargo test --release --lib od_sloppy_timing -- --ignored --nocapture`
 #[test]
 #[ignore]
@@ -2066,9 +2075,9 @@ fn od_sloppy_timing() {
     }
 }
 
-/// the largest |x_(i+1)| / ulp(x_i) over x's nonzero parts and their successors, infinite when a nonzero part follows a
-/// zero one, zero for a non-finite value: at most 1/2 for parts that do not overlap, at most 1 for ulp-nonoverlapping
-/// ones
+/// The largest |x_(i+1)| / ulp(x_i) over x's nonzero parts and their successors, infinite when a nonzero part follows a
+/// zero one and zero for a non-finite value. It is at most 1/2 for parts that do not overlap and at most 1 for
+/// ulp-nonoverlapping ones.
 fn overlap(x: OD) -> f64 {
     if x.x.iter().any(|p| !p.is_finite()) {
         return 0.0;
@@ -2087,12 +2096,12 @@ fn overlap(x: OD) -> f64 {
     w
 }
 
-/// Pass, set after a first run against `od`'s earlier statement (every part at most half the ulp of the one above it
-/// for every operation), which the adds miss after cancellation: on `od_accuracy`'s inputs (OD_N per operation and
-/// category, scalar and lanes), every finite result of the multiply, od x f64, the divide and the square root has
-/// |x_(i+1)| <= ulp(x_i)/2, and of the adds (od + od, od + f64) |x_(i+1)| <= ulp(x_i), with no nonzero part after a
-/// zero one. Controls: a value whose second part is twice the first's ulp fails both, one whose second part is a
-/// whole ulp fails the half-ulp bound only, and one with a nonzero part after a zero one fails both.
+/// On `od_accuracy`'s inputs in `CATS` (OD_N per operation and category, scalar and lanes), every finite result of the
+/// multiply, od x f64, the divide and the square root has |x_(i+1)| <= ulp(x_i)/2, every finite result of the adds
+/// (od + od, od + f64) has |x_(i+1)| <= ulp(x_i), and no nonzero part follows a zero one. The criterion was set after a
+/// first run, in which the adds passed half an ulp after cancellation. Of the controls, a value whose second part is
+/// twice the first's ulp fails both bounds, one whose second part is a whole ulp fails the half-ulp bound only, and one
+/// with a nonzero part after a zero one fails both.
 #[test]
 fn od_results_do_not_overlap() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
@@ -2134,8 +2143,8 @@ fn od_results_do_not_overlap() {
 
 /// Inputs on which the add, od + f64, mul, od x f64 and the divide reach their proven bounds, u^8 times the measure to
 /// within a factor 1 - O(u). The products and quotients come out as (1, u, ..., u^7) up to sign, and the order-8 term
-/// that the renormalization drops is the error. For od x f64, 3 g = 2^53 + 1 makes a_0 b = 1 + u. Pass: each
-/// measure between 0.99 u^8 and its bound, scalar and lanes alike, and the four operations' operands within
+/// that the renormalization drops is the error. For od x f64, 3 g = 2^53 + 1 makes a_0 b = 1 + u. It passes when each
+/// measure is between 0.99 u^8 and its bound, scalar and lanes alike, and the four operations' operands are within
 /// `proven`'s hypotheses.
 #[test]
 fn od_worst_case_inputs() {
@@ -2161,8 +2170,8 @@ fn od_worst_case_inputs() {
     let mut d = [0.0; 8];
     d[0] = -1.0;
     d[1] = u;
-    // the divide's runs are within the hypotheses too: its remainders are (u^k, 0, ...) and its quotient terms -u^k,
-    // so every product is exact; its bound is u^8 (1 + 2^-25) relative
+    // The divide's runs are within the hypotheses too. Its remainders are (u^k, 0, ...) and its quotient terms -u^k, so
+    // every product is exact. Its bound is u^8 (1 + 2^-25) relative.
     let div_thr = (1.0 + 2f64.powi(-25)) / 64.0;
     let cases = [
         (Op::Mul, ladder_to(7), OD { x: b_mul }, PROVEN_THR),
@@ -2196,10 +2205,10 @@ fn od_worst_case_inputs() {
     }
 }
 
-/// The proven bound catches what the 1-unit thresholds miss: with the products of order 8 dropped, an error of a few
-/// u^8 |ab| on the ladder category's inputs. Pass, set after a first run (2 of 400 past 1 unit, 348 past the
-/// proven bound): the proven bound fails more than half of the ladder row's samples and more than ten times as many as
-/// the thresholds.
+/// The proven bound catches what the 1-unit thresholds miss, the products of order 8 dropped (`mutate::MUL_L8`), an
+/// error of a few u^8 |ab| on the ladder category's inputs. It passes when the proven bound fails more than half of the
+/// ladder row's samples and more than ten times as many as the thresholds, a criterion set after a first run (2 of 400
+/// past 1 unit, 348 past the proven bound).
 #[cfg(feature = "mutate")]
 #[test]
 fn od_proven_bound_control() {
@@ -2216,7 +2225,7 @@ fn od_proven_bound_control() {
     assert!(row.proven.fails * 2 > n && row.proven.fails > 10 * row.fails, "{row:?}");
 }
 
-/// The square root's proven bound can fail: with its second Newton step skipped (`mutate::SQRT_ITER`), more than half
+/// The square root's proven bound can fail. With its second Newton step skipped (`mutate::SQRT_ITER`), more than half
 /// of the ladder row's samples, all within its hypotheses, miss it.
 #[cfg(feature = "mutate")]
 #[test]
@@ -2235,9 +2244,9 @@ fn od_sqrt_proven_bound_control() {
 }
 
 /// Inputs whose results miss their bounds by 1e10 to 1e28 units when the renormalization's second pass is by
-/// quick-two-sums: the square root of an eight-part value with gaps and zero parts, the product of a two-part value
-/// with a gap and its reciprocal, and two quotients of values with zero parts. Pass: each within its operation's
-/// threshold, scalar and lanes alike.
+/// quick-two-sums. They are the square root of an eight-part value with gaps and zero parts, the product of a two-part
+/// value with a gap and its reciprocal, and two quotients of values with zero parts. It passes when each is within its
+/// operation's threshold, scalar and lanes alike.
 #[test]
 fn od_gap_regressions() {
     let bad: Vec<(&str, f64)> = gap_cases()
@@ -2252,7 +2261,8 @@ fn od_gap_regressions() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
-/// Control: with the second pass by quick-two-sums (`mutate::RENORM_FAST`), every case misses its bound.
+/// Control for `od_gap_regressions`. With the second pass by quick-two-sums (`mutate::RENORM_FAST`), every case misses
+/// its bound.
 #[cfg(feature = "mutate")]
 #[test]
 fn od_gap_regressions_control() {
@@ -2265,8 +2275,8 @@ fn od_gap_regressions_control() {
     }
 }
 
-/// eight to nine values ±(1 + f)·2^e, e in -300..=0, in random magnitude order; half the time one value nearly cancels
-/// another, as the levels of a·(1/a) do
+/// Nine values ±(1 + f)·2^e, e in -300..=0, in random magnitude order, of which the callers take eight or nine. Half
+/// the time one value nearly cancels another, as the levels of a·(1/a) do.
 fn unordered(r: &mut Rng) -> [f64; 9] {
     let mut c: [f64; 9] = std::array::from_fn(|_| rde(r, -300, 0).to_f64());
     if coin(r) {
@@ -2278,7 +2288,8 @@ fn unordered(r: &mut Rng) -> [f64; 9] {
     c
 }
 
-/// 4.8.0's renormalization (second pass by quick-two-sums), and whether its every quick-two-sum was exact
+/// The fast pass, a renormalization whose second pass is by quick-two-sums, and whether its every quick-two-sum is
+/// exact.
 fn renorm_fast_pass(c: [f64; 9]) -> ([f64; 8], bool) {
     let c = crate::od::vecsum(c);
     let (mut out, mut k, mut acc, mut exact) = ([0.0f64; 8], 0, c[0], true);
@@ -2301,8 +2312,8 @@ fn exact_sum(c: &[f64]) -> Dy {
     c.iter().fold(Dy::zero(), |s, &x| s.add(&Dy::from_f64(x)))
 }
 
-/// Pass: eight values in any magnitude order renormalize with their exact sum kept (seven emissions at most, so no
-/// part is truncated, and every two-sum is exact).
+/// Eight values in any magnitude order renormalize with their exact sum kept. At most seven are emitted, so no part is
+/// truncated, and every two-sum is exact.
 #[test]
 fn renorm_of_eight_keeps_the_exact_sum_in_any_order() {
     let mut r = Rng::new(0x5e7e);
@@ -2315,8 +2326,8 @@ fn renorm_of_eight_keeps_the_exact_sum_in_any_order() {
     assert_eq!(lost, 0, "{lost} of 20000 renormalizations lost part of their sum");
 }
 
-/// Control: with the second pass by quick-two-sums (`mutate::RENORM_FAST`), some of the same renormalizations lose
-/// part of their sum.
+/// Control for `renorm_of_eight_keeps_the_exact_sum_in_any_order`. With the second pass by quick-two-sums
+/// (`mutate::RENORM_FAST`), some of the same renormalizations lose part of their sum.
 #[cfg(feature = "mutate")]
 #[test]
 fn renorm_of_eight_keeps_the_exact_sum_control() {
@@ -2332,8 +2343,8 @@ fn renorm_of_eight_keeps_the_exact_sum_control() {
     assert!(lost > 0, "the quick-two-sum pass kept every sum");
 }
 
-/// Pass: wherever every quick-two-sum of 4.8.0's second pass was exact, the two-sum pass gives its bits; the inputs,
-/// half of them in magnitude order, include both kinds (at least 1000 of each in 20000).
+/// Wherever every quick-two-sum of the fast pass (`renorm_fast_pass`) is exact, the two-sum pass gives its bits. The
+/// inputs, half of them in magnitude order, include both kinds, at least 1000 of each in 20000.
 #[test]
 fn renorm_keeps_the_fast_pass_bits_where_it_was_exact() {
     let (exact, inexact, changed) = fast_pass_comparison(0);
@@ -2345,17 +2356,17 @@ fn renorm_keeps_the_fast_pass_bits_where_it_was_exact() {
     assert!(exact >= 1000 && inexact >= 1000, "{exact} exact, {inexact} inexact");
 }
 
-/// Control: with the renormalization's eighth part dropped (`mutate::RENORM_DROP`), results change where every
-/// quick-two-sum was exact.
+/// Control for `renorm_keeps_the_fast_pass_bits_where_it_was_exact`. With the renormalization's eighth part dropped
+/// (`mutate::RENORM_DROP`), results change where every quick-two-sum is exact.
 #[cfg(feature = "mutate")]
 #[test]
 fn renorm_keeps_the_fast_pass_bits_control() {
     assert!(fast_pass_comparison(mutate::RENORM_DROP).2 > 0);
 }
 
-/// over 20000 renormalizations, half in magnitude order (as the levels of a product of full values) and half in random
-/// order: those whose every quick-two-sum in 4.8.0's pass was exact, those with one inexact, and among the first those
-/// whose bits differ from 4.8.0's, with mutation `id` active in `renorm_scalar`
+/// Counts over 20000 renormalizations, half in magnitude order (as the levels of a product of full values) and half in
+/// random order, with mutation `id` active in `renorm_scalar`. It returns those whose every quick-two-sum in the fast
+/// pass is exact, those with one inexact, and among the first those whose bits differ from the fast pass's.
 fn fast_pass_comparison(id: u32) -> (usize, usize, usize) {
     let mut r = Rng::new(0xb175);
     let (mut exact, mut inexact, mut changed) = (0, 0, 0);
@@ -2382,13 +2393,13 @@ fn fast_pass_comparison(id: u32) -> (usize, usize, usize) {
     (exact, inexact, changed)
 }
 
-/// the cases of `od_gap_regressions`
+/// The cases of `od_gap_regressions`.
 fn gap_cases() -> Vec<(&'static str, Op, OD, OD)> {
     let od = |h: [u64; 8]| OD {
         x: h.map(f64::from_bits),
     };
     let a = od([0x3ff97f22dc331771, 0x320e700ef097bbfd, 0, 0, 0, 0, 0, 0]);
-    // gaps after its first, second and fourth parts, and zero parts
+    // Gaps after its first, second and fourth parts, and zero parts.
     let sq = od([
         0x3ff93b4a66f163b7,
         0x30a0f22c361cefdc,
@@ -2453,7 +2464,7 @@ fn gap_cases() -> Vec<(&'static str, Op, OD, OD)> {
     ]
 }
 
-/// decimal input and output, the conversions and the order, exactly
+/// Decimal input and output, the conversions and the order, exactly.
 #[test]
 fn od_decimal_io_conversions_and_order() {
     let n = env_usize("OD_N", 2000);
