@@ -6,14 +6,15 @@
 //! precision floating point arithmetic", ARITH-15, 2001; QD 2.3, qd_inline.h): two-sum, the FMA two-product,
 //! the renormalization with its zero-skipping branches, the "sloppy" add (Cray-style bound) and the accurate merge
 //! add (IEEE-style bound), the sloppy and the accurate multiply (the latter adds the O(eps^4) partial products), the
-//! sloppy and the accurate divide (four or five quotient terms), and the square root by Newton's iteration on
-//! 1/sqrt(a). The O(eps^3) partial products that QD sums in plain arithmetic are summed here with FMA, in QD's order.
+//! sloppy and the accurate divide (four or five quotient terms). The square root is not QD's: one Newton step from the
+//! double-double square root. The O(eps^3) partial products that QD sums in plain arithmetic are summed here with FMA,
+//! in QD's order.
 //! The operators use the library's default configuration: `+`, `-` the sloppy add, `*` the sloppy multiply, `/` the
 //! sloppy divide; `ieee_add`, `accurate_mul` and `accurate_div` are the others.
 //!
 //! Two repairs of QD, both found by the tests: the accurate add keeps u + v where
 //! QD keeps u alone (when all parts are read with three emitted), and sqrt scales its argument by an exact power of
-//! four into [1, 4) (QD's iteration loses accuracy above about 2^860 and below about 2^-860).
+//! four into [1, 4) (QD's iteration lost accuracy above about 2^860 and below about 2^-860).
 //!
 //! `QdAcc` is a sum-of-products accumulator (the scalar twin of `qv::QDotAcc`, see there for its error). Decimal
 //! parsing and printing are exact (via `exact`): `parse` rounds the decimal value to four parts by greedy
@@ -49,7 +50,7 @@ pub mod mutate {
     pub const ADD_DD_T1: u32 = 10;
     /// divide: the third remainder update skipped (q3 from a stale remainder)
     pub const DIV_R3: u32 = 11;
-    /// sqrt: one Newton iteration instead of three
+    /// sqrt: the Newton step skipped, the double-double start returned
     pub const SQRT_ITER: u32 = 12;
     /// dot accumulator: the level-2 two-sum errors not carried to level 3
     pub const ACC_L3: u32 = 13;
@@ -74,7 +75,7 @@ pub mod mutate {
         "qd + f64: error of a0 + b dropped",
         "qd + dd: error of a1 + b.lo dropped",
         "divide: third remainder update skipped",
-        "sqrt: one Newton iteration instead of three",
+        "sqrt: Newton step skipped",
         "dot accumulator: level-2 errors dropped",
         "parse: last component truncated",
         "8-lane renorm: zero test ignored (step c2)",
@@ -713,10 +714,11 @@ impl QD {
         QD::ONE / self
     }
 
-    /// Square root: QD's Newton iteration on 1/sqrt(a) (three steps from the f64 value, then times a), applied to a
-    /// scaled by an exact power of four into [1, 4) and the result scaled back. Unscaled, as in QD, the iteration
-    /// loses accuracy above about 2^860 (1/a's lower parts underflow) and below about 2^-860 (a/2 drops bits of
-    /// subnormal parts); the near-overflow tests found it.
+    /// Square root: one Newton step, with its second-order term, from the double-double square root of a's two leading
+    /// parts (`DD::sqrt`, within 25/8 u^2). The step's truncation is cubic in the start's error e, and its correction
+    /// is formed in double-double, so the result errs by about |e| times that correction's relative error, a few u^4
+    /// (measured below 5 u^4). It works on a scaled by an exact power of four into [1, 4) and scales the result back,
+    /// which keeps every intermediate far from underflow and overflow.
     #[inline]
     pub fn sqrt(self) -> QD {
         if self.is_zero() {
@@ -726,13 +728,20 @@ impl QD {
         let s = f64::from_bits(self.x[0].sqrt().to_bits() & 0x7ff0_0000_0000_0000);
         let inv = 1.0 / s;
         let a = self.mul_pwr2(inv).mul_pwr2(inv);
-        let mut r = QD::from_f64(1.0 / a.x[0].sqrt());
-        let h = a.mul_pwr2(0.5);
-        let n = if mutate::on(mutate::SQRT_ITER) { 1 } else { 3 };
-        for _ in 0..n {
-            r = r + (-(h * r.sqr())).add_f(0.5) * r;
+        // y: the double-double square root of a's two leading parts (`DD::sqrt`, within 25/8 u^2 of sqrt(a0 + a1));
+        // a0 is in [1, 4), so it takes no scaling branch
+        let y = DD { hi: a.x[0], lo: a.x[1] }.sqrt();
+        let yq = QD::from_dd(y);
+        if mutate::on(mutate::SQRT_ITER) {
+            return yq.mul_pwr2(s);
         }
-        (r * a).mul_pwr2(s)
+        // one Newton step with its second-order term: sqrt(y^2 + r) = y + t - t^2 / (2 y) + O(t^3 / y^2) with
+        // t = r / (2 y). The truncation is cubic in y's error e. The result's error is the rounding of t, formed
+        // in double-double: |e| times t's relative error, a few u^4.
+        let r = a + (-yq.sqr());
+        let t = r.to_dd() / y.mul_pwr2(2.0);
+        let t2 = t.hi * t.hi / (y.hi + y.hi);
+        yq.add_dd(t).add_f(-t2).mul_pwr2(s)
     }
 
     /// integer power (QD's npwr: binary powering by sqr and the sloppy multiply; 1/a^|n| for n < 0)

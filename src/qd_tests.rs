@@ -1152,13 +1152,15 @@ fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
 }
 
 /// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with
-/// 4.1.1 and again when `ieee_add` began keeping its accumulator after four parts are emitted:
-/// every operation's bits in every category, pinned, and the lanes' with them, which must be the
-/// scalar ones. Every backend gives these bits.
-const QD_DIGEST: u64 = 0x98d3_2e89_7f18_4a13;
+/// 4.1.1, and again when `ieee_add` began keeping its accumulator after four parts are emitted
+/// and when `sqrt` began from the double-double square root: every operation's bits in every
+/// category, pinned, and the lanes' with them, which must be the scalar ones. Every backend gives
+/// these bits.
+const QD_DIGEST: u64 = 0x1dbb_0446_2879_f4bc;
 
-/// The digest of the gap category's results at the same size and seed, recorded with 4.8.2.
-const GAP_DIGEST: u64 = 0xed8b_01a4_013b_0742;
+/// The digest of the gap category's results at the same size and seed, recorded with 4.8.2 and
+/// again when `sqrt` began from the double-double square root.
+const GAP_DIGEST: u64 = 0xb516_56c3_befa_2572;
 
 /// Control for the pinned digest: with the O(eps^3) term a0 b2 of the product dropped
 /// (`mutate::SLOPPY_MUL_Q3`), the results' digest is not the pinned one.

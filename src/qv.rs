@@ -812,15 +812,21 @@ impl<S: Simd> QV<S> {
                 let a = QV {
                     c: self.c.map(|v| v.mul(inv).mul(inv)),
                 };
-                let mut r = QV {
-                    c: [one.div(a.c[0].sqrt()), z, z, z],
+                // `DD::sqrt` of a's two leading parts, a0 in [1, 4), as QD::sqrt
+                let sh = a.c[0].sqrt();
+                let rho = a.c[1].add(sh.neg().fma(sh, a.c[0]));
+                let (h, l) = quick_two_sum(sh, rho.div(sh.add(sh)));
+                let y = DV { hi: h, lo: l };
+                let yq = QV::from_dv(y);
+                let r = if mutate::on(mutate::SQRT_ITER) {
+                    yq
+                } else {
+                    // one Newton step with its second-order term (QD::sqrt)
+                    let r = a.sloppy_add(-yq.sqr());
+                    let t = r.to_dv() / y.mul_pwr2(2.0);
+                    let t2 = t.hi.mul(t.hi).div(y.hi.add(y.hi));
+                    yq.add_dv(t).add_v(t2.neg())
                 };
-                let h = a.mul_pwr2(0.5);
-                let n = if mutate::on(mutate::SQRT_ITER) { 1 } else { 3 };
-                for _ in 0..n {
-                    r = r + (-(h * r.sqr())).add_f(0.5) * r;
-                }
-                let r = r * a;
                 QV {
                     c: r.c.map(|v| zero.sel(z, v.mul(s))),
                 }
