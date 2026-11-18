@@ -9,7 +9,8 @@
 //!   corrected once from it. The remainder is rounded to n parts greedily (r_0 = RN(rem), r_1 = RN(rem - r_0), ...),
 //!   so that r is within u^n |rem| of rem (u = 2^-53) and |r_(i+1)| <= ulp(r_i)/2. The only other error of the
 //!   reduction is that of pi/2's 1216 fraction bits, at most |k| 2^-1217, below 2^-1165 for |x| <= 2^52. So r is
-//!   accurate relative to itself also next to the multiples of pi/2, wherever the result has full precision.
+//!   accurate relative to itself also next to the multiples of pi/2, wherever the result has full precision. The same
+//!   parts come faster from f64 limbs (`fast_reduce`) wherever a test decides them, and from the accumulator elsewhere.
 //! * Evaluation: Taylor series of sin r and cos r in z = r^2 by Horner's scheme, with the type's own products and
 //!   sums, as sin r = r + r (z P(z)) and cos r = 1 + z Q(z). The number of terms depends on the binary exponent of
 //!   r_0 (the tables in `tables`, from `scripts/trig_tables.py`), so that the series' truncation is at most
@@ -94,11 +95,11 @@ pub mod mutate {
     pub const LANE_NAN: u32 = 8;
     /// lanes only: lane 0's powers of two on every lane
     pub const LANE_POW2: u32 = 9;
-    /// lanes only: the fast reduction's rounding test skipped, so that every lane takes its parts
+    /// the fast reduction (`fast_reduce`): its test of the rounding skipped, so that every value takes its parts
     pub const REDUCE_FAST_UNCHECKED: u32 = 10;
-    /// lanes only: the fast reduction's test with no allowance for its own error (eps = 0)
+    /// the fast reduction: its test with no allowance for the error of its value (eps = 0)
     pub const REDUCE_FAST_EPS: u32 = 11;
-    /// lanes only: the fast reduction's pi/2 without its last two digits (52 bits), its test unchanged
+    /// the fast reduction: its pi/2 without its last two digits (52 bits), its test unchanged
     pub const REDUCE_FAST_PI: u32 = 12;
     /// number of ids
     pub const N: u32 = 12;
@@ -114,9 +115,9 @@ pub mod mutate {
         "lanes: lane 0's quadrant on every lane",
         "lanes: NaN lanes from the lanes' arithmetic, NaN signs flipped",
         "lanes: lane 0's powers of two on every lane",
-        "lanes: fast reduction's test skipped",
-        "lanes: fast reduction's test with eps = 0",
-        "lanes: fast reduction's pi/2 without its last two digits",
+        "fast reduction: test skipped",
+        "fast reduction: test with eps = 0",
+        "fast reduction: pi/2 without its last two digits",
     ];
 
     #[cfg(feature = "mutate")]
@@ -314,18 +315,42 @@ impl Acc {
 }
 
 /// x = k pi/2 + r for finite parts x with |x_0| <= 2^52: (k mod 4, r), |r| <= 0.7854 (1 + 2^-52); r = x for k = 0,
-/// otherwise N greedy parts
+/// otherwise N greedy parts. Bitwise `reduce_exact`: its parts from the reduction in f64 limbs (`fast_reduce`, L
+/// limbs) where that one decides them, from the integer code elsewhere.
 #[inline(always)]
-pub(crate) fn reduce<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
+pub(crate) fn reduce<const N: usize, const L: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
     let k = (x[0] * tables::TWO_OVER_PI).round();
     if k == 0.0 {
         // |x_0| < 0.78539817: r = x, exactly
         return (0, *x);
     }
+    reduce_fast_k::<N, L>(x, k)
+}
+
+/// `reduce` for k != 0, out of line, so that r = x for k = 0 reaches the caller in registers. Under the mutation of
+/// the integer code's pi/2, which the limbs do not follow, every value takes the integer code.
+#[inline(never)]
+fn reduce_fast_k<const N: usize, const L: usize>(x: &[f64; N], k: f64) -> (u32, [f64; N]) {
+    if !mutate::on(mutate::REDUCE_PI_SHORT) {
+        let (k, r, ok) = fast_reduce::fast::<f64, N, L>(x, k);
+        if ok {
+            return ((k as i64).rem_euclid(4) as u32, r);
+        }
+    }
     reduce_k(x, k)
 }
 
-/// `reduce` for k = round(x_0 RN(2/pi)) != 0, out of line, so that r = x for k = 0 reaches the caller in registers
+/// The reduction in exact integer arithmetic alone: the definition of `reduce`'s bits, and the reference of its tests.
+#[inline(always)]
+pub(crate) fn reduce_exact<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
+    let k = (x[0] * tables::TWO_OVER_PI).round();
+    if k == 0.0 {
+        return (0, *x);
+    }
+    reduce_k(x, k)
+}
+
+/// `reduce_exact` for k = round(x_0 RN(2/pi)) != 0, out of line
 #[inline(never)]
 fn reduce_k<const N: usize>(x: &[f64; N], mut k: f64) -> (u32, [f64; N]) {
     let mut acc = Acc([0; L]);
@@ -855,7 +880,7 @@ impl Ext for DD {
     }
     #[inline(always)]
     fn reduce(self) -> (usize, DD) {
-        let (q, r) = reduce(&[self.hi, self.lo]);
+        let (q, r) = reduce::<2, { fast_reduce::limbs(2) }>(&[self.hi, self.lo]);
         // the greedy r can have |r_1| = ulp(r_0)/2 with r_0 odd, a tie that RN(r_0 + r_1) rounds away from r_0; the
         // double-word algorithms' bounds need r_0 = RN(r_0 + r_1)
         let (hi, lo) = quick_two_sum(r[0], r[1]);
@@ -908,7 +933,7 @@ impl Ext for QD {
     }
     #[inline(always)]
     fn reduce(self) -> (usize, QD) {
-        let (q, x) = reduce(&self.x);
+        let (q, x) = reduce::<4, { fast_reduce::limbs(4) }>(&self.x);
         (q as usize, QD { x })
     }
     fn drop_last(self) -> QD {
@@ -958,7 +983,7 @@ impl Ext for OD {
     }
     #[inline(always)]
     fn reduce(self) -> (usize, OD) {
-        let (q, x) = reduce(&self.x);
+        let (q, x) = reduce::<8, { fast_reduce::limbs(8) }>(&self.x);
         (q as usize, OD { x })
     }
     fn drop_last(self) -> OD {
@@ -1010,14 +1035,13 @@ trig_methods!(OD, "3.17 u^8 (u = 2^-53, proven)", "6.42 u^8 (proven)");
 /// and r = x, as `reduce` decides from round(x_0 RN(2/pi)) = 0, with no lane taken apart. Otherwise the lanes with
 /// k != 0 take the fast reduction on L limbs (`fast_reduce`), and those whose parts it does not decide take `reduce`.
 #[inline(always)]
-fn reduce_lanes<S: Simd, const N: usize, const L: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
+pub(crate) fn reduce_lanes<S: Simd, const N: usize, const L: usize>(c: &[V8<S>; N]) -> (V8<S>, [V8<S>; N]) {
     let t = c[0].mul(V8::splat(tables::TWO_OVER_PI));
     let k0 = V8::splat(0.5).gt(t.abs());
     if k0.bits() == 0xff {
         return (V8::zero(), *c);
     }
-    let k = fast_reduce::round_away(t);
-    let (f, ok) = fast_reduce::fast::<V8<S>, N, L>(c, k);
+    let (k, f, ok) = fast_reduce::fast::<V8<S>, N, L>(c, fast_reduce::round_away(t));
     let mut q = k0.sel(V8::zero(), fast_reduce::mod4(k));
     let mut r = *c;
     for i in 0..N {
@@ -1043,7 +1067,7 @@ fn exact_lanes<S: Simd, const N: usize>(x: &[V8<S>; N], m: u8, q: &mut V8<S>, r:
     let mut ra = r.map(|v| v.to_array());
     for l in 0..8 {
         if m >> l & 1 == 1 {
-            let (ql, rl) = reduce::<N>(&std::array::from_fn(|i| a[i][l]));
+            let (ql, rl) = reduce_exact::<N>(&std::array::from_fn(|i| a[i][l]));
             qa[l] = ql as f64;
             for i in 0..N {
                 ra[i][l] = rl[i];
