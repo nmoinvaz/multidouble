@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="890" height="476" viewBox="0 0 890 476" font-family="system-ui, sans-serif">
+<style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
+<rect width="890" height="476" fill="#fcfcfb"/>
+<text x="16.0" y="24.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">SIMD lanes against the scalar types: change in time per value</text>
+<text x="16.0" y="40.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">8 lanes on NEON, the same inputs for both; fastest of 15 alternating passes over 1024 values; lower is faster</text>
+<line x1="176.4" y1="92.0" x2="176.4" y2="388.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="176.4" y="403.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">−80%</text>
+<line x1="265.3" y1="92.0" x2="265.3" y2="388.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="265.3" y="403.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">−60%</text>
+<line x1="354.2" y1="92.0" x2="354.2" y2="388.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="354.2" y="403.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">−40%</text>
+<line x1="443.1" y1="92.0" x2="443.1" y2="388.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="443.1" y="403.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">−20%</text>
+<line x1="532.0" y1="92.0" x2="532.0" y2="388.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="532.0" y="403.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">0%</text>
+<line x1="132.0" y1="388.0" x2="532.0" y2="388.0" stroke="#52514e" stroke-width="1"/>
+<line x1="132.0" y1="92.0" x2="132.0" y2="388.0" stroke="#52514e" stroke-width="1"/>
+<text x="332.0" y="422.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="normal">change in time per value, lanes against scalar (%)</text>
+<text x="122.0" y="82.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="bold">function</text>
+<text x="122.0" y="109.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">exp</text>
+<line x1="132.0" y1="105.0" x2="532.0" y2="105.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="135.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">ln</text>
+<line x1="132.0" y1="131.0" x2="532.0" y2="131.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="16.0" y="160.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">¼ ≤ |x| &lt; 1</text>
+<text x="122.0" y="179.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">sin</text>
+<line x1="132.0" y1="175.0" x2="532.0" y2="175.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="205.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">cos</text>
+<line x1="132.0" y1="201.0" x2="532.0" y2="201.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="231.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">tan</text>
+<line x1="132.0" y1="227.0" x2="532.0" y2="227.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="257.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">sin_cos</text>
+<line x1="132.0" y1="253.0" x2="532.0" y2="253.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="16.0" y="282.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">1 ≤ |x| &lt; 1024</text>
+<text x="122.0" y="301.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">sin</text>
+<line x1="132.0" y1="297.0" x2="532.0" y2="297.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="327.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">cos</text>
+<line x1="132.0" y1="323.0" x2="532.0" y2="323.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="353.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">tan</text>
+<line x1="132.0" y1="349.0" x2="532.0" y2="349.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="122.0" y="379.0" font-size="12" fill="#0b0b0b" text-anchor="end" font-weight="normal">sin_cos</text>
+<line x1="132.0" y1="375.0" x2="532.0" y2="375.0" stroke="#e7e6e2" stroke-width="1"/>
+<g><circle cx="181.6" cy="105.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double exp : scalar 304.4 ns, lanes 64.4 ns per value, -78.9%</title></g>
+<g><circle cx="172.0" cy="131.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double ln : scalar 359.7 ns, lanes 68.3 ns per value, -81.0%</title></g>
+<g><circle cx="265.0" cy="169.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double sin 1/4 &lt;= |x| &lt; 1: scalar 146.7 ns, lanes 58.6 ns per value, -60.1%</title></g>
+<g><circle cx="261.3" cy="195.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double cos 1/4 &lt;= |x| &lt; 1: scalar 137.8 ns, lanes 53.9 ns per value, -60.9%</title></g>
+<g><circle cx="235.0" cy="227.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double tan 1/4 &lt;= |x| &lt; 1: scalar 239.2 ns, lanes 79.3 ns per value, -66.8%</title></g>
+<g><circle cx="243.9" cy="253.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double sin_cos 1/4 &lt;= |x| &lt; 1: scalar 220.4 ns, lanes 77.6 ns per value, -64.8%</title></g>
+<g><circle cx="297.5" cy="297.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double sin 1 &lt;= |x| &lt; 1024: scalar 164.9 ns, lanes 77.9 ns per value, -52.8%</title></g>
+<g><circle cx="308.2" cy="323.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double cos 1 &lt;= |x| &lt; 1024: scalar 165.4 ns, lanes 82.2 ns per value, -50.3%</title></g>
+<g><circle cx="267.6" cy="349.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double tan 1 &lt;= |x| &lt; 1024: scalar 464.0 ns, lanes 188.0 ns per value, -59.5%</title></g>
+<g><circle cx="282.7" cy="369.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double sin_cos 1 &lt;= |x| &lt; 1024: scalar 210.2 ns, lanes 92.3 ns per value, -56.1%</title></g>
+<g><rect x="256.1" y="94.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double exp : scalar 957.2 ns, lanes 374.9 ns per value, -60.8%</title></g>
+<g><rect x="234.8" y="125.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double ln : scalar 1386.0 ns, lanes 476.4 ns per value, -65.6%</title></g>
+<g><rect x="226.5" y="169.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double sin 1/4 &lt;= |x| &lt; 1: scalar 1016.6 ns, lanes 330.4 ns per value, -67.5%</title></g>
+<g><rect x="228.1" y="195.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double cos 1/4 &lt;= |x| &lt; 1: scalar 1002.9 ns, lanes 329.7 ns per value, -67.1%</title></g>
+<g><rect x="218.8" y="221.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double tan 1/4 &lt;= |x| &lt; 1: scalar 2036.6 ns, lanes 626.5 ns per value, -69.2%</title></g>
+<g><rect x="220.6" y="247.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double sin_cos 1/4 &lt;= |x| &lt; 1: scalar 1899.9 ns, lanes 592.2 ns per value, -68.8%</title></g>
+<g><rect x="262.1" y="291.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double sin 1 &lt;= |x| &lt; 1024: scalar 969.4 ns, lanes 392.7 ns per value, -59.5%</title></g>
+<g><rect x="263.0" y="317.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double cos 1 &lt;= |x| &lt; 1024: scalar 969.4 ns, lanes 394.7 ns per value, -59.3%</title></g>
+<g><rect x="245.2" y="343.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double tan 1 &lt;= |x| &lt; 1024: scalar 1896.9 ns, lanes 696.1 ns per value, -63.3%</title></g>
+<g><rect x="247.3" y="369.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double sin_cos 1 &lt;= |x| &lt; 1024: scalar 1784.2 ns, lanes 663.3 ns per value, -62.8%</title></g>
+<g><polygon points="259.4,104.0 265.9,110.5 259.4,117.0 252.9,110.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double exp : scalar 8435.2 ns, lanes 3261.0 ns per value, -61.3%</title></g>
+<g><polygon points="256.2,124.5 262.7,131.0 256.2,137.5 249.7,131.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double ln : scalar 9655.6 ns, lanes 3664.5 ns per value, -62.0%</title></g>
+<g><polygon points="259.9,174.0 266.4,180.5 259.9,187.0 253.4,180.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double sin 1/4 &lt;= |x| &lt; 1: scalar 7443.9 ns, lanes 2887.2 ns per value, -61.2%</title></g>
+<g><polygon points="260.3,200.0 266.8,206.5 260.3,213.0 253.8,206.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double cos 1/4 &lt;= |x| &lt; 1: scalar 7451.7 ns, lanes 2897.1 ns per value, -61.1%</title></g>
+<g><polygon points="257.4,220.5 263.9,227.0 257.4,233.5 250.9,227.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double tan 1/4 &lt;= |x| &lt; 1: scalar 15202.7 ns, lanes 5811.1 ns per value, -61.8%</title></g>
+<g><polygon points="256.3,246.5 262.8,253.0 256.3,259.5 249.8,253.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double sin_cos 1/4 &lt;= |x| &lt; 1: scalar 14679.1 ns, lanes 5572.1 ns per value, -62.0%</title></g>
+<g><polygon points="281.9,290.5 288.4,297.0 281.9,303.5 275.4,297.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double sin 1 &lt;= |x| &lt; 1024: scalar 6909.7 ns, lanes 3020.7 ns per value, -56.3%</title></g>
+<g><polygon points="283.3,316.5 289.8,323.0 283.3,329.5 276.8,323.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double cos 1 &lt;= |x| &lt; 1024: scalar 6916.5 ns, lanes 3046.1 ns per value, -56.0%</title></g>
+<g><polygon points="276.8,342.5 283.3,349.0 276.8,355.5 270.3,349.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double tan 1 &lt;= |x| &lt; 1024: scalar 13999.7 ns, lanes 5962.4 ns per value, -57.4%</title></g>
+<g><polygon points="275.3,374.0 281.8,380.5 275.3,387.0 268.8,380.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double sin_cos 1 &lt;= |x| &lt; 1024: scalar 13506.9 ns, lanes 5704.4 ns per value, -57.8%</title></g>
+<text x="672.0" y="82.0" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD → DV</text>
+<g><circle cx="619.4" cy="78.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double</title></g>
+<text x="672.0" y="109.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−78.9%</text>
+<text x="672.0" y="135.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−81.0%</text>
+<text x="672.0" y="179.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−60.1%</text>
+<text x="672.0" y="205.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−60.9%</text>
+<text x="672.0" y="231.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−66.8%</text>
+<text x="672.0" y="257.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−64.8%</text>
+<text x="672.0" y="301.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−52.8%</text>
+<text x="672.0" y="327.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−50.3%</text>
+<text x="672.0" y="353.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−59.5%</text>
+<text x="672.0" y="379.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−56.1%</text>
+<text x="758.0" y="82.0" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD → QV</text>
+<g><rect x="699.9" y="72.5" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double</title></g>
+<text x="758.0" y="109.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−60.8%</text>
+<text x="758.0" y="135.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−65.6%</text>
+<text x="758.0" y="179.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−67.5%</text>
+<text x="758.0" y="205.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−67.1%</text>
+<text x="758.0" y="231.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−69.2%</text>
+<text x="758.0" y="257.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−68.8%</text>
+<text x="758.0" y="301.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−59.5%</text>
+<text x="758.0" y="327.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−59.3%</text>
+<text x="758.0" y="353.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−63.3%</text>
+<text x="758.0" y="379.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−62.8%</text>
+<text x="844.0" y="82.0" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD → OV</text>
+<g><polygon points="791.4,71.5 797.9,78.0 791.4,84.5 784.9,78.0" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double</title></g>
+<text x="844.0" y="109.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−61.3%</text>
+<text x="844.0" y="135.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−62.0%</text>
+<text x="844.0" y="179.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−61.2%</text>
+<text x="844.0" y="205.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−61.1%</text>
+<text x="844.0" y="231.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−61.8%</text>
+<text x="844.0" y="257.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−62.0%</text>
+<text x="844.0" y="301.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−56.3%</text>
+<text x="844.0" y="327.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−56.0%</text>
+<text x="844.0" y="353.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−57.4%</text>
+<text x="844.0" y="379.0" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">−57.8%</text>
+<g opacity="0.35"><line x1="608.0" y1="388.0" x2="550.0" y2="388.0" stroke="#52514e" stroke-width="2"/><polygon points="544.0,388.0 553.0,384.0 553.0,392.0" fill="#52514e"/><text x="576.0" y="381.0" font-size="11" fill="#52514e" text-anchor="middle" transform="rotate(360.0 576.0 388.0)">faster</text></g>
+<circle cx="172.0" cy="131.0" r="10" fill="none" stroke="#0b0b0b" stroke-width="1.5"/>
+<line x1="180.5" y1="136.2" x2="208.0" y2="153.0" stroke="#0b0b0b" stroke-width="1"/>
+<text x="212.0" y="157.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">largest gain</text>
+<circle cx="297.5" cy="297.0" r="10" fill="none" stroke="#0b0b0b" stroke-width="1.5"/>
+<line x1="306.9" y1="293.7" x2="337.5" y2="283.0" stroke="#0b0b0b" stroke-width="1"/>
+<text x="341.5" y="287.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">the π/2 reduction stays scalar</text>
+<text x="16.0" y="464.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">multidouble 4f82648  ·  examples/lane_speedups.rs  ·  Apple M5, 32 GB, macOS 27.0.1</text>
+<text x="16.0" y="448.0" font-size="10" fill="#c98500" text-anchor="start" font-weight="normal">⚠</text>
+<text x="30.0" y="448.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">load average 5–7 during the runs; a repeat run moved every change by at most 2.8 points</text>
+<a href="https://github.com/nmoinvaz/multidouble"><text x="874" y="464" font-size="10" fill="#52514e" text-anchor="end" text-decoration="underline">github.com/nmoinvaz/multidouble</text></a>
+</svg>
