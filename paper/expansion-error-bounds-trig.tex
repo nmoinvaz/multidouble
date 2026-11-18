@@ -1,0 +1,191 @@
+% The sine, cosine and tangent of multidouble (src/trig.rs), generalized to n parts: an exact reduction by pi/2, Taylor
+% series by Horner's scheme, and the bounds from Lemma 20 at every step, or from the published double-word bounds.
+% \input after the sloppy section of expansion-error-bounds.tex, whose macros and labels it uses. Constants:
+% trig_consts.py.
+
+\section{Sine, cosine and tangent}\label{sec:trig}
+
+The functions reduce $x$ by $\pi/2$ exactly, evaluate the Taylor series of $\sin r$ and $\cos r$ with the operations
+of the earlier sections, and recombine. Throughout, $p = 53$, $n$ is even, and $T_n = 2^{-53n/2}$, so that $T_n^2 =
+u^n$.
+
+\paragraph{Reduction} Let $F = 1216$, $P = \lfloor 2^F\pi/2 \rceil$ (an integer), $c = \RN(2/\pi)$ and $\tau =
+\RN(0.7854)$, with $\lfloor\cdot\rceil$ the nearest integer, halves away from zero. RED takes a finite $n$-part $x$ with
+$|x_0| \le 2^{52}$ and sets $k \gets \lfloor\RN(x_0c)\rceil$. If $k = 0$ it returns $q = 0$ and $r = x$. Otherwise
+it forms the integer $N = 2^F\sum_i x_i - kP$ exactly. If $|\RN(2^{-F}N)| > \tau$, it sets $k_2 \gets
+\lfloor\RN(\RN(2^{-F}N)\,c)\rceil$, $N \gets N - k_2P$ and $k \gets k + k_2$. It returns $q = k \bmod 4$ and the
+greedy rounding $r$ of $2^{-F}N$ to $n$ parts: $r_0 = \RN(2^{-F}N)$ and $r_i = \RN(2^{-F}N - \sum_{l<i}r_l)$. In
+multidouble $N$ is a two's-complement integer of 1280 bits. $P$ and $c$ come from Machin's formula in exact integer
+arithmetic, checked against Gauss's formula (\texttt{scripts/trig\_tables.py}).
+
+\paragraph{Evaluation} For $j \ge 0$ let $R_0 = 0.78541$ and $R_j = 2^{-j}(1 + 2^{-50})$ for $j \ge 1$. Bucket $j$ holds
+the $r$ with $2^{-j-1} \le |r_0| < 2^{-j}$, and $[\frac12, \tau]$ for $j = 0$. $K_{\rm s}(j)$ is the least $K \ge 2$
+with $R_j^{2K}/(2K+1)! \le 2^{-10}u^n(1 - R_j^2/6)$, and $K_{\rm c}(j)$ the least with $R_j^{2K}/(2K)! \le
+2^{-10}u^n(1 - R_j^2/2)$. Let $s_k = (-1)^k/(2k+1)!$ and $c_k = (-1)^k/(2k)!$, and let $\hat s_k$ and $\hat c_k$ be
+their greedy $n$-part roundings. For $|r_0| < T_n$, $\textrm{SINR}(r) = r$ and $\textrm{COSR}(r) = 1$. Otherwise,
+with $z = \mathrm{MUL}(r, r)$, $K = K_{\rm s}(j)$ for SINR and $K_{\rm c}(j)$ for COSR,
+\begin{gather*}
+p_{K-1} = \hat s_{K-1}, \quad p_k = \mathrm{ADD}(\mathrm{MUL}(z, p_{k+1}), \hat s_k), \\
+\textrm{SINR}(r) = \mathrm{ADD}\bigl(r, \mathrm{MUL}(r, \mathrm{MUL}(z, p_1))\bigr),
+\end{gather*}
+for $k = K-2, \dots, 1$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z, p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$.
+
+\paragraph{The functions} For $|x_0| < T_n$, SIN$_n(x) = x$, COS$_n(x) = 1$ and TAN$_n(x) = x$. Otherwise, with $(q, r)
+= \mathrm{RED}(x)$, $Y_{\rm s} = \mathrm{SINR}(r)$ and $Y_{\rm c} = \mathrm{COSR}(r)$, SIN$_n$ returns $Y_{\rm s}$,
+$Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$ for $q = 0, 1, 2, 3$, COS$_n$ returns $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$,
+$Y_{\rm s}$, and TAN$_n$ returns DIV$(Y_{\rm s}, Y_{\rm c})$ for even $q$ and $-$DIV$(Y_{\rm c}, Y_{\rm s})$ for odd
+$q$. At $n = 8$ these are multidouble's \texttt{OD::sin}, \texttt{cos} and \texttt{tan}. Its \texttt{DD} versions run the
+same steps with DWTimesDW3 for MUL, AccurateDWPlusDW for ADD, DWPlusFP for ADDF and DWDivDW2 for DIV~\cite{JMP17}.
+\begin{lemma}\label{lem:red}
+Assume~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$, and let $(q, r) = \mathrm{RED}(x)$.
+Then $|k| < 2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\pi/2$ and $A = |k|\,2^{-1217}$:
+\begin{enumerate}
+\item[(a)] if $k = 0$, $r = x$ and $|r| \le 0.785399$;
+\item[(b)] otherwise $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2A$, $|r| \le R_0$, and $|r_{i+1}| \le \frac12\ulp(r_i)$,
+  so $r$ satisfies $H(1)$.
+\end{enumerate}
+In both cases $r$ in bucket $j$ has $|r| \le R_j$, and its parts satisfy $|r_i| \le \bar\alpha_i|r|$ with
+$\bar\alpha_i = (2u)^i(1-2u)/(1-4u)$.
+\end{lemma}
+
+\begin{proof}
+Each $x_i$ is a multiple of $2^{-1074}$, so $2^F\sum_i x_i$ is an integer, and $N$ is computed exactly; $|N|$ stays
+below $2^{F+54}$. Write $v = 2^{-F}N$, so $v = r_{\rm e} + k(\pi/2 - 2^{-F}P)$ and $|v - r_{\rm e}| \le A$. By $H(2)$,
+$|x - x_0| \le 2u|x_0|/(1-2u)$, so with $|c - 2/\pi| \le 2^{-54}$, \eqref{eq:rn} and $|x_0| \le 2^{52}$,
+$|2x/\pi - \RN(x_0c)| \le 0.32 + 0.25 + 0.64 < 1.21$. So $|v| < 1.71\cdot\pi/2 + A < 2.7$ before the
+correction, and $|k| < 2^{52}$. If $|\RN(v)| \le \tau$, then $|v| \le \tau(1+u)$. Otherwise the same estimate with
+$|v| < 2.7$ gives $|2v/\pi - k_2| \le \frac12 + 2^{-51}$, so the new $|v| \le \pi/4 + 2^{-50} < \tau$. In both
+cases $|v| \le \tau(1+u) < R_0$. (a) $\lfloor\RN(x_0c)\rceil = 0$ means $|\RN(x_0c)| < \frac12$, so $|x_0| < \frac\pi4(1+u)/(1-u) < 0.7853982$, and
+$|x| \le |x_0|/(1-2u)$. (b) By \eqref{eq:rn}, each
+remainder of the greedy rounding is at most $u_*$ times the one before, so $|r - v| \le u_*^n|v|$, and $|r_{i+1}| \le
+\frac12\ulp(r_i)$; then $|r - r_{\rm e}| \le u_*^n(|r_{\rm e}| + A) + A$. The bucket bounds follow from $|r| \le
+|r_0|/(1-2u)$, and the part bounds from \eqref{eq:a0} with $\rho = 2u$, since $H(1)$ implies $H(2)$.
+\end{proof}
+
+The evaluation is a program of the operations of Lemma~\ref{lem:g}, in the notation $(\epsilon, \pi) =
+G_{\rm op}(\alpha, \beta;\ \bar Z)$ of Theorem~\ref{thm:t7}. Its bounds are those of Lemma~\ref{lem:g} applied in
+turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket $j$ with
+$R = R_j$ and $K = K_{\rm s}(j)$, let $\sigma_k$ be the magnitudes of the parts of $\hat s_k$, $\delta_k = |\hat s_k -
+s_k|$, $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar\alpha, \bar\alpha;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} =
+\sigma_{K-1}$, and for $k = K-2, \dots, 1$
+\begin{align*}
+(\epsilon_m, \mu) &= G_{\rm MUL}\bigl(R^2\zeta, \pi^{(k+1)};\ R^2(1+\epsilon_z)(|s_{k+1}| + E_{k+1})\bigr), \\
+D_k &= R^2(1+\epsilon_z)E_{k+1} + R^2\epsilon_z|s_{k+1}| + \delta_k + \epsilon_m, \\
+(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, \sigma_k;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
+\end{align*}
+Then let
+\begin{align*}
+(\epsilon_t, \tau') &= G_{\rm MUL}\bigl(\zeta, \pi^{(1)};\ (1+\epsilon_z)(|s_1| + E_1)\bigr), \\
+E_t &= (1+\epsilon_z)E_1 + \epsilon_z|s_1| + \epsilon_t, \\
+(\epsilon_w, \omega) &= G_{\rm MUL}\bigl(\bar\alpha, \tau';\ |s_1| + E_t\bigr), \\
+D &= R^2(E_t + \epsilon_w) + R^{2K}/(2K+1)!, \\
+(\epsilon_y, \psi_{\rm s}) &= G_{\rm ADD}\bigl(\bar\alpha, R^2\omega;\ 1 + D\bigr), \\
+E_{\rm S} &= (1+u^n)D + \epsilon_y - u^n(1+D),
+\end{align*}
+and $\delta_{\rm S} = u^n + E_{\rm S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same recursion with the
+parts of $\hat c_k$ gives $E_1$ and $\pi^{(1)}$, and with $|c_1| = \frac12$
+\begin{align*}
+(\epsilon_t, \tau') &= G_{\rm MUL}\bigl(\zeta, \pi^{(1)};\ (1+\epsilon_z)(\tfrac12 + E_1)\bigr), \\
+E_t &= (1+\epsilon_z)E_1 + \tfrac12\epsilon_z + \epsilon_t, \quad D_{\rm c} = R^2E_t + \frac{R^{2K}}{(2K)!}, \\
+(\epsilon_y, \psi_{\rm c}) &= G_{\rm ADDF}\bigl(R^2\tau', 1;\ 1 + D_{\rm c}\bigr), \\
+E_{\rm C} &= (1+u^n)D_{\rm c} + \epsilon_y - u^n(1+D_{\rm c}),
+\end{align*}
+and $\delta_{\rm C} = u^n + E_{\rm C}/\cos_- R$, where $\cos_- R = 1 - R^2/2 + R^4/24 - R^6/720 \le \cos R$. For the
+bucket $|r_0| < T_n$, $\delta_{\rm S} = T^2/(6 - T^2)$ and $\delta_{\rm C} = T^2/(2\cos_- T)$ with $T = T_n(1 +
+2^{-50})$.
+
+\begin{lemma}\label{lem:sincosr}
+Assume~\ref{as:fp} and $(n^2+n)u < 1$, and let $r$ be in bucket $j$ with $|r| \le R_j$ and $|r_i| \le
+\bar\alpha_i|r|$. Then $|\textrm{SINR}(r) - \sin r| \le \delta_{\rm S}|\sin r|$ and $|\textrm{COSR}(r) - \cos r| \le
+\delta_{\rm C}\cos r$, and the parts of SINR$(r)$ and COSR$(r)$ are at most $\psi_{\rm s}|r|$ and $\psi_{\rm c}$.
+\end{lemma}
+
+\begin{proof}
+Let $z_{\rm e} = r^2$ and $p^{\rm e}_k = \sum_{l=k}^{K-1}s_lz_{\rm e}^{\,l-k}$. Since $z_{\rm e} \le R^2 < 1$, the terms
+of $p^{\rm e}_k$ alternate in sign and decrease, so $|p^{\rm e}_k| \le |s_k|$. Lemma~\ref{lem:g} gives $|z - z_{\rm
+e}| \le \epsilon_z\rho^2$, part bounds $\zeta\rho^2$, and $|z| \le (1+\epsilon_z)R^2$. By induction from $k = K-1$,
+$|p_k - p^{\rm e}_k| \le E_k$ and $p_k$ has part bounds $\pi^{(k)}$: with $m = \mathrm{MUL}(z, p_{k+1})$,
+\[
+p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (\hat s_k - s_k) + \hat\epsilon_m
++ \hat\epsilon_a,
+\]
+where $\hat\epsilon_m = m - zp_{k+1}$ and $\hat\epsilon_a = p_k - (m + \hat s_k)$ are bounded by Lemma~\ref{lem:g},
+whose third arguments bound $|zp_{k+1}|$ and $|m + \hat s_k|$. The same expansion gives $|t - z_{\rm e}p^{\rm e}_1|
+\le E_t\rho^2$ for $t = \mathrm{MUL}(z, p_1)$, and $|w - rz_{\rm e}p^{\rm e}_1| \le (E_t + \epsilon_w)\rho^3 \le
+R^2(E_t + \epsilon_w)\rho$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\omega\rho^3$ are at most $R^2\omega\rho$.
+The series' remainder after $K$ terms is at most its first omitted term, so $|r + rz_{\rm e}p^{\rm e}_1 - \sin r| \le
+\rho R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D\rho$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
+w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, so
+$|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. COSR is the same
+with $|c_1| = \frac12$ and the absolute units of ADDF, and $\cos r \ge \cos_- R$. For $|r_0| < T_n$, $|\sin r - r| \le
+\rho^3/6$ and $|1 - \cos r| \le \rho^2/2$.
+\end{proof}
+
+For the quotient, let $\theta_j \ge 1$ be the least value, rounded up, with $\psi_{{\rm s},i} \le (\theta_ju)^i\lambda_{\rm s}$
+and $\psi_{{\rm c},i} \le (\theta_ju)^i\lambda_{\rm c}$ for $i \ge 1$, where $\lambda_{\rm s} = (1 - R^2/6)(1 -
+\delta_{\rm S}) - \sum_{i \ge 1}\psi_{{\rm s},i}$ and $\lambda_{\rm c} = \cos_-R\,(1 - \delta_{\rm C}) - \sum_{i \ge
+1}\psi_{{\rm c},i}$ bound the leading parts from below ($\theta_j = 2$ for $|r_0| < T_n$), and let $\delta_{\rm D} =
+u^n + K_nu^{n+1}$ with $K_n$ that of Theorem~\ref{thm:t6} at $\theta = \theta_j$.
+
+\begin{theorem}\label{thm:trig}
+Assume~\ref{as:fp} with $p = 53$, $n$ even with $(n^2+n)u < 1$, and let $x$ be finite with $|x_0| \le 2^{52}$
+satisfying $H(2)$, $f \in \{\sin, \cos\}$, $A = |k|\,2^{-1217}$ and $\epsilon = 1 + 2u^n$. For each bucket $j$, let
+\begin{align*}
+C_j &= \epsilon\max\bigl(\delta_{\rm S} + \epsilon u^n,\ \delta_{\rm C} + \epsilon u^nR_j\tan_+ R_j\bigr), \\
+C^{\rm T}_j &= \epsilon\Bigl(\max\Bigl(\frac{(1+\delta_{\rm S})(1+\delta_{\rm D})}{1 - \delta_{\rm C}},
+  \frac{(1+\delta_{\rm C})(1+\delta_{\rm D})}{1 - \delta_{\rm S}}\Bigr) \\
+&\qquad - 1 + \epsilon u^n\frac{2R_j}{\sin_-2R_j}\Bigr),
+\end{align*}
+with $\sin_-$ and $\sin_+$ the Taylor sums of $\sin$ ending with the terms of orders seven and five, and $\tan_+ =
+\sin_+/\cos_-$, let $C$ and $C^{\rm T}$ be the largest $C_j$ and $C^{\rm T}_j$ over the buckets, including $|r_0| < T_n$, and at least
+$T^2/(2\cos_-T)$ and $\tan_+(T)/T - 1$, the errors of the returns for $|x_0| < T_n$. Then
+\begin{gather*}
+|\mathrm{SIN}_n(x) - \sin x| \le C|\sin x| + 5A, \\
+|\mathrm{COS}_n(x) - \cos x| \le C|\cos x| + 5A, \\
+|\mathrm{TAN}_n(x) - \tan x| \le \Bigl(C^{\rm T} + \frac{5A}{|\sin x\cos x|}\Bigr)|\tan x|.
+\end{gather*}
+At $n = 8$, $C \le 3.163167\,u^8$ and $C^{\rm T} \le 6.418351\,u^8$. With the double-word bounds of DWTimesDW3,
+$(4u^2 + u^3/2)/(1+u)^2$ \cite{MR22}, AccurateDWPlusDW, $3u^2/(1-4u)$, DWPlusFP, $2u^2$, and DWDivDW2, $15u^2 +
+56u^3$ \cite{JMP17}, in place of Lemma~\ref{lem:g} and Theorem~\ref{thm:t6}, the bounds hold for multidouble's
+double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.841411\,u^2$ and $C^{\rm T} \le 28.414065\,u^2$. Since $|k| < 2^{52}$, $5A <
+2^{-1163}$.
+\end{theorem}
+
+\begin{proof}
+If $|x_0| < T_n$, $|x| < T(1-2u)^{-1}$, and the returned $x$, $1$ and $x$ err by at most $|x|^3/6$, $x^2/2$ and $\tan|x|
+- |x|$, within the stated $C$ and $C^{\rm T}$. Otherwise Lemma~\ref{lem:red} gives $r$ in bucket $j$ with the
+hypotheses of Lemma~\ref{lem:sincosr}, and $f(x) = \pm\sin r_{\rm e}$ or $\pm\cos r_{\rm e}$ by the quadrant, as SIN$_n$
+and COS$_n$ return. Let $\eta = |r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2A$ (zero for $k = 0$). For the sine,
+$|\sin r - \sin r_{\rm e}| \le \eta\cos\xi$ with $\xi$ between $r$ and $r_{\rm e}$, and $\cos\xi \le \cos|r_{\rm e}| +
+\eta$; with $|r_{\rm e}|\cos|r_{\rm e}| \le \sin|r_{\rm e}|$ and $|r_{\rm e}| \le 1.12\sin|r_{\rm e}|$ this is at most
+$u^n(1+u^n)|\sin r_{\rm e}| + 4A$. With Lemma~\ref{lem:sincosr} and $|\sin r| \le (1 + 1.2u^n)|\sin r_{\rm e}| + 2A$,
+$|\mathrm{SINR}(r) - \sin r_{\rm e}| \le C_j|\sin r_{\rm e}| + 5A$, as $\delta_{\rm S} \le 1/4$. For the cosine,
+$|\cos r - \cos r_{\rm e}| \le \eta(\sin|r_{\rm e}| + \eta) \le u^n(1+u^n)|r_{\rm e}|\tan|r_{\rm e}|\cos r_{\rm e} +
+4A$, and the same steps give the second term of $C_j$. For the tangent, $|\tan r - \tan r_{\rm e}| = |\sin(r - r_{\rm
+e})|/|\cos r\cos r_{\rm e}| \le \eta/|\cos r\cos r_{\rm e}|$, which relative to $|\tan r_{\rm e}|$ is at most
+$\epsilon u^n\,2|r_{\rm e}|/\sin 2|r_{\rm e}| + 3A/|\sin r_{\rm e}\cos r_{\rm e}|$, and $2t/\sin 2t$ increases. With
+$Y_{\rm s} = \sin r\,(1 + \hat\sigma)$, $Y_{\rm c} = \cos r\,(1 + \hat\gamma)$, $|\hat\sigma| \le \delta_{\rm S}$ and
+$|\hat\gamma| \le \delta_{\rm C}$, the parts of $Y_{\rm s}$ and $Y_{\rm c}$ satisfy $H(\theta_j)$, so
+Theorem~\ref{thm:t6} gives DIV$(Y_{\rm s}, Y_{\rm c}) = (Y_{\rm s}/Y_{\rm c})(1 + \hat d)$ with $|\hat d| \le
+\delta_{\rm D}$, and $\tan r\,(1+\hat\sigma)(1+\hat d)/(1+\hat\gamma)$ is within the first term of $C^{\rm T}_j$;
+likewise for $-$DIV$(Y_{\rm c}, Y_{\rm s})$ and $-\cot r$. For the double-double functions
+the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, whose operands are
+double-word numbers, since every algorithm ends with a $\FastTwoSum$ and $r$ and the constants are greedy.
+
+The values are those of \texttt{trig\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers. It
+evaluates one bucket per pair $(K_{\rm s}(j), K_{\rm c}(j))$, the one with the largest $R_j$: every bound above holds
+for all $\rho \le R_j$, and the buckets with the same series lengths lie in its range. It checks that the series
+lengths and constants it derives are those of multidouble's tables.
+\end{proof}
+
+\begin{remark}
+The largest $C_j$ is that of the cosine in bucket 0, at $n = 8$: $0.785473\,u^8$ from the reduction, $u^8$ from the
+last ADDF, and $1.377695\,u^8$ from the rest, mostly the product $t$, whose roundings of $z$, $p_1$ and $t$ each enter
+with a weight near $R_0^2/2$, divided by $\cos R_0$. For $|r_0| < \frac12$ the bounds fall to $2.175822\,u^8$ and
+$4.800526\,u^8$, and for $|r_0| < 2^{-5}$ to $2.000705\,u^8$ and $4.002771\,u^8$. Evaluated at other $n$, the bounds
+are $3.168700\,u^2$ and $6.452138\,u^2$ at $n = 2$, $3.164154\,u^4$ and $6.426154\,u^4$ at $n = 4$, and
+$3582.787311\,u^{12}$ and $4929.367335\,u^{12}$ at $n = 12$, where the second term of the multiplication's bound
+dominates (Table~\ref{tab:main}). In multidouble's tests, random arguments, arguments near multiples of $\pi/2$ with
+results down to $2^{-443}$, and arguments near $2^{52}$ give at most $0.09\,u^8$ for the octo-double functions and
+$1.9\,u^2$ and $4.1\,u^2$ for the double-double ones. Whether the bounds are approached is not known.
+\end{remark}

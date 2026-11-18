@@ -8,8 +8,9 @@ plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth.
 
 | File | Contents |
 |---|---|
-| `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex`, `expansion-error-bounds-sloppy.tex` | the source; the appendix holds the proofs, the accumulator file those for sums of products, and the sloppy file that of the sloppy multiply |
+| `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex`, `expansion-error-bounds-sloppy.tex`, `expansion-error-bounds-trig.tex` | the source; the appendix holds the proofs, the accumulator file those for sums of products, the sloppy file that of the sloppy multiply, and the trig file those of the sine, cosine and tangent |
 | `constants.py`, `div_consts.py`, `sqrt_consts.py` | the constants of Theorems 12 and 13, 18, and 21 and 22 in exact rational arithmetic; their outputs are the `.txt` files |
+| `trig_consts.py` | the bounds of the sine, cosine and tangent, Theorem 34, in exact rational arithmetic, for the octo-double functions (Lemma 20 at every step, at n = 2, 4, 8 and 12) and the double-double ones (the published double-word bounds); it checks that its series lengths and constants are those of `src/trig/tables.rs`, and `check` adds controls that must raise the bound; its output is `trig_consts.txt` |
 | `sloppy_consts.py` | the bound of the opt-in sloppy multiply (`OD::sloppy_mul`) and of sums of its products, Theorem 30, in exact rational arithmetic, with a walk of the algorithm's deposits that checks its two-sum and rounding counts; `check` is its control |
 | `sloppy_emu.py` | the sloppy multiply on `fpemu.py`, written from its description: hill climbs against `sloppy_consts.py`'s bound at p = 6 to 53 and n = 3 to 8, the crate's worst found pair bit for bit, and a control that must fire |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
@@ -23,6 +24,8 @@ From this folder:
 python3 constants.py     # prints constants.txt
 python3 div_consts.py    # prints div_consts.txt
 python3 sqrt_consts.py   # prints sqrt_consts.txt
+python3 trig_consts.py   # prints trig_consts.txt (about a minute)
+python3 trig_consts.py check   # also the controls, prints PASS
 python3 example_n3.py .  # prints PASS
 python3 sqrt_bits.py 2000          # prints 2000 inputs, 0 mismatches
 python3 sqrt_bits.py 300 1 accumulator/acc_check/Cargo.toml control   # prints 300 inputs, 300 mismatches (control)
