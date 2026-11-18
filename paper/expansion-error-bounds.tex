@@ -298,7 +298,9 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 \begin{table}[H]
 \centering
 \caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
-ladder and a floating-point number $f$. $Z$ is the exact result.}
+ladder and a floating-point number $f$. $Z$ is the exact result. Each bound assumes no underflow inside the run; for
+$e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
+(A2$'$)).}
 \label{tab:summary}
 \small
 \begin{tabular}{@{}ll@{}}
@@ -321,7 +323,7 @@ $\sin x$, $\cos x$ & $3.17\,u^8|Z| + 5|k|2^{-1217}$, $|x_0| \le 2^{52}$ \\
 & not known \\ \addlinespace
 $\tan x$ & $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)\,|Z|$ \\
 & not known \\ \addlinespace
-$e^a$ & $3.661\,u^8|Z|$ \\
+$e^a$ & $3.661\,u^8|Z| + 2^{-1071}$ \\
 & not known \\ \addlinespace
 $\ln a$ & $9.926\,u^8|Z| + 2^{-509}$ \\
 & not known \\
@@ -354,7 +356,9 @@ double-double square root, the first with its second-order term, errs by at most
 \end{theorem}
 
 The exponential and the logarithm, built from these operations with each part's bound carried through every step, err
-by at most $3.661\,u^8e^a$ and $9.926\,u^8|\ln a| + 2^{-509}$ at $n = 8$ (Theorems~\ref{thm:exp} and~\ref{thm:log}).
+by at most $3.661\,u^8e^a + 2^{-1071}$ and $9.926\,u^8|\ln a| + 2^{-509}$ at $n = 8$ (Theorems~\ref{thm:exp}
+and~\ref{thm:log}). The logarithm starts from a binary64 logarithm of its own, whose error is proved too
+(Lemma~\ref{lem:lnb}), so no bound rests on the platform's logarithm.
 
 The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
 so is a sum whose operands' leading parts have one sign (Corollary~\ref{cor:closure}), so the bounds apply at every
@@ -522,8 +526,23 @@ of Proposition~\ref{prop:acc-low}. A reviewer who had seen neither these scripts
 section with its own emulator. Its model of the accumulator matches multidouble bit for bit, the bound held on
 random, sharp and hill-climbed inputs at precisions 8 to 53, and its controls fired.
 
+The constants of the exponential and the logarithm were evaluated in exact rational arithmetic
+(\texttt{explog\_consts.py}), which also samples the convexity that the logarithm's chords use, on every case at $k =
+0$ and four at $k \ne 0$, with a concave function as the control. The emulator's operations run EXP and LOG as the
+appendix states them (\texttt{explog\_bits.py}) and give multidouble's \texttt{OD::exp}, \texttt{OD::ln},
+\texttt{DD::exp} and \texttt{DD::ln} bit for bit on 3746 arguments, random, near 0, near multiples of $\frac12\ln 2$,
+near 1, subnormal, and with parts at the top of the ladder; their results are within the bounds against Python's
+correctly rounded exp and ln at 1300 digits. Controls that halve the Taylor degree or move the logarithm's start by
+$2^{-20}$ mismatch and break the bounds. The same script hooks every product, fused multiply-add and quotient of the
+steps to find which leave the normal range (Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor
+degree that must find some. A reviewer's code, written from an earlier text of the appendix and sharing no code with
+\texttt{explog\_consts.py} (\texttt{review/}), recomputes the largest cases of Theorems~\ref{thm:exp}
+and~\ref{thm:log}, $3.660060\,u^8$ and $9.925819\,u^8$, and the absolute term $2^{-509.17}$, to the digits the script
+prints; the degree of step (3) and the cases chosen by $U$, which it does not model, leave those digits unchanged.
+
 Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
-meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}.
+meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}. They check the bounds of the exponential and
+the logarithm the same way against a reference accurate to $2^{-1600}$, which is checked against planted truth.
 
 \section*{How this work was done}
 
@@ -573,6 +592,9 @@ doi:10.1145/3484514.
 de Lyon, 2017. HAL tel-01534090.
 \bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
 132--143, 1991. doi:10.1109/ARITH.1991.145549.
+\bibitem{QD237} Y. Hida, X. S. Li, D. H. Bailey. QD, a double-double and quad-double library, version 2.3.7: the
+functions \texttt{exp} and \texttt{log} of \texttt{src/dd\_real.cpp} and \texttt{src/qd\_real.cpp} (source package
+qd 2.3.7, Debian).
 \bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request
 1321, ``compress the expansion before renormalizing addition'', 2026.
 \url{https://github.com/stillwater-sc/universal/pull/1321}.
