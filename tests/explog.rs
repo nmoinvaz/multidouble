@@ -34,6 +34,7 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::exact::{BigU, Dy};
+use multidouble::native;
 use multidouble::od::OD;
 use multidouble::qd::QD;
 
@@ -966,7 +967,8 @@ fn controls_fire() {
     assert!(silent.is_empty(), "controls that did not fire: {silent:?}");
 }
 
-/// time per call of each function, on arguments spread over the range
+/// time per call of each function, on arguments spread over the range, and per value of the lane functions on the
+/// compile-time backend, which take 8 values a call
 #[test]
 #[ignore]
 fn timing() {
@@ -984,6 +986,20 @@ fn timing() {
         }
         best * 1e9
     }
+    fn time_lanes<T: Ty, V: Copy>(xs: &[T], load: fn(&[T; 8]) -> V, f: fn(V) -> V, hi: fn(V) -> f64) -> f64 {
+        let vs: Vec<V> = xs.as_chunks::<8>().0.iter().map(load).collect();
+        let mut best = f64::INFINITY;
+        for _ in 0..3 {
+            let t = std::time::Instant::now();
+            let mut acc = 0.0;
+            for &v in &vs {
+                acc += hi(f(std::hint::black_box(v)));
+            }
+            std::hint::black_box(acc);
+            best = best.min(t.elapsed().as_secs_f64() / (8 * vs.len()) as f64);
+        }
+        best * 1e9
+    }
     fn args<T: Ty>(lo: f64, hi: f64) -> Vec<T> {
         let mut r = Rng(5);
         (0..2000)
@@ -996,17 +1012,33 @@ fn timing() {
             })
             .collect()
     }
-    fn row<T: Ty>() {
+    /// the scalar functions of T and the lane functions of V, whose lane 0's leading part is hi
+    fn row<T: Ty, V: Copy>(load: fn(&[T; 8]) -> V, exp: fn(V) -> V, ln: fn(V) -> V, hi: fn(V) -> f64) {
         let e = args::<T>(-700.0, 700.0);
         let l = args::<T>(1e-3, 1e3);
         println!(
-            "{}: exp {:.0} ns, ln {:.0} ns",
+            "{}: exp {:.0} ns, ln {:.0} ns; lanes on {}: exp {:.0} ns, ln {:.0} ns per value",
             T::NAME,
             time(&e, T::exp),
-            time(&l, T::ln)
+            time(&l, T::ln),
+            native::V8::ISA,
+            time_lanes(&e, load, exp, hi),
+            time_lanes(&l, load, ln, hi)
         );
     }
-    row::<DD>();
-    row::<QD>();
-    row::<OD>();
+    row::<DD, native::DV>(
+        |x| {
+            let (hi, lo) = multidouble::dd::split(x);
+            native::DV::load(&hi, &lo)
+        },
+        native::DV::exp,
+        native::DV::ln,
+        |v| v.hi.to_array()[0],
+    );
+    row::<QD, native::QV>(native::QV::from_lanes, native::QV::exp, native::QV::ln, |v| {
+        v.c[0].to_array()[0]
+    });
+    row::<OD, native::OV>(native::OV::from_lanes, native::OV::exp, native::OV::ln, |v| {
+        v.c[0].to_array()[0]
+    });
 }
