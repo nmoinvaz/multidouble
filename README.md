@@ -28,7 +28,8 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 | `od::OD`, `ov::OV` | octo-double, scalar and on 8 lanes, with exact decimal parsing and printing: the quad-double algorithms carried to eight parts and written once for both |
 | `dv::DotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
 
-The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip` and `powi`, and every type
+The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, and `sin`, `cos`,
+`tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216 bits in exact integer arithmetic, and every type
 has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and underflow. Two operations trade accuracy
 for speed. `DD::fast_div` divides with two divisions instead of three, within a proven 15 u² + 56 u³ barring underflow
 and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits. An
@@ -207,6 +208,8 @@ gives up in parentheses.
 | multiply | 5 u² (2.3) | 16 u⁴ (4) | u⁸ (0), proven |
 | divide | 8 u² (3) | 32 u⁴ (5) | u⁸ (0), proven |
 | square root | 25/8 u² (1.6), proven | 32 u⁴ (5) | 3 u⁸ (1.6), proven |
+| sin, cos | 7.85 u² (3.0), proven | 32 u⁴ (5) | 3.17 u⁸ (1.7), proven |
+| tan | 28.5 u² (4.8), proven | 64 u⁴ (6) | 6.42 u⁸ (2.7), proven |
 
 A proven bound holds for every input. The double-double add's is Theorem 3.1 of Joldes, Muller and Popescu (2017),
 `fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022) proved formally, and the double-double square root's
@@ -214,6 +217,14 @@ is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algor
 [the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵ of the first. The other bounds
 are the thresholds the tests check.
 
+- The sine, cosine and tangent are relative to the exact value for |x| up to 2⁵², next to the multiples of π/2 too,
+  as their reduction is exact up to π/2's 1216 fraction bits, an absolute 2⁻¹¹⁶³ aside. Beyond 2⁵² they return NaN.
+  The double-double bounds follow from the published bounds of the double-word algorithms they use (DWTimesDW3, which
+  Muller and Rideau (2022) bound by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the
+  paper's bounds of each operation, and the tests compare all three types against a 2200-bit reference. Random and
+  constructed arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.9 u² for the
+  double-double sin and cos and 4.1 u² for its tan, 1.3 u⁴ and 7.2 u⁴ for the quad-double ones, and 0.09 u⁸ for the
+  octo-double ones (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
 - The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
   promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
   measured on the residual of its quotient.
