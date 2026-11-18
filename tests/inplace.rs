@@ -4,18 +4,23 @@
 //! f64-tangent lanes, the jets (`QJet<24>` among them, and `OJet<24>` in optimized builds) and the counting lane,
 //! `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`,
 //! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`, and the split sums `cs_par`, `cs_range_par` and `cs_w_par`,
-//! against `cs`, `cs_range` and `cs_w`. Each check has a control that must fail, the same comparison of a sum with two
-//! of its terms swapped, and for the field sums also of a sum without its last term.
+//! against `cs`, `cs_range` and `cs_w`; the order-k sums one lane vector at a time, `cs_lane_at` and `cs_w_lane_at`,
+//! and split, `cs_at_par`, `cs_range_at_par` and `cs_w_at_par`, against `cs_at`, `cs_range_at` and `cs_w_at`, on
+//! random inputs and on jets holding signed zeros, zero parts, extreme magnitudes, infinities and NaNs. Each check has
+//! a control that must fail, the same comparison of a sum with two of its terms swapped, for the field sums also of a
+//! sum without its last term, and for the split order-k sums of a sum with one term moved by an ulp.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
 use multidouble::dv::{DotAcc, DV};
 use multidouble::field::{
-    cs, cs_into, cs_lane_into, cs_par, cs_range, cs_range_into, cs_range_par, cs_splits, cs_w, cs_w_into,
-    cs_w_lane_into, cs_w_par, Fl,
+    cs, cs_at, cs_at_cost, cs_at_par, cs_at_splits, cs_into, cs_lane_at, cs_lane_into, cs_par, cs_range, cs_range_at,
+    cs_range_at_par, cs_range_into, cs_range_par, cs_splits, cs_w, cs_w_at, cs_w_at_par, cs_w_into, cs_w_lane_at,
+    cs_w_lane_into, cs_w_par, Fl, CS_AT_PAR_MIN,
 };
 use multidouble::jet::{Jet, OJet, QJet};
+use multidouble::od::OD;
 use multidouble::ov::{ODotAcc, OV};
 use multidouble::qv::{QDotAcc, QV};
 use multidouble::simd::{self, Kernel, Simd};
@@ -710,7 +715,295 @@ impl Check for Sums {
             "{be} {name}: {checks} in-place and split sums matched, {split} of them split; the controls caught \
              {caught} and {caught_par} of {controls} swaps and {dropped} and {dropped_par} of {controls} dropped terms"
         );
+        at_sums::<T>(&mut r, be, name);
     }
+}
+
+/// x with the leading part of lane 0 of coefficient 0 of its lane vector 0 moved by one ulp (jets only)
+fn ulp_moved<T: Gen>(x: &Fl<T, B>) -> Fl<T, B> {
+    let mut f = *x;
+    let v = f.0[0].coef_od(0);
+    let mut lanes: [_; 8] = std::array::from_fn(|i| v.lane(i));
+    lanes[0].x[0] = f64::from_bits(lanes[0].x[0].to_bits() + 1);
+    f.0[0].set_coef_od(0, OV::from_lanes(&lanes));
+    f
+}
+
+/// Terms of the series in the order-k checks: ORDERS, or on a jet lane enough that its last sum splits at the last
+/// coefficient (`cs_at_splits`), 616 on `Jet<5>`, whose products weigh least
+fn split_terms<T: Lane>() -> usize {
+    match T::NJ {
+        0 => ORDERS,
+        nj => (CS_AT_PAR_MIN / (cs_at_cost::<T>() * nj) + 1).max(ORDERS),
+    }
+}
+
+/// The series indices of the order-k checks for n terms: those below ORDERS, and n - 2 and n - 1
+fn indices(n: usize) -> Vec<usize> {
+    let mut js: Vec<usize> = (0..ORDERS).collect();
+    js.extend([n - 2, n - 1].into_iter().filter(|&j| j >= ORDERS));
+    js
+}
+
+/// The order-k sums at every coefficient k of the jet variable (k = 0 alone on the other lanes), for the series indices
+/// `indices(split_terms)` with the ranges 0..=j, j/3..=j - j/4 and an empty one, each written over a random destination:
+/// `cs_lane_at` and `cs_w_lane_at` against lane vector b of `cs_range_at` and `cs_w_at`, and `cs_at_par`,
+/// `cs_range_at_par` and `cs_w_at_par` against `cs_at`, `cs_range_at` and `cs_w_at`, which must split some sums of
+/// every jet lane and none of the other lanes. Control: every split range sum with x[lo] moved by one ulp in its
+/// leading part (`ulp_moved`) differs from the reference.
+fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
+    let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
+    let n = split_terms::<T>();
+    let x: Vec<Fl<T, B>> = (0..n).map(|_| field(r)).collect();
+    let y: Vec<Fl<T, B>> = (0..n).map(|_| field(r)).collect();
+    let (x, y) = (&x[..], &y[..]);
+    let w = |i: usize| (2 * i + 1) as f64;
+    let (mut checks, mut split, mut controls, mut caught) = (0, 0, 0, 0);
+    for j in indices(n) {
+        for k in 0..T::NJ.max(1) {
+            let bg = field(r);
+            let (mut want, mut out) = (bg, bg);
+            cs_at(&mut want, x, y, j, k);
+            cs_at_par(&mut out, x, y, j, k);
+            assert_eq!(fl_bits(&out), fl_bits(&want), "{be} {name}: cs_at_par, j {j}, k {k}");
+            split += cs_at_splits::<T>(j + 1, k) as usize;
+            checks += 1;
+            for (lo, hi) in [(0, j), (j / 3, j - j / 4), (j + 1, j)] {
+                let (mut want, mut want_w) = (bg, bg);
+                cs_range_at(&mut want, x, y, j, lo, hi, k);
+                cs_w_at(&mut want_w, x, y, j, lo, hi, w, k);
+                for b in 0..B {
+                    let mut o = bg.0[b];
+                    cs_lane_at(&mut o, b, x, y, j, lo, hi, k);
+                    assert!(
+                        same(&o, &want.0[b]),
+                        "{be} {name}: cs_lane_at, j {j}, {lo}..={hi}, k {k}, b {b}"
+                    );
+                    let mut o = bg.0[b];
+                    cs_w_lane_at(&mut o, b, x, y, j, lo, hi, w, k);
+                    assert!(
+                        same(&o, &want_w.0[b]),
+                        "{be} {name}: cs_w_lane_at, j {j}, {lo}..={hi}, k {k}, b {b}"
+                    );
+                }
+                let mut out = bg;
+                cs_range_at_par(&mut out, x, y, j, lo, hi, k);
+                assert_eq!(
+                    fl_bits(&out),
+                    fl_bits(&want),
+                    "{be} {name}: cs_range_at_par, j {j}, {lo}..={hi}, k {k}"
+                );
+                // the weights taken on rayon's workers, where only a split sum's tasks run
+                let on_pool = AtomicUsize::new(0);
+                let wp = |i: usize| {
+                    on_pool.fetch_add(rayon::current_thread_index().is_some() as usize, Ordering::Relaxed);
+                    w(i)
+                };
+                let mut out = bg;
+                cs_w_at_par(&mut out, x, y, j, lo, hi, wp, k);
+                assert_eq!(
+                    fl_bits(&out),
+                    fl_bits(&want_w),
+                    "{be} {name}: cs_w_at_par, j {j}, {lo}..={hi}, k {k}"
+                );
+                let splits = hi >= lo && cs_at_splits::<T>(hi - lo + 1, k);
+                assert_eq!(
+                    on_pool.load(Ordering::Relaxed) > 0,
+                    splits,
+                    "{be} {name}: cs_w_at_par, j {j}, {lo}..={hi}, k {k}: weights on rayon's workers, the sum splits: \
+                     {splits}"
+                );
+                split += 2 * splits as usize;
+                checks += 2 + 2 * B;
+                if splits {
+                    let mut xs = x.to_vec();
+                    xs[lo] = ulp_moved(&xs[lo]);
+                    let mut out = bg;
+                    cs_range_at_par(&mut out, &xs, y, j, lo, hi, k);
+                    controls += 1;
+                    caught += (fl_bits(&out) != fl_bits(&want)) as usize;
+                }
+            }
+        }
+    }
+    assert_eq!(
+        split > 0,
+        T::NJ > 0,
+        "{be} {name}: {split} order-k sums split, a jet lane must split some and another lane none"
+    );
+    assert_eq!(
+        caught, controls,
+        "{be} {name}: control: a split order-k sum with a term moved by an ulp has the reference's bits"
+    );
+    println!(
+        "{be} {name}: {checks} order-k lane and split sums matched, {split} of them split; the control caught {caught} \
+         of {controls} terms moved by an ulp"
+    );
+}
+
+/// A jet of random coefficients (`Gen`) with special values in its lanes. At level 0 each lane of each coefficient has
+/// a one in two chance of +0, -0, a value with zero lower parts or one of magnitude about 2^-1000 (whose products
+/// underflow); level 1 adds magnitudes about 2^1000 (whose products overflow), and level 2 also +inf, -inf or NaN at
+/// about one lane in 64.
+fn edge_jet<T: Gen>(r: &mut Rng, level: u8) -> T {
+    let mut x = T::gen(r);
+    for k in 0..T::NJ {
+        let lanes: [OD; 8] = std::array::from_fn(|i| {
+            let mut d = x.coef_od(k).lane(i);
+            let u = r.next_u64();
+            let s = if u & 1 == 0 { 1.0 } else { -1.0 };
+            match (u >> 1) % 8 {
+                0 => d.x = [0.0; 8],
+                1 => d.x = [-0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                2 => d.x[1..].fill(0.0),
+                3 => d = OD::new(d.x.map(|p| p * 2f64.powi(-1000))),
+                4 if level >= 1 => d.x.iter_mut().for_each(|p| *p *= 2f64.powi(1000)),
+                _ => {}
+            }
+            if level >= 2 && (u >> 8).is_multiple_of(64) {
+                d.x = [
+                    [f64::INFINITY * s, f64::NAN, f64::NAN][((u >> 16) % 3) as usize],
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ];
+            }
+            d
+        });
+        x.set_coef_od(k, OV::from_lanes(&lanes));
+    }
+    x
+}
+
+/// the bits of every part of every lane vector of f, each NaN as one word: two NaNs' sign and payload are the hardware's
+/// choice of operand, which need not agree between two compilations of the same sum
+fn fl_bits_nan<T: Gen>(f: &Fl<T, B>) -> Vec<u64> {
+    fl_bits(f)
+        .into_iter()
+        .map(|w| if f64::from_bits(w).is_nan() { u64::MAX } else { w })
+        .collect()
+}
+
+/// The split order-k sums against `cs_at`, `cs_range_at` and `cs_w_at` on jets with special values (`edge_jet`), finite
+/// and with infinities and NaNs, at every coefficient k and series index `indices(split_terms)` with the ranges 0..=j and
+/// j/3..=j - j/4, each written over a destination with special values, at the three levels of `edge_jet`. Control:
+/// every split range sum of level 0 with the terms x[lo] and y[j - lo] made regular differs from the reference when
+/// x[lo] is moved by one ulp in its leading part (`ulp_moved`). At the other levels a product of 2^1000 or an infinity
+/// can absorb the ulp.
+#[inline(always)]
+fn edge_at_sums<T: Gen>(seed: u64, be: &str, name: &str) {
+    let mut r = Rng(seed);
+    let w = |i: usize| (2 * i + 1) as f64;
+    let (mut checks, mut split, mut nan, mut controls, mut caught) = (0, 0, 0, 0, 0);
+    for level in 0..3 {
+        let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| edge_jet::<T>(r, level)));
+        let n = split_terms::<T>();
+        let x: Vec<Fl<T, B>> = (0..n).map(|_| field(&mut r)).collect();
+        let y: Vec<Fl<T, B>> = (0..n).map(|_| field(&mut r)).collect();
+        for j in indices(n) {
+            for k in 0..T::NJ {
+                let bg = field(&mut r);
+                for (lo, hi) in [(0, j), (j / 3, j - j / 4)] {
+                    let (mut want, mut out) = (bg, bg);
+                    cs_range_at(&mut want, &x, &y, j, lo, hi, k);
+                    cs_range_at_par(&mut out, &x, &y, j, lo, hi, k);
+                    assert_eq!(
+                        fl_bits_nan(&out),
+                        fl_bits_nan(&want),
+                        "{be} {name}: cs_range_at_par, j {j}, {lo}..={hi}, k {k}"
+                    );
+                    let (mut want_w, mut out) = (bg, bg);
+                    cs_w_at(&mut want_w, &x, &y, j, lo, hi, w, k);
+                    cs_w_at_par(&mut out, &x, &y, j, lo, hi, w, k);
+                    assert_eq!(
+                        fl_bits_nan(&out),
+                        fl_bits_nan(&want_w),
+                        "{be} {name}: cs_w_at_par, j {j}, {lo}..={hi}, k {k}"
+                    );
+                    if lo == 0 {
+                        let mut out = bg;
+                        cs_at_par(&mut out, &x, &y, j, k);
+                        assert_eq!(
+                            fl_bits_nan(&out),
+                            fl_bits_nan(&want),
+                            "{be} {name}: cs_at_par, j {j}, k {k}"
+                        );
+                        checks += 1;
+                    }
+                    let splits = cs_at_splits::<T>(hi - lo + 1, k);
+                    split += 2 * splits as usize;
+                    checks += 2;
+                    nan += fl_bits(&want).iter().any(|&w| f64::from_bits(w).is_nan()) as usize;
+                    if splits && level == 0 {
+                        // a regular term lo, whose product an ulp moves
+                        let (mut xs, mut ys) = (x.clone(), y.clone());
+                        xs[lo] = Fl(std::array::from_fn(|_| T::gen(&mut r)));
+                        ys[j - lo] = Fl(std::array::from_fn(|_| T::gen(&mut r)));
+                        let mut want = bg;
+                        cs_range_at(&mut want, &xs, &ys, j, lo, hi, k);
+                        xs[lo] = ulp_moved(&xs[lo]);
+                        let mut out = bg;
+                        cs_range_at_par(&mut out, &xs, &ys, j, lo, hi, k);
+                        controls += 1;
+                        caught += (fl_bits_nan(&out) != fl_bits_nan(&want)) as usize;
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        split > 0 && nan > 0,
+        "{be} {name}: {split} sums split, {nan} with NaNs: the inputs miss their purpose"
+    );
+    assert!(
+        controls > 0 && caught == controls,
+        "{be} {name}: control: {} of {controls} split sums with a term moved by an ulp have the reference's bits",
+        controls - caught
+    );
+    println!(
+        "{be} {name}: {checks} order-k sums of special values matched, {split} of them split, {nan} with NaNs; the \
+         control changed {caught} of {controls} sums"
+    );
+}
+
+/// `edge_at_sums` for T, compiled with the backend's target features, as `own`
+#[inline(never)]
+fn edge_own<S: Simd, T: Gen>(seed: u64, name: &str) {
+    S::vectorize(
+        #[inline(always)]
+        || edge_at_sums::<T>(seed, S::NAME, name),
+    )
+}
+
+/// `split_at_sums_of_special_values` on one backend
+#[derive(Clone)]
+struct EdgeAtSums;
+
+impl Kernel for EdgeAtSums {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        edge_own::<S, Jet<S, 5>>(301, "Jet<5>");
+        edge_own::<S, QJet<S, 5>>(302, "QJet<5>");
+        edge_own::<S, OJet<S, 5>>(303, "OJet<5>");
+        edge_own::<S, Counted<OJet<S, 5>>>(304, "Counted<OJet<5>>");
+        // optimized builds only, as in every_lane
+        if !cfg!(debug_assertions) {
+            edge_own::<S, QJet<S, 24>>(305, "QJet<24>");
+            edge_own::<S, OJet<S, 24>>(306, "OJet<24>");
+        }
+    }
+}
+
+/// The split order-k sums are the serial ones bit for bit on jets holding signed zeros, zero parts, magnitudes that
+/// overflow and underflow, infinities and NaNs, on every backend. Control: a term moved by an ulp changes a split sum.
+#[test]
+fn split_at_sums_of_special_values() {
+    on_every_backend(EdgeAtSums);
 }
 
 /// `in_place_sums_are_the_sums` on one backend
@@ -735,4 +1028,51 @@ impl Kernel for InPlaceSumsAreTheSums {
 #[test]
 fn in_place_sums_are_the_sums() {
     on_every_backend(InPlaceSumsAreTheSums);
+}
+
+/// Control with the crate's built-in breakage: a split order-k sum whose last lane vector is moved by one ulp
+/// (`dual::mutate::CS_AT_SPLIT`) differs from the serial sum, on `Jet<5>`, `QJet<5>` and `OJet<5>`, and without the
+/// mutation it is the serial sum again.
+#[cfg(feature = "mutate")]
+#[test]
+fn control_split_at_sum_moved_by_an_ulp_is_caught() {
+    use multidouble::dual::mutate;
+    use multidouble::native;
+    fn run<T: Gen>(name: &str) {
+        let mut r = Rng(401);
+        let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
+        let n = split_terms::<T>();
+        let x: Vec<Fl<T, B>> = (0..n).map(|_| field(&mut r)).collect();
+        let y: Vec<Fl<T, B>> = (0..n).map(|_| field(&mut r)).collect();
+        let (j, k) = (n - 1, T::NJ - 1);
+        assert!(cs_at_splits::<T>(j + 1, k), "{name}: the sum must split");
+        let mut want = Fl::zero();
+        cs_at(&mut want, &x, &y, j, k);
+        let w = |i: usize| (2 * i + 1) as f64;
+        let mut want_w = Fl::zero();
+        cs_w_at(&mut want_w, &x, &y, j, 0, j, w, k);
+        let (mut out, mut out_w) = (Fl::zero(), Fl::zero());
+        mutate::set(mutate::CS_AT_SPLIT);
+        cs_at_par(&mut out, &x, &y, j, k);
+        cs_w_at_par(&mut out_w, &x, &y, j, 0, j, w, k);
+        mutate::set(0);
+        assert!(
+            fl_bits(&out) != fl_bits(&want),
+            "{name}: control: the moved split sum has the serial sum's bits"
+        );
+        assert!(
+            fl_bits(&out_w) != fl_bits(&want_w),
+            "{name}: control: the moved weighted split sum has its bits"
+        );
+        cs_at_par(&mut out, &x, &y, j, k);
+        assert_eq!(
+            fl_bits(&out),
+            fl_bits(&want),
+            "{name}: the split sum without the mutation"
+        );
+        println!("{name}: the split order-k sums moved by an ulp differ from the serial ones");
+    }
+    run::<native::Jet<5>>("Jet<5>");
+    run::<native::QJet<5>>("QJet<5>");
+    run::<native::OJet<5>>("OJet<5>");
 }
