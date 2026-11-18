@@ -2196,6 +2196,57 @@ fn od_worst_case_inputs() {
     }
 }
 
+/// The parts of a finite OD from their bits
+fn od_bits(b: [u64; 8]) -> OD {
+    OD {
+        x: b.map(f64::from_bits),
+    }
+}
+
+/// An input on which the square root errs by u^8 |sqrt x| to within a factor 1 - 5u (the paper's Table 1,
+/// paper/table1_inputs.py): x = (1 + 2u, x_1, ..., x_7), its parts chosen one at a time so that the levels of the last
+/// product, r x, are 1, u, ..., u^7 with a ninth just below u^8, which the renormalization drops, so that the result is
+/// (1, u, ..., u^7). Pass: that result, the measure |z^2 - x| / (2x) between 0.99 u^8 and the proven bound, scalar and
+/// lanes alike, and x within `proven`'s hypotheses. Control: x with its leading part one ulp up measures below 0.99 u^8.
+#[test]
+fn od_sqrt_worst_case_input() {
+    let u = 2f64.powi(-53);
+    let x = od_bits([
+        0x3ff0000000000001,
+        0x3967fdf3b645a1cb,
+        0x38b0624dd2f1af00,
+        0x35f0000000000004,
+        0x32b0000000000003,
+        0x2c3bff7ced916873,
+        0x2b60624dd2f1be00,
+        0x28b0000000000009,
+    ]);
+    let measure = |x: OD| -> (OD, f64, bool) {
+        let (rs, rv) = results(Op::Sqrt, &[(x, OD::ONE)]);
+        let (err, scale, _, _) = exact_err(Op::Sqrt, x, OD::ONE, rs[0], false);
+        let inside = within(&err, &scale, SQRT_PROVEN_THR, &Dy::zero());
+        (rs[0], err.ratio(&scale) / unit(), inside && same(rs[0], rv[0]))
+    };
+    assert!(proven(Op::Sqrt, x, OD::ONE), "sqrt: input outside the hypotheses");
+    let (z, m, ok) = measure(x);
+    let ladder: [f64; 8] = std::array::from_fn(|k| u.powi(k as i32));
+    println!(
+        "sqrt error {m:.10} units of 2^-418, (m - 1/64) / (u/64) = {:.3}",
+        (m * 64.0 - 1.0) / u
+    );
+    assert_eq!(z.x, ladder, "sqrt: the result is not (1, u, ..., u^7)");
+    assert!(
+        ok,
+        "sqrt: past the proven bound, or lanes differ from the scalar result"
+    );
+    assert!(m >= 0.99 / 64.0, "sqrt: {m} units, below 0.99 u^8");
+    let mut y = x;
+    y.x[0] = y.x[0].next_up();
+    let (_, my, _) = measure(y);
+    println!("control, leading part one ulp up: {my:.3e} units");
+    assert!(my < 0.99 / 64.0, "control: {my} units, the check cannot fail");
+}
+
 /// The proven bound catches what the 1-unit thresholds miss: with the products of order 8 dropped, an error of a few
 /// u^8 |ab| on the ladder category's inputs. Pass, set after a first run (2 of 400 past 1 unit, 348 past the
 /// proven bound): the proven bound fails more than half of the ladder row's samples and more than ten times as many as
