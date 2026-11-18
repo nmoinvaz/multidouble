@@ -59,7 +59,7 @@ first of them $\RN(0 + a_1b_{n-1})$. Steps (3) and (4) are deps.
 
 \emph{Inputs.} By $H(\theta)$, $|a_ib_j| \le \rho^{i+j}M$. For $m \le n-2$, level $m$ receives what it receives in MUL:
 the $m+1$ products $p_{ij}$ with $i+j = m$, by assignment for $i = 0$ and by dep otherwise, and the $m$ errors $e_{ij}$
-with $i+j = m-1$; so $A_m \le \alpha_m\rho^mM$, as in the proof of Theorem~\ref{thm:t2}. Level $n-1$ receives in the
+with $i+j = m-1$; so $A_m \le \alpha_m\rho^mM$, as in the proofs of Lemma~\ref{lem:g} and Theorem~\ref{thm:t2}. Level $n-1$ receives in the
 chain the $n$ products of order $n-1$, at most $\rho^{n-1}M$ each, and the $n-1$ products of order $n$, at most
 $\rho^nM$ each, and by the deps started there the $n-1$ errors $e_{ij}$ with $i+j = n-2$, one of step (3) and $n-2$ of
 step (4), each at most $u\rho^{n-2}M = \rho^{n-1}M/\theta$ by Lemma~\ref{lem:facts}(c). So $A_{n-1} \le
