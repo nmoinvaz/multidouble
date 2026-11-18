@@ -9,8 +9,8 @@
 //!   `DEG`, by Horner's rule, as r' + r' (r' q); m steps t <- 2t + t^2 take t to e^r - 1, an error that grows by one
 //!   rounding per step where squaring 1 + t would double it (the QD library's exp, Y. Hida, X. S. Li, D. H. Bailey,
 //!   ARITH-15, 2001); and the result is (1 + t) 2^k, scaled exactly in two steps.
-//! * ln: one Newton step on exp from y0, the double-double logarithm (for the double-double, f64's `ln` of the
-//!   leading part plus lo / hi): with (k, t) the reduction of exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is
+//! * ln: one Newton step on exp from y0, the double-double logarithm (for the double-double, `ln_f64` of the leading
+//!   part, this module's own binary64 logarithm with a proven error, plus lo / hi): with (k, t) the reduction of exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is
 //!   exact (its leading part lies in [1/2, 2], Sterbenz), so c = x e^(-y0) - 1 = (f + t) + f t keeps its relative
 //!   accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c) to order `Q` (QD's log takes y0 + c, the plain
 //!   Newton step on exp, from f64's logarithm).
@@ -19,7 +19,7 @@
 //! `OD::ln` by 9.926 u^8 |ln x| + 2^-509, for inputs on the ladder |x_i| <= (2u)^i |x_0|, proved in the paper
 //! (paper/expansion-error-bounds.pdf, its appendix on exp and log) from Lemma 20 at every operation;
 //! `DD::exp` errs by at most 5.872 u^2 and `DD::ln` by 15.351 u^2 relative, from the published bounds of the
-//! double-word operations they use (`ln` also takes f64's `ln` to be within 2^-40 relative). The constants come from
+//! double-word operations they use and the proven bound of `ln_f64`. The constants come from
 //! `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no proven bounds, and are
 //! tested to 64 u^4.
 //!
@@ -33,20 +33,23 @@ use crate::qd::QD;
 
 /// Deliberate breakage for the controls (feature `mutate`; ids below, 0 = none).
 pub mod mutate {
-    /// exp's reduction: ln 2's tail `LN2_LO` cut to its first part, an error of about |k| 2^-98 in r
+    /// exp's reduction: ln 2's tail `LN2_LO` cut to its first part, an error of about |k| 2^-102 in r
     pub const RED_TAIL: u32 = 1;
     /// exp: the Taylor polynomial cut to half its degree
     pub const TAYLOR_HALF: u32 = 2;
     /// ln: the Newton step skipped, the start returned
     pub const LN_STEP: u32 = 3;
+    /// ln: the double-double start (`ln_f64`) off by 2^-20 relative, past the error its proof allows
+    pub const LN_START: u32 = 4;
     /// number of ids
-    pub const N: u32 = 3;
+    pub const N: u32 = 4;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 4] = [
+    pub const NAMES: [&str; 5] = [
         "none",
         "exp: ln 2's tail cut to one part",
         "exp: Taylor polynomial at half its degree",
         "ln: Newton step skipped",
+        "ln: start off by 2^-20",
     ];
 
     #[cfg(feature = "mutate")]
@@ -587,6 +590,12 @@ fn pow2(k: i32) -> f64 {
     f64::from_bits(((k + 1023) as u64) << 52)
 }
 
+/// floor(log2 |h|) for a normal h, -1023 for a zero or subnormal one (the biased exponent field less 1023)
+#[inline(always)]
+fn expo(h: f64) -> i32 {
+    ((h.to_bits() >> 52) & 0x7ff) as i32 - 1023
+}
+
 /// x 2^k in two exact steps, -1076 <= k <= 1076
 #[inline(always)]
 fn scale<T: Prec>(x: T, k: i32) -> T {
@@ -692,6 +701,53 @@ fn ln_of<T: Prec>(x: T) -> T {
     T::ln_finish(y0, c.plus(c.times(c).times(s)))
 }
 
+/// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper/explog_consts.py), and 0 for h = 1: h = 2^e m
+/// with m in (mu/2, mu], mu = RN(sqrt 2), m - 1 exact, and ln m = 2 atanh(s), s = (m - 1) / (m + 1), |s| <= 0.1716,
+/// by the first ten terms of its series in s^2 (by Horner's rule with fused multiply-adds), whose remainder is below
+/// 0.22 u relative; then e ln 2 is added by one fused multiply-add. No library logarithm is called, so the start of
+/// `DD::ln` has a proven error. Public for the tests only.
+#[doc(hidden)]
+#[inline(always)]
+pub fn ln_f64(h: f64) -> f64 {
+    let (h, e0) = if h < f64::MIN_POSITIVE {
+        (h * pow2(54), -54)
+    } else {
+        (h, 0)
+    };
+    let mut e = expo(h) + e0;
+    let mut m = f64::from_bits((h.to_bits() & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000);
+    if m > std::f64::consts::SQRT_2 {
+        m *= 0.5;
+        e += 1;
+    }
+    let s = (m - 1.0) / (m + 1.0);
+    let z = s * s;
+    let mut v = LN_SERIES[LN_SERIES.len() - 1];
+    for &c in LN_SERIES[..LN_SERIES.len() - 1].iter().rev() {
+        v = z.mul_add(v, c);
+    }
+    let y = (e as f64).mul_add(std::f64::consts::LN_2, (s + s) * v);
+    if mutate::on(mutate::LN_START) {
+        y * (1.0 + 2f64.powi(-20))
+    } else {
+        y
+    }
+}
+
+/// 1 / (2j + 1) for j = 0..=9, rounded to nearest
+const LN_SERIES: [f64; 10] = [
+    1.0,
+    1.0 / 3.0,
+    1.0 / 5.0,
+    1.0 / 7.0,
+    1.0 / 9.0,
+    1.0 / 11.0,
+    1.0 / 13.0,
+    1.0 / 15.0,
+    1.0 / 17.0,
+    1.0 / 19.0,
+];
+
 /// a + b for a double-word a and an f64 b: DWPlusFP, Algorithm 4 of M. Joldes, J.-M. Muller, V. Popescu, "Tight and
 /// rigorous error bounds for basic building blocks of double-word arithmetic", ACM Trans. Math. Softw. 44(2), 2017,
 /// doi:10.1145/3121432, within 2u^2 / (1 - 2u) relative (u = 2^-53)
@@ -764,10 +820,10 @@ impl Prec for DD {
         let (h, l) = two_sum(self.hi - 1.0, self.lo);
         DD { hi: h, lo: l }
     }
-    /// f64's ln of the leading part, plus lo / hi
+    /// the logarithm of the leading part (`ln_f64`), plus lo / hi
     #[inline(always)]
     fn ln_start(self) -> DD {
-        DD::from_f64(self.hi.ln() + self.lo / self.hi)
+        DD::from_f64(ln_f64(self.hi) + self.lo / self.hi)
     }
     #[inline(always)]
     fn ln_finish(y0: DD, corr: DD) -> DD {
@@ -904,8 +960,8 @@ impl DD {
     pub fn exp(self) -> DD {
         exp_of(self)
     }
-    /// the natural logarithm, within 15.351 u^2 relative (see the module doc); NaN for a negative argument, -inf for
-    /// zero
+    /// the natural logarithm, within 15.351 u^2 relative, from its own start `ln_f64` (see the module doc); NaN for a
+    /// negative argument, -inf for zero
     pub fn ln(self) -> DD {
         ln_of(self)
     }
