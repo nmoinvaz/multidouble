@@ -1,0 +1,737 @@
+//! `exp` and `ln` of the double-double, quad-double and octo-double types against a reference far more accurate than
+//! 2^-424 that shares no code with them (`exp_ref`): e^x for an exact dyadic x, by its Taylor series at x 2^-12 in
+//! fixed point with P = 1700 fractional bits, then twelve squarings in floating point with P + 64-bit significands,
+//! with a rigorous bound on its error, below 2^-1600 relative. ln is measured through it: for the computed y,
+//! |e^y - x| / x = |e^(y - ln x) - 1| is |y - ln x| up to a factor 1 + 2^-400.
+//!
+//! The reference is checked against planted truth (`reference_is_planted_truth`): e = sum 1/k! in exact integer
+//! arithmetic, within 2^-1550, and e^x to 470 of the 700 digits that Python's decimal module gives
+//! (scripts/explog_vectors.py, tests/data/explog_vectors.txt); a reference cut to 60 Taylor terms must fail both.
+//!
+//! The bounds, with u = 2^-53, are checked on every input that meets their hypotheses: the proven ones of the paper's
+//! appendix on exp and log (paper/explog_consts.py), `OD::exp` 3.661 u^8 relative and `OD::ln` 9.926 u^8 |ln x| +
+//! 2^-509 for inputs on the ladder |x_i| <= (2u)^i |x_0| with normal parts, `DD::exp` 5.872 u^2 and `DD::ln` 15.351 u^2
+//! relative (the latter given f64's ln within 2^-40, checked too); and for the quad-double, which has no proven bounds,
+//! 64 u^4 relative, fixed before the first run. Inputs: random over the range, near 0, near the reduction's boundaries
+//! (k + 1/2) ln 2 and its multiples k ln 2, near overflow and underflow, near 1 for ln, subnormal, with gaps and zero
+//! parts, and the special values.
+//!
+//! ```text
+//! cargo test --release --test explog                        the checks (EXPLOG_REPORT=1 prints the worst cases)
+//! cargo test --release --test explog --features mutate      and their controls (`explog::mutate`)
+//! cargo test --release --test explog timing -- --ignored --nocapture
+//! ```
+mod common;
+use common::Rng;
+use multidouble::dd::DD;
+use multidouble::exact::{BigU, Dy};
+use multidouble::od::OD;
+use multidouble::qd::QD;
+
+/// the reference's fixed-point fractional bits
+const P: u64 = 1700;
+/// the reference's squarings: |x| 2^-12 <= 0.182 for |x| <= 745.2
+const SQ: u32 = 12;
+
+/// the proven bounds (paper/explog_consts.py), in units of u^n
+const OD_EXP: f64 = 3.661;
+const OD_LN: f64 = 9.926;
+const DD_EXP: f64 = 5.872;
+const DD_LN: f64 = 15.351;
+/// the quad-double thresholds, fixed before the first run
+const QD_EXP: f64 = 64.0;
+const QD_LN: f64 = 64.0;
+
+// -------------------------------------------------------------------------------------------------------------
+// the reference
+// -------------------------------------------------------------------------------------------------------------
+
+/// e^x = m 2^e within 2^err2 relative (err2 a log2 bound)
+struct Ref {
+    m: BigU,
+    e: i64,
+    err2: f64,
+}
+
+impl Ref {
+    fn dy(&self) -> Dy {
+        Dy {
+            neg: false,
+            m: self.m.clone(),
+            e: self.e,
+        }
+    }
+}
+
+/// e^x for an exact dyadic x with |x| <= 745.2. y = x 2^-12, Y = floor(|y| 2^P); the terms T_k = floor(T_(k-1) Y /
+/// (2^P k)) of e^(+-Y 2^-P) are each within 2 units below the true ones (T_(k-1) is within 2 units, and Y 2^-P / k <
+/// 1), so the K terms' sum S is within 2K + 4 units of e^(Y 2^-P) 2^P counting the tail after the first zero term,
+/// and |y - Y 2^-P| < 2^-P adds 2 units. S >= 0.83 2^P. Each squaring doubles the relative error and its truncation
+/// to P + 64 bits adds 2^-(P + 63). cut: keep only that many terms (the control).
+fn exp_ref(x: &Dy, cut: Option<usize>) -> Ref {
+    let sh = x.e + P as i64 - SQ as i64;
+    let y = if sh >= 0 {
+        x.m.shl(sh as u64)
+    } else {
+        x.m.shr((-sh) as u64)
+    };
+    let one = BigU::from_u64(1).shl(P);
+    let (mut pos, mut neg) = (one.clone(), BigU::zero());
+    let mut t = one;
+    let mut k = 0u64;
+    loop {
+        k += 1;
+        if cut.is_some_and(|c| k as usize >= c) {
+            break;
+        }
+        t = t.mul(&y).shr(P).divrem_small(k).0;
+        if t.is_zero() {
+            break;
+        }
+        if x.neg && k % 2 == 1 {
+            neg = neg.add(&t);
+        } else {
+            pos = pos.add(&t);
+        }
+    }
+    let mut m = pos.sub(&neg);
+    let mut e = -(P as i64);
+    let mut err2 = ((2 * k + 6) as f64 / 0.83).log2() - P as f64;
+    for _ in 0..SQ {
+        m = m.mul(&m);
+        e *= 2;
+        let b = m.bits();
+        if b > P + 64 {
+            m = m.shr(b - P - 64);
+            e += (b - P - 64) as i64;
+        }
+        // 2 eps + eps^2 + 2^-(P + 63) <= 2^(err2 + 1.001) while err2 < -100
+        err2 = (err2 + 1.0).max(-(P as f64) - 63.0) + 0.001;
+    }
+    Ref { m, e, err2 }
+}
+
+/// the decimal d.ddd...e+NNN as (digits, power of ten)
+fn decimal(s: &str) -> (BigU, i64) {
+    let (mant, ex) = s.split_once('e').unwrap();
+    let digits: String = mant.chars().filter(|c| c.is_ascii_digit()).collect();
+    let frac = mant.split_once('.').map_or(0, |(_, f)| f.len()) as i64;
+    (BigU::from_dec(&digits), ex.parse::<i64>().unwrap() - frac)
+}
+
+/// |m 2^e - d 10^p| / (d 10^p) <= 10^-digits, in integers
+fn agrees(r: &Ref, d: &BigU, p: i64, digits: u64) -> bool {
+    // compare m 2^e 10^-p with d: scale both to integers
+    let (mut a, mut b) = (r.m.clone(), d.clone());
+    if r.e >= 0 {
+        a = a.shl(r.e as u64);
+    } else {
+        b = b.shl((-r.e) as u64);
+    }
+    if p >= 0 {
+        b = b.mul(&BigU::pow_small(10, p as u64));
+    } else {
+        a = a.mul(&BigU::pow_small(10, (-p) as u64));
+    }
+    let diff = if a.cmp(&b) == std::cmp::Ordering::Less {
+        b.sub(&a)
+    } else {
+        a.sub(&b)
+    };
+    diff.mul(&BigU::pow_small(10, digits)).cmp(&b) != std::cmp::Ordering::Greater
+}
+
+/// e as sum_(k <= 320) 1/k! in integers: e 320! = sum 320!/k! + (a tail below 1), within 2^-1550 relative
+fn e_check(r: &Ref) -> bool {
+    let n = 320u64;
+    let mut f = BigU::from_u64(1);
+    for k in 2..=n {
+        f = f.mul_small(k);
+    }
+    let mut s = BigU::zero();
+    let mut q = f.clone();
+    for k in 0..=n {
+        if k > 0 {
+            q = q.divrem_small(k).0;
+        }
+        s = s.add(&q);
+    }
+    // m 2^e n! against s
+    let (mut a, mut b) = (r.m.mul(&f), s);
+    if r.e >= 0 {
+        a = a.shl(r.e as u64);
+    } else {
+        b = b.shl((-r.e) as u64);
+    }
+    let diff = if a.cmp(&b) == std::cmp::Ordering::Less {
+        b.sub(&a)
+    } else {
+        a.sub(&b)
+    };
+    diff.shl(1550).cmp(&b) != std::cmp::Ordering::Greater
+}
+
+fn vectors() -> Vec<(Dy, BigU, i64)> {
+    include_str!("data/explog_vectors.txt")
+        .lines()
+        .map(|l| {
+            let (xs, ds) = l.split_once(' ').unwrap();
+            let x = xs
+                .split(',')
+                .map(|h| Dy::from_f64(f64::from_bits(u64::from_str_radix(h, 16).unwrap())))
+                .fold(Dy::zero(), |a, b| a.add(&b));
+            let (d, p) = decimal(ds);
+            (x, d, p)
+        })
+        .collect()
+}
+
+/// whether the reference agrees with e = sum 1/k!, and with each 700-digit decimal value, and |x| of each
+fn planted(cut: Option<usize>) -> (bool, Vec<(bool, f64)>) {
+    let e = exp_ref(&Dy::from_f64(1.0), cut);
+    let vs = vectors()
+        .iter()
+        .map(|(x, d, p)| {
+            let r = exp_ref(x, cut);
+            assert!(r.err2 < -1600.0, "reference error bound 2^{}", r.err2);
+            // 10^-470 = 2^-1561, above the reference's bound
+            (agrees(&r, d, *p, 470), x.to_f64().abs())
+        })
+        .collect();
+    (e_check(&e), vs)
+}
+
+#[test]
+fn reference_is_planted_truth() {
+    let (e, vs) = planted(None);
+    assert!(e && vs.iter().all(|v| v.0), "e {e}, decimal values {vs:?}");
+    // control: 60 Taylor terms of e^(x/4096) err by about 2^-990 for |x| near 1, which fails both checks wherever
+    // |x| >= 1/4 (smaller x need fewer terms)
+    let (e, vs) = planted(Some(60));
+    let big: Vec<&(bool, f64)> = vs.iter().filter(|v| v.1 >= 0.25).collect();
+    assert!(
+        !e && big.len() >= 10 && big.iter().all(|v| !v.0),
+        "cut reference: e {e}, {vs:?}"
+    );
+}
+
+// -------------------------------------------------------------------------------------------------------------
+// the types, generically
+// -------------------------------------------------------------------------------------------------------------
+
+/// what the checks need of each type
+trait Ty: Copy + std::fmt::Debug {
+    const N: usize;
+    const NAME: &'static str;
+    fn parts(self) -> Vec<f64>;
+    fn from_parts(p: &[f64]) -> Self;
+    fn exp(self) -> Self;
+    fn ln(self) -> Self;
+}
+
+impl Ty for DD {
+    const N: usize = 2;
+    const NAME: &'static str = "dd";
+    fn parts(self) -> Vec<f64> {
+        vec![self.hi, self.lo]
+    }
+    fn from_parts(p: &[f64]) -> DD {
+        DD { hi: p[0], lo: p[1] }
+    }
+    fn exp(self) -> DD {
+        DD::exp(self)
+    }
+    fn ln(self) -> DD {
+        DD::ln(self)
+    }
+}
+
+impl Ty for QD {
+    const N: usize = 4;
+    const NAME: &'static str = "qd";
+    fn parts(self) -> Vec<f64> {
+        self.x.to_vec()
+    }
+    fn from_parts(p: &[f64]) -> QD {
+        QD {
+            x: [p[0], p[1], p[2], p[3]],
+        }
+    }
+    fn exp(self) -> QD {
+        QD::exp(self)
+    }
+    fn ln(self) -> QD {
+        QD::ln(self)
+    }
+}
+
+impl Ty for OD {
+    const N: usize = 8;
+    const NAME: &'static str = "od";
+    fn parts(self) -> Vec<f64> {
+        self.x.to_vec()
+    }
+    fn from_parts(p: &[f64]) -> OD {
+        OD {
+            x: std::array::from_fn(|i| p[i]),
+        }
+    }
+    fn exp(self) -> OD {
+        OD::exp(self)
+    }
+    fn ln(self) -> OD {
+        OD::ln(self)
+    }
+}
+
+fn exact<T: Ty>(x: T) -> Dy {
+    Dy::sum(&x.parts())
+}
+
+/// the greedy n-part expansion of v: x_0 = RN(v), x_1 = RN(v - x_0), ...
+fn greedy<T: Ty>(v: &Dy) -> T {
+    let mut r = v.clone();
+    let mut p = vec![0.0; T::N];
+    for x in p.iter_mut() {
+        let c = r.to_f64();
+        *x = c;
+        if c == 0.0 || !c.is_finite() {
+            break;
+        }
+        r = r.sub(&Dy::from_f64(c));
+    }
+    T::from_parts(&p)
+}
+
+/// the unit u^n
+fn un<T: Ty>() -> f64 {
+    2f64.powi(-53 * T::N as i32)
+}
+
+/// on the ladder |x_i| <= (2u)^i |x_0|, with every nonzero part normal: the proven bounds' hypotheses
+fn ladder<T: Ty>(x: T) -> bool {
+    let p = x.parts();
+    let a0 = p[0].abs();
+    p.iter().all(|v| *v == 0.0 || v.is_normal()) && (1..p.len()).all(|i| p[i].abs() <= a0 * 2f64.powi(-52 * i as i32))
+}
+
+/// ln 2 to 1700 bits from sum 1/(j 2^j), a value within (P + 1) 2^-P below ln 2: independent of the crate's constants
+fn ln2() -> Dy {
+    let mut s = BigU::zero();
+    for j in 1..=P {
+        s = s.add(&BigU::from_u64(1).shl(P - j).divrem_small(j).0);
+    }
+    Dy {
+        neg: false,
+        m: s,
+        e: -(P as i64),
+    }
+}
+
+/// a random exact value of 300 random bits times 2^e (sign included)
+fn rand_dy(r: &mut Rng, e: i64, neg: bool) -> Dy {
+    let mut m = BigU::from_u64(r.next_u64() | 1 << 63);
+    for _ in 0..4 {
+        m = m.shl(64).add(&BigU::from_u64(r.next_u64()));
+    }
+    Dy { neg, m, e: e - 319 }
+}
+
+/// rand_dy with an exponent uniform in [lo, hi) and, if signed, a random sign
+fn rand_in(r: &mut Rng, lo: i64, hi: i64, signed: bool) -> Dy {
+    let e = lo + (r.next_u64() % (hi - lo) as u64) as i64;
+    let neg = signed && r.next_u64() & 1 == 0;
+    rand_dy(r, e, neg)
+}
+
+/// an input with gaps: random parts at random depths, some zero, on the ladder
+fn gapped<T: Ty>(r: &mut Rng, x0: f64) -> T {
+    let mut p = vec![0.0; T::N];
+    p[0] = x0;
+    for (i, x) in p.iter_mut().enumerate().skip(1) {
+        if r.next_u64().is_multiple_of(3) {
+            continue;
+        }
+        let depth = 53 * i as i32 + (r.next_u64() % 120) as i32;
+        *x = r.sym() * x0.abs() * 2f64.powi(-depth);
+    }
+    T::from_parts(&p)
+}
+
+// -------------------------------------------------------------------------------------------------------------
+// the checks
+// -------------------------------------------------------------------------------------------------------------
+
+/// the result of one category's checks
+#[derive(Debug, Default)]
+struct Row {
+    what: String,
+    n: usize,
+    /// inputs within the bound's hypotheses
+    covered: usize,
+    fails: usize,
+    /// the largest error in units of u^n (relative; for ln relative to |ln x|)
+    max: f64,
+    worst: String,
+}
+
+/// |exp(x) - e^x| / e^x in units of u^n, or None where the result is outside the normal range of every part
+fn exp_err<T: Ty>(x: T) -> (f64, bool) {
+    let y = x.exp();
+    if !y.parts().iter().all(|v| v.is_finite()) {
+        return (f64::INFINITY, false);
+    }
+    let r = exp_ref(&exact(x), None);
+    let yd = exact(y);
+    let e = yd.sub(&r.dy()).ratio(&r.dy()) / un::<T>();
+    let p = y.parts();
+    // the result's parts normal where nonzero, and its value far from overflow
+    let normal = p[0].abs() > 2f64.powi(-1022 + 53 * (T::N as i32 - 1)) && p[0].is_finite();
+    (e, normal)
+}
+
+/// |ln(x) - ln x| / |ln x| in units of u^n, and the share of `OD::ln`'s absolute term 2^-509, 2^-509 / |ln x| / u^n
+fn ln_err<T: Ty>(x: T) -> (f64, f64) {
+    let y = x.ln();
+    if !y.parts().iter().all(|v| v.is_finite()) {
+        return (f64::INFINITY, 0.0);
+    }
+    let yd = exact(y);
+    let xd = exact(x);
+    if yd.is_zero() {
+        // only ln 1 may be zero
+        let one = xd.sub(&Dy::from_f64(1.0)).is_zero();
+        return (if one { 0.0 } else { f64::INFINITY }, 0.0);
+    }
+    let r = exp_ref(&yd, None);
+    let e = r.dy().sub(&xd).ratio(&xd.mul(&yd)) / un::<T>();
+    let floor = 2f64.powi(-509) / y.parts()[0].abs() / un::<T>();
+    (e, floor)
+}
+
+/// exp on n inputs of each category
+fn run_exp<T: Ty>(n: usize, seed: u64, bound: f64, proven: bool) -> Vec<Row> {
+    let mut r = Rng(seed);
+    let l2 = ln2();
+    let mut rows = Vec::new();
+    let cats: [&str; 7] = [
+        "random",
+        "near 0",
+        "(k+1/2) ln 2",
+        "k ln 2",
+        "overflow",
+        "underflow",
+        "gaps",
+    ];
+    for cat in cats {
+        let mut row = Row {
+            what: format!("{} exp {cat}", T::NAME),
+            ..Row::default()
+        };
+        for _ in 0..n {
+            let x: T = match cat {
+                "random" => {
+                    let v = -740.0 + 1445.0 * r.unit();
+                    greedy(&Dy::from_f64(v).add(&rand_in(&mut r, -52, -51, true)))
+                }
+                "near 0" => greedy(&rand_in(&mut r, -1000, 0, true)),
+                "(k+1/2) ln 2" | "k ln 2" => {
+                    let k = (r.next_u64() % 2048) as i64 - 1074;
+                    let h = if cat == "k ln 2" { 0 } else { 1 };
+                    let c = l2.mul(&Dy::from_f64((2 * k + h) as f64)).ldexp(-1);
+                    let d = rand_in(&mut r, -420, -20, true);
+                    greedy(&c.add(&d))
+                }
+                "overflow" => greedy(&Dy::from_f64(
+                    709.782712893384 - 2f64.powi(-((r.next_u64() % 40) as i32)),
+                )),
+                "underflow" => greedy(&Dy::from_f64(-708.0 - 37.0 * r.unit())),
+                _ => {
+                    let x0 = -745.0 + 1454.0 * r.unit();
+                    gapped(&mut r, x0)
+                }
+            };
+            let (e, normal) = exp_err(x);
+            row.n += 1;
+            let hyp = normal && (!proven || ladder(x));
+            // outside the hypotheses (results with subnormal parts) an absolute 16 2^-1074 is allowed
+            let ok = if hyp {
+                row.covered += 1;
+                e <= bound
+            } else if e.is_finite() || normal {
+                // a result with subnormal parts: within 16 2^-1074 + the bound
+                let y = x.exp();
+                let r = exp_ref(&exact(x), None);
+                let err = exact(y).sub(&r.dy()).abs();
+                // 16 2^-1074 from its bits: a debug build gives 2f64.powi(-1070) = 0, as 2^1070 overflows first
+                let allow = Dy::from_f64(f64::from_bits(16)).add(&r.dy().mul(&Dy::from_f64(bound * un::<T>())));
+                err.cmp_abs(&allow) != std::cmp::Ordering::Greater
+            } else {
+                false
+            };
+            if !ok {
+                row.fails += 1;
+            }
+            if hyp && e > row.max {
+                row.max = e;
+                row.worst = format!("{:?}", x.parts());
+            }
+        }
+        rows.push(row);
+    }
+    rows
+}
+
+/// ln on n inputs of each category
+fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: bool, proven: bool) -> Vec<Row> {
+    let mut r = Rng(seed);
+    let mut rows = Vec::new();
+    let cats: [&str; 7] = [
+        "random",
+        "near 1",
+        "sqrt2 2^k",
+        "subnormal",
+        "near max",
+        "gaps",
+        "power of 2",
+    ];
+    for cat in cats {
+        let mut row = Row {
+            what: format!("{} ln {cat}", T::NAME),
+            ..Row::default()
+        };
+        for _ in 0..n {
+            let x: T = match cat {
+                "random" => greedy(&rand_in(&mut r, -1021, 1024, false)),
+                "near 1" => {
+                    let d = rand_in(&mut r, -600, 0, true);
+                    greedy(&Dy::from_f64(1.0).add(&d))
+                }
+                "sqrt2 2^k" => {
+                    // x near 2^(k + 1/2), where the reduction of exp(-y0) changes k
+                    let k = (r.next_u64() % 2000) as i64 - 1000;
+                    let s = Dy::from_f64(std::f64::consts::SQRT_2);
+                    let d = rand_in(&mut r, -150, -50, true);
+                    greedy(&s.add(&d).ldexp(k))
+                }
+                "subnormal" => greedy(&Dy::from_f64(f64::from_bits(1 + r.next_u64() % (1 << 52)))),
+                "near max" => greedy(&Dy::from_f64(f64::MAX * (1.0 - r.unit() * 2f64.powi(-20)))),
+                "gaps" => {
+                    let x0 = (1.0 + r.unit()) * 2f64.powi((r.next_u64() % 1200) as i32 - 600);
+                    gapped(&mut r, x0)
+                }
+                _ => {
+                    // 2^k for -1074 <= k <= 1023, subnormal powers included
+                    let k = (r.next_u64() % 2098) as i64 - 1074;
+                    let b = if k >= -1022 {
+                        ((k + 1023) as u64) << 52
+                    } else {
+                        1u64 << (k + 1074)
+                    };
+                    greedy(&Dy::from_f64(f64::from_bits(b)))
+                }
+            };
+            let (e, fl) = ln_err(x);
+            row.n += 1;
+            // a single subnormal part is scaled exactly before any operation
+            let hyp = !proven || ladder(x) || x.parts()[1..].iter().all(|v| *v == 0.0);
+            let lim = bound + if floor { fl } else { 0.0 };
+            if hyp {
+                row.covered += 1;
+                if e > lim {
+                    row.fails += 1;
+                }
+                if e > row.max {
+                    row.max = e;
+                    row.worst = format!("{:?}", x.parts());
+                }
+            }
+        }
+        rows.push(row);
+    }
+    rows
+}
+
+/// f64's ln within 2^-40 relative, the double-double ln's hypothesis, on random normal and subnormal arguments and
+/// near 1: the count of misses, with f64's ln times 1 + nudge (the control)
+fn libm_hypothesis(n: usize, seed: u64, nudge: f64) -> usize {
+    let mut r = Rng(seed);
+    let mut bad = 0;
+    for _ in 0..n {
+        let h = (1.0 + r.unit()) * 2f64.powi((r.next_u64() % 2046) as i32 - 1022);
+        let h = match r.next_u64() % 8 {
+            0 | 1 => 1.0 + r.sym() * 2f64.powi(-((r.next_u64() % 52) as i32)),
+            2 => f64::from_bits(1 + r.next_u64() % (1 << 52)),
+            _ => h,
+        };
+        let l = h.ln() * (1.0 + nudge);
+        if l == 0.0 {
+            bad += (h != 1.0) as usize;
+            continue;
+        }
+        // |e^l - h| / h = |e^(l - ln h) - 1| ~ |l - ln h|
+        let rf = exp_ref(&Dy::from_f64(l), None);
+        let e = rf
+            .dy()
+            .sub(&Dy::from_f64(h))
+            .ratio(&Dy::from_f64(h).mul(&Dy::from_f64(l)));
+        bad += (e > 2f64.powi(-40)) as usize;
+    }
+    bad
+}
+
+fn report() -> bool {
+    std::env::var("EXPLOG_REPORT").map(|v| v == "1").unwrap_or(false)
+}
+
+fn show(rows: &[Row]) {
+    for r in rows {
+        println!(
+            "{:<28} n {:>5} covered {:>5} fails {:>4} worst {:.3e} u^n {}",
+            r.what,
+            r.n,
+            r.covered,
+            r.fails,
+            r.max,
+            if report() { &r.worst } else { "" }
+        );
+    }
+}
+
+fn all_rows(n: usize, seed: u64) -> Vec<Row> {
+    let mut rows = run_exp::<DD>(n, seed, DD_EXP, true);
+    rows.extend(run_ln::<DD>(n, seed, DD_LN, false, true));
+    rows.extend(run_exp::<QD>(n / 2, seed, QD_EXP, false));
+    rows.extend(run_ln::<QD>(n / 2, seed, QD_LN, false, false));
+    rows.extend(run_exp::<OD>(n / 4, seed, OD_EXP, true));
+    rows.extend(run_ln::<OD>(n / 4, seed, OD_LN, true, true));
+    rows
+}
+
+#[test]
+fn exp_and_ln_within_bounds() {
+    let n = std::env::var("EXPLOG_N")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(400);
+    let rows = all_rows(n, 1);
+    show(&rows);
+    let bad: Vec<&Row> = rows.iter().filter(|r| r.fails > 0).collect();
+    assert!(bad.is_empty(), "{bad:#?}");
+    // the proven bounds are checked on most inputs, not a few
+    for r in rows.iter().filter(|r| !r.what.ends_with("underflow")) {
+        assert!(
+            r.covered * 2 >= r.n,
+            "{}: {} of {} inputs within the hypotheses",
+            r.what,
+            r.covered,
+            r.n
+        );
+    }
+    assert_eq!(libm_hypothesis(4 * n, 2, 0.0), 0, "f64::ln beyond 2^-40");
+    // control: off by 2^-39 relative, it misses wherever ln h is not 0
+    assert!(libm_hypothesis(64, 2, 2f64.powi(-39)) > 32);
+}
+
+/// special values, exact cases and the range ends, as f64's exp and ln give them
+#[test]
+fn special_values() {
+    fn check<T: Ty>() {
+        let f = |v: f64| T::from_parts(&[v, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0][..T::N]);
+        let hi = |x: T| x.parts()[0];
+        assert!(hi(f(f64::NAN).exp()).is_nan());
+        assert_eq!(hi(f(f64::INFINITY).exp()), f64::INFINITY);
+        assert_eq!(hi(f(f64::NEG_INFINITY).exp()).to_bits(), 0);
+        assert_eq!(f(0.0).exp().parts(), f(1.0).parts());
+        assert_eq!(f(-0.0).exp().parts(), f(1.0).parts());
+        assert_eq!(hi(f(709.79).exp()), f64::INFINITY);
+        assert_eq!(f(709.8).exp().parts(), f(f64::INFINITY).parts());
+        assert!(hi(f(709.78).exp()).is_finite());
+        assert_eq!(hi(f(-745.21).exp()).to_bits(), 0);
+        assert!(hi(f(-745.0).exp()) > 0.0, "e^-745 rounds to the least subnormal");
+        assert!(hi(f(f64::NAN).ln()).is_nan());
+        assert!(hi(f(-1.0).ln()).is_nan());
+        assert!(hi(f(-f64::MIN_POSITIVE).ln()).is_nan());
+        assert_eq!(hi(f(0.0).ln()), f64::NEG_INFINITY);
+        assert_eq!(hi(f(-0.0).ln()), f64::NEG_INFINITY);
+        assert_eq!(hi(f(f64::INFINITY).ln()), f64::INFINITY);
+        assert!(f(1.0).ln().parts().iter().all(|v| *v == 0.0), "ln 1 = 0 exactly");
+        // e^(ln 2 + ln 3) = 6, ln(e^x) = x, to the precision
+        let six = (f(2.0).ln().parts(), f(3.0).ln().parts());
+        let s = exact(T::from_parts(&six.0)).add(&exact(T::from_parts(&six.1)));
+        let back = exact(greedy::<T>(&s).exp());
+        assert!(back.sub(&Dy::from_f64(6.0)).ratio(&Dy::from_f64(6.0)) < 100.0 * un::<T>());
+    }
+    check::<DD>();
+    check::<QD>();
+    check::<OD>();
+}
+
+/// The controls (feature `mutate`): each breakage of `explog::mutate` makes the checks of every type fail.
+#[cfg(feature = "mutate")]
+#[test]
+fn controls_fire() {
+    use multidouble::explog::mutate;
+    let mut silent = Vec::new();
+    for id in 1..=mutate::N {
+        mutate::set(id);
+        let rows = all_rows(64, 3);
+        mutate::set(0);
+        for t in ["dd", "qd", "od"] {
+            let failed = rows.iter().filter(|r| r.what.starts_with(t) && r.fails > 0).count();
+            println!(
+                "control {id} {:<40} {t}: {failed} rows fail",
+                mutate::NAMES[id as usize]
+            );
+            if failed == 0 {
+                silent.push((id, t));
+            }
+        }
+    }
+    assert!(silent.is_empty(), "controls that did not fire: {silent:?}");
+}
+
+/// time per call of each function, on arguments spread over the range
+#[test]
+#[ignore]
+fn timing() {
+    fn time<T: Ty>(xs: &[T], f: fn(T) -> T) -> f64 {
+        let reps = 3;
+        let mut best = f64::INFINITY;
+        for _ in 0..reps {
+            let t = std::time::Instant::now();
+            let mut acc = 0.0;
+            for &x in xs {
+                acc += f(std::hint::black_box(x)).parts()[0];
+            }
+            std::hint::black_box(acc);
+            best = best.min(t.elapsed().as_secs_f64() / xs.len() as f64);
+        }
+        best * 1e9
+    }
+    fn args<T: Ty>(lo: f64, hi: f64) -> Vec<T> {
+        let mut r = Rng(5);
+        (0..2000)
+            .map(|_| {
+                greedy(
+                    &rand_dy(&mut r, 0, false)
+                        .ldexp(-1)
+                        .add(&Dy::from_f64(lo + (hi - lo) * r.unit())),
+                )
+            })
+            .collect()
+    }
+    fn row<T: Ty>() {
+        let e = args::<T>(-700.0, 700.0);
+        let l = args::<T>(1e-3, 1e3);
+        println!(
+            "{}: exp {:.0} ns, ln {:.0} ns",
+            T::NAME,
+            time(&e, T::exp),
+            time(&l, T::ln)
+        );
+    }
+    row::<DD>();
+    row::<QD>();
+    row::<OD>();
+}
