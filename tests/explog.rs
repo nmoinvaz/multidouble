@@ -10,17 +10,17 @@
 //!
 //! The bounds, with u = 2^-53, are checked on every input that meets their hypotheses on x (`covered`; for exp, on
 //! every input): the proven ones of the paper's appendix on exp and log (paper/explog_consts.py), `OD::exp` 3.661 u^8
-//! e^x + 8 2^-1074 and `OD::ln` 9.926 u^8 |ln x| + 2^-509, `DD::exp` 5.465 u^2 e^x + 2 2^-1074 and `DD::ln`
-//! 15.351 u^2 |ln x| + 2^-1071, for x on the ladder |x_i| <= (2u)^i |x_0| (for the double-double a double-word) with
-//! normal parts; the theorems also ask that no product inside the run underflow, which the size of x does not cause
-//! (an emulator scans every binade, in the paper's appendix on exp and log). Where `OD::ln`'s absolute term dominates,
-//! near x = 1, it is held to its relative constant as well, a tested threshold. The quad-double, which has no proven
-//! bounds, is held to 64 u^4 relative, fixed before the first run. The start of ln, `explog::ln_f64`, is checked
-//! against its proven 5.915 u.
-//! Inputs, n per category for the double-double, n/2 for the quad-double and n/4 for the octo-double: random over the
-//! range, near 0, near the reduction's boundaries (k + 1/2) ln 2 and its multiples k ln 2, near overflow and underflow,
-//! near 1 for ln, subnormal, with gaps and zero parts, at the top of the ladder (overlapping by a bit, not greedy, with
-//! random signs; not for the double-double, which must be a double-word), and the special values.
+//! e^x + 8 2^-1074 and `OD::ln` 9.926 u^8 |ln x| + 2^-509, `DD::exp` 5.465 u^2 e^x + 2 2^-1074 and `DD::ln` 15.351 u^2
+//! |ln x| + 2^-1071, for x on the ladder |x_i| <= (2u)^i |x_0| (for the double-double a double-word) with normal parts;
+//! the theorems also ask that no product inside the run underflow, apart from those that only choose k, m, the degree
+//! or a branch; an emulator scanning every binade of x finds none (the paper's appendix on exp and log). Where
+//! `OD::ln`'s absolute term dominates, near x = 1, it is held to its relative constant as well, a tested threshold. The
+//! quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the first run. The start of ln,
+//! `explog::ln_f64`, is checked against its proven 5.915 u. Inputs, n per category for the double-double, n/2 for the
+//! quad-double and n/4 for the octo-double: random over the range, near 0, near the reduction's boundaries (k + 1/2) ln
+//! 2 and its multiples k ln 2, near overflow and underflow, near 1 for ln, subnormal, with gaps and zero parts, at the
+//! top of the ladder (overlapping by a bit, not greedy, with random signs; not for the double-double, which must be a
+//! double-word), and the special values.
 //!
 //! ```text
 //! cargo test --release --test explog                        the checks (EXPLOG_REPORT=1 prints the worst cases)
@@ -50,6 +50,8 @@ const DD_LN_FLOOR: i32 = -1071;
 const OD_LN_TESTED: f64 = OD_LN;
 /// the start `ln_f64`'s proven bound, in units of u
 const LN_F64: f64 = 5.915;
+/// arguments of `ln_f64` checked besides the random ones: 0x1.22e14015c154dp+0, near its worst found by a search
+const START_PINNED: [u64; 1] = [0x3ff2_2e14_015c_154d];
 /// the quad-double thresholds, fixed before the first run
 const QD_EXP: f64 = 64.0;
 const QD_LN: f64 = 64.0;
@@ -236,6 +238,43 @@ fn planted(cut: Option<usize>) -> (bool, Vec<(bool, f64)>) {
         })
         .collect();
     (e_ok, vs)
+}
+
+/// x on H(2) whose f = x - 1, exact, is led by a part below half its value: e_f of the leading part does not bound |f|,
+/// while `bound_expo`'s U does, sum |f_i| (1 + 2^-48) < 2^(e + 1); and ln x is within its bound
+#[test]
+fn leading_part_does_not_bound_the_value() {
+    let x = OD {
+        x: [
+            1.0,
+            1.5050180741806962e-71,
+            -1.0947644252537633e-47,
+            1.0947644252537632e-47,
+            -1.6444249949300811e-63,
+            -4.130301482114151e-79,
+            -1.1985091468012028e-94,
+            -1.9639758264985916e-110,
+        ],
+    };
+    assert!(ladder(x));
+    let f = x.add_f(-1.0);
+    let fd = exact(f);
+    assert!(fd.sub(&exact(x).sub(&Dy::from_f64(1.0))).is_zero(), "x - 1 is exact");
+    let expo = |h: f64| ((h.to_bits() >> 52) & 0x7ff) as i32 - 1023;
+    let lead = Dy::from_f64(pow2i(expo(f.x[0]) + 1));
+    assert_eq!(
+        fd.cmp_abs(&lead),
+        std::cmp::Ordering::Greater,
+        "|f| above 2^(e+1) of its leading part"
+    );
+    let u = f.x.iter().fold(0.0, |a, v| a + v.abs()) * (1.0 + 2f64.powi(-48));
+    assert_eq!(
+        fd.cmp_abs(&Dy::from_f64(pow2i(expo(u) + 1))),
+        std::cmp::Ordering::Less,
+        "|f| below U's bound"
+    );
+    let (e, fl) = ln_err(x, OD_LN_FLOOR);
+    assert!(e <= OD_LN + fl && e <= OD_LN_TESTED, "ln x errs by {e} u^8");
 }
 
 #[test]
@@ -640,14 +679,16 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
 }
 
 /// the start's bound (paper/explog_consts.py): `ln_f64` within `LN_F64` u of ln h relative (ln_f64(1) = 0 exactly), on
-/// random normal and subnormal arguments, near 1, near the boundaries sqrt(2) 2^k of its reduction and at powers of 2;
-/// the count of misses and the worst error in units of u, with its result times 1 + nudge (the control)
+/// random normal and subnormal arguments, near 1, near the boundaries sqrt(2) 2^k of its reduction, at powers of 2 and
+/// at `START_PINNED`; the count of misses and the worst error in units of u, with its result times 1 + nudge (the
+/// control)
 fn start_bound(n: usize, seed: u64, nudge: f64) -> (usize, f64) {
     let mut r = Rng(seed);
     let (mut bad, mut worst) = (0, 0.0f64);
-    for i in 0..n {
+    for i in 0..n + START_PINNED.len() {
         let k = (r.next_u64() % 2046) as i32 - 1022;
         let h = match i % 5 {
+            _ if i >= n => f64::from_bits(START_PINNED[i - n]),
             0 => (1.0 + r.unit()) * 2f64.powi(k),
             1 => 1.0 + r.sym() * pow2i(-((r.next_u64() % 53) as i32)),
             2 => f64::from_bits(1 + r.next_u64() % (1 << 52)),
@@ -732,7 +773,7 @@ fn exp_and_ln_within_bounds() {
         );
     }
     let (bad, worst) = start_bound(4 * n, 2, 0.0);
-    println!("ln_f64: {} arguments, worst {worst:.3} u", 4 * n);
+    println!("ln_f64: {} arguments, worst {worst:.3} u", 4 * n + START_PINNED.len());
     assert_eq!(bad, 0, "ln_f64 beyond {LN_F64} u");
     // control: off by 2^-48 = 32 u relative, it misses wherever ln h is not 0
     assert!(start_bound(64, 2, 2f64.powi(-48)).0 > 48);
