@@ -214,14 +214,15 @@ gives up in parentheses.
 | tan | 28.5 u² (4.8), proven | 64 u⁴ (6) | 6.42 u⁸ (2.7), proven |
 
 A proven bound holds for every input that meets its hypotheses: for the octo-double the paper's, parts on the ladder
-|xᵢ| ≤ (2u)ⁱ|x₀| and no underflow in the run's products, and for the double-double a double-word. The double-double
-add's is Theorem 3.1 of Joldes, Muller and Popescu (2017), `fast_div`'s is their Theorem 7.1, which Muller and Rideau
-(2022) proved formally, and the double-double square root's
-is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it is. The octo-double ones are in
-[the paper](paper/expansion-error-bounds.pdf), where the add, multiply, divide and square root each have a second term
-at most 2⁻¹⁵ of the first. The exp and ln rows give the relative coefficient alone: their bounds also have an absolute
-term, given below, which is larger only for tiny results and near x = 1. The other bounds are the thresholds the tests
-check.
+|xᵢ| ≤ (2u)ⁱ|x₀| and no underflow in the run's products, and for the double-double a double-word. For exp they also need
+a finite result, eˣ below f64::MAX + ulp(f64::MAX)/2 (x below about ln f64::MAX), above which exp returns +inf as
+`f64::exp` does; ln's hold for every positive finite x. The double-double add's is Theorem 3.1 of Joldes, Muller and
+Popescu (2017), `fast_div`'s is their Theorem 7.1, which Muller and Rideau (2022) proved formally, and the double-double
+square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it is. The
+octo-double ones are in [the paper](paper/expansion-error-bounds.pdf), where the add, multiply, divide and square root
+each have a second term at most 2⁻¹⁵ of the first. The exp and ln rows give the relative coefficient alone: their bounds
+also have an absolute term, given below, which is larger only for tiny results and near x = 1. The other bounds are the
+thresholds the tests check.
 
 - The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number
   for `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most
@@ -253,22 +254,22 @@ check.
   products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30, with
   the constant from `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random
   operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
-- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, sums a Taylor
-  polynomial whose degree falls with the reduced argument, and squares in the form t ← 2t + t², as the QD library's
-  source does; ln takes one Newton step on exp from the double-double logarithm, which starts from `explog`'s own
-  binary64 logarithm, within a proven 5.915 u. The double-double ones use the double-word operations whose bounds
-  are published (Joldes, Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved
-  formally, rather than `*`). The octo-double bounds are proved in the paper's appendix on exp and log. Each bound has
-  a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the
-  relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for
-  the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled
-  below 2, and an emulator with every product hooked finds none below the normal range at any binade of the argument,
-  the closest 48 binades above it (the paper's appendix on exp and log); a part far below the one above it can make
-  one underflow, as for the other operations.
-  `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|. Against a 1700-bit
-  reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the double-double exp and
-  ln, 0.86 u⁴ and 0.41 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the
-  ladder included (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
+- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, sums a Taylor polynomial
+  whose degree falls with the reduced argument, and squares in the form t ← 2t + t², as the QD library's source does; ln
+  takes one Newton step on exp from the double-double logarithm, which starts from `explog`'s own binary64 logarithm,
+  within a proven 5.915 u. The double-double ones use the double-word operations whose bounds are published (Joldes,
+  Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved formally, rather than `*`). The
+  octo-double bounds are proved in the paper's appendix on exp and log. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴
+  for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹
+  for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only
+  where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled below 2, and an
+  emulator with every product hooked finds none below the normal range at any binade of the argument, the closest 48
+  binades above it (the paper's appendix on exp and log); a part far below the one above it can make one underflow, as
+  for the other operations. `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|.
+  Against a 1700-bit reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the
+  double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double,
+  parts at the top of the ladder included
+  (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
