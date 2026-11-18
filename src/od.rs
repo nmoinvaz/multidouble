@@ -1,98 +1,99 @@
-//! Scalar octo-double: an unevaluated sum x0 + x1 + ... + x7 of eight f64, renormalized so that the parts do not
-//! overlap, about 126 significant digits (2^-418 relative, `OD::EPS`). A product, a quotient or a square root has
-//! |x_{i+1}| <= ulp(x_i)/2; a sum (od + od, od + f64) |x_{i+1}| <= ulp(x_i), since after cancelling operands its
-//! renormalization can leave a part past half the ulp of the one above, up to 0.74 ulp in the tests
-//! (`od_tests::od_results_do_not_overlap`; ulp-nonoverlapping in the sense of Joldes, Muller and Popescu, below). The
-//! 8-lane `ov::OV` runs the same algorithms with bitwise the same results.
+//! Scalar octo-double, an unevaluated sum x0 + x1 + ... + x7 of eight f64 renormalized so that the parts do not
+//! overlap. It carries about 126 significant digits (2^-418 relative, `OD::EPS`). A product, a quotient or a square
+//! root has |x_{i+1}| <= ulp(x_i)/2. A sum (od + od, od + f64) has |x_{i+1}| <= ulp(x_i), ulp-nonoverlapping in the
+//! sense of Joldes, Marty, Muller and Popescu (below), since after cancellation its renormalization can leave a part
+//! past half the ulp of the one above, up to 0.74 ulp in the tests (`od_tests::od_results_do_not_overlap`). The 8-lane
+//! `ov::OV` runs the same algorithms with bitwise the same results.
 //!
-//! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the
-//! scalar type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double
-//! algorithms of the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating
-//! point arithmetic", ARITH-15, 2001, 155-162, doi:10.1109/ARITH.2001.930115) from four parts to eight, with the
-//! error-free transformations two-sum and the FMA two-product (`dd`):
+//! The algorithms are written once over `Limb`, a part position of one value (`f64`) or of eight (`V8`), so the scalar
+//! type and the lanes perform the same IEEE operations in the same order. They generalize the quad-double algorithms of
+//! the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating point arithmetic",
+//! ARITH-15, 2001, 155-162, doi:10.1109/ARITH.2001.930115) from four parts to eight, built on the error-free
+//! transformations two-sum and FMA two-product (`dd`).
 //!
-//! * Renormalization (`renorm`): QD's two passes. The first runs from the smallest part up with two-sums, so it is
-//!   error-free whatever the order of the parts (VecSum: Ogita, Rump, Oishi, "Accurate sum and dot product", SIAM J.
-//!   Sci. Comput. 26(6), 2005, 1955-1988, doi:10.1137/030601818; Joldes, Marty, Muller, Popescu, "Arithmetic
-//!   algorithms for extended precision using floating-point expansions", IEEE Trans. Comput. 65(4), 2016,
-//!   1197-1210, doi:10.1109/TC.2015.2441714). The second runs from the top with two-sums and skips zero errors, so
-//!   that an exact partial sum does not leave a gap, and adds what is left into the eighth part. Its two-sums are
-//!   exact whatever the order of the first pass's output: a quick-two-sum is exact only when |acc| >= |c_i|, and a
-//!   product of a value with a part far below the one above it (x0 + x1 with |x1| far below ulp(x0), or zero parts
-//!   between nonzero ones) gives the first pass levels out of magnitude order, where a quick-two-sum dropped terms of
-//!   about 2^-325 (`od_tests`, category gap). The parts of such a result can still be out of magnitude order.
-//! * Addition: the parts pairwise by two-sums, then each error carried down the levels below it, every level but
-//!   the last by two-sums (`dep`), and the nine levels renormalized: QD's sloppy add with its error terms kept to
-//!   the eighth level. Its error is relative to |a| + |b| (Cray-style), as QD's `+`.
-//! * Multiplication: every partial product a_i b_j of order i + j <= 7 by two-product, the products of order 8 by
-//!   fused multiply-adds, all deposited by order into nine levels whose first eight sum with two-sums, then
-//!   renormalized: QD's accurate multiply, extended to eight parts. The levels carry the product's terms to order 8,
-//!   below the eighth part, so its error is that of the renormalization's rounding to eight parts.
-//! * The sloppy multiply (`OD::sloppy_mul`, opt-in): QD's sloppy multiply extended to eight parts. Levels 0..6 sum
-//!   with two-sums, each carry taken down to level 6 only, and level 7 sums in plain f64 the products of orders 7
-//!   and 8 (by fused multiply-adds), the errors of order 6 and the carries out of level 6. There is no level 8, so
-//!   the 168 two-sums of the default's carries become 112, and the renormalization of the eight levels is exact. Its
-//!   error is the 64 roundings at level 7 and the dropped products of order above 8: at most 2^31.93 u^8 |a_0 b_0|
-//!   (u = 2^-53) for operands on the ladder |a_i| <= (2u)^i |a_0|, Theorem 30 of the error-bounds paper (constant from
-//!   `paper/sloppy_consts.py`). The bound is a triangle inequality over the 64 roundings: random operands give at most
+//! * Renormalization (`renorm`) takes QD's two passes. The first runs from the smallest part up with two-sums, so it is
+//!   error-free whatever the order of the parts (VecSum, Ogita, Rump and Oishi, "Accurate sum and dot product", SIAM J.
+//!   Sci. Comput. 26(6), 2005, 1955-1988, doi:10.1137/030601818; Joldes, Marty, Muller and Popescu, "Arithmetic
+//!   algorithms for extended precision using floating-point expansions", IEEE Trans. Comput. 65(4), 2016, 1197-1210,
+//!   doi:10.1109/TC.2015.2441714). The second runs from the top with two-sums and skips zero errors, so that an exact
+//!   partial sum leaves no gap, and adds what is left into the eighth part. Its two-sums are exact whatever the order
+//!   of the first pass's output. A quick-two-sum is exact only when |acc| >= |c_i|, and a product of a value with a
+//!   part far below the one above it (x0 + x1 with |x1| far below ulp(x0), or zero parts between nonzero ones) gives
+//!   the first pass levels out of magnitude order, where a quick-two-sum would drop terms of about 2^-325
+//!   (`od_tests`, category gap). The parts of such a result can still be out of magnitude order.
+//! * Addition is QD's sloppy add with its error terms kept to the eighth level. It adds the parts pairwise by two-sums,
+//!   carries each error down the levels below it, every level but the last by two-sums (`dep`), and renormalizes the
+//!   nine levels. Its error is relative to |a| + |b| (Cray-style), as QD's `+`.
+//! * Multiplication is QD's accurate multiply extended to eight parts. Every partial product a_i b_j of order
+//!   i + j <= 7 is formed by two-product and the products of order 8 by fused multiply-adds. All are deposited by order
+//!   into nine levels whose first eight sum with two-sums, then renormalized. The levels carry the product's terms to
+//!   order 8, below the eighth part, so its error is that of the renormalization's rounding to eight parts.
+//! * The opt-in sloppy multiply (`OD::sloppy_mul`) is QD's sloppy multiply extended to eight parts. Levels 0..6 sum
+//!   with two-sums, each carry taken down to level 6 only. Level 7 sums in plain f64 the products of orders 7 and 8 (by
+//!   fused multiply-adds), the errors of order 6 and the carries out of level 6. With no level 8, the 168 two-sums of
+//!   the default's carries become 112, and the renormalization of the eight levels is exact. Its error, the 64
+//!   roundings at level 7 and the dropped products of order above 8, is at most 2^31.93 u^8 |a_0 b_0| (u = 2^-53) for
+//!   operands on the ladder |a_i| <= (2u)^i |a_0| (Theorem 30 of `paper/expansion-error-bounds.pdf`, constant from
+//!   `paper/sloppy_consts.py`). The bound is a triangle inequality over the 64 roundings. Random operands give at most
 //!   98 u^8 |a_0 b_0| and a hill climb 582 (`od_tests`, `od_sloppy_mul`, `od_sloppy_worst_case`), where `*` errs by at
 //!   most u^8. Its bits differ from `*`'s.
-//! * Division: long division, nine quotient terms q_k = r_0 / b_0 with the remainder r - b q_k updated in one pass
-//!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), two steps from the reciprocal of
-//!   the double-double square root, after scaling by a power of four.
-//! * `OdAcc`: sums of products, each product's nine levels added into nine running levels with two-sums (the scalar
-//!   twin of `ov::ODotAcc`); `finish` adds the levels with octo-double + f64.
+//! * Division is QD's accurate divide, long division with nine quotient terms q_k = r_0 / b_0, each remainder r - b q_k
+//!   formed in one pass.
+//! * The square root takes Newton's iteration on 1/sqrt(a), two steps from the reciprocal of the double-double square
+//!   root, after scaling by a power of four.
+//! * `OdAcc`, the scalar twin of `ov::ODotAcc`, sums products by adding each product's nine levels into nine running
+//!   levels with two-sums. `finish` adds the levels with octo-double + f64.
 //!
-//! The error bounds the tests check are stated per operation where it is defined (`od_tests`), measured against
-//! exact arithmetic (`exact`). The algorithms carry no proof here: the bounds are those measured. Full precision
-//! needs every part to be a normal f64, |x| above about 2^-600 (424 bits above 2^-1022); below that the lower parts
-//! lose bits to underflow, as QD's do below about 2^-800.
+//! `od_tests` checks every operation against exact arithmetic (`exact`), with the error bounds stated there.
+//! `paper/expansion-error-bounds.pdf` proves bounds for the sum, the product, the quotient, the square root and sums of
+//! products. Full precision needs every part to be a normal f64, |x| above about 2^-600 (424 bits above 2^-1022). Below
+//! that the lower parts lose bits to underflow, as QD's do below about 2^-800.
 //!
-//! With the cargo feature `mutate`, `mutate::set(id)` breaks one algorithm on purpose in the current thread, for
-//! the controls of the accuracy tests; without it the hooks are compile-time `false`.
+//! With the cargo feature `mutate`, `mutate::set(id)` breaks one algorithm on purpose in the current thread, for the
+//! controls of the accuracy tests. Without it the hooks are compile-time `false`.
 use crate::dd::DD;
 use crate::exact::Dy;
 use crate::qd::QD;
 use std::cmp::Ordering;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// Deliberate breakage for the controls (feature `mutate`; ids below, 0 = none).
+/// Deliberate breakage for the controls (feature `mutate`), selected by id, 0 for none.
 pub mod mutate {
-    /// renormalization: the eighth part dropped
+    /// Renormalization drops the eighth part.
     pub const RENORM_DROP: u32 = 1;
-    /// two-sum: its error's second term subtracted instead of added (a wrong sign in an error-free transformation)
+    /// Two-sum subtracts its error's second term instead of adding it, a wrong sign in an error-free transformation.
     pub const TWO_SUM_SIGN: u32 = 2;
-    /// add: the error of a1 + b1 dropped
+    /// Add drops the error of a1 + b1.
     pub const ADD_T1: u32 = 3;
-    /// mul: the error of a2 b3 (an order-6 term) dropped
+    /// Mul drops the error of a2 b3, an order-6 term.
     pub const MUL_E23: u32 = 4;
-    /// od x f64: the error of a3 b dropped
+    /// od x f64 drops the error of a3 b.
     pub const MUL_F_E3: u32 = 5;
-    /// divide: the remainder update before the sixth quotient term skipped
+    /// Divide skips the remainder update before the sixth quotient term.
     pub const DIV_REM: u32 = 6;
-    /// sqrt: the second Newton step skipped
+    /// Sqrt skips the second Newton step.
     pub const SQRT_ITER: u32 = 7;
-    /// dot accumulator: the error of the running sum at level 3 dropped
+    /// The dot accumulator drops the error of the running sum at level 3.
     pub const ACC_L3: u32 = 8;
-    /// parse: the last part truncated instead of rounded to nearest
+    /// Parse truncates the last part instead of rounding it to nearest.
     pub const PARSE_TRUNC: u32 = 9;
-    /// 8-lane only: the renormalization's zero test ignored (every error emitted)
+    /// The 8-lane renormalization ignores its zero test and emits every error.
     pub const OV_RENORM_MASK: u32 = 10;
-    /// 8-lane only, on the backend `simd::Native`: two-product's fused multiply-subtract replaced by a plain product
-    /// and a subtraction
+    /// The 8-lane two-product on the backend `simd::Native` replaces its fused multiply-subtract by a plain product and
+    /// a subtraction.
     pub const OV_FMA_PLAIN: u32 = 11;
-    /// renormalization: the second pass by quick-two-sums, exact only when |acc| >= |c_i|
+    /// Renormalization takes its second pass by quick-two-sums, exact only when |acc| >= |c_i|.
     pub const RENORM_FAST: u32 = 12;
-    /// mul: the products of order 8 dropped, an error of a few u^8 |ab| (u = 2^-53), inside the 1-unit thresholds
+    /// Mul drops the products of order 8, an error of a few u^8 |ab| (u = 2^-53) inside the 1-unit thresholds.
     pub const MUL_L8: u32 = 13;
-    /// od x dd and od + dd (`alg::expand_dd`, `alg::add_dd`): the second level one ulp up
+    /// od x dd and od + dd (`alg::expand_dd`, `alg::add_dd`) move the second level one ulp up.
     pub const DD_ULP: u32 = 14;
-    /// sloppy mul: the carries out of level 6 dropped instead of added to level 7 (the truncation one level too
-    /// high), an error of about u^7 |ab| whenever one is nonzero, past the sloppy multiply's proven bound
+    /// The sloppy mul drops the carries out of level 6 instead of adding them to level 7, truncating one level too
+    /// high. The error, about u^7 |ab| whenever a carry is nonzero, exceeds the sloppy multiply's proven bound.
     pub const SLOPPY_C6: u32 = 15;
-    /// number of ids
+    /// The number of ids.
     pub const N: u32 = 15;
-    /// the mutations' descriptions, by id
+    /// The mutations' descriptions, by id.
     pub const NAMES: [&str; 16] = [
         "none",
         "renorm: eighth part dropped",
@@ -115,20 +116,20 @@ pub mod mutate {
     #[cfg(feature = "mutate")]
     thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
 
-    /// select the mutation for the current thread (0 = none)
+    /// Selects the mutation for the current thread, 0 for none.
     #[cfg(feature = "mutate")]
     pub fn set(id: u32) {
         ID.with(|m| m.set(id));
     }
 
-    /// whether mutation id is selected in the current thread
+    /// Whether mutation id is selected in the current thread.
     #[cfg(feature = "mutate")]
     #[inline(always)]
     pub fn on(id: u32) -> bool {
         ID.with(|m| m.get() == id)
     }
 
-    /// whether mutation id is selected: never, without the feature `mutate`
+    /// Whether mutation id is selected, never without the feature `mutate`.
     #[cfg(not(feature = "mutate"))]
     #[inline(always)]
     pub fn on(_id: u32) -> bool {
@@ -137,13 +138,13 @@ pub mod mutate {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// the arithmetic, once for f64 and for the lanes
+// The arithmetic, once for f64 and for the lanes
 // ---------------------------------------------------------------------------------------------------------------
 
-/// One part position of octo-doubles: `f64` for the scalar `OD`, `V8<S>` for the lanes of `ov::OV<S>`. The
+/// One part position of octo-doubles, `f64` for the scalar `OD` and `V8<S>` for the lanes of `ov::OV<S>`. The
 /// operations are IEEE round-to-nearest with `fma` and `fms` fused, so each is bitwise the same on both.
 pub(crate) trait Limb: Copy {
-    /// a per-lane condition: bool for f64, `M8<S>` for the lanes
+    /// A per-lane condition, bool for f64 and `M8<S>` for the lanes.
     type M: Copy;
     fn zero() -> Self;
     fn splat(x: f64) -> Self;
@@ -151,23 +152,23 @@ pub(crate) trait Limb: Copy {
     fn sub(self, o: Self) -> Self;
     fn mul(self, o: Self) -> Self;
     fn div(self, o: Self) -> Self;
-    /// self b + c with one rounding
+    /// self b + c with one rounding.
     fn fma(self, b: Self, c: Self) -> Self;
-    /// self b - c with one rounding
+    /// self b - c with one rounding.
     fn fms(self, b: Self, c: Self) -> Self;
-    /// the sign bit flipped
+    /// The sign bit flipped.
     fn neg(self) -> Self;
     fn sqrt(self) -> Self;
-    /// 2^floor(log2 |x|) for normal x
+    /// 2^floor(log2 |x|) for normal x.
     fn pow2_floor(self) -> Self;
-    /// self == 0
+    /// self == 0.
     fn is_zero(self) -> Self::M;
-    /// per lane: t where m, f elsewhere
+    /// t in the lanes where m holds, f elsewhere.
     fn sel(m: Self::M, t: Self, f: Self) -> Self;
-    /// the renormalization of N >= 8 parts to eight (the scalar one branches on zero errors, the lanes' masks them)
+    /// The renormalization of N >= 8 parts to eight. The scalar one branches on zero errors, the lanes' masks them.
     fn renorm<const N: usize>(c: [Self; N]) -> [Self; 8];
-    /// f, an `#[inline(always)]` closure, run as a function of its own on the lane backends that need no target
-    /// features (`Simd::outline`) and inlined elsewhere: the steps of the operations below
+    /// Runs f, an `#[inline(always)]` closure holding the steps of an operation below, as a function of its own on the
+    /// lane backends that need no target features (`Simd::outline`), and inlined elsewhere.
     fn outline<T>(f: impl FnOnce() -> T) -> T;
 }
 
@@ -239,7 +240,7 @@ impl Limb for f64 {
     }
 }
 
-/// (a + b) as (s, e) with s = RN(a + b), error-free (Knuth's two-sum, as `dd::two_sum`)
+/// a + b as (s, e) with s = RN(a + b), error-free (Knuth's two-sum, as `dd::two_sum`).
 #[inline(always)]
 pub(crate) fn two_sum<L: Limb>(a: L, b: L) -> (L, L) {
     let s = a.add(b);
@@ -253,22 +254,22 @@ pub(crate) fn two_sum<L: Limb>(a: L, b: L) -> (L, L) {
     }
 }
 
-/// (a + b) as (s, e), error-free when |a| >= |b| (Dekker's fast two-sum, as `dd::quick_two_sum`)
+/// a + b as (s, e), error-free when |a| >= |b| (Dekker's fast two-sum, as `dd::quick_two_sum`).
 #[inline(always)]
 pub(crate) fn quick_two_sum<L: Limb>(a: L, b: L) -> (L, L) {
     let s = a.add(b);
     (s, b.sub(s.sub(a)))
 }
 
-/// a b as (p, e), error-free barring underflow (the FMA two-product, as `dd::two_prod`)
+/// a b as (p, e), error-free barring underflow (the FMA two-product, as `dd::two_prod`).
 #[inline(always)]
 pub(crate) fn two_prod<L: Limb>(a: L, b: L) -> (L, L) {
     let p = a.mul(b);
     (p, a.fms(b, p))
 }
 
-/// t added into level l of the levels s: two-sums at levels l..K-2, each error carried to the next level, and a
-/// plain add at the last level K-1. All levels but the last stay error-free.
+/// Adds t into level l of the levels s by two-sums at levels l..K-2, each error carried to the next level, and a plain
+/// add at the last level K-1. All levels but the last stay error-free.
 #[inline(always)]
 fn dep<L: Limb, const K: usize>(s: &mut [L; K], l: usize, t: L) {
     let mut e = t;
@@ -280,8 +281,9 @@ fn dep<L: Limb, const K: usize>(s: &mut [L; K], l: usize, t: L) {
     s[K - 1] = s[K - 1].add(e);
 }
 
-/// The first pass of the renormalization, from the smallest part up: s = c[N-1], then (s, c[i+1]) = two-sum(c[i],
-/// s) for i = N-2 down to 0, and c[0] = s. Error-free (VecSum), whatever the order of the parts' magnitudes.
+/// The first pass of the renormalization, from the smallest part up. With s = c\[N-1\] it sets
+/// (s, c\[i+1\]) = two-sum(c\[i\], s) for i = N-2 down to 0, then c\[0\] = s. It is error-free (VecSum) whatever the
+/// order of the parts' magnitudes.
 #[inline(always)]
 pub(crate) fn vecsum<L: Limb, const N: usize>(c: [L; N]) -> [L; N] {
     let mut c = c;
@@ -295,10 +297,10 @@ pub(crate) fn vecsum<L: Limb, const N: usize>(c: [L; N]) -> [L; N] {
     c
 }
 
-/// The renormalization of N parts to eight, branching on zero errors (`ov` has the masked twin): the two-sum pass
-/// from the smallest part up (`vecsum`), then a quick-two-sum pass from the top that emits a part only where the
-/// error is nonzero, and once seven parts are out adds the rest into the eighth. An infinite first part returns the
-/// first eight parts as they are.
+/// The renormalization of N parts to eight, branching on zero errors (`ov` has the masked twin). The two-sum pass from
+/// the smallest part up (`vecsum`) is followed by a two-sum pass from the top that emits a part only where the error is
+/// nonzero and, once seven parts are out, adds the rest into the eighth. An infinite first part returns the first eight
+/// parts as they are.
 #[inline(always)]
 pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     if c[0].is_infinite() {
@@ -309,9 +311,10 @@ pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     let mut k = 0;
     let mut acc = c[0];
     for &ci in &c[1..] {
-        // exact in any order: VecSum's output can be out of magnitude order (a product of a value with a part far
-        // below the one above it). A quick-two-sum is exact when |acc| >= |c_i| and then gives the two-sum's bits; the
-        // scalar type branches to it (an od + od about 1.2x faster), the lanes take the two-sum throughout
+        // VecSum's output can be out of magnitude order (a product of a value with a part far below the one above it),
+        // so this pass must be exact in any order. A quick-two-sum is exact when |acc| >= |c_i|, and then gives the
+        // two-sum's bits. The scalar type branches to it, which makes an od + od about 1.2x faster. The lanes take the
+        // two-sum throughout.
         let (t, e) = if mutate::on(mutate::RENORM_FAST) || acc.abs() >= ci.abs() {
             quick_two_sum(acc, ci)
         } else {
@@ -332,11 +335,12 @@ pub(crate) fn renorm_scalar<const N: usize>(c: [f64; N]) -> [f64; 8] {
     out
 }
 
-/// the eight-part arithmetic on part arrays, for `OD` and `ov::OV`
+/// The eight-part arithmetic on part arrays, for `OD` and `ov::OV`.
 pub(crate) mod alg {
     use super::{dep, mutate, quick_two_sum, two_prod, two_sum, Limb};
 
-    /// a + b (the default `+`): the parts pairwise by two-sums, the errors carried down nine levels, renormalized
+    /// a + b, the default `+`. The parts are added pairwise by two-sums, the errors carried down nine levels, and the
+    /// levels renormalized.
     #[inline(always)]
     pub fn add<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
         L::outline(
@@ -363,7 +367,7 @@ pub(crate) mod alg {
         )
     }
 
-    /// a + b for an exact f64 b: b down the parts by two-sums, renormalized from nine parts
+    /// a + b for an exact f64 b, carried down the parts by two-sums and renormalized from nine parts.
     #[inline(always)]
     pub fn add_f<L: Limb>(a: &[L; 8], b: L) -> [L; 8] {
         L::outline(
@@ -380,7 +384,7 @@ pub(crate) mod alg {
         )
     }
 
-    /// a b for an exact f64 b: eight two-products, their errors carried down nine levels, renormalized
+    /// a b for an exact f64 b by eight two-products, their errors carried down nine levels and renormalized.
     #[inline(always)]
     pub fn mul_f<L: Limb>(a: &[L; 8], b: L) -> [L; 8] {
         L::outline(
@@ -407,8 +411,9 @@ pub(crate) mod alg {
         )
     }
 
-    /// a b by order: levels 0..7 hold the partial products of their order and the errors carried into them, all
-    /// summed with two-sums, and level 8 the products of order 8 (by FMA) and everything below, in plain f64
+    /// The levels of a b by order. Levels 0..7 hold the partial products of their order and the errors carried into
+    /// them, all summed with two-sums. Level 8 holds the products of order 8 (by FMA) and everything below, in plain
+    /// f64.
     #[inline(always)]
     pub fn expand<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 9] {
         L::outline(
@@ -437,7 +442,7 @@ pub(crate) mod alg {
                 dep(&mut s, 6, e[5]);
                 dep(&mut s, 7, e[6]);
                 dep(&mut s, 8, e[7]);
-                // rows 1..7: a_i b_j into level i + j, its error into level i + j + 1
+                // Rows 1..7 put a_i b_j into level i + j and its error into level i + j + 1.
                 macro_rules! pp {
                 ($(($i:literal, $j:literal)),*) => {
                     $({
@@ -460,20 +465,20 @@ pub(crate) mod alg {
         )
     }
 
-    /// a b (the default `*`): the nine levels of `expand`, renormalized
+    /// a b, the default `*`, as the nine levels of `expand` renormalized.
     #[inline(always)]
     pub fn mul<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
         L::renorm(expand(a, b))
     }
 
-    /// `expand(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise up to NaNs' signs and payloads, without
-    /// the partial products of b's six zero parts: 15 two-products of the 36, and one product of the order-8 sum's
-    /// seven. For finite parts of a those products deposit zeros at levels 3..8. The carry of a0 b0's error (`dep`
-    /// from level 1) leaves no -0 at levels 2..8, as a two-sum's error is never -0, so the zero deposits after it
-    /// change nothing. Before it, `expand`'s levels 2..8 differ from these at most in the sign of a zero, which that
-    /// carry erases. An infinite or NaN part makes some skipped products NaN. A non-finite a0 makes e0 NaN, whose
-    /// carry fills levels 1..8. A non-finite a_i, i >= 1, makes the kept a_i b0's error NaN, whose carry fills
-    /// levels i + 1..8, where every skipped NaN lands.
+    /// `expand(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise up to NaNs' signs and payloads, without the
+    /// partial products of b's six zero parts. It keeps 15 two-products of the 36 and one product of the order-8 sum's
+    /// seven. For finite parts of a the skipped products deposit zeros at levels 3..8. The carry of a0 b0's error
+    /// (`dep` from level 1) leaves no -0 at levels 2..8, as a two-sum's error is never -0, so the zero deposits after
+    /// it change nothing. Before it, `expand`'s levels 2..8 differ from these at most in the sign of a zero, which that
+    /// carry erases. An infinite or NaN part makes some skipped products NaN. A non-finite a0 makes e0 NaN, whose carry
+    /// fills levels 1..8. A non-finite a_i, i >= 1, makes the kept a_i b0's error NaN, whose carry fills levels
+    /// i + 1..8, where every skipped NaN lands.
     #[inline(always)]
     pub fn expand_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 9] {
         L::outline(
@@ -485,17 +490,17 @@ pub(crate) mod alg {
                 s[0] = p0;
                 s[1] = p1;
                 if mutate::on(mutate::DD_ULP) {
-                    // one ulp up, for a normal p1
+                    // One ulp up, for a normal p1.
                     s[1] = p1.add(p1.pow2_floor().mul(L::splat(f64::EPSILON)));
                 }
-                // the order-8 sum of `expand` without its zero products
+                // The order-8 sum of `expand` without its zero products.
                 s[8] = a[7].mul(b1);
                 if mutate::on(mutate::MUL_L8) {
                     s[8] = L::zero();
                 }
                 dep(&mut s, 1, e0);
                 dep(&mut s, 2, e1);
-                // rows 1..7 of `expand`, columns 0 and 1
+                // Rows 1..7 of `expand`, columns 0 and 1.
                 macro_rules! pp {
                 ($(($i:literal, $j:literal)),*) => {
                     $({
@@ -517,8 +522,8 @@ pub(crate) mod alg {
         )
     }
 
-    /// `dep` on the sloppy product's eight levels: two-sums at levels l..6, a plain add at level 7 (with
-    /// `mutate::SLOPPY_C6`, the carry out of level 6 dropped)
+    /// `dep` on the sloppy product's eight levels, two-sums at levels l..6 and a plain add at level 7. With
+    /// `mutate::SLOPPY_C6` it drops the carry out of level 6.
     #[inline(always)]
     fn dep_sloppy<L: Limb>(s: &mut [L; 8], l: usize, t: L) {
         if l <= 6 && mutate::on(mutate::SLOPPY_C6) {
@@ -531,9 +536,9 @@ pub(crate) mod alg {
         }
     }
 
-    /// The sloppy product's eight levels: levels 0..6 as in `expand`, each deposit carried down with two-sums to
-    /// level 6 only, and level 7 in plain f64. Level 7 holds the products of orders 7 and 8 by fused multiply-adds,
-    /// the smallest first, the errors of the products of order 6, and the carries out of level 6.
+    /// The sloppy product's eight levels. Levels 0..6 are those of `expand`, each deposit carried down with two-sums to
+    /// level 6 only. Level 7 sums in plain f64 the products of orders 7 and 8 by fused multiply-adds, the smallest
+    /// first, the errors of the products of order 6, and the carries out of level 6.
     #[inline(always)]
     pub fn expand_sloppy<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
         L::outline(
@@ -568,7 +573,7 @@ pub(crate) mod alg {
                 dep_sloppy(&mut s, 5, e[4]);
                 dep_sloppy(&mut s, 6, e[5]);
                 dep_sloppy(&mut s, 7, e[6]);
-                // rows 1..6: a_i b_j of order i + j <= 6 into level i + j, its error into level i + j + 1
+                // Rows 1..6 put a_i b_j of order i + j <= 6 into level i + j and its error into level i + j + 1.
                 macro_rules! pp {
                 ($(($i:literal, $j:literal)),*) => {
                     $({
@@ -589,7 +594,7 @@ pub(crate) mod alg {
         )
     }
 
-    /// a b for a double-double b = (b0, b1): bitwise `mul(a, b)`, the levels of `expand_dd` renormalized
+    /// a b for a double-double b = (b0, b1), bitwise `mul(a, b)`, as the levels of `expand_dd` renormalized.
     #[inline(always)]
     pub fn mul_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 8] {
         L::renorm(expand_dd(a, b0, b1))
@@ -598,8 +603,8 @@ pub(crate) mod alg {
     /// `add(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise up to NaNs' signs and payloads, without the
     /// two-sums of a's parts 2..7 with zero and the carries of their errors. For a finite part such a two-sum returns
     /// the part, a -0 as +0, with a zero error, and the carry of a0 + b0's error erases that difference as in
-    /// `expand_dd`. For an infinite or NaN part its error is NaN, and that carry, passing the part's level, makes
-    /// every level below it NaN.
+    /// `expand_dd`. For an infinite or NaN part its error is NaN, and that carry, passing the part's level, makes every
+    /// level below it NaN.
     #[inline(always)]
     pub fn add_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 8] {
         L::outline(
@@ -611,7 +616,7 @@ pub(crate) mod alg {
                 s[0] = s0;
                 s[1] = s1;
                 if mutate::on(mutate::DD_ULP) {
-                    // one ulp up, for a normal s1
+                    // One ulp up, for a normal s1.
                     s[1] = s1.add(s1.pow2_floor().mul(L::splat(f64::EPSILON)));
                 }
                 s[2..8].copy_from_slice(&a[2..8]);
@@ -623,14 +628,15 @@ pub(crate) mod alg {
         )
     }
 
-    /// a b by the sloppy multiply: the eight levels of `expand_sloppy`, renormalized (exactly, as eight terms)
+    /// a b by the sloppy multiply, the eight levels of `expand_sloppy` renormalized. The renormalization of eight terms
+    /// is exact.
     #[inline(always)]
     pub fn sloppy_mul<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
         L::renorm(expand_sloppy(a, b))
     }
 
-    /// r - b q for an f64 q in one pass: r_i - RN(b_i q) by two-sums, those errors and the errors of the products
-    /// carried down nine levels, renormalized (the remainder of long division)
+    /// r - b q for an f64 q in one pass, the remainder of long division. It forms r_i - RN(b_i q) by two-sums, carries
+    /// their errors and the products' errors down nine levels, and renormalizes.
     #[inline(always)]
     pub fn sub_mul_f<L: Limb>(r: &[L; 8], b: &[L; 8], q: L) -> [L; 8] {
         L::outline(
@@ -659,8 +665,8 @@ pub(crate) mod alg {
         )
     }
 
-    /// a / b by long division (QD's accurate divide with nine quotient terms), each quotient term q(r_0) = r_0 / b_0
-    /// (so that `ov::OV::div_by` can pass a shared divisor)
+    /// a / b by long division, QD's accurate divide with nine quotient terms. Each quotient term is q(r_0) = r_0 / b_0,
+    /// a closure so that `ov::OV::div_by` can pass a shared divisor.
     #[inline(always)]
     pub fn div<L: Limb>(a: &[L; 8], b: &[L; 8], q: impl Fn(L) -> L) -> [L; 8] {
         let mut qs = [L::zero(); 9];
@@ -675,7 +681,7 @@ pub(crate) mod alg {
         L::renorm(qs)
     }
 
-    /// times a power of two, every part
+    /// a times a power of two s, every part scaled.
     #[inline(always)]
     pub fn mul_pwr2<L: Limb>(a: &[L; 8], s: L) -> [L; 8] {
         let mut r = *a;
@@ -685,7 +691,8 @@ pub(crate) mod alg {
         r
     }
 
-    /// -a: the first part's sign bit flipped, the others as -x + 0, so a zero lower part is +0 (as `QD`'s)
+    /// -a, the first part's sign bit flipped and the others computed as -x + 0, so that a zero lower part is +0 (as
+    /// `QD`'s).
     #[inline(always)]
     pub fn neg<L: Limb>(a: &[L; 8]) -> [L; 8] {
         let z = L::zero();
@@ -697,10 +704,10 @@ pub(crate) mod alg {
         r
     }
 
-    /// The square root: Newton's iteration on 1/sqrt(a), two steps from the reciprocal of the double-double square
-    /// root of a's two leading parts, the first with its second-order term, then times a, applied to a scaled by an
-    /// exact power of four into [1, 4) and the result scaled back. A zero gives zero. The products and sums are the
-    /// caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here at every call).
+    /// The square root, Newton's iteration on 1/sqrt(a) times a. It takes two steps from the reciprocal of the
+    /// double-double square root of a's two leading parts, the first with its second-order term. It runs on a scaled by
+    /// an exact power of four into [1, 4) and scales the result back. A zero gives zero. The products and sums are the
+    /// caller's `mul`, `add` and `add_f`, the type's own operations, so that they are not inlined here at every call.
     #[inline(always)]
     pub fn sqrt<L: Limb>(
         x: &[L; 8],
@@ -717,10 +724,10 @@ pub(crate) mod alg {
             a[k] = x[k].mul(inv).mul(inv);
         }
         let one = L::splat(1.0);
-        // r_0 = 1 / y for y the double-double square root of a_0 + a_1, renormalized to a double-word number by a
-        // quick two-sum: y by Algorithm 8 of Lefevre, Louvet, Muller, Picot and Rideau (`DD::sqrt`, within 25/8 u^2;
-        // a_0 is in [1, 4)) and 1 / y by DWDivDW2 of Joldes, Muller and Popescu (`DD::fast_div`, within
-        // 15 u^2 + 56 u^3)
+        // r_0 = 1 / y for y the double-double square root of a_0 + a_1, which a quick two-sum first renormalizes to a
+        // double-word number. y is Algorithm 8 of Lefevre, Louvet, Muller, Picot and Rideau (`DD::sqrt`, within
+        // 25/8 u^2, with a_0 in [1, 4)). 1 / y is DWDivDW2 of Joldes, Muller and Popescu (`DD::fast_div`, within
+        // 15 u^2 + 56 u^3).
         let (a0, a1) = quick_two_sum(a[0], a[1]);
         let sh = a0.sqrt();
         let (yh, yl) = quick_two_sum(sh, a1.add(sh.neg().fma(sh, a0)).div(sh.add(sh)));
@@ -733,12 +740,13 @@ pub(crate) mod alg {
         r[0] = r0;
         r[1] = r1;
         let h = mul_pwr2(&a, L::splat(0.5));
-        // first step, with its second-order term: r + (c + 3/2 c^2) r for c = 1/2 - h r^2, an error cubic in r_0's
+        // The first step, with its second-order term, is r + (c + 3/2 c^2) r for c = 1/2 - h r^2. Its error is cubic in
+        // r_0's.
         let c = add_f(&neg(&mul(&h, &mul(&r, &r))), L::splat(0.5));
         let c2 = mul(&c, &c);
         let w = add(&c, &add(&c2, &mul_pwr2(&c2, L::splat(0.5))));
         r = add(&r, &mul(&w, &r));
-        // second step, Newton's: r + (1/2 - h r^2) r
+        // The second step is Newton's, r + (1/2 - h r^2) r.
         if !mutate::on(mutate::SQRT_ITER) {
             let c = add_f(&neg(&mul(&h, &mul(&r, &r))), L::splat(0.5));
             r = add(&r, &mul(&c, &r));
@@ -750,8 +758,8 @@ pub(crate) mod alg {
         r
     }
 
-    /// the levels of `expand` (or a's parts) added into the running levels acc: level l by two-sums into acc[l],
-    /// each error carried down to level 8, which sums in plain f64
+    /// Adds the levels t of `expand`, or a value's parts, into the running levels acc. Level l goes into acc\[l\] by
+    /// two-sums, each error carried down to level 8, which sums in plain f64.
     #[inline(always)]
     pub fn acc_levels<L: Limb, const K: usize>(acc: &mut [L; 9], t: &[L; K]) {
         L::outline(
@@ -772,20 +780,20 @@ pub(crate) mod alg {
         )
     }
 
-    /// quick-two-sum of a0 and the sum of the lower parts (a's value to about 2^-106)
+    /// The quick-two-sum of a0 and the sum of the lower parts, a's value to about 2^-106.
     #[inline(always)]
     pub fn to_dd<L: Limb>(a: &[L; 8]) -> (L, L) {
         let t = a[1].add(a[2].add(a[3].add(a[4].add(a[5].add(a[6].add(a[7]))))));
         quick_two_sum(a[0], t)
     }
 
-    /// the four leading parts, the fourth with the sum of the lower four added (renormalized by the caller)
+    /// The four leading parts, the fourth with the sum of the lower four added, for the caller to renormalize.
     #[inline(always)]
     pub fn to_qd_parts<L: Limb>(a: &[L; 8]) -> [L; 4] {
         [a[0], a[1], a[2], a[3].add(a[4].add(a[5].add(a[6].add(a[7]))))]
     }
 
-    /// a0 and the sum of the lower parts (a's nearest f64 to within that sum's rounding)
+    /// a0 and the sum of the lower parts. Their sum is a's nearest f64 to within the rounding of the lower parts' sum.
     #[inline(always)]
     pub fn to_f64_parts<L: Limb>(a: &[L; 8]) -> (L, L) {
         (a[0], a[1].add(a[2].add(a[3].add(a[4].add(a[5].add(a[6].add(a[7])))))))
@@ -793,13 +801,13 @@ pub(crate) mod alg {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// the scalar type
+// The scalar type
 // ---------------------------------------------------------------------------------------------------------------
 
 /// Octo-double `x[0] + x[1] + ... + x[7]`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct OD {
-    /// the parts, largest first
+    /// The parts, largest first.
     pub x: [f64; 8],
 }
 
@@ -810,22 +818,22 @@ impl OD {
     pub const ONE: OD = OD {
         x: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     };
-    /// 2^-418, the unit of the error bounds (twice the exponent of QD's 2^-209; the parts hold 424 bits)
+    /// 2^-418, the unit of the error bounds, twice the exponent of QD's 2^-209. The parts hold 424 bits.
     pub const EPS: f64 = f64::from_bits((1023 - 418) << 52);
 
-    /// renormalized from eight parts
+    /// Renormalized from eight parts.
     #[inline]
     pub fn new(x: [f64; 8]) -> OD {
         OD { x: renorm_scalar(x) }
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_f64(x: f64) -> OD {
         let mut o = OD::ZERO;
         o.x[0] = x;
         o
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_dd(d: DD) -> OD {
         let mut o = OD::ZERO;
@@ -833,15 +841,15 @@ impl OD {
         o.x[1] = d.lo;
         o
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_qd(q: QD) -> OD {
         let mut o = OD::ZERO;
         o.x[..4].copy_from_slice(&q.x);
         o
     }
-    /// nearest f64 (to within the rounding of the seven lower parts' sum); a zero tail leaves the leading part as it
-    /// is, so a zero keeps its sign
+    /// The nearest f64, to within the rounding of the seven lower parts' sum. A zero tail leaves the leading part as it
+    /// is, so a zero keeps its sign.
     #[inline(always)]
     pub fn to_f64(self) -> f64 {
         let (h, t) = alg::to_f64_parts(&self.x);
@@ -851,25 +859,25 @@ impl OD {
             h + t
         }
     }
-    /// double-double, to about 2^-106 relative (as `QD::to_dd`)
+    /// Double-double, to about 2^-106 relative (as `QD::to_dd`).
     #[inline(always)]
     pub fn to_dd(self) -> DD {
         let (hi, lo) = alg::to_dd(&self.x);
         DD { hi, lo }
     }
-    /// quad-double, to about 2^-212 relative: the four leading parts with the lower four's sum added to the fourth,
-    /// renormalized (`QD::new`)
+    /// Quad-double, to about 2^-212 relative, the four leading parts with the lower four's sum added to the fourth,
+    /// renormalized (`QD::new`).
     #[inline(always)]
     pub fn to_qd(self) -> QD {
         let [a, b, c, d] = alg::to_qd_parts(&self.x);
         QD::new(a, b, c, d)
     }
-    /// the leading part is zero (so, renormalized, every part is)
+    /// Whether the leading part is zero, which for a renormalized value means every part is.
     #[inline(always)]
     pub fn is_zero(self) -> bool {
         self.x[0] == 0.0
     }
-    /// |self|: negated where the leading part is negative
+    /// |self|, negated where the leading part is negative.
     #[inline(always)]
     pub fn abs(self) -> OD {
         if self.x[0] < 0.0 {
@@ -878,7 +886,7 @@ impl OD {
             self
         }
     }
-    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
+    /// self times a power of two b (`dd::is_pwr2`), every part scaled, exact barring overflow and underflow.
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> OD {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
@@ -893,9 +901,9 @@ impl OD {
             x: alg::add_f(&self.x, b),
         }
     }
-    /// a b by the sloppy multiply (see the module doc): levels 0..6 error-free, level 7 in plain f64, about 1.3 times
-    /// fewer instructions than `*`, within 2^31.93 u^8 |a_0 b_0| of the exact product for operands on the ladder. Its
-    /// bits differ from `*`.
+    /// a b by the sloppy multiply (module doc), with levels 0..6 error-free and level 7 in plain f64. It takes about
+    /// 1.3 times fewer instructions than `*` and is within 2^31.93 u^8 |a_0 b_0| of the exact product for operands on
+    /// the ladder. Its bits differ from `*`'s.
     #[inline]
     pub fn sloppy_mul(self, b: OD) -> OD {
         OD {
@@ -909,14 +917,14 @@ impl OD {
             x: alg::mul_f(&self.x, b),
         }
     }
-    /// od + dd: bitwise `self + OD::from_dd(b)`, without the steps for the zero parts (`alg::add_dd`)
+    /// od + dd, bitwise `self + OD::from_dd(b)` without the steps for the zero parts (`alg::add_dd`).
     #[inline]
     pub fn add_dd(self, b: DD) -> OD {
         OD {
             x: alg::add_dd(&self.x, b.hi, b.lo),
         }
     }
-    /// od x dd: bitwise `self * OD::from_dd(b)`, without the partial products of the zero parts (`alg::expand_dd`)
+    /// od x dd, bitwise `self * OD::from_dd(b)` without the partial products of the zero parts (`alg::expand_dd`).
     #[inline]
     pub fn mul_dd(self, b: DD) -> OD {
         OD {
@@ -928,7 +936,7 @@ impl OD {
     pub fn recip(self) -> OD {
         OD::ONE / self
     }
-    /// the square root (Newton's iteration on 1/sqrt(a), see the module doc); a negative value gives NaN
+    /// The square root by Newton's iteration on 1/sqrt(a) (module doc). A negative value gives NaN.
     #[inline]
     pub fn sqrt(self) -> OD {
         let w = |x: &[f64; 8]| OD { x: *x };
@@ -941,7 +949,7 @@ impl OD {
             ),
         }
     }
-    /// integer power: binary powering, 1/a^|n| for n < 0 (as `QD::powi`)
+    /// Integer power by binary powering, 1/a^|n| for n < 0 (as `QD::powi`).
     pub fn powi(self, n: i32) -> OD {
         if n == 0 {
             return OD::ONE;
@@ -969,12 +977,12 @@ impl OD {
         }
     }
 
-    /// the exact value of the eight-part sum (finite parts)
+    /// The exact value of the eight-part sum, for finite parts.
     pub fn exact(self) -> Dy {
         Dy::sum(&self.x)
     }
 
-    /// Parse a decimal ("-1.234e-5", "3.14159...", "42"): the exact decimal value rounded to eight parts by greedy
+    /// Parses a decimal ("-1.234e-5", "3.14159...", "42"). The exact decimal value is rounded to eight parts by greedy
     /// round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), so |error| <= ulp(x7)/2 <= 2^-424 |v|.
     ///
     /// ```
@@ -986,22 +994,22 @@ impl OD {
     /// ```
     pub fn parse(s: &str) -> Result<OD, String> {
         let mut x = crate::qd::parse_parts::<8>(s, mutate::on(mutate::PARSE_TRUNC))?;
-        // a lower part that rounded to zero below the subnormals is +0, as everywhere else
+        // A lower part that rounded to zero below the subnormals is +0, as everywhere else.
         for v in x[1..].iter_mut() {
             *v += 0.0;
         }
         Ok(OD { x })
     }
 
-    /// Scientific notation with `digits` significant digits, correctly rounded (half to even) from the exact value
-    /// of the eight-part sum: "-1.2345e-05" style, at least two exponent digits.
+    /// Scientific notation with `digits` significant digits, correctly rounded (half to even) from the exact value of
+    /// the eight-part sum, in the style "-1.2345e-05" with at least two exponent digits.
     pub fn to_sci(self, digits: usize) -> String {
         crate::qd::sci_parts(&self.x, digits)
     }
 }
 
 impl std::fmt::Display for OD {
-    /// 128 significant digits (the eight parts carry about 126)
+    /// 128 significant digits (the eight parts carry about 126), or p + 1 for a precision p.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_sci(f.precision().map(|p| p + 1).unwrap_or(128)))
     }
@@ -1009,16 +1017,16 @@ impl std::fmt::Display for OD {
 
 impl std::str::FromStr for OD {
     type Err = String;
-    /// parse a decimal (`OD::parse`)
+    /// Parses a decimal (`OD::parse`).
     fn from_str(s: &str) -> Result<OD, String> {
         OD::parse(s)
     }
 }
 
-/// Lexicographic on the parts, as the QD library orders quad-doubles; None if a part is NaN. For renormalized values
-/// (nonoverlapping parts) this is the order of the values, up to ties at the parts' half-ulp bounds.
+/// Lexicographic on the parts, as the QD library orders quad-doubles, and None if a part is NaN. For renormalized
+/// values (nonoverlapping parts) this is the order of the values, up to ties at the parts' half-ulp bounds.
 impl PartialOrd for OD {
-    /// the parts compared in turn, the first that differ deciding
+    /// Compares the parts in turn. The first that differ decide.
     fn partial_cmp(&self, o: &OD) -> Option<Ordering> {
         for i in 0..8 {
             match self.x[i].partial_cmp(&o.x[i])? {
@@ -1032,7 +1040,7 @@ impl PartialOrd for OD {
 
 impl Neg for OD {
     type Output = OD;
-    /// every part negated, the lower seven as -x + 0, so that a zero lower part is +0 (as `QD`'s)
+    /// Every part negated, the lower seven as -x + 0, so that a zero lower part is +0 (as `QD`'s).
     #[inline(always)]
     fn neg(self) -> OD {
         OD { x: alg::neg(&self.x) }
@@ -1041,7 +1049,7 @@ impl Neg for OD {
 
 impl Add for OD {
     type Output = OD;
-    /// a + b (QD's sloppy add carried to eight parts, see the module doc)
+    /// a + b, QD's sloppy add carried to eight parts (module doc).
     #[inline]
     fn add(self, b: OD) -> OD {
         OD {
@@ -1061,7 +1069,7 @@ impl Sub for OD {
 
 impl Mul for OD {
     type Output = OD;
-    /// a b (the partial products to order 8, renormalized)
+    /// a b, the partial products to order 8 renormalized.
     #[inline]
     fn mul(self, b: OD) -> OD {
         OD {
@@ -1072,7 +1080,7 @@ impl Mul for OD {
 
 impl Div for OD {
     type Output = OD;
-    /// a / b by long division, nine quotient terms
+    /// a / b by long division with nine quotient terms.
     #[inline]
     fn div(self, b: OD) -> OD {
         let b0 = b.x[0];
@@ -1082,14 +1090,14 @@ impl Div for OD {
     }
 }
 
-/// the eight parts of octo-doubles as eight arrays, part k of value i at index i of array k (the layout of
-/// `OV::load`), the inverse of `from_parts`
+/// The eight parts of octo-doubles as eight arrays, part k of value i at index i of array k (the layout of `OV::load`).
+/// The inverse of `from_parts`.
 pub fn to_parts(v: &[OD]) -> [Vec<f64>; 8] {
     std::array::from_fn(|k| v.iter().map(|q| q.x[k]).collect())
 }
 
-/// octo-doubles from the arrays of their eight parts, the parts as they are (`OD { x }`, not renormalized as
-/// `OD::new`). Arrays of different lengths panic.
+/// Octo-doubles from the arrays of their eight parts, taken as they are (`OD { x }`, not renormalized as by `OD::new`).
+/// Arrays of different lengths panic.
 pub fn from_parts(c: [&[f64]; 8]) -> Vec<OD> {
     let n = c[0].len();
     assert!(
@@ -1103,20 +1111,20 @@ pub fn from_parts(c: [&[f64]; 8]) -> Vec<OD> {
         .collect()
 }
 
-/// Scalar sum-of-products accumulator, the twin of `ov::ODotAcc` (same algorithm, bitwise the same per lane): nine
-/// running levels, the first eight summed with two-sums and the last in plain f64. Each product's levels (`expand`,
-/// its terms to order 8) are added into them with their errors carried down. For K products of operands on the ladder
-/// the error is at most (|Z| + c_K W) u^8, W = sum |a_i b_i| and u = 2^-53, with c_K below 1 up to K = 50 (`od_tests`,
-/// `acc_thr`). c_K grows like K^9 u, and 2048 constructed terms reach 2^23.8 u^8 |Z|, while random sums stay near
-/// u^8 W. The proof is the section on sums of products of paper/expansion-error-bounds.pdf.
+/// Scalar sum-of-products accumulator, the twin of `ov::ODotAcc` with bitwise the same results per lane. It keeps nine
+/// running levels, the first eight summed with two-sums and the last in plain f64. Each product's levels (`expand`, its
+/// terms to order 8) are added into them with their errors carried down. For K products of operands on the ladder the
+/// error is at most (|Z| + c_K W) u^8, Z the exact sum, W = sum |a_i b_i| and u = 2^-53, with c_K below 1 up to K = 50
+/// (`od_tests`, `acc_thr`). c_K grows like K^9 u. 2048 constructed terms reach 2^23.8 u^8 |Z|, while random sums stay
+/// near u^8 W. The proof is the section on sums of products of `paper/expansion-error-bounds.pdf`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OdAcc {
-    /// the running levels, the largest first
+    /// The running levels, largest first.
     pub s: [f64; 9],
 }
 
 impl OdAcc {
-    /// the empty sum
+    /// The empty sum.
     pub fn zero() -> OdAcc {
         OdAcc::default()
     }
@@ -1128,7 +1136,7 @@ impl OdAcc {
         alg::acc_levels(&mut s, &t);
         OdAcc { s }
     }
-    /// self + a b for a double-double b: bitwise `add_prod(a, OD::from_dd(b))` (`alg::expand_dd`)
+    /// self + a b for a double-double b, bitwise `add_prod(a, OD::from_dd(b))` (`alg::expand_dd`).
     #[inline]
     pub fn add_prod_dd(self, a: OD, b: DD) -> OdAcc {
         let t = alg::expand_dd(&a.x, b.hi, b.lo);
@@ -1136,9 +1144,9 @@ impl OdAcc {
         alg::acc_levels(&mut s, &t);
         OdAcc { s }
     }
-    /// self + a b by the sloppy multiply's eight levels (`OD::sloppy_mul`), added into the running levels as `add`
-    /// adds a value. Each product adds its own error, at most 2^31.93 u^8 |a_0 b_0|, and the levels' accumulation is
-    /// the default's; it can be mixed with `add_prod` and `add` in one sum.
+    /// self + a b by the sloppy multiply's eight levels (`OD::sloppy_mul`), added into the running levels as `add` adds
+    /// a value. Each product adds its own error, at most 2^31.93 u^8 |a_0 b_0|, and the levels accumulate as in the
+    /// default. It mixes with `add_prod` and `add` in one sum.
     #[inline]
     pub fn add_prod_sloppy(self, a: OD, b: OD) -> OdAcc {
         let t = alg::expand_sloppy(&a.x, &b.x);
@@ -1153,7 +1161,7 @@ impl OdAcc {
         alg::acc_levels(&mut s, &a.x);
         OdAcc { s }
     }
-    /// the sum as an octo-double: the nine levels added in turn with od + f64
+    /// The sum as an octo-double, the nine levels added in turn with od + f64.
     #[inline]
     pub fn finish(self) -> OD {
         let mut r = OD::from_f64(self.s[0]);
