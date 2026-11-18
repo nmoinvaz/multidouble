@@ -17,19 +17,22 @@
 //!   c = x e^(-y0) - 1 = (f + t) + f t keeps its relative accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c)
 //!   = c (1 + c h(c)) to order `Q` (QD's log takes y0 + c, the plain Newton step on exp, from f64's logarithm).
 //!
-//! A product of a small factor is formed from the factor scaled by a power of two to [1, 2), and scaled back after, so
-//! that no product's parts leave the normal range because the argument is small; the scalings are exact while the
-//! parts stay normal, and each part that falls below 2^-1022 loses at most 2^-1075.
+//! A product of a small factor is formed from the factor scaled by a power of two to below 2, from a bound of its
+//! whole value (`bound_expo`), and scaled back after, so that no product's parts leave the normal range because the
+//! argument is small; the scalings are exact while the parts stay normal, and each part that falls below 2^-1022 loses
+//! at most 2^-1075.
 //!
 //! Error bounds (u = 2^-53): `OD::exp` errs by at most 3.661 u^8 e^x + 8 2^-1074 and `OD::ln` by 9.926 u^8 |ln x| +
 //! 2^-509, for inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient
-//! below the normal range (the paper's (A2), apart from the steps above, whose losses the bounds include), proved in
+//! below the normal range (the paper's (A2), apart from the scalings above, whose losses the bounds include, and the
+//! products that only choose k, m, the degree or a branch of ln), proved in
 //! the paper (paper/expansion-error-bounds.pdf, its appendix on exp and log) from Lemma 20 at every operation;
 //! `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for
 //! double-words under the same condition, from the published bounds of the double-word operations they use and the
-//! proven bound of `ln_f64`. The argument's size does not enter the condition: an emulator of these steps with every
-//! product hooked finds none below the normal range at any binade (the paper's appendix on exp and log). A part far
-//! below the one above it can make a product underflow, as for the other operations. The constants come from
+//! proven bound of `ln_f64`. An emulator of these steps with every product hooked finds none below the normal range at
+//! any binade of the argument, the closest 48 binades above it (the paper's appendix on exp and log), so the
+//! argument's size does not break the condition there; a part far below the one above it can make a product
+//! underflow, as for the other operations. The constants come from
 //! `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no proven bounds, and are
 //! tested to 64 u^4.
 //!
@@ -614,9 +617,17 @@ fn expo(h: f64) -> i32 {
     ((h.to_bits() >> 52) & 0x7ff) as i32 - 1023
 }
 
-/// a b for a with leading part a_0, 2^e <= |a_0| < 2^(e+1), -1022 <= e: formed as 2^e ((a 2^-e) b), so that the
-/// product's parts are formed near b's scale and only the last power-of-two scaling, exact while the parts stay
-/// normal, can leave the normal range
+/// the exponent e of U = RN(RN(sum |v_i|) (1 + 2^-48)), 2^e <= U < 2^(e+1), -1023 for a zero or subnormal U: |v| <=
+/// sum |v_i| <= U < 2^(e+1) whatever v's parts, where the leading part's exponent alone bounds nothing (a renormalized
+/// expansion can be led by a part below half its value)
+#[inline(always)]
+fn bound_expo<T: Prec>(v: T) -> i32 {
+    expo(v.abs_sum() * (1.0 + 2f64.powi(-48)))
+}
+
+/// a b for a with sum |a_i| < 2^(e+1) (`bound_expo`), -1022 <= e: formed as 2^e ((a 2^-e) b), so that the product's
+/// parts are formed near b's scale and only the last power-of-two scaling, exact while the parts stay normal, can
+/// leave the normal range
 #[inline(always)]
 fn times_scaled<T: Prec>(a: T, e: i32, b: T) -> T {
     a.times_pwr2(pow2(-e)).times(b).times_pwr2(pow2(e))
@@ -647,7 +658,7 @@ fn expm1_red<T: Prec>(x: T) -> (i32, T) {
     };
     // m = max(0, e + S + 1) with 2^e <= RN(RN(sum |r_i|) (1 + 2^-48)) < 2^(e+1), so that |r| < 2^(e+1) and |r| 2^-m <
     // 2^-S whatever r's parts (a zero or subnormal sum gives e = -1023)
-    let e = expo(r.abs_sum() * (1.0 + 2f64.powi(-48)));
+    let e = bound_expo(r);
     let m = (e + T::S + 1).max(0);
     let r = if m > 0 { r.times_pwr2(pow2(-m)) } else { r };
     // the degree d = min(DEG, ceil(B / (-er - 1))), |r'| < 2^(er+1) <= 2^-S: the terms of degree above d sum to below
@@ -731,20 +742,21 @@ fn ln_of<T: Prec>(x: T) -> T {
         return y0;
     }
     // e^-y0 ~ 2^k (1 + t); f = x 2^k - 1 exactly; c = x e^-y0 - 1 = (f + t) + f t, f t formed from f 2^-ef and t 2^-et,
-    // both near 1, and dropped when either is below 2^-(B + 13)
+    // both near 1, and dropped when |f| or |t| is below 2^-(B + 12), with ef and et the exponents of bounds of the
+    // whole values (`bound_expo`), as the leading parts' do not bound them
     let (k, t) = expm1_red(y0.neg());
     let f = scale(x, k).sub_one();
-    let (ef, et) = (expo(f.hi()), expo(t.hi()));
-    let c = if f.hi() == 0.0 || t.hi() == 0.0 || ef.min(et) < -T::B - 13 {
+    let (ef, et) = (bound_expo(f), bound_expo(t));
+    let c = if ef.min(et) < -T::B - 13 {
         f.plus(t)
     } else {
         let p = f.times_pwr2(pow2(-ef)).times(t.times_pwr2(pow2(-et)));
         f.plus(t).plus(p.times_pwr2(pow2(ef)).times_pwr2(pow2(et)))
     };
     // log(1 + c) = c (1 + c h), h = -1/2 + c (1/3 - c / 4 ...) to order Q, each product with c at the other factor's
-    // scale; below 2^-(B + 13), c alone
-    let ec = expo(c.hi());
-    let corr = if c.hi() == 0.0 || ec < -T::B - 13 || mutate::on(mutate::LN_SERIES) {
+    // scale; for |c| below 2^-(B + 12), c alone
+    let ec = bound_expo(c);
+    let corr = if ec < -T::B - 13 || mutate::on(mutate::LN_SERIES) {
         c
     } else {
         let mut h = series::<T>(T::Q);
