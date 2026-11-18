@@ -1091,13 +1091,16 @@ fn ulp(v: f64) -> f64 {
 /// the kinds of argument of the fast reduction's checks
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum FCat {
-    /// greedy parts, |x| from 2^-1 to 2^52
+    /// greedy parts, |x| from 2^-1 to 2^52, and 2^52 and 2^52 - 1 with a lower part
     Wide,
-    /// |x| below 1: k = 0 and k = +-1 side by side
+    /// |x| below 1: k = 0 and k = +-1 side by side, and tiny
     Small,
-    /// the greedy rounding of k pi/2 (k up to 2^51), of k pi/2 plus a few units of its last part (k up to 2^40), the
-    /// deepest cancellations, or of k pi/2 + t with |t| from 2^-20 to 2^-(53 (n - 1) + 20)
+    /// the greedy rounding of k pi/2 (k up to 2^51), or of k pi/2 plus a few units of its last part (k up to 2^40): the
+    /// deepest cancellations
     NearPi2,
+    /// k pi/2 + t, k up to 2^40 and t with random bits from 2^-20 to 2^-(53 (n - 1) + 20) down to below the last
+    /// part's: the depths where the fast reduction runs out of bits
+    Mid,
     /// k pi/2 + t, t's remainder after its part i at or within 2^-27 ulp(t_i) of the tie ulp(t_i)/2
     NearTie,
     /// k pi/2 +- 0.7854 (1 +- 2^-30), k up to 2^50: the correction of k
@@ -1106,10 +1109,11 @@ enum FCat {
     Off,
 }
 
-const FCATS: [FCat; 6] = [
+const FCATS: [FCat; 7] = [
     FCat::Wide,
     FCat::Small,
     FCat::NearPi2,
+    FCat::Mid,
     FCat::NearTie,
     FCat::Edge,
     FCat::Off,
@@ -1141,26 +1145,42 @@ fn near_tie<T: Ty>(r: &mut Rng) -> T {
 fn fast_input<T: Ty>(r: &mut Rng, cat: FCat) -> T {
     let n = T::N;
     match cat {
-        FCat::Wide => greedy(&rand_r(r, -1, 51)),
-        FCat::Small => greedy(&rand_r(r, -3, -1)),
-        FCat::NearPi2 => match r.int(0, 2) {
+        FCat::Wide => match r.int(0, 7) {
+            // 2^52 and 2^52 - 1, the largest arguments, with a lower part
+            0 => {
+                let top = 2f64.powi(52) - r.int(0, 1) as f64;
+                greedy(&Dy::from_f64(sign(r) * top).add(&rand_r(r, -60, -2)))
+            }
+            _ => greedy(&rand_r(r, -1, 51)),
+        },
+        FCat::Small => match r.int(0, 3) {
+            0 => greedy(&rand_r(r, -1000, -4)),
+            _ => greedy(&rand_r(r, -3, -1)),
+        },
+        FCat::NearPi2 => match r.int(0, 1) {
             0 => {
                 let k = (1i64 << r.int(0, 50)) + r.int(0, 1 << 20);
                 greedy(&k_c(k * sign(r) as i64))
             }
-            1 => {
+            _ => {
                 let k = (1i64 << r.int(0, 40)) + r.int(0, 1 << 10);
                 let x: T = greedy(&k_half_pi(k * sign(r) as i64));
                 let d = r.int(-3, 3) as f64 * ulp(x.parts()[n - 1]);
                 greedy(&exact(x).add(&Dy::from_f64(d)))
             }
-            // r from 2^-20 down to past the limbs' last bit: the depths where the fast reduction runs out of bits
-            _ => {
-                let k = (1i64 << r.int(0, 40)) + r.int(0, 1 << 10);
-                let e = r.int(20, 53 * (n as i64 - 1) + 20);
-                greedy(&k_c(k * sign(r) as i64).add(&rand_at(r, -e)))
-            }
         },
+        FCat::Mid => {
+            let k = (1i64 << r.int(0, 40)) + r.int(0, 1 << 10);
+            let e = r.int(20, 53 * (n as i64 - 1) + 20);
+            let mut m: Vec<u64> = (0..10).map(|_| r.next()).collect();
+            m[9] |= 1 << 63;
+            let t = Dy {
+                neg: r.next() & 1 == 1,
+                m: BigU(m),
+                e: -e - 639,
+            };
+            greedy(&k_c(k * sign(r) as i64).add(&t))
+        }
         FCat::NearTie => near_tie(r),
         FCat::Edge => {
             let e = r.int(1, 50);
@@ -1190,9 +1210,9 @@ fn fast_vectors<T: Ty>(n: usize, seed: u64) -> Vec<[(T, FCat); 8]> {
     let mut r = Rng::new(seed ^ (T::N as u64) << 40);
     (0..n)
         .map(|v| {
-            let one = FCATS[r.int(0, 5) as usize];
+            let one = FCATS[r.int(0, 6) as usize];
             std::array::from_fn(|_| {
-                let cat = if v % 4 == 0 { one } else { FCATS[r.int(0, 5) as usize] };
+                let cat = if v % 4 == 0 { one } else { FCATS[r.int(0, 6) as usize] };
                 (fast_input(&mut r, cat), cat)
             })
         })
@@ -1314,7 +1334,7 @@ fn trig_fast_reduce_bitwise() {
             share(FCat::Wide)
         );
         assert!(
-            share(FCat::NearPi2) < 1.0 && share(FCat::NearTie) < 1.0,
+            share(FCat::NearPi2) < 1.0 && share(FCat::Mid) < 1.0 && share(FCat::NearTie) < 1.0,
             "{} decides every near case",
             T::NAME
         );
@@ -1335,8 +1355,8 @@ fn trig_fast_reduce_bitwise() {
 }
 
 /// Controls (feature `mutate`): the fast reduction with its test skipped fails the bitwise check on the near ties and
-/// near the multiples of pi/2, with eps = 0 near the multiples, and with pi/2 two digits short on the wide arguments,
-/// scalar and on the lanes of every backend
+/// near the multiples of pi/2, with eps = 0 at the depths where its bits run out, and with pi/2 two digits short on
+/// the wide arguments, scalar and on the lanes of every backend
 #[cfg(feature = "mutate")]
 #[test]
 fn trig_fast_reduce_controls() {
@@ -1373,8 +1393,11 @@ fn trig_fast_reduce_controls() {
     }
     let mut missed = Vec::new();
     for (id, cats) in [
-        (mutate::REDUCE_FAST_UNCHECKED, &[FCat::NearTie, FCat::NearPi2][..]),
-        (mutate::REDUCE_FAST_EPS, &[FCat::NearPi2][..]),
+        (
+            mutate::REDUCE_FAST_UNCHECKED,
+            &[FCat::NearTie, FCat::NearPi2, FCat::Mid][..],
+        ),
+        (mutate::REDUCE_FAST_EPS, &[FCat::Mid][..]),
         (mutate::REDUCE_FAST_PI, &[FCat::Wide][..]),
     ] {
         missed.extend(bad::<DD, 2, 8>(id, 400, cats));
