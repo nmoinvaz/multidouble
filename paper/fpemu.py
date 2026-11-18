@@ -12,7 +12,7 @@ MUTATE = None  # controls: 'ties_away' (rounding), 'two_sum_sign' (two-sum's err
 LEVEL_HOOK = None  # called with the levels after every change by dep and after each level builder's setup
 DROP = None  # controls of the operation checks: 'add_t1' drops the error of a1 + b1 (as the crate's ADD_T1),
 #              'mul_e23' the error of a2 b3 (MUL_E23), 'mulf_e3' the error of a3 b (MUL_F_E3), 'div_rem' the remainder
-#              update before the sixth quotient term (DIV_REM), 'sqrt_iter' two Newton steps (SQRT_ITER)
+#              update before the sixth quotient term (DIV_REM), 'sqrt_iter' the second Newton step skipped (SQRT_ITER)
 RANGE_CHECK = False  # p = 53 only: count results outside f64's normal range (they would be subnormal or overflow)
 range_hits = 0
 PZ = (0, 0)
@@ -404,13 +404,11 @@ ONE = (1, 0)
 HALF = (1, -1)
 
 
-def od_sqrt(x, mode=None, J=4):
-    """J Newton steps (the crate's 4; DROP 'sqrt_iter' gives 2, as its mutation SQRT_ITER)"""
+def od_sqrt_newton(x, mode=None, J=4):
+    """SQRT_{n,J}: J Newton steps on 1/sqrt(a) from RN(1/RN(sqrt(a_0)))"""
     n = len(x)
-    if DROP == 'sqrt_iter':
-        J = 2
     if x[0][0] == 0:
-        return [PZ] * n  # the crate selects +0 in every part for a zero leading part
+        return [PZ] * n
     s = pow2_floor(fsqrt(x[0]))
     inv = div(ONE, s)
     a = [mul(mul(xk, inv), inv) for xk in x]
@@ -420,6 +418,37 @@ def od_sqrt(x, mode=None, J=4):
     for _ in range(J):
         hr2 = od_mul(h, od_mul(r, r, mode), mode)
         c = od_add_f(od_neg(hr2), HALF, mode)
+        r = od_add(r, od_mul(c, r, mode), mode)
+    r = od_mul(r, a, mode)
+    return [mul(rk, s) for rk in r]
+
+
+def od_sqrt(x, mode=None):
+    """The crate's square root: r_0 = 1/y for y the double-double square root of a_0 + a_1 (a quick two-sum, then
+    Algorithm 8 of Lefevre et al.) and 1/y by DWDivDW2; one step with the second-order term, r + (c + 3/2 c^2) r, and
+    one Newton step, r + c r, c = 1/2 - h r^2 (DROP 'sqrt_iter' skips the second, as the mutation SQRT_ITER)"""
+    n = len(x)
+    if x[0][0] == 0:
+        return [PZ] * n  # the crate selects +0 in every part for a zero leading part
+    s = pow2_floor(fsqrt(x[0]))
+    inv = div(ONE, s)
+    a = [mul(mul(xk, inv), inv) for xk in x]
+    a0, a1 = quick_two_sum(a[0], a[1])
+    sh = fsqrt(a0)
+    yh, yl = quick_two_sum(sh, div(add(a1, fma(neg(sh), sh, a0)), add(sh, sh)))
+    th = div(ONE, yh)
+    ch, cl1 = two_prod(yh, th)
+    g, tl1 = quick_two_sum(ch, mul(yl, th))
+    rh, rl = quick_two_sum(g, add(tl1, cl1))
+    r0, r1 = quick_two_sum(th, div(sub(sub(ONE, rh), rl), yh))
+    r = [r0, r1] + [PZ] * (n - 2)
+    h = [mul(ak, HALF) for ak in a]
+    c = od_add_f(od_neg(od_mul(h, od_mul(r, r, mode), mode)), HALF, mode)
+    c2 = od_mul(c, c, mode)
+    w = od_add(c, od_add(c2, [mul(t, HALF) for t in c2], mode), mode)
+    r = od_add(r, od_mul(w, r, mode), mode)
+    if DROP != 'sqrt_iter':
+        c = od_add_f(od_neg(od_mul(h, od_mul(r, r, mode), mode)), HALF, mode)
         r = od_add(r, od_mul(c, r, mode), mode)
     r = od_mul(r, a, mode)
     return [mul(rk, s) for rk in r]
