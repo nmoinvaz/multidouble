@@ -12,7 +12,8 @@
 //!   D. H. Bailey, version 2.3.7, src/dd_real.cpp and src/qd_real.cpp); and the result is (1 + t) 2^k, scaled exactly
 //!   in two steps while its parts stay normal.
 //! * ln: one Newton step on exp from y0, the double-double logarithm (for the double-double, `ln_f64` of the leading
-//!   part, this module's own binary64 logarithm with a proven error, plus lo / hi): with (k, t) the reduction of
+//!   part, this module's own binary64 logarithm with a proven error, plus lo / hi; for a leading part at least 2^1023,
+//!   that of x/2 plus ln 2, as x's double-double can round past f64::MAX there): with (k, t) the reduction of
 //!   exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is exact (its leading part lies in [1/2, 2], Sterbenz), so
 //!   c = x e^(-y0) - 1 = (f + t) + f t keeps its relative accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c)
 //!   = c (1 + c h(c)) to order `Q` (QD's log takes y0 + c, the plain Newton step on exp, from f64's logarithm).
@@ -111,6 +112,8 @@ const LN2_LO: [f64; 8] = [
     f64::from_bits(0xa86de25a2a3947d9),
     f64::from_bits(0x24c0a213ab9d9489),
 ];
+/// ln 2, greedy two parts
+const LN2_DD: [f64; 2] = [f64::from_bits(0x3fe62e42fefa39ef), f64::from_bits(0x3c7abc9e3b39803f)];
 /// 1/j! for j = 0..=43, greedy eight parts
 const INV_FACT: [[f64; 8]; 44] = [
     [
@@ -768,6 +771,21 @@ fn ln_of<T: Prec>(x: T) -> T {
     T::ln_finish(y0, corr)
 }
 
+/// the start of the quad-double and octo-double ln: the double-double ln of x's double-double, or, for a leading part
+/// x_0 >= 2^1023, where that conversion can round past f64::MAX, the double-double ln of x/2's plus ln 2 (`LN2_DD`)
+#[inline(always)]
+fn start_dd(x0: f64, dd: impl Fn() -> DD, half: impl Fn() -> DD) -> DD {
+    if x0 >= pow2(1023) {
+        half().ln()
+            + DD {
+                hi: LN2_DD[0],
+                lo: LN2_DD[1],
+            }
+    } else {
+        dd().ln()
+    }
+}
+
 /// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper/explog_consts.py), and 0 for h = 1: h = 2^e m
 /// with m in (mu/2, mu], mu = RN(sqrt 2), m - 1 exact, and ln m = 2 atanh(s), s = (m - 1) / (m + 1), |s| <= 0.1716,
 /// by the first ten terms of its series in s^2 (by Horner's rule with fused multiply-adds), whose remainder is below
@@ -960,7 +978,7 @@ impl Prec for QD {
     }
     #[inline(always)]
     fn ln_start(self) -> QD {
-        QD::from_dd(self.to_dd().ln())
+        QD::from_dd(start_dd(self.x[0], || self.to_dd(), || self.times_pwr2(0.5).to_dd()))
     }
     #[inline(always)]
     fn ln_finish(y0: QD, corr: QD) -> QD {
@@ -1024,7 +1042,7 @@ impl Prec for OD {
     }
     #[inline(always)]
     fn ln_start(self) -> OD {
-        OD::from_dd(self.to_dd().ln())
+        OD::from_dd(start_dd(self.x[0], || self.to_dd(), || self.times_pwr2(0.5).to_dd()))
     }
     /// y0 + corr, by `add_dd` (the bits of `+` with y0's zero parts)
     #[inline(always)]
@@ -1099,8 +1117,9 @@ mod tests {
     }
 
     /// The generated constants against exact arithmetic: 1/j! and 1/3 to their eight-part greedy rounding (within
-    /// 2^-423 relative), ln 2 against its series in Rust (LN2_HI + LN2_LO within 2^-466), LN2_HI of 42 bits.
-    /// Control: each check fails with the last part moved by 2^-421 of the value (2^-460 for ln 2).
+    /// 2^-423 relative), ln 2 against its series in Rust (LN2_HI + LN2_LO within 2^-466, LN2_DD within 2^-107), LN2_HI
+    /// of 42 bits. Control: each check fails with the last part moved by 2^-421 of the value (2^-460 for ln 2, 2^-104
+    /// for LN2_DD).
     #[test]
     fn constants_are_exact_roundings() {
         let one = Dy::from_f64(1.0);
@@ -1125,6 +1144,11 @@ mod tests {
         lo[8] += 2f64.powi(-460);
         assert!(!within(&lo, &l2, &one, -466), "control ln 2");
         assert_eq!(LN2_HI.to_bits() & ((1 << 11) - 1), 0, "LN2_HI has more than 42 bits");
+        // LN2_DD, ln 2's greedy two parts, within 2^-107 relative, and its control
+        assert!(within(&LN2_DD, &l2, &one, -107), "LN2_DD");
+        let mut bad = LN2_DD;
+        bad[1] += 2f64.powi(-104);
+        assert!(!within(&bad, &l2, &one, -107), "control LN2_DD");
         assert!((LN2_HI - std::f64::consts::LN_2).abs() < 2f64.powi(-42));
     }
 }

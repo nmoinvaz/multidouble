@@ -8,6 +8,7 @@ reciprocals and 1/3 are exact rationals.
 
   LN2_HI      ln 2 rounded to 42 significant bits, so that k LN2_HI is exact for every integer |k| < 2^11
   LN2_LO      ln 2 - LN2_HI, greedy eight parts (x_0 = RN(v), x_1 = RN(v - x_0), ...)
+  LN2_DD      ln 2, greedy two parts (the logarithm's start at the top of the range)
   INV_FACT    1/j! for j = 0..=JMAX, greedy eight parts
   THIRD       1/3, greedy eight parts
 
@@ -96,9 +97,10 @@ def constants():
     num = hi42 * Fr(2) ** 42
     assert num.denominator == 1 and num.numerator < 2 ** 42
     lo_parts = greedy_interval(lo - hi42, hi - hi42)
+    dd = greedy_interval(lo, hi, 2)
     fact = [greedy(Fr(1, _fact(j))) for j in range(JMAX + 1)]
     third = greedy(Fr(1, 3))
-    return dict(ln2=(lo, hi), hi=float(hi42), lo=lo_parts, fact=fact, third=third)
+    return dict(ln2=(lo, hi), hi=float(hi42), lo=lo_parts, dd=dd, fact=fact, third=third)
 
 
 def _fact(j):
@@ -119,6 +121,9 @@ def rust(c):
              f'const LN2_HI: f64 = f64::from_bits({hexf(c["hi"])});',
              '/// ln 2 - LN2_HI, greedy eight parts',
              f'const LN2_LO: [f64; 8] = {arr(c["lo"], 0)};',
+             '/// ln 2, greedy two parts',
+             # rustfmt keeps a two-element array on one line
+             'const LN2_DD: [f64; 2] = [' + ', '.join(f'f64::from_bits({hexf(x)})' for x in c['dd']) + '];',
              f'/// 1/j! for j = 0..={JMAX}, greedy eight parts',
              f'const INV_FACT: [[f64; 8]; {JMAX + 1}] = [']
     lines += [f'    {arr(v, 4)},' for v in c['fact']]
