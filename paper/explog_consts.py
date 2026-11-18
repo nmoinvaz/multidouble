@@ -2,10 +2,12 @@
 parts n, Lemma 20 of expansion-error-bounds.pdf bounds every operation's error and its result's parts from its
 operands' part bounds, and the bounds are carried through every step; for the double-double ones, the published
 relative bounds of the double-word operations. A scaling by a power of two that leaves the normal range, and the
-start's quotient, add at most ETA0 = 2^-1075 per part; the products obey (A2). The start of the logarithm is the
-crate's own binary64 logarithm, whose error is bounded here too. Every
+start's quotient, add at most ETA0 = 2^-1075 per part; the products obey (A2) but for those that only choose k, m and
+the degree. The start of the logarithm is the crate's own binary64 logarithm, whose error is bounded here too. Every
 bound is computed in rationals rounded up to 200-bit dyadic numbers (sqrt_consts.up); every formula is nondecreasing
 in the quantities so rounded, and nonincreasing in the lower bounds of |r| (a), which are not rounded.
+
+Every printed bound is rounded up: its decimals by up_dec, its base-2 exponents by lg2_up.
 
 usage: explog_consts.py           the bound of the start ln_f64, the bounds of the crate's DD and OD exp and ln, and
                                   of the n-part algorithms at n = 4 and 12 (about 7 minutes)
@@ -572,7 +574,11 @@ def k0_fn(Lg, e1, e0, m, d, sigma, a, hi, cap, llo):
 
 
 def chord(Ef, lo, hi):
-    """for E convex on [lo, hi]: max of E(l)/l there is at an end; for lo = 0, E(l) <= E(0) + l slope"""
+    """for E convex on [lo, hi]: max of E(l)/l there is at an end; for lo = 0, E(l) <= E(0) + l slope. Each E passed
+    here is a case's bound as Log.bin evaluates it in convex mode (VecSum's second bound alone, no minima, tau_j = 2^j
+    b' for sigma = -1), which the paper's appendix, proof of the log theorem, "Convexity", shows nondecreasing and
+    convex in l; its rounding up at the two ends keeps the chord above E. check() samples that property, and proves
+    nothing."""
     if lo == 0:
         e0, e1 = Ef(Fr(0)), Ef(hi)
         return dict(floor=e0, rel=up((e1 - e0) / hi))
@@ -618,6 +624,9 @@ def log_bound(Lg, e1, e0, pieces=(Fr(1), Fr(4)), sub=4, verbose=False, dd_split=
     red = E.reduce(zp, up(Z / (1 - u)), up(2 * u * Z))
     top = up(red['re'] + red['dr'])
     tail = M.tail(red['parts']) if red['parts'] is not None else Fr(0)
+    # E(l)/l at the ends of [lk, 1], [1, 4] and [4, XMAX] bounds it inside each: for a fixed case (sign, m, d, |r| in
+    # [ra, rb]), E is nondecreasing and convex in l, since l enters only through y-bar = l + E0(l), linear, and the
+    # reduction's X, gamma and alpha, linear in y-bar (the appendix, proof of the log theorem, "Convexity"; chord())
     ends = [lk] + list(pieces) + [XMAX]
     worst = (Fr(0), None)
     for (m, d, rlo, rhi, cap) in E.groups(tail, top):
@@ -632,13 +641,33 @@ def log_bound(Lg, e1, e0, pieces=(Fr(1), Fr(4)), sub=4, verbose=False, dd_split=
     return out
 
 
+def up_dec(x, k=6):
+    """a rational x >= 0 rounded up to k decimals, as printed: every printed bound is an upper bound"""
+    q = -(-x.numerator * 10 ** k // x.denominator)
+    return f'{q // 10 ** k}.{q % 10 ** k:0{k}d}' if k else str(q)
+
+
+def lg2_up(x, k=2):
+    """the least c, a multiple of 10^-k, with x <= 2^c for a rational x > 0, printed with k decimals; exact, from
+    x^(10^k) against 2^(c 10^k), as a float's log2 loses bits below 2^-1022"""
+    s = 10 ** k
+    b = x.numerator.bit_length() - x.denominator.bit_length()
+    a = math.ceil((b + math.log2(float(x / Fr(2) ** b))) * s)
+    le = lambda a: x ** s <= Fr(2) ** a
+    while not le(a):
+        a += 1
+    while le(a - 1):
+        a -= 1
+    return f'{a / s:.{k}f}' if k else str(a)
+
+
 def fmt(x, u, n):
-    return f'{float(x / u ** n):.6f}'
+    return up_dec(x / u ** n)
 
 
 def ceil3(x):
     """x rounded up to three decimals, as quoted"""
-    return math.ceil(float(x) * 1000 - 1e-9) / 1000
+    return up_dec(x, 3)
 
 
 # the crate's parameters: (s, d, q) per precision
@@ -778,27 +807,36 @@ if __name__ == '__main__':
         sys.exit(0 if check() else 1)
     print('the crate (u = 2^-53; exp relative; log relative to |ln x|, plus an absolute term)')
     eta, se = start_eta()
-    print(f'the start ln_f64: within {float(eta / u):.6f} u relative (2^{math.log2(eta):.2f}); for e = 0, '
-          f'{float(se["ew"] / u):.6f} u')
+    print(f'the start ln_f64: within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
+          f'{up_dec(se["ew"] / u)} u')
     w, info, red = dd_exp()
     rdd, fdd, _ = dd_log()
     print(f'DD s,d,q = {DD_PARAMS}: exp <= {fmt(w, u, 2)} u^2 (quoted {ceil3(w / u ** 2)}), worst at '
           f'{"k = 0" if info["k0"] else "k != 0"}, d {info["d"]}, sign {info["sigma"]}, '
           f'|r| in [{float(info["a"]):.4f}, '
-          f'{float(info["b"]):.4f}]; log <= {fmt(rdd, u, 2)} u^2 |ln x| + 2^{math.log2(fdd):.2f} (quoted '
-          f'{ceil3(rdd / u ** 2)} u^2 and 2^{math.ceil(math.log2(fdd))})')
+          f'{float(info["b"]):.4f}]; log <= {fmt(rdd, u, 2)} u^2 |ln x| + 2^{lg2_up(fdd)} (quoted '
+          f'{ceil3(rdd / u ** 2)} u^2 and 2^{lg2_up(fdd, 0)})')
+    wdd = w
     s, d, q = OD_PARAMS
     w, info, red = od_exp(8, s, d)
     print(f'OD s,d,q = {OD_PARAMS}: exp <= {fmt(w, u, 8)} u^8 (quoted {ceil3(w / u ** 8)}), worst at '
           f'{"k = 0" if info["k0"] else "k != 0"}, m {info["m"]}, d {info["d"]}, sign {info["sigma"]}, |r| in '
           f'[{float(info["a"]):.4f}, {float(info["b"]):.4f}]; reduction {fmt(red["dr"], u, 8)} u^8')
     rel, floor, rows, delta = od_log(8, s, d, q, rdd, fdd)
-    print(f'OD log <= {fmt(rel, u, 8)} u^8 |ln x| + 2^{math.log2(floor):.2f} (quoted {ceil3(rel / u ** 8)} u^8 and '
-          f'2^{math.ceil(math.log2(floor))}); start within {fmt(rdd, u, 2)} u^2 |ln to_dd(x)| + 2^{math.log2(fdd):.2f} '
-          f'of ln to_dd(x), |ln x - ln to_dd(x)| <= 2^{math.log2(delta):.2f}')
+    print(f'OD log <= {fmt(rel, u, 8)} u^8 |ln x| + 2^{lg2_up(floor)} (quoted {ceil3(rel / u ** 8)} u^8 and '
+          f'2^{lg2_up(floor, 0)}); start within {fmt(rdd, u, 2)} u^2 |ln to_dd(x)| + 2^{lg2_up(fdd)} '
+          f'of ln to_dd(x), |ln x - ln to_dd(x)| <= 2^{lg2_up(delta)}')
+    # where each quoted bound's absolute term exceeds its relative one: e^x below n 2^-1074 / (C u^n), |ln x| below
+    # 2^a / (C u^n), as quoted (C and 2^a rounded up); the printed limits are rounded up too
+    A_od, A_dd = Fr(2) ** int(lg2_up(floor, 0)), Fr(2) ** int(lg2_up(fdd, 0))
+    C = {k: Fr(ceil3(v)) for k, v in dict(de=wdd / u ** 2, dl=rdd / u ** 2, oe=w / u ** 8, ol=rel / u ** 8).items()}
+    lim = [lg2_up(16 * ETA0 / (C['oe'] * u ** 8), 0), lg2_up(4 * ETA0 / (C['de'] * u ** 2), 0),
+           lg2_up(A_od / (C['ol'] * u ** 8), 0), lg2_up(A_dd / (C['dl'] * u ** 2), 0)]
+    print(f'the absolute terms, as quoted, exceed the relative ones only where e^x < 2^{lim[0]} (OD) or '
+          f'2^{lim[1]} (DD), and |ln x| < 2^{lim[2]} (OD) or 2^{lim[3]} (DD)')
     for r in rows[:-1]:
         print(f'   k=0 m={r[1]} d={r[2]:<2d} sign={r[3]:+d} {fmt(r[6], u, 8)} u^8' +
-              (f' + 2^{math.log2(r[7]):.2f}' if r[7] else ''))
+              (f' + 2^{lg2_up(r[7])}' if r[7] else ''))
     w = rows[-1][1]
     print(f'   k!=0 {fmt(rows[-1][6], u, 8)} u^8, at m {w[0]}, d {w[1]}, sign {w[2]:+d}, |r| in [{float(w[3]):.4f}, '
           f'{float(w[4]):.4f}]')
@@ -809,4 +847,4 @@ if __name__ == '__main__':
         w, _, _ = od_exp(n, s, d)
         rel, floor, _, _ = od_log(n, s, d, q, rdd, fdd)
         print(f'n={n:2d} d={d} q={q}: exp <= {fmt(w, u, n)} u^n, log <= {fmt(rel, u, n)} u^n |ln x| + '
-              f'2^{math.log2(floor):.2f}')
+              f'2^{lg2_up(floor)}')
