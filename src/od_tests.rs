@@ -13,8 +13,9 @@
 //! terms are checked against the accumulator's proven bound, (|Z| + c_n W) u^8 with W = sum |a_i b_i| (`acc_thr`).
 //!
 //! The adds, the multiply and od x f64 have a proven bound, u^8 (1 + 2^-14) with u = 2^-53, which is 1/64 unit and
-//! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`). Every input within those
-//! hypotheses is checked against it too (`PROVEN_THR`), and `od_worst_case_inputs` reaches it. Random inputs stay
+//! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`), and the square root one of
+//! 3.0000319 u^8 (`SQRT_PROVEN_THR`). Every input within those hypotheses is checked against its bound too
+//! (`PROVEN_THR`), and `od_worst_case_inputs` reaches the first. Random inputs stay
 //! near 10^-4 units, the ladder category's inputs included, because the error is set by the result's parts.
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
@@ -431,6 +432,18 @@ fn op_thr(op: Op) -> f64 {
 /// to |ab| for the products and to |a| + |b| for the adds. It holds for operands within `proven`'s hypotheses.
 const PROVEN_THR: f64 = (1.0 + 1.0 / 16384.0) / 64.0;
 
+/// The square root's proven bound, 3.0000319 u^8 (Theorem 22 of paper/expansion-error-bounds.pdf, theta = 2), rounded
+/// up, in units of 2^-418. The test's measure |r^2 - x| / (2x) exceeds the relative error by at most its square.
+const SQRT_PROVEN_THR: f64 = 3.000_032 / 64.0;
+
+/// the proven bound of an operation, for the inputs `proven` admits
+fn proven_thr(op: Op) -> f64 {
+    match op {
+        Op::Sqrt => SQRT_PROVEN_THR,
+        _ => PROVEN_THR,
+    }
+}
+
 /// exponent of the last bit of a finite nonzero x
 fn lsb(x: f64) -> i64 {
     let e = ((x.to_bits() >> 52) & 0x7ff) as i64;
@@ -459,7 +472,9 @@ fn products_fit(a: &[f64], b: &[f64], max_order: usize) -> bool {
 
 /// The operands are within the hypotheses of the proven bound: finite, both octo-double operands on the ladder, every
 /// rounding either normal or exact, and the leading parts well below overflow. Only the operation's inputs are
-/// read, so the runs of division and the square root, whose intermediate quotients these do not bound, are left out.
+/// read, so division, whose intermediate quotients these do not bound, is left out. The square root works on its
+/// argument scaled into [1, 4), so a positive argument whose nonzero parts are within 2^-500 of the leading one keeps
+/// every intermediate far from underflow.
 fn proven(op: Op, a: OD, b: OD) -> bool {
     let fin = |x: &OD| x.x.iter().all(|v| v.is_finite());
     let big = |x: f64| x.abs() >= 2f64.powi(500);
@@ -471,7 +486,15 @@ fn proven(op: Op, a: OD, b: OD) -> bool {
         Op::AddF => !big(a.x[0]) && !big(b.x[0]),
         Op::Mul => ladder(&b) && products_fit(&a.x, &b.x, 8) && !big(a.x[0]) && !big(b.x[0]),
         Op::MulF => products_fit(&a.x, &b.x[..1], 7) && !big(a.x[0]) && !big(b.x[0]),
-        Op::Div | Op::Sqrt => false,
+        Op::Sqrt => {
+            a.x[0] > 0.0
+                && !big(a.x[0])
+                && a.x[0] >= 2f64.powi(-500)
+                && a.x[1..]
+                    .iter()
+                    .all(|&v| v == 0.0 || v.abs() >= a.x[0] * 2f64.powi(-500))
+        }
+        Op::Div => false,
     }
 }
 
@@ -714,7 +737,7 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 if proven(op, a, b) {
                     pr.n += 1;
                     pr.max = pr.max.max(err.ratio(&scale) / unit());
-                    if !within(&err, &scale, PROVEN_THR, &Dy::zero()) {
+                    if !within(&err, &scale, proven_thr(op), &Dy::zero()) {
                         pr.fails += 1;
                     }
                 }
@@ -1513,16 +1536,18 @@ fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
 }
 
 /// The digest of `od_accuracy`'s results at its default size and seed (2000, 1), recorded with
-/// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
-/// be the scalar ones. Every backend gives these bits.
-const OD_DIGEST: u64 = 0x6ff0_7dec_6a4e_4e28;
+/// 4.1.1 and again when `sqrt` began from the double-double square root: every operation's bits in
+/// every category, pinned, and the lanes' with them, which must be the scalar ones. Every backend
+/// gives these bits.
+const OD_DIGEST: u64 = 0xfb89_5d1d_a057_c861;
 
 /// The digest of the gap category's results at the same size and seed, recorded with 4.8.1, whose renormalization's
-/// second pass by two-sums made them correct.
-const GAP_DIGEST: u64 = 0xd7a7_6d83_c65e_67d7;
+/// second pass by two-sums made them correct, and again when `sqrt` began from the double-double square root.
+const GAP_DIGEST: u64 = 0xc9db_20d6_a82f_28af;
 
-/// The digest of the ladder category's results at the same size and seed, recorded with 4.8.2.
-const LADDER_DIGEST: u64 = 0xcfaf_1ebd_dc50_f177;
+/// The digest of the ladder category's results at the same size and seed, recorded with 4.8.2 and again when `sqrt`
+/// began from the double-double square root.
+const LADDER_DIGEST: u64 = 0xb02b_b2f9_037d_22c4;
 
 /// Control for the pinned digest: with the order-6 term a2 b3 of the product dropped
 /// (`mutate::MUL_E23`), the results' digest is not the pinned one.
@@ -1748,9 +1773,28 @@ fn od_proven_bound_control() {
     assert!(row.proven.fails * 2 > n && row.proven.fails > 10 * row.fails, "{row:?}");
 }
 
-/// Inputs whose results missed their bounds by 1e10 to 1e28 units when the renormalization's second pass was by
-/// quick-two-sums: the square root of a two-part value with a gap and its product with its reciprocal, and two
-/// quotients of values with zero parts. Pass: each within its operation's threshold, scalar and lanes alike.
+/// The square root's proven bound can fail: with its second Newton step skipped (`mutate::SQRT_ITER`), more than half
+/// of the ladder row's samples, all within its hypotheses, miss it.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_sqrt_proven_bound_control() {
+    let n = env_usize("OD_N", 400) / 8 * 8;
+    let rs = run_ops(n, 7, mutate::SQRT_ITER);
+    let row = rs
+        .iter()
+        .find(|r| r.what == op_name(Op::Sqrt) && r.cat == "ladder")
+        .unwrap();
+    println!(
+        "sqrt without its second step, ladder inputs: {} of {} within the hypotheses past the proven bound",
+        row.proven.fails, row.proven.n
+    );
+    assert!(row.proven.n * 2 > n && row.proven.fails * 2 > row.proven.n, "{row:?}");
+}
+
+/// Inputs whose results miss their bounds by 1e10 to 1e28 units when the renormalization's second pass is by
+/// quick-two-sums: the square root of an eight-part value with gaps and zero parts, the product of a two-part value
+/// with a gap and its reciprocal, and two quotients of values with zero parts. Pass: each within its operation's
+/// threshold, scalar and lanes alike.
 #[test]
 fn od_gap_regressions() {
     let bad: Vec<(&str, f64)> = gap_cases()
@@ -1901,8 +1945,19 @@ fn gap_cases() -> Vec<(&'static str, Op, OD, OD)> {
         x: h.map(f64::from_bits),
     };
     let a = od([0x3ff97f22dc331771, 0x320e700ef097bbfd, 0, 0, 0, 0, 0, 0]);
+    // gaps after its first, second and fourth parts, and zero parts
+    let sq = od([
+        0x3ff93b4a66f163b7,
+        0x30a0f22c361cefdc,
+        0,
+        0x1e0c251714b46fe7,
+        0,
+        0x0bc7e97fd3b29241,
+        0x885f41d74c3832f1,
+        0x84f56713803b93f1,
+    ]);
     vec![
-        ("sqrt", Op::Sqrt, a, OD::ONE),
+        ("sqrt", Op::Sqrt, sq, OD::ONE),
         ("a (1/a)", Op::Mul, a, OD::ONE / a),
         (
             "quotient 1",

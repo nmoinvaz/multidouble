@@ -91,6 +91,9 @@ fn scalar(c: &mut Criterion) {
     g.bench_function("od add", |bch| bch.iter(|| od.iter().fold(OD::ZERO, |s, &x| s + x)));
     g.bench_function("od mul", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s * x)));
     g.bench_function("od div", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s / x)));
+    g.bench_function("od sqrt", |bch| {
+        bch.iter(|| od.iter().map(|&x| x.sqrt()).fold(0.0, |s, r| s + r.x[0]))
+    });
     g.finish();
 }
 
