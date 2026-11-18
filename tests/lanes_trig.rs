@@ -10,7 +10,9 @@
 //!
 //! Controls (feature `mutate`): with Horner's steps masked by lane 0's number of terms, lane 0's quadrant on every
 //! lane, or the NaN lanes left to the lanes' arithmetic with their NaNs' signs flipped (`trig::mutate::LANE_TERMS`,
-//! `LANE_QUADRANT`, `LANE_NAN`), the same check fails for each type on every backend.
+//! `LANE_QUADRANT`, `LANE_NAN`), the same check fails for each type on every backend. With lane 0's powers of two on
+//! every lane (`LANE_POW2`) it fails for `OV`, whose products leave the normal range without each lane's own scalings;
+//! those of `DV` and `QV` stay normal.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -167,11 +169,19 @@ fn arg<T: Scalar>(r: &mut Rng, kind: u64) -> T {
         // a b + c in the type's arithmetic, parts as its arithmetic leaves them
         1 => full::<T>(r, -2, 1) * full::<T>(r, -2, 0) + full::<T>(r, -30, 0),
         // small: the buckets from the early return's threshold up, and the binade below it
-        2 => full(r, tiny - 1, -1),
+        2 => match int(r, 0, 1) {
+            0 => full(r, tiny - 1, -1),
+            // one part alone in the lowest buckets, where the products leave the normal range without the scalings
+            _ => padded(&[sign(r) * (1.0 + r.unit()) * 2f64.powi(int(r, tiny, tiny + 32) as i32)]),
+        },
         // tiny: the early return, down to the subnormals, and signed zeros
-        3 => match int(r, 0, 3) {
+        3 => match int(r, 0, 5) {
             0 => padded(&[sign(r) * 0.0, 0.0]),
             1 => padded(&[sign(r) * f64::from_bits(1 + r.next_u64() % (1 << 52))]),
+            // the early return's threshold itself, which takes the series
+            2 => padded(&[sign(r) * 2f64.powi(tiny as i32)]),
+            // RN(pi/4): x_0 RN(2/pi) rounds to 1/2 exactly, so k = +-1 beside lanes with k = 0
+            3 => padded(&[sign(r) * f64::from_bits(0x3fe921fb54442d18)]),
             _ => full(r, -1000, tiny - 1),
         },
         // near k pi/2, |k| up to 2^40, plus a few units of the last part's ulp
@@ -404,13 +414,23 @@ fn lanes_trig_controls() {
     common::big_stack(|| {
         use multidouble::trig::mutate;
         let mut missed = Vec::new();
-        for id in [mutate::LANE_TERMS, mutate::LANE_QUADRANT, mutate::LANE_NAN] {
+        for id in [
+            mutate::LANE_TERMS,
+            mutate::LANE_QUADRANT,
+            mutate::LANE_NAN,
+            mutate::LANE_POW2,
+        ] {
             mutate::set(id);
-            let ran = [
-                ("dv", mismatches(DvTrig(200))),
-                ("qv", mismatches(QvTrig(100))),
-                ("ov", mismatches(OvTrig(40))),
-            ];
+            // lane 0's powers of two show only where the products leave the normal range, in `OV`
+            let ran = if id == mutate::LANE_POW2 {
+                vec![("ov", mismatches(OvTrig(150)))]
+            } else {
+                vec![
+                    ("dv", mismatches(DvTrig(200))),
+                    ("qv", mismatches(QvTrig(100))),
+                    ("ov", mismatches(OvTrig(40))),
+                ]
+            };
             mutate::set(0);
             for (t, by_backend) in ran {
                 for (name, bad) in by_backend {
