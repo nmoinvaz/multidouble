@@ -511,8 +511,7 @@ constants gathered into $\kappa$.
 The square root of multidouble generalizes as SQRT$_{n,J}$: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
 (exact), $h = a/2$, $r = (\RN(1/\RN(\sqrt{a_0})), 0, \dots, 0)$; $J$ times $m = \mathrm{MUL}(r, r)$, $g =
 \mathrm{MUL}(h, m)$, $c = \mathrm{ADDF}(-g, 1/2)$, $d = \mathrm{MUL}(c, r)$, $r \gets \mathrm{ADD}(r, d)$; then $z =
-\mathrm{MUL}(r, a)$, and the result is $zs$. At $n = 8$, multidouble takes $J = 4$, and this is its square root
-(identical bits on 487 inputs).
+\mathrm{MUL}(r, a)$, and the result is $zs$.
 
 \begin{theorem}\label{thm:t7}
 Assume~\ref{as:fp}, $(n^2+n)u < 1$, $\theta \ge 1$, $\rho = \theta u \le 1/4$, and let $x$ satisfy $H(\theta)$ with
@@ -568,10 +567,69 @@ $n = 8$ are those of \texttt{sqrt\_consts.py}, in rational arithmetic rounded up
 formula above is nondecreasing in the quantities so rounded, so the computed values are upper bounds.
 \end{proof}
 
+The square root of multidouble starts closer instead. SQRT$^{\rm DD}_n$ takes $s$, $a$ and $h$ as SQRT$_{n,J}$, then
+$(a_0', a_1') = \FastTwoSum(a_0, a_1)$, $y$ the double-word square root of $a_0' + a_1'$ by Algorithm~8
+of~\cite{LLMPR23}, and $r = 1/y$ by DWDivDW2~\cite{JMP17}, so that $r = (r_0, r_1, 0, \dots, 0)$. One step keeps the
+second-order term: with $m$, $g$ and $c$ as above, $q = \mathrm{MUL}(c, c)$, $t = \mathrm{ADD}(q, q/2)$, $w =
+\mathrm{ADD}(c, t)$, $d = \mathrm{MUL}(w, r)$ and $r \gets \mathrm{ADD}(r, d)$. One step of SQRT$_{n,J}$ follows,
+then $z = \mathrm{MUL}(r, a)$, and the result is $zs$. At $n = 8$ this is multidouble's square root (identical bits on
+2000 inputs, \texttt{sqrt\_bits.py}).
+
+\begin{theorem}\label{thm:t8}
+Assume the hypotheses of Theorem~\ref{thm:t7}, with its units, $\bar a$ and $\bar h$, and $p \ge 7$. Let $\tau =
+\rho^2/(1-\rho)^2$, $\eta_1 = \frac{25}{8}u^2$, $\eta_2 = 15u^2 + 56u^3$,
+\begin{gather*}
+E_0 = \max\Bigl(\frac{(1 + \tau/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\tau)(1-\eta_2)}{1+\eta_1}\Bigr),
+\\
+\pi^{(0)} = \Bigl(\frac{1+E_0}{1-u},\ \frac{u(1+E_0)}{1-u},\ 0, \dots, 0\Bigr).
+\end{gather*}
+With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \gamma, \epsilon_c, \kappa$ and $\zeta$ be those
+of Theorem~\ref{thm:t7}, $\gamma' = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \zeta + \epsilon_c$, and
+\begin{align*}
+(\epsilon_q, \nu) &= G_{\rm MUL}\bigl(\kappa, \kappa;\ \bar c^2\bigr), \quad \bar q = \bar c^2 + \epsilon_q, \\
+(\epsilon_t, \sigma) &= G_{\rm ADD}\bigl(\nu, \tfrac12\nu;\ \tfrac32\bar q\bigr), \quad \bar t = \tfrac32\bar q +
+\epsilon_t, \\
+(\epsilon_w, \omega) &= G_{\rm ADD}\bigl(\kappa, \sigma;\ \bar c + \bar t\bigr), \quad \bar w = \bar c + \bar t +
+\epsilon_w, \\
+(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\omega, \pi;\ \bar w(1+E)\bigr), \\
+(\epsilon_r, \pi^{(1)}) &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) + \bar w(1+E) + \epsilon_d\bigr),
+\end{align*}
+\begin{align*}
+E_1 &= \tfrac52E^3 + \tfrac{15}8E^4 + \tfrac38E^5 + \epsilon_d + \epsilon_r \\
+&\quad + (1+E)\bigl(\gamma'(1 + 3(E + \tfrac12E^2) + \tfrac32\gamma') \\
+&\qquad + \tfrac32\epsilon_q + \epsilon_t + \epsilon_w\bigr).
+\end{align*}
+Let $E_2$ and $\pi^{(2)}$ be one step of Theorem~\ref{thm:t7} from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
+G_{\rm MUL}(\pi^{(2)}, \bar a;\ 1 + E_2)$ and $\delta^{\rm DD} = E_2 + \epsilon_z$. Then $|\sqrt x - \sum_k
+\mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$: $E_0 \le 22.125\,u^2$, $E_1 \le 2^{-303}$, and
+$\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$, the bounds of SQRT$_{8,4}$.
+\end{theorem}
+
+\begin{proof}
+\emph{Start.} $\FastTwoSum$ is exact, since $|a_1| \le \rho|a_0|$, and $(a_0', a_1')$ is a double-word number far from
+underflow, as $a_0 \in [1, 4)$. Theorem~3.5 of~\cite{LLMPR23} gives $y = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
+\eta_1$, and Theorem~7.1 of~\cite{JMP17}, which~\cite{MR22} proved formally, gives $r y = 1 + d_2$ with $|d_2| \le
+\eta_2$ for $p \ge 7$. With $A = (a_0 + a_1)(1 + t)$, where $|t| \le \tau$ by $|a_2 + \dots| \le \rho^2a_0/(1-\rho)$ and
+$|a_0 + a_1| \ge (1-\rho)a_0$, $r/y_A = (1+t)^{1/2}(1+d_2)/(1+d_1)$ for $y_A = A^{-1/2}$, and $1 - t \le (1+t)^{1/2}
+\le 1 + t/2$ give $|r/y_A - 1| \le E_0$. The output of $\FastTwoSum$ has $|r_1| \le u|r_0|$, so $|r_0| \le |r|/(1-u)$,
+which is $\pi^{(0)}$.
+
+\emph{The second-order step.} With $r = y(1+e)$, the exact $c$ is $-e - \frac12e^2$, and $(1+e)(1 + c + \frac32c^2) = 1 +
+\frac52e^3 + \frac{15}8e^4 + \frac38e^5$. The computed $c$ differs from the exact one by at most $\gamma'$, as in the
+proof of Theorem~\ref{thm:t7}, and $|c| \le \bar c$. Then $q = c^2 + \hat\epsilon_q$, $t = \frac32q + \hat\epsilon_t$
+($q/2$ is exact) and $w = c + t + \hat\epsilon_w$, so $w$ differs from $c_e + \frac32c_e^2$, $c_e$ the exact $c$, by at
+most $\gamma'(1 + 3|c_e| + \frac32\gamma') + \frac32\epsilon_q + \epsilon_t + \epsilon_w$, with $|c_e| \le E + \frac12E^2$.
+As in Theorem~\ref{thm:t7}, $r' = r(1 + w) + \hat\epsilon_d + \hat\epsilon_r$, which gives $E_1$, and Lemma~\ref{lem:g}
+gives the errors and part bounds from the bounds $\bar Z$ listed.
+
+\emph{The rest} is the step and the end of the proof of Theorem~\ref{thm:t7}, and the values are those of
+\texttt{sqrt\_consts.py}.
+\end{proof}
+
 \begin{remark}
 The leading constant 3 at $n = 8$ is $u^n/2$ from each of $m$ and $g$ (through $c$), $u^n$ from the last ADD and $u^n$
-from the final MUL; the Newton error of the third step, $E_3 \approx 1.1 \cdot 10^6u^8$ at $\theta = 2$, enters
-squared. In units of $2^{-418}$ the bound is $(3/64)(1 + 2^{-15})$ unit, and multidouble's test measure $|z^2s^2 - x|/(2x)$
+from the final MUL; the error before the last step enters squared, $E_3 \approx 1.1 \cdot 10^6u^8$ for SQRT$_{8,4}$ at
+$\theta = 2$ and $E_1 \le 2^{-303}$ for SQRT$^{\rm DD}_8$. In units of $2^{-418}$ the bound is $(3/64)(1 + 2^{-15})$ unit, and multidouble's test measure $|z^2s^2 - x|/(2x)$
 is at most $\delta_J + \delta_J^2/2$. Whether 3 is attained is not known.
 \end{remark}
 

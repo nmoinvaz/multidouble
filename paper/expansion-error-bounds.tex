@@ -339,10 +339,10 @@ $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
 \end{tabular}
 \end{table}
 
-\begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t7}]\label{thm:divsqrt}
+\begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t8}]\label{thm:divsqrt}
 For expansions on the ladder, long division with $n+1$ quotient terms errs by at most $(u^n + K_nu^{n+1})|a/b|$, with
-$K_8u = 2^{-25.5}$ and $K_nu < 1$ up to $n = 13$ in binary64. The square root by four Newton steps errs by at most
-$3.00004\,u^8\sqrt a$ at $n = 8$.
+$K_8u = 2^{-25.5}$ and $K_nu < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
+double-double square root, the first with its second-order term, errs by at most $3.00004\,u^8\sqrt a$ at $n = 8$.
 \end{theorem}
 
 The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
@@ -485,12 +485,14 @@ The constants were evaluated in exact rational arithmetic (\texttt{constants.py}
 code, and the values agree to the digits given.
 
 Every statement was also tested by an independent emulator, written from multidouble's source without access to the
-proofs. It reproduces multidouble's octo-double bit for bit on 10,000 inputs of each operation. It ran the algorithms
+proofs. It reproduces multidouble's octo-double bit for bit on 10,000 inputs of each operation but the square root. It ran the algorithms
 in exact arithmetic at precisions 5 to 10 with 5 to 8 parts, over exhaustive families of ladders, gaps, zero parts,
 cancelling pairs and shuffled orders, and at random and by hill climbing, about 37 million renormalizations in all,
 and at $p = 53$. No statement failed. The bounds of Theorem~\ref{thm:renorm} and Proposition~\ref{prop:worst} were
 reached with ratio 1, and each check fired on a halved bound or a deliberately broken algorithm. The example of
-Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}).
+Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}). The emulator's square root matches
+multidouble's bit for bit on 2000 inputs with gaps and zero parts, and a control that skips its last step mismatches
+on every one (\texttt{sqrt\_bits.py}).
 
 The accumulator's bound was evaluated in exact rational arithmetic and tested the same way (\texttt{accumulator/}):
 the constructed inputs of Proposition~\ref{prop:acc-low} at $p = 8$ to $14$ and at $p = 53$, and random sums, all within
@@ -531,10 +533,15 @@ double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), Article 15res, 201
 evaluation. arXiv:2609.35844, 2026.
 \bibitem{Kouya26fma} T. Kouya. Performance evaluation of branch-free fused multiply-add algorithms for multicomponent
 multiple-precision floating-point arithmetic. arXiv:2607.11391, 2026.
+\bibitem{LLMPR23} V. Lef\`evre, N. Louvet, J.-M. Muller, J. Picot, L. Rideau. Accurate calculation of Euclidean
+norms using double-word arithmetic. \emph{ACM Trans. Math. Softw.} 49(1), 2023. doi:10.1145/3568672.
 \bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust.
 \url{https://github.com/nmoinvaz/multidouble}.
 \bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using
 floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
+\bibitem{MR22} J.-M. Muller, L. Rideau. Formalization of double-word arithmetic, and comments on ``Tight and rigorous
+error bounds for basic building blocks of double-word arithmetic''. \emph{ACM Trans. Math. Softw.} 48(1), 1--24, 2022.
+doi:10.1145/3484514.
 \bibitem{ORO05} T. Ogita, S. M. Rump, S. Oishi. Accurate sum and dot product. \emph{SIAM J. Sci. Comput.} 26(6),
 1955--1988, 2005. doi:10.1137/030601818.
 \bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
