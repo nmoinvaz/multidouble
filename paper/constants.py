@@ -1,4 +1,4 @@
-"""The constants of Theorems 12 and 13 of expansion-error-bounds.pdf, computed exactly in rationals from their
+"""The constants of Theorems 14 and 15 of expansion-error-bounds.pdf, computed exactly in rationals from their
 recursions.
 usage: constants.py [p]   (default p = 53); prints, per operation, n and theta, the level constants and kappa, and
 the values of Table IV."""
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
 
 def theta_out(op, n, theta, u):
-    """Theorem 16: the theta' with which the result of MUL or MULF satisfies H(theta'), or None if xi <= 0.
+    """Theorem 17: the theta' with which the result of MUL or MULF satisfies H(theta'), or None if xi <= 0.
     theta'^i = (1+u)^i + i u (1+u)^(n+i-1) Lambda / xi, xi = (zeta - (R + Delta) u^(n+1) - u^2 (1+u)^(n-1) Lambda)/(1+u)"""
     C = consts(op, n, theta, u)
     rho = Fr(theta) * u
@@ -95,7 +95,7 @@ def theta_out(op, n, theta, u):
 if __name__ == '__main__':
     p = int(sys.argv[1]) if len(sys.argv) > 1 else 53
     u = Fr(1, 2 ** p)
-    print("Theorem 16: theta' of the result (H(theta) inputs; for ADD and ADDF leading parts of one sign)")
+    print("Theorem 17: theta' of the result (H(theta) inputs; for ADD and ADDF leading parts of one sign)")
     for op in ('mul', 'mul_f', 'add', 'add_f'):
         for theta in (1, 2):
             row = []

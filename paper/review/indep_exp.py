@@ -1,4 +1,4 @@
-"""Reviewer scratch: Theorem 39 (and Theorem 41 at one point) recomputed from the appendix's text with separate code.
+"""Reviewer scratch: Theorem 40 (and Theorem 42 at one point) recomputed from the appendix's text with separate code.
 Fractions rounded to nearest at 420 bits (not directed: a cross-check of the digits, not a proof). No import of the
 PR's scripts."""
 import math, sys
@@ -190,4 +190,4 @@ if __name__ == '__main__':
                 r = thm34_case(lad(b), Fr(0), a, b, m, sigma)
                 if r > worst[0]:
                     worst = (r, ('k=0', m, sigma, float(a), float(b)))
-    print('Theorem 39, n = 8, s = 6, d = 43, theta = 2: max over cases =', float(worst[0] / u ** 8), 'u^8 at', worst[1])
+    print('Theorem 40, n = 8, s = 6, d = 43, theta = 2: max over cases =', float(worst[0] / u ** 8), 'u^8 at', worst[1])
