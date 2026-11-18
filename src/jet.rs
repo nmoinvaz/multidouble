@@ -21,6 +21,17 @@ use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+/// the coefficients that `Lane::mulf_upto` weights, 0..=k (feature `mutate`: `crate::dual::mutate::MULF_UPTO` leaves
+/// coefficient k out)
+#[inline(always)]
+fn upto(k: usize) -> usize {
+    if mutate::on(mutate::MULF_UPTO) {
+        k
+    } else {
+        k + 1
+    }
+}
+
 /// A scalar truncated power series, N double-double coefficients: the parameter arithmetic ([`Lane::P`]) of `Jet<N>`,
 /// with `Param::var(c)` the series c + h
 #[derive(Clone, Copy, Debug)]
@@ -295,6 +306,15 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     fn mulf(self, s: f64) -> Self {
         let mut v = self.c;
         for x in v.iter_mut() {
+            *x = x.mul_f(s);
+        }
+        Jet { c: v }
+    }
+    /// coefficients 0..=k times s, as `mulf`'s, the others as they are
+    #[inline(always)]
+    fn mulf_upto(self, s: f64, k: usize) -> Self {
+        let mut v = self.c;
+        for x in v[..upto(k)].iter_mut() {
             *x = x.mul_f(s);
         }
         Jet { c: v }
@@ -740,6 +760,15 @@ impl<S: Simd, const N: usize> Lane for QJet<S, N> {
     fn mulf(self, s: f64) -> Self {
         let mut v = self.c;
         for x in v.iter_mut() {
+            *x = x.mul_f(s);
+        }
+        QJet { c: v }
+    }
+    /// coefficients 0..=k times s, as `mulf`'s, the others as they are
+    #[inline(always)]
+    fn mulf_upto(self, s: f64, k: usize) -> Self {
+        let mut v = self.c;
+        for x in v[..upto(k)].iter_mut() {
             *x = x.mul_f(s);
         }
         QJet { c: v }
@@ -1231,6 +1260,15 @@ impl<S: Simd, const N: usize> Lane for OJet<S, N> {
     fn mulf(self, s: f64) -> Self {
         let mut v = self.c;
         for x in v.iter_mut() {
+            *x = x.mul_f(s);
+        }
+        OJet { c: v }
+    }
+    /// coefficients 0..=k times s, as `mulf`'s, the others as they are
+    #[inline(always)]
+    fn mulf_upto(self, s: f64, k: usize) -> Self {
+        let mut v = self.c;
+        for x in v[..upto(k)].iter_mut() {
             *x = x.mul_f(s);
         }
         OJet { c: v }

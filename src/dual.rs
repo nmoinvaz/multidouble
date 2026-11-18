@@ -48,15 +48,19 @@ pub mod mutate {
     /// `crate::field::cs_range_at_par`'s and `cs_w_at_par`'s split sums: the last lane vector's coefficient k moved by
     /// one ulp of the leading part of its lane 0
     pub const CS_AT_SPLIT: u32 = 4;
+    /// `crate::dual::Lane::mulf_upto` on the jets: coefficient k left unweighted, so that a weighted order-k sum
+    /// (`crate::field::cs_w_at`) takes the products of order k with x_k unweighted
+    pub const MULF_UPTO: u32 = 5;
     /// number of ids
-    pub const N: u32 = 4;
+    pub const N: u32 = 5;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 5] = [
+    pub const NAMES: [&str; 6] = [
         "none",
         "octo-double jet product: last convolution term dropped",
         "octo-double jet solve: residual at the iterate rounded to quad-double",
         "octo-double dual product: tangent term d o.v dropped",
         "split order-k Cauchy sum: last lane vector moved by an ulp",
+        "jet times an f64 to order k: coefficient k left unweighted",
     ];
 
     #[cfg(feature = "mutate")]
@@ -249,6 +253,13 @@ pub trait Lane:
     }
     /// times an exact f64 (small integers, 1/2)
     fn mulf(self, s: f64) -> Self;
+    /// `mulf(s)`'s coefficients 0..=k on a jet, the others left as they are (a weighted order-k sum reads no others,
+    /// `crate::field::cs_w_at`); on every other lane `mulf(s)`
+    #[inline(always)]
+    fn mulf_upto(self, s: f64, k: usize) -> Self {
+        let _ = k;
+        self.mulf(s)
+    }
     /// times a power of two s (`dd::is_pwr2`): every part, value and tangents, scaled exactly (barring overflow and
     /// underflow), so bitwise `mulf(s)`; for computing in a variable rescaled by 2^k, e.g. a power series in x / 2^k
     /// whose coefficients would overflow in x
@@ -2284,6 +2295,12 @@ impl<L: Lane> Lane for Counted<L> {
     fn mulf(self, s: f64) -> Self {
         count(op::MULF);
         Counted(self.0.mulf(s))
+    }
+    /// counted as `mulf`
+    #[inline(always)]
+    fn mulf_upto(self, s: f64, k: usize) -> Self {
+        count(op::MULF);
+        Counted(self.0.mulf_upto(s, k))
     }
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
