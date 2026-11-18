@@ -1,0 +1,303 @@
+% The exponential and the logarithm of n-part expansions (multidouble's OD::exp and OD::ln at n = 8), by Lemma 20 at
+% every operation, and of double-words (DD::exp and DD::ln), from the published bounds of the double-word operations.
+% \input after the sloppy section of expansion-error-bounds.tex, whose macros and labels it uses.
+% Constants: explog_consts.py.
+
+\section{The exponential and the logarithm}\label{sec:explog}
+
+The exponential and the logarithm are built from MUL, ADD, MULF and ADDF, and their errors are bounded as the square
+root's are (Theorem~\ref{thm:t7}). We write $(\epsilon, \pi') = G_{\rm OP}(\alpha, \beta;\ \bar Z)$ for the error
+bound (a) and the part bounds (b) that Lemma~\ref{lem:g} gives for operation OP from part bounds $\alpha$ and $\beta$
+of its operands and a bound $\bar Z$ on its exact result, and $G_{\rm OP}(\alpha, \beta;\ \bar Z, \lambda)$ when it is
+also given $\lambda$, a bound on $|a_0 + b_0|$. Part bounds of a value of one part $f$ are $(|f|, 0, \dots, 0)$. In
+binary64, $p = 53$.
+
+\paragraph{Constants} $c_h$ is $\ln 2$ rounded to 42 significant bits, so that for every integer $|k| < 2^{11}$, $kc_h$
+is in $\F$ and is a multiple of $2^{-42}$. $c_\ell$ is the greedy $n$-part expansion of $\ln 2 - c_h$ ($v_0 = \RN(v)$,
+$v_1 = \RN(v - v_0)$, \dots), and $\eta_\ell = |\ln 2 - c_h - \sum_i c_{\ell,i}|$. $F_j$ is the greedy $n$-part
+expansion of $1/j!$ and $\phi_j = |\sum_iF_{j,i} - 1/j!|$; $A_i$ is that of $(-1)^{i+1}/i$ and $\phi'_i =
+|\sum_jA_{i,j} - (-1)^{i+1}/i|$. $\Lambda = \RN(1/\ln 2)$.
+
+\paragraph{EXP$_{n,s,d}$} For an $n$-part $x$ with $|x_0| \le X = 745.2$:
+\begin{enumerate}
+\item[(1)] $k = \RN(x_0\Lambda)$ rounded to the nearest integer, half away from zero. If $k = 0$, $r = x$; otherwise
+  $x' = (x_0 - kc_h, x_1, \dots, x_{n-1})$ and $r = \mathrm{ADD}(x', \mathrm{MULF}(c_\ell, -k))$.
+\item[(2)] $m = \max(0, e + s + 1)$ with $2^e \le |r_0| < 2^{e+1}$ ($m = 0$ if $r_0 = 0$), and $r' = 2^{-m}r$.
+\item[(3)] $q \gets F_d$; $q \gets \mathrm{ADD}(F_j, \mathrm{MUL}(r', q))$ for $j = d-1, \dots, 2$; $t \gets
+  \mathrm{ADD}(r', \mathrm{MUL}(r', \mathrm{MUL}(r', q)))$.
+\item[(4)] $m$ times $t \gets \mathrm{ADD}(2t, \mathrm{MUL}(t, t))$.
+\item[(5)] Return $2^k\,\mathrm{ADDF}(t, 1)$, scaled in two exact steps.
+\end{enumerate}
+Step (1) is Cody and Waite's reduction~\cite{CW80}, step (3) is Horner's rule for $\sum_{j=1}^dr'^j/j!$, and each pass
+of step (4) takes $t$ from $e^{r'} - 1$ to $e^{2r'} - 1$, as QD's exponential does~\cite{HLB01}, which keeps the
+relative error of $t$ from doubling. At $n = 8$, $s = 6$ and $d = 43$ this is multidouble's \texttt{OD::exp}.
+
+\begin{lemma}\label{lem:red}
+Assume~\ref{as:fp} and $p = 53$, and let $|x_0| \le X \le 745.3$, $|x - x_0| \le \gamma$ and $|x_i| \le \alpha_i$ for $i
+\ge 1$. Let $K = 1075$, $\beta = X(|\Lambda - 1/\ln 2| + u\Lambda)$, $\rho_e = (\frac12 + \beta)\ln 2 + \gamma$, $r_e =
+x - k\ln 2$, and assume $\alpha_0 = \rho_e + \gamma + K|\ln 2 - c_h| < \frac12$.
+\begin{enumerate}
+\item[(a)] $|k| \le K$, $|r_e| \le \rho_e$, and for $k \ne 0$, $x_0 - kc_h \in \F$.
+\item[(b)] Let $k \ne 0$, $|r_e| \le \bar r$, $\delta = \epsilon_1 + \epsilon_2 + K\eta_\ell$, and
+  \begin{align*}
+  (\epsilon_1, \mu) &= G_{\rm MULF}(|c_\ell|, K;\ K|c_\ell|), \\
+  (\epsilon_2, \pi^r) &= G_{\rm ADD}(\alpha, \mu;\ \bar r + K\eta_\ell + \epsilon_1).
+  \end{align*}
+  Then $|r - r_e| \le \delta$ and $|r_i| \le \pi^r_i$.
+\end{enumerate}
+For $x$ on $H(\theta)$, $\alpha_i = \rho^iX$ and $\gamma = \rho X/(1-\rho)$ serve, $\rho = \theta u$.
+\end{lemma}
+
+\begin{proof}
+(a) By \eqref{eq:rn}, $|\RN(x_0\Lambda) - x_0/\ln 2| \le |x_0||\Lambda - 1/\ln 2| + u|x_0\Lambda| \le \beta$, so $|k|
+\le X/\ln 2 + \beta + \frac12 < 1076$ and $|x_0 - k\ln 2| \le (\frac12 + \beta)\ln 2$, and with $|x - x_0| \le
+\gamma$, $|r_e| \le \rho_e$. If $k \ne 0$ then $|\RN(x_0\Lambda)| \ge \frac12$, so $|x_0| \ge \frac14$ and $x_0$ is a
+multiple of $2^{-54}$, and so is $kc_h$. Their difference is $r_e - (x - x_0) + k(\ln 2 - c_h)$, of magnitude at most
+$\alpha_0 < \frac12$, so it is a multiple of $2^{-54}$ below $2^{53}\cdot 2^{-54}$, in $\F$.
+
+(b) The parts of $x'$ are bounded by $\alpha$: its leading part is $x_0 - kc_h$, bounded in (a), and the others are
+those of $x$. Lemma~\ref{lem:g} bounds MULF's error by $\epsilon_1$ and its parts by $\mu$, its exact result being
+$-k\sum_ic_{\ell,i}$. The exact sum that ADD rounds is $x' - k\sum_ic_{\ell,i}$ plus MULF's error, that is $r_e +
+k(\ln 2 - c_h - \sum_i c_{\ell,i})$ plus that error, of magnitude at most $\bar r + K\eta_\ell + \epsilon_1$; so
+$|r - r_e| \le \epsilon_2 + \epsilon_1 + K\eta_\ell$.
+\end{proof}
+
+\begin{lemma}\label{lem:core}
+Assume~\ref{as:fp} and $(n^2+n)u < 1$. Let $r$ be an $n$-part expansion of sign $\sigma \in \{1, -1\}$ with $a \le |r|
+\le b$ and $|r_i| \le \pi_i$, and let steps (2)--(4) of EXP$_{n,s,d}$ run on it with $m$ squarings. Let $b' =
+2^{-m}\min(b, 2^{m-s} + \sum_{i \ge 1}\pi_i)$, $\pi' = 2^{-m}(\min(\pi_0, 2^{m-s}), \pi_1, \dots, \pi_{n-1})$, and for
+$j \ge 0$ let $\tau_j = e^{2^jb'} - 1$ and $g_j = 1 + \tau_j$ if $\sigma = 1$, and $\tau_j = 1 - e^{-2^jb'}$ and $g_j =
+e^{-2^ja2^{-m}}$ if $\sigma = -1$. Let $v_d = 1/d!$, $e_d = \phi_d$, $\kappa_d = |F_d|$, and for $j = d-1, \dots, 2$
+\begin{align*}
+(\epsilon^p_j, \mu_j) &= G_{\rm MUL}\bigl(\pi', \kappa_{j+1};\ b'(v_{j+1} + e_{j+1})\bigr), \\
+(\epsilon^a_j, \kappa_j) &= G_{\rm ADD}\bigl(|F_j|, \mu_j;\ \tfrac1{j!} + \phi_j + b'(v_{j+1} + e_{j+1}) +
+\epsilon^p_j\bigr), \\
+e_j &= \phi_j + b'e_{j+1} + \epsilon^p_j + \epsilon^a_j, \qquad v_j = \tfrac1{j!} + b'v_{j+1}.
+\end{align*}
+Let $(\epsilon', \omega') = G_{\rm MUL}(\pi', \kappa_2;\ b'(v_2 + e_2))$, $(\epsilon'', \omega) = G_{\rm MUL}(\pi',
+\omega';\ b'(b'(v_2 + e_2) + \epsilon'))$,
+\[
+E^- = \epsilon'' + b'(\epsilon' + b'e_2) + \frac{b'^{d+1}}{(d+1)!\,(1 - b'/(d+2))},
+\]
+$(\epsilon''', \psi_0) = G_{\rm ADD}(\pi', \omega;\ \tau_0 + E^-)$ and $E_0 = E^- + \epsilon'''$, and for $j = 0,
+\dots, m-1$
+\begin{align*}
+(\epsilon^m_j, \nu_j) &= G_{\rm MUL}\bigl(\psi_j, \psi_j;\ (\tau_j + E_j)^2\bigr), \\
+(\epsilon^s_j, \psi_{j+1}) &= G_{\rm ADD}\bigl(2\psi_j, \nu_j;\ \tau_{j+1} + 2E_j(1 + \tau_j) + E_j^2 + \epsilon^m_j\bigr),
+\\
+E_{j+1} &= 2g_jE_j + E_j^2 + \epsilon^m_j + \epsilon^s_j.
+\end{align*}
+Then the result $t$ of step (4) satisfies $|t - (e^r - 1)| \le E_m$ and $|t_i| \le \psi_{m,i}$, and $|e^r - 1| \le
+\tau_m$.
+\end{lemma}
+
+\begin{proof}
+The scaling by $2^{-m}$ is exact. Step (2) gives $|r_0| < 2^{m-s}$, so $|r'| \le b'$ and $|r'_i| \le \pi'_i$. Let
+$Q_j = \sum_{i=j}^d r'^{i-j}/i!$, so $|Q_j| \le v_j$. By induction from $j = d$, the computed $q$ after the pass with
+index $j$ satisfies $|q - Q_j| \le e_j$ and has parts bounded by $\kappa_j$: the exact product $r'q$ has magnitude at
+most $b'(v_{j+1} + e_{j+1})$, Lemma~\ref{lem:g} bounds its rounding by $\epsilon^p_j$, the exact sum $F_j + \RN(r'q)$
+has magnitude at most the stated bound, and $q - Q_j = (F_j - 1/j!) + r'(q_{\rm old} - Q_{j+1}) + $ the two
+roundings. Likewise $w = \mathrm{MUL}(r', \mathrm{MUL}(r', q))$ satisfies $|w - r'^2Q_2| \le \epsilon'' + b'\epsilon' +
+b'^2e_2$, and $r' + r'^2Q_2 = \sum_{i=1}^dr'^i/i!$ differs from $e^{r'} - 1$ by at most the remainder term in $E^-$.
+So the first $t$ errs by at most $E_0$ from $T_0 = e^{r'} - 1$.
+
+Let $T_j = e^{2^jr'} - 1$, so $|T_j| \le \tau_j$ and $T_{j+1} = 2T_j + T_j^2$, and let $t$ before pass $j$ be $T_j +
+h$ with $|h| \le E_j$. Then $2t + t^2 = T_{j+1} + h(2 + 2T_j + h)$, and $|2 + 2T_j| = 2e^{2^jr'} \le 2g_j$, using $r'
+\le -a2^{-m}$ when $\sigma = -1$. MUL rounds $t^2$, of magnitude at most $(\tau_j + E_j)^2$, within $\epsilon^m_j$, and
+ADD rounds $2t + \RN(t^2)$, of magnitude at most the stated bound, within $\epsilon^s_j$; $2t$ is exact with parts
+bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $T_m = e^r - 1$.
+\end{proof}
+
+\begin{theorem}\label{thm:exp}
+Assume~\ref{as:fp}, $p = 53$, $\rho = \theta u \le 1/4$ and $(n^2+n)u < 1$, let $x$ satisfy $H(\theta)$ with $|x_0| \le
+X$, and let $y$ be the result of EXP$_{n,s,d}$ (no operation, the final scaling included, underflowing or overflowing).
+For a case, take $k = 0$ or $k \ne 0$, a squaring count $m$, a sign $\sigma$ of $r$, and an interval $[a, b]$ of the
+values of $|r|$ that can select $m$; for $k = 0$ let $\pi$ be the part bounds of an expansion on $H(\theta)$ with
+$|r| \le b$ and $\delta = 0$, and for $k \ne 0$ let $\pi = \pi^r$ and $\delta$ be those of Lemma~\ref{lem:red}(b) with
+$\bar r = b + \delta^*$, $\delta^*$ its $\delta$ for $\bar r = \rho_e$. With $E_m$ and $\psi_m$ of
+Lemma~\ref{lem:core}, let $Z = e^b + E_m$ for $\sigma = 1$ and $e^{-a} + E_m$ for $\sigma = -1$, $(\epsilon_s, \cdot) =
+G_{\rm ADDF}(\psi_m, 1;\ Z, Z + \sum_{i \ge 1}\psi_{m,i})$, $v = e^{a - \delta}$ for $\sigma = 1$ and $e^{-b-\delta}$ for
+$\sigma = -1$, and
+\[
+\varepsilon = \frac{E_m + \epsilon_s}{v} + e^\delta - 1.
+\]
+If the cases cover every $|r|$ that can select each $m$, $|y - e^x| \le \varepsilon_{\exp}e^x$, with $\varepsilon_{\exp}$
+the largest $\varepsilon$. At $n = 8$, $s = 6$, $d = 43$ and $\theta = 2$, $\varepsilon_{\exp} \le 3.661\,u^8$, the
+largest at $k \ne 0$, $m = 5$, $r$ just above $-\frac12\ln 2$.
+\end{theorem}
+
+\begin{proof}
+Step (2) selects $m \ge 1$ only if $|r_0| \ge 2^{m-s-1}$ and $m$ only if $|r_0| < 2^{m-s}$, so the $|r|$ that select $m$
+lie in $[2^{m-s-1} - \sum_{i \ge 1}\pi_i,\ 2^{m-s} + \sum_{i \ge 1}\pi_i]$, intersected with $[0, \rho_e + \delta^*]$ by
+Lemma~\ref{lem:red}. Fix the case that contains the run. By Lemma~\ref{lem:red} (for $k = 0$, $r = x$ is exact) and
+Lemma~\ref{lem:core}, $t$ errs from $e^r - 1$ by at most $E_m$, so the exact sum $t + 1$ has magnitude at most $e^r +
+E_m \le Z$, and ADDF errs by at most $\epsilon_s$ (Lemma~\ref{lem:g}). So $|2^{-k}y - e^r| \le E_m + \epsilon_s$, and
+$e^{r_e} \ge v$ since $|r - r_e| \le \delta$; with $e^x = 2^ke^{r_e}$ and $|e^r - e^{r_e}| \le e^{r_e}(e^\delta - 1)$,
+$|y - e^x| \le 2^k(E_m + \epsilon_s + e^{r_e}(e^\delta - 1)) \le \varepsilon e^x$. The scaling by $2^k$ is exact. The
+value at $n = 8$ is that of \texttt{explog\_consts.py}, over eight geometric intervals per $m$ and sign, in rational
+arithmetic rounded up to 200-bit dyadic numbers, every bound above being nondecreasing in the quantities so rounded.
+\end{proof}
+
+The constant is about one rounding per operation that touches the result's scale: each ADD of step (4) adds about
+$u^8|t|$ to $t$'s error, which enters the result divided by $e^r$, ADDF adds $u^8$, and the reduction $u^8|r|/e^r$. The
+products and Horner's inner steps add terms smaller by factors of $|t|$ or $|r'|$.
+
+\paragraph{LOG$_{n,s,d,q}$} For an $n$-part $x$ with $x_0 > 0$:
+\begin{enumerate}
+\item[(1)] $y_0 = (y_h, y_l)$, the double-word logarithm (Proposition~\ref{prop:ddexplog}) of $\FastTwoSum(x_0, \RN(x_1 +
+  \RN(x_2 + \dots)))$.
+\item[(2)] $(k, t)$ by steps (1)--(4) of EXP$_{n,s,d}$ on $(-y_h, -y_l, 0, \dots, 0)$.
+\item[(3)] $f = \mathrm{ADDF}(2^kx, -1)$, $2^kx$ scaled in two exact steps.
+\item[(4)] $c = \mathrm{ADD}(\mathrm{ADD}(f, t), \mathrm{MUL}(f, t))$.
+\item[(5)] $h \gets A_q$; $h \gets \mathrm{ADD}(A_i, \mathrm{MUL}(c, h))$ for $i = q-1, \dots, 2$; return
+  $\mathrm{ADD}(y_0, \mathrm{ADD}(c, \mathrm{MUL}(\mathrm{MUL}(c, c), h)))$.
+\end{enumerate}
+Up to rounding, $1 + c = (1 + f)(1 + t) = xe^{-y_0}$, so $y_0 + \log(1 + c) = \ln x$, and step (5) sums $\log(1 + c)$ to
+order $q$: one Newton step on $e^y = x$, with its correction carried to order $q$ (QD's logarithm takes $y_0 + c$, the
+first order~\cite{HLB01}). Step (4) forms $c$ from $f$ and $t$ without cancelling their leading $1$s, so its error stays
+relative to $|\ln x|$ near $x = 1$. At $n = 8$, $s = 6$, $d = 43$ and $q = 4$ this is \texttt{OD::ln}.
+
+\begin{lemma}\label{lem:fexact}
+In LOG$_{n,s,d,q}$ under the hypotheses of Theorem~\ref{thm:log}, $f = 2^kx - 1$ exactly.
+\end{lemma}
+
+\begin{proof}
+By Lemma~\ref{lem:red}(a), $2^kx = e^{-e_0 - r_e}$ with $e_0 = y_0 - \ln x$ and $|r_e| \le \rho_e$, so $2^kx \in
+[0.70, 1.42]$ by the bound on $|e_0|$ of Theorem~\ref{thm:log}, and $2^kx_0$ lies in $[\frac12, 2]$ by
+\eqref{eq:a0}. ADDF's first $\TwoSum(2^kx_0, -1)$ is then exact with error zero (Sterbenz), each later one is
+$\TwoSum(2^kx_i, 0) = (2^kx_i, 0)$, and the level $s_n$ is zero. VecSum's first $\TwoSum$ adds that zero, so $v_n = 0$,
+and the renormalization is exact by Theorem~\ref{thm:t1}(a): a lossy last step would lose the error of $\TwoSum(\acc,
+0)$, which is zero.
+\end{proof}
+
+\begin{theorem}\label{thm:log}
+Assume~\ref{as:fp}, $p = 53$, $\rho = \theta u \le 1/4$ and $(n^2+n)u < 1$, and the hypothesis (L) of
+Proposition~\ref{prop:ddexplog}. Let $x$ satisfy $H(\theta)$ with $x_0 > 0$ and $|\ln x| \le X$, and let no operation
+of LOG$_{n,s,d,q}$ underflow. Let $\epsilon_{\rm DW}$ be the double-word logarithm's bound of
+Proposition~\ref{prop:ddexplog}, $g = (n-2)u/(1 - (n-2)u)$, $w = g\rho/(1 - 2\rho - g\rho)$, $\delta_0 = w/(1-w)$ and
+$E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0$. For $\ell \ge |\ln x|$ and a case as in
+Theorem~\ref{thm:exp}, of the reduction of $-y_0$, define:
+\begin{itemize}
+\item $\bar y = \ell + E(\ell)$, and $\pi^y$ the part bounds of a two-part expansion on $H(1)$ with value at most $\bar
+  y$; for $k = 0$, $\pi = \pi^y$, $\delta = 0$ and $b \le \bar y$; for $k \ne 0$, $\pi = \pi^r$ and $\delta$ those of
+  Lemma~\ref{lem:red}(b) with $X = \bar y$, $\gamma = 2u\bar y$ and $\alpha = \pi^y$; $E_m$, $\psi_m$ and $\tau_m$ those of
+  Lemma~\ref{lem:core};
+\item $\xi = e^{E + \delta - a}$ (or $e^{E + \delta}$ if $a \le \delta$) for $\sigma = 1$ and $e^{E + b + \delta}$ for
+  $\sigma = -1$, $\bar f = \max(\xi - 1, 1 - e^{-(E + b + \delta)})$, $\chi'$ the part bounds of an expansion on
+  $H(\theta)$ with value at most $\xi$, and $(\cdot, \pi^f) = G_{\rm ADDF}(\chi', 1;\ \bar f, \bar f + \sum_{i \ge
+  1}\chi'_i)$;
+\item $(\epsilon_{ft}, \nu) = G_{\rm MUL}(\pi^f, \psi_m;\ \bar f(\tau_m + E_m))$, $(\epsilon_{f+t}, \zeta) = G_{\rm
+  ADD}(\pi^f, \psi_m;\ 2(e^{\hat b} - 1 - \hat b) + e^{\hat b}(e^{E + \delta} - 1) + E_m)$ with $\hat b = b + \delta$,
+  $\bar c^* =
+  e^E - 1$, $\Delta = e^E(e^\delta - 1)$, $(\epsilon_c, \chi) = G_{\rm ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + \Delta +
+  \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + \Delta + \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$ and $C = \bar
+  c^* + E_c$;
+\item $v_q = 1/q$, $e_q = \phi'_q$, $\kappa_q = |A_q|$, and for $i = q-1, \dots, 2$
+  \begin{align*}
+  (\epsilon^p_i, \mu_i) &= G_{\rm MUL}\bigl(\chi, \kappa_{i+1};\ C(v_{i+1} + e_{i+1})\bigr), \\
+  (\epsilon^a_i, \kappa_i) &= G_{\rm ADD}\bigl(|A_i|, \mu_i;\ \tfrac1i + \phi'_i \\
+  &\qquad + C(v_{i+1} + e_{i+1}) + \epsilon^p_i\bigr), \\
+  e_i &= \phi'_i + Ce_{i+1} + \epsilon^p_i + \epsilon^a_i, \\
+  v_i &= \tfrac1i + Cv_{i+1};
+  \end{align*}
+\item with $W = \epsilon^w + \epsilon^0(v_2 + e_2) + C^2e_2$,
+  \begin{align*}
+  (\epsilon^0, \omega_0) &= G_{\rm MUL}(\chi, \chi;\ C^2), \\
+  (\epsilon^w, \omega) &= G_{\rm MUL}\bigl(\omega_0, \kappa_2;\ (C^2 + \epsilon^0)(v_2 + e_2)\bigr), \\
+  (\epsilon^r, \omega_r) &= G_{\rm ADD}(\chi, \omega;\ C + C^2v_2 + W);
+  \end{align*}
+\item $P = \epsilon^r + W + \frac{C^{q+1}}{(q+1)(1-C)} + \frac{E_c}{1-C}$, $(\epsilon_y, \cdot) = G_{\rm ADD}(\pi^y,
+  \omega_r;\ \ell + P)$, and $\mathcal E(\ell) = \epsilon_y + P$.
+\end{itemize}
+Then $|y - \ln x| \le \mathcal E(\ell)$ in the case of the run. With $\varepsilon_{\ln}$ and $\Phi$ defined from
+$\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, and at $n = 8$, $s = 6$, $d = 43$, $q
+= 4$ and $\theta = 2$, $\varepsilon_{\ln} \le 9.926\,u^8$ and $\Phi \le 2^{-509}$.
+\end{theorem}
+
+\begin{proof}
+\emph{The start.} Proposition~\ref{prop:ddexplog} gives $|y_0 - \ln\tilde x| \le \epsilon_{\rm DW}|\ln\tilde x|$ for
+the double-word $\tilde x$ of step (1). Its tail is the sum of $n - 1$ parts rounded $n - 2$ times, so $|x - \tilde x|
+\le g\sum_{i \ge 1}|x_i| \le g\rho x_0/(1-\rho)$, $\tilde x \ge x - g\rho x_0/(1 - \rho) \ge x_0(1 - 2\rho - g\rho)/(1 -
+\rho)$, and $|\ln x - \ln\tilde x| \le \delta_0$; so $e_0 = y_0 - \ln x$ satisfies $|e_0| \le E(\ell)$, and $|y_0| \le
+\bar y$.
+
+\emph{The steps.} Lemmas~\ref{lem:red} and~\ref{lem:core} apply to $-y_0$, with $X = \bar y$ and $|y_0 - y_h| \le
+2u\bar y$. With $T = e^r - 1$ and $|t - T| \le E_m$, $x' = 2^kx = e^{-e_0 - r_e}$ lies within the bounds $\xi$ and
+$1 - \bar f$, and $f = x' - 1$ exactly (Lemma~\ref{lem:fexact}), with $|f| \le \bar f$ and parts bounded by $\pi^f$
+(Lemma~\ref{lem:g}(b)). $f + t = (x' - e^{-r}) + (e^{-r} + e^r - 2) + (t - T)$, where $|x' - e^{-r}| = e^{-r}|e^{-e_0 +
+r - r_e} - 1|$ and $e^{-r} + e^r - 2 = 2(\cosh r - 1) \le 2(e^{|r|} - 1 - |r|)$, which gives the bound of the inner
+ADD. The exact value of the outer ADD is $f + t + ft$ plus the two roundings, and $f + t + ft = x'(1 + t) - 1 = c^* +
+x'(e^r - e^{r_e}) + x'(t - T)$ with $c^* = x'e^{r_e} - 1 = e^{-e_0} - 1$, $|c^*| \le \bar c^*$ and $|x'(e^r - e^{r_e})|
+= e^{-e_0}|e^{r - r_e} - 1| \le \Delta$. So $|c - c^*| \le E_c$ and $|c|, |c^*| \le C$. Step (5) computes $h$ within
+$e_2$ of $H(c) = \sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, as in the proof of Lemma~\ref{lem:core}, and $c + c^2H(c) = S_q(c) =
+\sum_{i=1}^q(-1)^{i+1}c^i/i$, with $|S_q(c)| \le C + C^2v_2$; the sum is within $\epsilon^r + W$ of $S_q(c)$. Finally
+$|\log(1+c) - S_q(c)| \le C^{q+1}/((q+1)(1 - C))$ and $|\log(1+c) - \log(1+c^*)| \le E_c/(1-C)$, and $y_0 + \log(1 +
+c^*) = \ln x$, which gives $|y_0 + \text{the sum} - \ln x| \le P$ and the last ADD's bound.
+
+\emph{The cases.} $k = 0$ only if $|y_h| < 1/(2\Lambda)$, and $k \ne 0$ only if $|y_h| \ge 1/(2\Lambda(1+u))$; with
+$|y_0 - \ln x| \le E(\ell)$ this splits $\ell = |\ln x|$ into $[0, \ell_k^+]$ and $[\ell_k^-, X]$. For $k = 0$, $r =
+-y_0$ exactly, and $m$ is selected by $|y_h|$, so each $m$ holds for $\ell$ in an interval $[\ell_m^-, \ell_m^+]$; we
+take $a = 2^{m-s-1}(1 - 2u)$ for $m \ge 1$ ($0$ for $m = 0$) and $b = \ell + E(\ell)$. For $k \ne 0$ the cases are
+those of Theorem~\ref{thm:exp} for $|r|$, at every $\ell \in [\ell_k^-, X]$.
+
+\emph{Convexity.} Evaluate the bounds with VecSum's second bound alone in Lemma~\ref{lem:g} ($V_j = \us(1+u)^{n-j}
+\sigma_{j-1}$, larger than the minimum), with $b'$ and $\pi'_0$ of Lemma~\ref{lem:core} without their minima, and with
+$\tau_j = 2^jb'$ for $\sigma = -1$ (larger than $1 - e^{-2^jb'}$), and likewise $\bar f$. Then every quantity above is
+built from $\ell$ by sums and products with nonnegative coefficients and by $z \mapsto e^z$, $z \mapsto z^{q+1}/(1 -
+z)$ and $z \mapsto 1/(1-z)$ applied to nondecreasing convex arguments, so $\mathcal E$ is nondecreasing and convex in
+$\ell$ for a fixed case. On an interval $[\ell_1, \ell_2]$ with $\ell_1 > 0$, $\mathcal E(\ell)$ lies below its chord, so
+$\mathcal E(\ell)/\ell \le \max(\mathcal E(\ell_1)/\ell_1, \mathcal E(\ell_2)/\ell_2)$, and on $[0, \ell_2]$, $\mathcal
+E(\ell) \le \mathcal E(0) + \ell(\mathcal E(\ell_2) - \mathcal E(0))/\ell_2$. Let $\varepsilon_{\ln}$ be the largest of
+these ratios and slopes over the cases ($k = 0$: each $m$ on $[\ell_m^-, \ell_m^+]$; $k \ne 0$: each case on $[\ell_k^-,
+1]$, $[1, 4]$ and $[4, X]$), and $\Phi$ the largest $\mathcal E(0)$, which only $m = 0$ has. The values are those of
+\texttt{explog\_consts.py}, as in Theorem~\ref{thm:exp}, with four intervals of $|r|$ per $m$ and sign for $k \ne 0$.
+\end{proof}
+
+The bound is largest near $|\ln x| = \frac12\ln 2$, where $|r|$ is near $\frac12\ln 2$ too and $t$'s error, as in
+Theorem~\ref{thm:exp}, enters relative to $|\ln x|$ instead of to $e^r$. For larger $|\ln x|$ that share falls like
+$1/|\ln x|$, toward the last ADD's $u^8$. The term $\Phi$ is the
+second-order part of Lemma~\ref{lem:g} for $f$, whose part bounds follow $x$'s ladder from $x_0 \approx 1$ rather than
+$|f|$; it matters only within $2^{-85}$ of $x = 1$.
+
+\paragraph{Double words} \texttt{DD::exp} and \texttt{DD::ln} run EXP and LOG with the double-word operations of
+Joldes, Muller and Popescu~\cite{JMP17}, whose relative errors are bounded: AccurateDWPlusDW (their Algorithm 6, the
+ADD) within $\alpha_{\rm A} = 3u^2/(1-4u)$ (their Theorem 3.1), DWPlusFP (Algorithm 4, the ADDF) within $\alpha_{\rm F}
+= 2u^2/(1-2u)$, DWTimesFP3 (Algorithm 9, the MULF) within $\alpha_{\rm M} = 2u^2$, and DWTimesDW2 (Algorithm 11, the
+MUL) within $\alpha_{\rm P} = 5u^2/(1+u)^2$, the bound Muller and Rideau proved formally~\cite{MR22}, who also proved the
+others formally. The double-word product of multidouble sums its terms in another order, for which no bound is
+published, so \texttt{DD::exp} and \texttt{DD::ln} use DWTimesDW2. The reduction is $r =
+\mathrm{DWPlusFP}(\mathrm{DWPlusFP}(P, x_l), x_h - kc_h)$ with $P = \mathrm{DWTimesFP3}(c_\ell, -k)$, $s = 1$ (no
+squarings, as $|r| < \frac12$), $d = 27$, and the logarithm starts from $y_0 = \RN(\ln_{\rm b}(x_h) + \RN(x_l/x_h))$,
+$\ln_{\rm b}$ binary64's logarithm, with $q = 3$ and the last addition $\mathrm{DWPlusFP}(\cdot, y_0)$.
+
+\begin{proposition}\label{prop:ddexplog}
+Assume~\ref{as:fp} with $p = 53$, and (L): $|\ln_{\rm b}(h) - \ln h| \le 2^{-40}|\ln h|$ for every positive $h \in
+\F$. For a double-word $x$ (its parts the output of $\FastTwoSum$), let Lemma~\ref{lem:red}, Lemma~\ref{lem:core},
+Theorem~\ref{thm:exp} and Theorem~\ref{thm:log} be read with no part bounds and with each $G_{\rm OP}$'s error replaced
+by $\alpha_{\rm OP}\bar Z$, and with the start's error $E(\ell) = (2^{-40} + u(1 + 2^{-40}))\ell + 2^{-40}\delta_1 + u^2
++ u^2/(2(1-u)) + u((1 + 2^{-40})\delta_1 + u(1+u))$, $\delta_1 = u/(1-u)$, or $E(\ell) = \ell(u(1+\ell) + \ell)$ when
+$\ell < u(1-u)/2$. Then \texttt{DD::exp} errs by at most $5.872\,u^2e^x$ and \texttt{DD::ln} by at most $15.351\,u^2|\ln x|$
+(computed), so $\epsilon_{\rm DW} = 15.351\,u^2$.
+\end{proposition}
+
+\begin{proof}
+The steps are those of the proofs above, each operation's error bounded relative to its exact result. For the start,
+with $v = x_l/x_h$, $|v| \le u$ and $|y_0 - \ln x| \le 2^{-40}|\ln x_h| + u|v| + v^2/(2(1-u)) + u|\ln_{\rm b}(x_h) +
+\RN(v)|$, with $|\ln x_h| \le \ell + \delta_1$; and if $x_h \ne 1$ then $|x - 1| \ge u/2$, so for $\ell < u(1-u)/2$,
+$x_h = 1$, $\ln_{\rm b}(1) = 0$ by (L), $y_0 = x_l$ and $|y_0 - \ln x| \le x_l^2/(2(1 - |x_l|))$. The reduction's
+error is $\alpha_{\rm M}K|c_\ell|$ for $P$, $\alpha_{\rm F}$ times the magnitudes of the two sums, and $K\eta_\ell$; the
+remaining steps follow the recursions of Lemma~\ref{lem:core} and Theorems~\ref{thm:exp} and~\ref{thm:log}, and the
+values are those of \texttt{explog\_consts.py}.
+\end{proof}
+
+Every binary64 logarithm in common use is within one ulp, $2^{-52}$ relative, so (L) holds with a wide margin;
+multidouble's tests check it on their inputs. The quad-double \texttt{QD::exp} and \texttt{QD::ln} run the same steps
+with QD's own operations, which have no proven bounds, and are tested to $64u^4$.
+
+\begin{remark}
+Against a reference accurate to $2^{-1600}$, multidouble's tests measure at most $0.25\,u^8$ for \texttt{OD::exp} (at
+$x$ near $k\ln 2$, where the result lies just above a power of two and the rounding of its last part is largest
+relative to it) and $0.0056\,u^8$ for \texttt{OD::ln}, and
+$1.03\,u^2$ and $1.27\,u^2$ for \texttt{DD::exp} and \texttt{DD::ln} (measured). Whether the bounds are approached is
+not known; they charge every operation its full rounding.
+\end{remark}

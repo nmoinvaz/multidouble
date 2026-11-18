@@ -320,6 +320,10 @@ $\sqrt a$ & $3.00004\,u^8|Z|$ \\
 $\sin x$, $\cos x$ & $3.17\,u^8|Z| + 5|k|2^{-1217}$, $|x_0| \le 2^{52}$ \\
 & not known \\ \addlinespace
 $\tan x$ & $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)\,|Z|$ \\
+& not known \\ \addlinespace
+$e^a$ & $3.661\,u^8|Z|$ \\
+& not known \\ \addlinespace
+$\ln a$ & $9.926\,u^8|Z| + 2^{-509}$ \\
 & not known \\
 \bottomrule
 \end{tabular}
@@ -348,6 +352,9 @@ For expansions on the ladder, long division with $n+1$ quotient terms errs by at
 $K_8u = 2^{-25.5}$ and $K_nu < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
 double-double square root, the first with its second-order term, errs by at most $3.00004\,u^8\sqrt a$ at $n = 8$.
 \end{theorem}
+
+The exponential and the logarithm, built from these operations with each part's bound carried through every step, err
+by at most $3.661\,u^8e^a$ and $9.926\,u^8|\ln a| + 2^{-509}$ at $n = 8$ (Theorems~\ref{thm:exp} and~\ref{thm:log}).
 
 The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
 so is a sum whose operands' leading parts have one sign (Corollary~\ref{cor:closure}), so the bounds apply at every
@@ -530,10 +537,13 @@ section on sums of products and tested it with its own code.
 \input{expansion-error-bounds-accumulator}
 \input{expansion-error-bounds-sloppy}
 \input{expansion-error-bounds-trig}
+\input{expansion-error-bounds-explog}
 
 \begin{thebibliography}{99}
 \bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
 renormalization algorithm. \emph{ITP 2017}, LNCS 10499, 98--113, 2017. doi:10.1007/978-3-319-66107-0\_7.
+\bibitem{CW80} W. J. Cody, Jr., W. Waite. \emph{Software Manual for the Elementary Functions}. Prentice-Hall,
+Englewood Cliffs, NJ, 1980. ISBN 0-13-822064-6.
 \bibitem{Dekker71} T. J. Dekker. A floating-point technique for extending the available precision. \emph{Numer.
 Math.} 18(3), 224--242, 1971. doi:10.1007/BF01397083.
 \bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
