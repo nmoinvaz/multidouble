@@ -230,32 +230,31 @@ results and near x = 1. The other bounds are the thresholds the tests check.
   theorem needs a run without underflow, and the functions scale small reduced arguments by powers of two so that every
   reduced argument from the early return's threshold up (2⁻²¹² at eight parts) gives one, as the paper checks at eight
   parts in every binade, unless a part of x lies far below the ladder. The reduction is exact up to π/2's 1216 fraction
-  bits, so the bounds hold next to the multiples of π/2 too. `scripts/trig_tables.py` computes those bits in exact
-  integer arithmetic from Machin's formula [[4]](#ref-machin), π/4 = 4 arctan(1/5) − arctan(1/239), and checks them
-  against Gauss's, π/4 = 12 arctan(1/18) + 8 arctan(1/57) − 5 arctan(1/239). Beyond 2⁵² the functions return NaN. The
-  double-double bounds follow from the published bounds of the double-word algorithms they use [[1]](#ref-jmp17)
-  (DWTimesDW3, which Muller and Rideau (2022) [[2]](#ref-mr22) bound by 4 u², AccurateDWPlusDW, DWPlusFP and
-  `fast_div`), the octo-double ones from the paper's bounds of each operation, and the tests compare all three types
-  against a 2200-bit reference. In the default test run, random and constructed arguments, results down to 2⁻⁴⁴³ next to
-  multiples of π/2 among them, give at most 1.82 u² for the double-double sin and cos and 4.07 u² for its tan, 1.24 u⁴
-  and 7.18 u⁴ for the quad-double ones, and 0.48 u⁸ for the octo-double ones, the early return's x²/2 just below 2⁻²¹²,
-  below 0.01 u⁸ for every other kind of argument (`TRIG_REPORT=1 cargo test --release --lib trig_ -- --nocapture`).
+  bits, so the bounds hold next to the multiples of π/2 too. Those bits come from Machin's formula [[4]](#ref-machin),
+  π/4 = 4 arctan(1/5) − arctan(1/239), in exact integer arithmetic, checked against Gauss's, π/4 = 12 arctan(1/18) + 8
+  arctan(1/57) − 5 arctan(1/239). Beyond 2⁵² the functions return NaN. The double-double bounds follow from the
+  published bounds of the double-word algorithms they use [[1]](#ref-jmp17) (DWTimesDW3, which Muller and Rideau (2022)
+  [[2]](#ref-mr22) bound by 4 u², AccurateDWPlusDW, DWPlusFP and `fast_div`), the octo-double ones from the paper's
+  bounds of each operation, and the tests compare all three types against a 2200-bit reference. In the default test run,
+  random and constructed arguments, results down to 2⁻⁴⁴³ next to multiples of π/2 among them, give at most 1.82 u² for
+  the double-double sin and cos and 4.07 u² for its tan, 1.24 u⁴ and 7.18 u⁴ for the quad-double ones, and 0.48 u⁸ for
+  the octo-double ones, the early return's x²/2 just below 2⁻²¹², below 0.01 u⁸ for every other kind of argument.
 - The double-double add is relative to the result. The quad-double `+` is measured against |a| + |b|, all its algorithm
   promises after cancellation, and so is the small second term of the octo-double add. The double-double divide is
   measured on the residual of its quotient.
-- The octo-double add, multiply and divide reach their bounds on the paper's worst-case inputs (`od_worst_case_inputs`),
-  and the tests check the proven bounds of the add and multiply on every input that meets the paper's hypotheses.
-  Random inputs stay far inside: below 0.01 u⁸ for every octo-double operation, and up to 1.66 u², 3.12 u² and 1.54 u²
-  for the double-double add, multiply and divide.
+- The octo-double add, multiply and divide reach their bounds on the paper's worst-case inputs, and the tests check the
+  proven bounds of the add and multiply on every input that meets the paper's hypotheses. Random inputs stay far inside:
+  below 0.01 u⁸ for every octo-double operation, and up to 1.66 u², 3.12 u² and 1.54 u² for the double-double add,
+  multiply and divide.
 - The quad-double column is for the default operators `+`, `*` and `/`. The more accurate `ieee_add`, `accurate_mul` and
   `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴. The quad-double types use the QD library's algorithms (Hida, Li and Bailey,
   ARITH-15, 2001) [[5]](#ref-hlb01) with three repairs: the accurate add lost a term when all parts are read with three
   emitted, and its accumulator when four parts are emitted before every part is read, and the square root, which lost
   accuracy far from 1, now scales its argument by a power of four.
 - The sloppy multiply has no level below the eighth part. Its error is the 64 roundings at that level and the dropped
-  products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30, with
-  the constant from `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random
-  operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
+  products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30), where
+  `*` errs by u⁸. The bound is a triangle inequality: random operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and
+  a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
 - `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, with ln 2 split into a
   head whose multiples are exact and a tail, as Cody and Waite do [[6]](#ref-cw80), sums a Taylor polynomial whose
   degree falls with the reduced argument, and squares in the form t ← 2t + t², as the QD library's exp does; ln takes
@@ -268,12 +267,10 @@ results and near x = 1. The other bounds are the thresholds the tests check.
   where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln,
   which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled
   below 2, and an emulator with every product hooked finds none below the normal range at any binade of the argument,
-  the closest 48 binades above it (`paper/explog_bits.py scan`); a part far below the one above it can make one
-  underflow, as for the other operations. `paper/explog_consts.py` computes every constant. The ln column is relative to
-  |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the
-  double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double,
-  parts at the top of the ladder included
-  (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
+  the closest 48 binades above it; a part far below the one above it can make one underflow, as for the other
+  operations. The ln column is relative to |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per category
+  give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double, and 0.25
+  u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included.
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
@@ -284,9 +281,9 @@ results and near x = 1. The other bounds are the thresholds the tests check.
   within 10⁻¹²³, and its value is `OV`'s bit for bit.
 
 Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms, and exp and ln, one at a
-time, and `cargo test --release --features mutate` checks that each breakage fails a test. The integration tests also
-feed deliberately wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a
-perturbed LU factor, and f128 conversions that round twice.
+time, and the tests run with it check that each breakage fails a test. The integration tests also feed deliberately
+wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor,
+and f128 conversions that round twice.
 
 ## Testing, coverage and benchmarks
 
@@ -315,10 +312,10 @@ Each precision costs more than the one below it:
 On the NEON lanes an `OJet<24>` product costs 7.6 times a `QJet<24>` one, a term of its sums 12 times, and a 24-order
 solve on 32 values 8.3 times, with four refinement steps against two.
 
-`tests/lanes.rs` checks that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, `OJet` its scalar series
-`OSeries` and `Ou` its scalar formulas, on every backend the CPU has. The NEON backend's code is also
-compiled on x86 against a pure-Rust model of its intrinsics and checked there (`v8::neon_check`), so it is tested on
-every runner, not only on ARM. CI runs the whole suite on:
+The tests check that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, `OJet` its scalar series `OSeries`
+and `Ou` its scalar formulas, on every backend the CPU has. The NEON backend's code is also compiled on x86 against a
+pure-Rust model of its intrinsics and checked there, so it is tested on every runner, not only on ARM. CI runs the whole
+suite on:
 
 - the portable, SSE2, AVX2, AVX-512 and NEON backends;
 - Linux on x86-64, ARM64, ARMv7, PPC64LE, RISC-V 64 and S390X (big-endian);
