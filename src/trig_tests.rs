@@ -937,6 +937,34 @@ fn trig_special_values() {
     special::<OD>();
 }
 
+/// The reduced argument of a double-double is a double-word number (r_0 = RN(r_0 + r_1)), as the double-word bounds
+/// need, on double-word inputs whose greedy reduced argument is a tie, |r_1| = ulp(r_0)/2 with r_0 odd. Control: the
+/// greedy reduction itself (`trig::reduce`) gives a pair that is not a double-word number on each of them.
+#[test]
+fn trig_dd_reduced_is_double_word() {
+    use crate::trig::Ext;
+    let ties = [
+        (0x401a552e8777604b_u64, 0xbc5676733ae8fe48_u64),
+        (0x4023731618ccbb6c, 0x3c5e4e5327a28294),
+        (0x4034b86901443171, 0xbc64807b3fba9d35),
+    ];
+    for (h, l) in ties {
+        let x = DD {
+            hi: f64::from_bits(h),
+            lo: f64::from_bits(l),
+        };
+        assert_eq!(x.hi + x.lo, x.hi, "{x:?} is not a double-word number");
+        let (_, g) = crate::trig::reduce::<2>(&[x.hi, x.lo]);
+        assert_ne!(
+            g[0] + g[1],
+            g[0],
+            "control: the greedy r of {x:?} is a double-word number"
+        );
+        let (_, r) = x.reduce();
+        assert_eq!(r.hi + r.lo, r.hi, "{x:?}: r = {r:?}");
+    }
+}
+
 /// Controls: each deliberate breakage must fail the accuracy checks of the functions it touches
 #[cfg(feature = "mutate")]
 #[test]
