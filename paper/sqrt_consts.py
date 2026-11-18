@@ -1,4 +1,4 @@
-"""Lemma 20 of expansion-error-bounds.pdf (an operation's error and its result's part bounds from part bounds of its
+"""Lemma 13 of expansion-error-bounds.pdf (an operation's error and its result's part bounds from part bounds of its
 operands) and Theorems 21 and 22 (the square root), in exact rationals. Units: r in y = a^(-1/2), the parts of a and h in the
 value a, m in y^2, g and c dimensionless (a y^2 = 1), d in y, z in sqrt(a). usage: sqrt_consts.py [p]"""
 import sys, math
@@ -32,7 +32,7 @@ def lemma_L(A, T, Q, u):
 
 
 def op_bounds(op, n, u, al, be, Zb, lam=None):
-    """Lemma 20. al, be: part bounds of the operands (be = [|b|] for ADDF and MULF); Zb >= |Z|; lam: bounds
+    """Lemma 13. al, be: part bounds of the operands (be = [|b|] for ADDF and MULF); Zb >= |Z|; lam: bounds
     lambda_m >= |a_m + b_m| (ADD) or lambda_0 >= |a_0 + b| (ADDF), if better than the triangle inequality.
     Returns (eps, parts, X): |Z - x| <= eps, |x_i| <= parts[i], level bounds X."""
     Rr = Fr(0); Dl = Fr(0)

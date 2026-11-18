@@ -243,7 +243,7 @@ against Gauss's, π/4 = 12 arctan(1/18) + 8 arctan(1/57) − 5 arctan(1/239), so
 [[5]](#ref-cw80), and squares as t ← 2t + t², as the QD library's exp does; ln takes one Newton step on exp, as its log
 does [[6]](#ref-qd), from a binary64 logarithm of its own, proved within 5.915 u, so no bound rests on the platform's
 `ln`. The functions scale small arguments by powers of two so that no product underflows, unless a part of x lies far
-below the ladder. The paper proves the octo-double bounds in Theorems 34, 39 and 41.
+below the ladder. The paper proves the octo-double bounds in Theorems 35, 40 and 42.
 
 The largest errors the tests measured, against exact arithmetic or a reference of 1700 to 2200 bits:
 
