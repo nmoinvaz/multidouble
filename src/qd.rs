@@ -460,11 +460,21 @@ impl QD {
                 k += 1;
             }
         }
-        for kk in i..4 {
-            x[3] += a[kk];
-        }
-        for kk in j..4 {
-            x[3] += b[kk];
+        if k == 4 {
+            // Four parts emitted, but u, v and the parts not read still hold part of the sum. QD adds the parts not
+            // read into x[3] and drops u and v. After cancellation the emitted parts can overlap, so u can lie well
+            // above the last bit of the result (QD: 2^46 units of 2^-210). So u, v and the parts not read are summed
+            // into a fifth term and the five renormalized.
+            let mut e = v;
+            for kk in i..4 {
+                e += a[kk];
+            }
+            for kk in j..4 {
+                e += b[kk];
+            }
+            return QD {
+                x: renorm5(x[0], x[1], x[2], x[3], u + e),
+            };
         }
         QD {
             x: renorm4(x[0], x[1], x[2], x[3]),

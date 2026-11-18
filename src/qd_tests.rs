@@ -1152,9 +1152,10 @@ fn fold_digest<'a>(rs: impl Iterator<Item = &'a Res>) -> u64 {
 }
 
 /// The digest of `qd_accuracy`'s results at its default size and seed (4000, 1), recorded with
-/// 4.1.1: every operation's bits in every category, pinned, and the lanes' with them, which must
-/// be the scalar ones. Every backend gives these bits.
-const QD_DIGEST: u64 = 0xaa5c_661a_6064_c9d4;
+/// 4.1.1 and again when `ieee_add` began keeping its accumulator after four parts are emitted:
+/// every operation's bits in every category, pinned, and the lanes' with them, which must be the
+/// scalar ones. Every backend gives these bits.
+const QD_DIGEST: u64 = 0x98d3_2e89_7f18_4a13;
 
 /// The digest of the gap category's results at the same size and seed, recorded with 4.8.2.
 const GAP_DIGEST: u64 = 0xed8b_01a4_013b_0742;
@@ -1379,6 +1380,60 @@ fn qd_ieee_add_regression() {
         literal_worst > 1.0,
         "control: QD's literal algorithm should miss these ({literal_worst} u)"
     );
+}
+
+/// `QD::ieee_add` when the loop ends with four parts emitted while input parts remain: QD adds the parts not read to
+/// x[3] and drops its accumulator u, v, which after the emitted parts overlap can hold the result's last 50 bits. On
+/// b and on a, a2 (a and a2 differ in a's last bit; a ends with three parts emitted, a2 with four) QD's literal
+/// algorithm misses by 2^46 u on both, and a version with only the three-parts repair still misses on a2. Same-sign
+/// sums, no cancellation, found by the library survey of research/libraries on branch wip/discover-b. Each sum must be
+/// within 1 u of the exact one, the lanes must agree with the scalar add bit for bit, and QD's literal algorithm must
+/// miss on both (the control).
+#[test]
+fn qd_ieee_add_four_parts_emitted() {
+    let b = [
+        0xbff061d2017c3fdd,
+        0x3c9f2c626c6a92ef,
+        0x391db856994e5f1e,
+        0x35b8fb8e95ff5794,
+    ];
+    let a = [
+        0xbff10b3152f6f89a,
+        0xbc7fffffffffffff,
+        0x391dbf40e3873925,
+        0x359bd32b707ee75c,
+    ];
+    let a2 = [
+        0xbff10b3152f6f89a,
+        0xbc7fffffffffffff,
+        0x391dbf40e3873925,
+        0x359bd32b707ee75d,
+    ];
+    let f = |p: [u64; 4]| QD {
+        x: p.map(f64::from_bits),
+    };
+    let (la, lb) = ([f(a), f(a2)], [f(b), f(b)]);
+    let mut pa = [QD { x: [0.0; 4] }; 8];
+    let mut pb = [QD { x: [0.0; 4] }; 8];
+    pa[..2].copy_from_slice(&la);
+    pb[..2].copy_from_slice(&lb);
+    let lanes = QV::from_lanes(&pa).ieee_add(QV::from_lanes(&pb)).lanes();
+    for m in 0..2 {
+        let x = la[m].exact().add(&lb[m].exact());
+        let r = la[m].ieee_add(lb[m]);
+        assert_eq!(
+            r.x.map(f64::to_bits),
+            lanes[m].x.map(f64::to_bits),
+            "case {m}: scalar and 8-lane differ"
+        );
+        let e = r.exact().sub(&x).abs().ratio(&x) / unit();
+        assert!(e <= 1.0, "case {m}: accurate add misses by {e} u");
+        let literal = ieee_add_qd_literal(la[m], lb[m]).exact().sub(&x).abs().ratio(&x) / unit();
+        assert!(
+            literal > 1.0,
+            "control, case {m}: QD's literal algorithm should miss ({literal} u)"
+        );
+    }
 }
 
 #[test]
