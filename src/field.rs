@@ -512,7 +512,9 @@ pub fn cs_lane_at<T: Lane, const B: usize>(
     T::fin_at(&a, k, out);
 }
 
-/// Lane vector b of `cs_w_at`, coefficient k of `sum_{i=lo..=hi} (w(i) x[i].0[b]) y[j-i].0[b]`, as `cs_lane_at`
+/// Lane vector b of `cs_w_at`, coefficient k of `sum_{i=lo..=hi} (w(i) x[i].0[b]) y[j-i].0[b]`, as `cs_lane_at`. Each
+/// term weights only the coefficients 0..=k that its products read (`Lane::mulf_upto`), so the bits are the whole
+/// weighted jet's.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub fn cs_w_lane_at<T: Lane, const B: usize>(
@@ -528,7 +530,7 @@ pub fn cs_w_lane_at<T: Lane, const B: usize>(
 ) {
     let mut a = T::acc0();
     for i in lo..=hi {
-        T::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[j - i].0[b], k);
+        T::acc_at(&mut a, &x[i].0[b].mulf_upto(w(i), k), &y[j - i].0[b], k);
     }
     T::fin_at(&a, k, out);
 }
