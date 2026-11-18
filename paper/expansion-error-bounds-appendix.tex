@@ -13,7 +13,8 @@ Write $\us = u/(1+u)$. Under (A2), for every real $z$,
 \frac{|z|}{1+u} \le |\RN(z)| \le (1+u)|z|. \nonumber
 \end{gather}
 The second inequality follows from the first, since $|z| \le |\RN(z)| + |\RN(z) - z|$ and $\us/(1-\us) = u$. The
-number of parts is $n \ge 2$. A sum whose upper limit is below its lower one is zero.
+number of parts is $n \ge 2$, and we write (A3) for the condition $(n^2+n)u < 1$, assumed only where it is named. A sum
+whose upper limit is below its lower one is zero.
 
 Assumption (A2) concerns each run, not only the operands' values. For binary64 it holds when no result overflows,
 every exact value that the run rounds is zero, at least $2^{-1022}$ in magnitude, or a multiple of $2^{-1074}$ (and
@@ -22,8 +23,8 @@ error to be representable, with $e_x$ the exponent of $x$. A part far below the 
 two small parts underflow even when the operands are far above $2^{-1022}$; the bounds here do not cover such runs.
 
 \begin{definition}\label{def:h}
-For $\theta \ge 1$, an $n$-part $a = (a_0, \dots, a_{n-1}) \in \F^n$ satisfies $H(\theta)$ when $|a_i| \le (\theta
-u)^i |a_0|$ for $1 \le i \le n-1$.
+For $1 \le \theta \le 1/(4u)$, an $n$-part $a = (a_0, \dots, a_{n-1}) \in \F^n$ satisfies $H(\theta)$ when $|a_i| \le
+\rho^i |a_0|$ for $1 \le i \le n-1$, where $\rho = \theta u$ here and throughout, so that $\rho \le 1/4$.
 \end{definition}
 
 Since $\ulp(x) \le 2u|x|$, an ulp-nonoverlapping expansion \cite{MPT16,BJMP17} ($|a_{i+1}| \le \ulp(a_i)$, with
@@ -31,7 +32,7 @@ $\ulp(0) = 0$) satisfies $H(2)$, and one with $|a_{i+1}| \le \frac12\ulp(a_i)$ (
 satisfies $H(1)$. If $a_0 = 0$, $H(\theta)$ forces $a = 0$; when the scale $M$ below is zero the operands are zero and
 the results are exact, so we take $M > 0$. The hypothesis allows a part far
 below the one above it, and zero parts between nonzero ones, as long as the ladder relative to $a_0$ holds. If $a$
-satisfies $H(\theta)$ with $\rho = \theta u \le 1/4$, then
+satisfies $H(\theta)$, then
 \begin{equation}\label{eq:a0}
 |a| \ge |a_0|\Bigl(1 - \sum_{i \ge 1}\rho^i\Bigr) = \frac{1-2\rho}{1-\rho}\,|a_0|, \qquad |a| = \Bigl|\sum_i a_i\Bigr|,
 \end{equation}
@@ -208,7 +209,7 @@ carry $y$ having already been counted where it entered).
 \end{proof}
 
 \begin{theorem}\label{thm:t2}
-Assume~\ref{as:fp}, $\theta \ge 1$, $\rho = \theta u \le 1/4$ and $(n^2 + n)u < 1$, and let the $n$-part operands
+Assume~\ref{as:fp} and (A3), and let the $n$-part operands
 satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and MULF let $M$, $\alpha_m$, $T_m$, $Q$ and
 $\Delta$ be
 \begin{center}
@@ -290,7 +291,7 @@ The result $x$ of each of MUL, ADD, MULF and ADDF satisfies
 \[
 \Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + \kappa\,u^{n+1}M.
 \]
-In particular, with $\rho = \theta u$,
+In particular,
 $|ab - x| \le \bigl(u^n + \kappa u^{n+1}(\tfrac{1-\rho}{1-2\rho})^2\bigr)|ab|$ for MUL,
 $|ab - x| \le \bigl(u^n + \kappa u^{n+1}\tfrac{1-\rho}{1-2\rho}\bigr)|ab|$ for MULF,
 $|a + b - x| \le u^n|a+b| + \kappa u^{n+1}\tfrac{1-\rho}{1-2\rho}(|a| + |b|)$ for ADD, and
@@ -355,10 +356,11 @@ Under the hypotheses of Theorem~\ref{thm:t2}, the result $x$ of each operation s
 |x_i| \le u^i\Bigl((1+u)^i|x_0| + i\,u(1+u)^{n+i-1}\Lambda M\Bigr).
 \]
 If moreover $|Z| \ge \zeta M$ with $\zeta > 0$, and $\xi = \bigl(\zeta - (R+\Delta)u^{n+1} - u^2(1+u)^{n-1}\Lambda\bigr)
-/(1+u) > 0$, then $|x_0| \ge \xi M$ and $x$ satisfies $H(\theta')$ with
+/(1+u) > 0$, then $|x_0| \ge \xi M$ and $|x_i| \le (\theta'u)^i|x_0|$ for $1 \le i \le n-1$, with
 \[
-\theta' = \max_{1 \le i \le n-1}\Bigl((1+u)^i + i\,u(1+u)^{n+i-1}\Lambda/\xi\Bigr)^{1/i}.
+\theta' = \max_{1 \le i \le n-1}\Bigl((1+u)^i + i\,u(1+u)^{n+i-1}\Lambda/\xi\Bigr)^{1/i},
 \]
+so that $x$ satisfies $H(\theta')$ when $\theta'u \le 1/4$.
 By \eqref{eq:a0}, $\zeta = (\frac{1-2\rho}{1-\rho})^2$ serves for MUL and $\zeta = \frac{1-2\rho}{1-\rho}$ for MULF, and
 for ADD and ADDF when the leading parts $a_0$ and $b_0$ (or $b$) have the same sign.
 \end{theorem}
@@ -403,7 +405,7 @@ performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -\pi_l)$ for $l = 0, \dots, n-2$,
 53$ this is multidouble's division (identical bits on 645 inputs).
 
 \begin{theorem}\label{thm:t6}
-Assume~\ref{as:fp}, $\theta \ge 1$, $\rho = \theta u \le 1/4$, $(2n-1)u < 1$, and let $a$ and $b$ satisfy $H(\theta)$
+Assume~\ref{as:fp} and $(2n-1)u < 1$, and let $a$ and $b$ satisfy $H(\theta)$
 with $b_0 \ne 0$. Define, in units of $|a_0|$, $P^{(0)}_i = \rho^i$ ($0 \le i \le n-1$), and for $k = 0, \dots, n$ let
 $Q_k = (1+u)P^{(k)}_0$. For $k = 0, \dots, n-1$, with $P = P^{(k)}$, let
 \[
@@ -482,7 +484,7 @@ Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposi
 \section{Operations from part bounds, and the square root}
 
 \begin{lemma}\label{lem:g}
-Assume~\ref{as:fp} and $(n^2+n)u < 1$. Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
+Assume~\ref{as:fp} and (A3). Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
 ($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$, and let $P_m =
 \sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, $\lambda_m \ge |a_m + b_m|$ for ADD and
 $\lambda_m = \alpha_m\beta_0$ for MULF, with $P_{-1} = \lambda_{-1} = 0$, and $m < n$ in the row of $A_m$:
@@ -536,8 +538,7 @@ SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start
 \mathrm{MUL}(r, a)$, and the result is $zs$.
 
 \begin{theorem}\label{thm:t7}
-Assume~\ref{as:fp}, $(n^2+n)u < 1$, $\theta \ge 1$, $\rho = \theta u \le 1/4$, and let $x$ satisfy $H(\theta)$ with
-$x_0 > 0$. Let $A = \sum_i a_i$ and $y = A^{-1/2}$, and measure $r$ and $d$ in units of $y$, $a$ and $h$ in units of
+Assume~\ref{as:fp} and (A3), and let $x$ satisfy $H(\theta)$ with $x_0 > 0$. Let $A = \sum_i a_i$ and $y = A^{-1/2}$, and measure $r$ and $d$ in units of $y$, $a$ and $h$ in units of
 $A$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. With the $\bar a_i$ of \eqref{eq:abar}, let $\bar
 h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1-2\rho)}{1-\rho}\bigr)$ and $\pi^{(0)} =
 (1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let
