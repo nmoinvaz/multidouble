@@ -92,7 +92,8 @@ D &= R^2(E_t + \epsilon_w) + R^{2K}/(2K+1)!, \\
 (\epsilon_y, \psi_{\rm s}) &= G_{\rm ADD}\bigl(\bar a, R^2\omega;\ 1 + D\bigr), \\
 E_{\rm S} &= D + \epsilon_y - u^n,
 \end{align*}
-and $\delta_{\rm S} = u^n + E_{\rm S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same formulas with
+where $\epsilon_y - u^n(1 + D)$ is the last ADD's error beyond $u^n|r + w|$, and let $\delta_{\rm S} = u^n + E_{\rm
+S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same formulas with
 $\hat c_k$ and $c_k$ in place of $\hat s_k$ and $s_k$, and the magnitudes of the parts of $\hat c_k$ in place of
 $\sigma_k$, give $E_1$, $\pi^{(1)}$, $\tau'$ and $E_t$, and
 \begin{align*}
@@ -100,7 +101,8 @@ D_{\rm c} &= R^2E_t + R^{2K}/(2K)!, \\
 (\epsilon_y, \psi_{\rm c}) &= G_{\rm ADDF}\bigl(R^2\tau', 1;\ 1 + D_{\rm c}\bigr), \\
 E_{\rm C} &= D_{\rm c} + \epsilon_y - u^n,
 \end{align*}
-and $\delta_{\rm C} = u^n + E_{\rm C}/\cos_- R$, where $\cos_- R = 1 - R^2/2 + R^4/24 - R^6/720 \le \cos R$. For the
+where $\epsilon_y - u^n(1 + D_{\rm c})$ is the last ADDF's error beyond $u^n$ times its exact sum, and let
+$\delta_{\rm C} = u^n + E_{\rm C}/\cos_- R$, with $\cos_- R = 1 - R^2/2 + R^4/24 - R^6/720 \le \cos R$. For the
 bucket $|r_0| < T_n$, $\delta_{\rm S} = T^2/(6 - T^2)$ and $\delta_{\rm C} = T^2/(2\cos_- T)$ with $T = T_n(1 +
 2^{-50})$.
 
