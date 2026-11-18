@@ -75,7 +75,7 @@ if __name__ == '__main__':
     p = int(sys.argv[1]) if len(sys.argv) > 1 else 53
     for theta in (1, 2):
         row = []
-        for n in range(2, 13):
+        for n in range(2, 15):
             r = div_consts(n, p, theta)
             row.append(f'{n}:{math.log2(r["K"]):6.1f}/{math.log2(r["K"] * r["u"]):6.1f}')
         print(f'div theta={theta}  log2 K / log2 K u:  ' + '  '.join(row))

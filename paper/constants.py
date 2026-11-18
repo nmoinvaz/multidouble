@@ -1,6 +1,7 @@
 """The constants of Theorems 12 and 13 of expansion-error-bounds.pdf, computed exactly in rationals from their
 recursions.
-usage: constants.py [p]   (default p = 53); prints, per operation, n and theta, the level constants and kappa."""
+usage: constants.py [p]   (default p = 53); prints, per operation, n and theta, the level constants and kappa, and
+the values of Table IV."""
 import sys
 from fractions import Fraction as Fr
 import math
@@ -69,6 +70,10 @@ if __name__ == '__main__':
         print(f'mul n=8 theta={theta}: L_m (log2) =', [round(math.log2(x), 2) for x in k['L']],
               ' R/u^(n+1)M = 2^%.2f' % math.log2(k['R']), ' Delta coef = 2^%.2f' % math.log2(k['drop']),
               ' kappa = 2^%.2f' % math.log2(k['kappa']))
+    print('Table IV, n = 8: kappa for theta = 1 and 2, and the second term kappa u^(n+1) M for theta = 2 (log2)')
+    for op in ('mul', 'add', 'mul_f', 'add_f'):
+        k1, k2 = (consts(op, 8, theta, u)['kappa'] for theta in (1, 2))
+        print(f'{op:6s} kappa = 2^{math.log2(k1):.2f}, 2^{math.log2(k2):.2f};  kappa u^9 = 2^{math.log2(k2 * u ** 9):.2f}')
 
 
 def theta_out(op, n, theta, u):
