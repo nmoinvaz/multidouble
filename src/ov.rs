@@ -346,6 +346,26 @@ impl<S: Simd> OV<S> {
     pub fn mul_f(self, b: f64) -> Self {
         self.mul_v(V8::splat(b))
     }
+    /// od + dd lanes, as `OD::add_dd`: bitwise `self + OV::from_dv(b)`
+    #[inline]
+    pub fn add_dv(self, b: DV<S>) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || OV {
+                c: alg::add_dd(&self.c, b.hi, b.lo),
+            },
+        )
+    }
+    /// times double-double lanes, as `OD::mul_dd`: bitwise `self * OV::from_dv(b)`
+    #[inline]
+    pub fn mul_dv(self, b: DV<S>) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || OV {
+                c: alg::mul_dd(&self.c, b.hi, b.lo),
+            },
+        )
+    }
     /// self / b for r = b.c\[0\].divisor(), bitwise the same as `/`. Its nine quotients by b.c\[0\] go through r, so
     /// several divisions by one b share it (on AVX-512 its reciprocal).
     #[inline]
@@ -521,6 +541,30 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
+    /// self + a b for double-double lanes b, as `OdAcc::add_prod_dd`: bitwise `add_prod(a, OV::from_dv(b))`
+    #[inline]
+    pub fn add_prod_dv(self, a: OV<S>, b: DV<S>) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let t = alg::expand_dd(&a.c, b.hi, b.lo);
+                let mut s = self.s;
+                alg::acc_levels(&mut s, &t);
+                ODotAcc { s }
+            },
+        )
+    }
+    /// `add_prod_dv` into self, with a and b borrowed (as `add_prod_mut`)
+    #[inline]
+    pub fn add_prod_dv_mut(&mut self, a: &OV<S>, b: &DV<S>) {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let t = alg::expand_dd(&a.c, b.hi, b.lo);
+                alg::acc_levels(&mut self.s, &t);
+            },
+        )
+    }
     /// self + a
     #[inline]
     pub fn add(self, a: OV<S>) -> Self {
@@ -578,7 +622,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     }
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
-        self * OV::from_dv(c)
+        self.mul_dv(c)
     }
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
@@ -590,7 +634,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     }
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
-        self + OV::from_dv(c)
+        self.add_dv(c)
     }
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
@@ -623,7 +667,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     }
     #[inline(always)]
     fn accc(a: ODotAcc<S>, x: Self, c: DV<S>) -> ODotAcc<S> {
-        a.add_prod(x, OV::from_dv(c))
+        a.add_prod_dv(x, c)
     }
     #[inline(always)]
     fn acc1(a: ODotAcc<S>, x: Self) -> ODotAcc<S> {

@@ -76,10 +76,12 @@ pub mod mutate {
     pub const RENORM_FAST: u32 = 12;
     /// mul: the products of order 8 dropped, an error of a few u^8 |ab| (u = 2^-53), inside the 1-unit thresholds
     pub const MUL_L8: u32 = 13;
+    /// od x dd and od + dd (`alg::expand_dd`, `alg::add_dd`): the second level one ulp up
+    pub const DD_ULP: u32 = 14;
     /// number of ids
-    pub const N: u32 = 13;
+    pub const N: u32 = 14;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 14] = [
+    pub const NAMES: [&str; 15] = [
         "none",
         "renorm: eighth part dropped",
         "two-sum: error with a wrong sign",
@@ -94,6 +96,7 @@ pub mod mutate {
         "8-lane two-product: FMA as a plain product (native)",
         "renorm: second pass by quick-two-sums",
         "mul: products of order 8 dropped",
+        "od x dd, od + dd: second level one ulp up",
     ];
 
     #[cfg(feature = "mutate")]
@@ -450,6 +453,86 @@ pub(crate) mod alg {
         L::renorm(expand(a, b))
     }
 
+    /// `expand(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise, without the partial products of b's six
+    /// zero parts: 13 two-products of the 28. Those products deposit zeros at levels 3..8. The carry of a0 b0's error
+    /// (`dep` from level 1) leaves no -0 at levels 2..8, as a two-sum's error is never -0, so the zero deposits after
+    /// it change nothing. Before it, `expand`'s levels 2..8 differ from these at most in the sign of a zero, which
+    /// that carry erases.
+    #[inline(always)]
+    pub fn expand_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 9] {
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let (p0, e0) = two_prod(a[0], b0);
+                let (p1, e1) = two_prod(a[0], b1);
+                s[0] = p0;
+                s[1] = p1;
+                if mutate::on(mutate::DD_ULP) {
+                    // one ulp up, for a normal p1
+                    s[1] = p1.add(p1.pow2_floor().mul(L::splat(f64::EPSILON)));
+                }
+                // the order-8 sum of `expand` without its zero products
+                s[8] = a[7].mul(b1);
+                if mutate::on(mutate::MUL_L8) {
+                    s[8] = L::zero();
+                }
+                dep(&mut s, 1, e0);
+                dep(&mut s, 2, e1);
+                // rows 1..7 of `expand`, columns 0 and 1
+                macro_rules! pp {
+                ($(($i:literal, $j:literal)),*) => {
+                    $({
+                        let (p, e) = two_prod(a[$i], if $j == 0 { b0 } else { b1 });
+                        dep(&mut s, $i + $j, p);
+                        dep(&mut s, $i + $j + 1, e);
+                    })*
+                };
+            }
+                pp!((1, 0), (1, 1));
+                pp!((2, 0), (2, 1));
+                pp!((3, 0), (3, 1));
+                pp!((4, 0), (4, 1));
+                pp!((5, 0), (5, 1));
+                pp!((6, 0), (6, 1));
+                pp!((7, 0));
+                s
+            },
+        )
+    }
+
+    /// a b for a double-double b = (b0, b1): bitwise `mul(a, b)`, the levels of `expand_dd` renormalized
+    #[inline(always)]
+    pub fn mul_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 8] {
+        L::renorm(expand_dd(a, b0, b1))
+    }
+
+    /// `add(a, b)` for a double-double b = (b0, b1, 0, ..., 0), bitwise, without the two-sums of a's parts 2..7 with
+    /// zero and the carries of their zero errors. Such a two-sum returns the part, a -0 as +0, and the carry of
+    /// a0 + b0's error erases that difference as in `expand_dd`.
+    #[inline(always)]
+    pub fn add_dd<L: Limb>(a: &[L; 8], b0: L, b1: L) -> [L; 8] {
+        L::outline(
+            #[inline(always)]
+            || {
+                let mut s = [L::zero(); 9];
+                let (s0, t0) = two_sum(a[0], b0);
+                let (s1, t1) = two_sum(a[1], b1);
+                s[0] = s0;
+                s[1] = s1;
+                if mutate::on(mutate::DD_ULP) {
+                    // one ulp up, for a normal s1
+                    s[1] = s1.add(s1.pow2_floor().mul(L::splat(f64::EPSILON)));
+                }
+                s[2..8].copy_from_slice(&a[2..8]);
+                let t1 = if mutate::on(mutate::ADD_T1) { L::zero() } else { t1 };
+                dep(&mut s, 1, t0);
+                dep(&mut s, 2, t1);
+                L::renorm(s)
+            },
+        )
+    }
+
     /// r - b q for an f64 q in one pass: r_i - RN(b_i q) by two-sums, those errors and the errors of the products
     /// carried down nine levels, renormalized (the remainder of long division)
     #[inline(always)]
@@ -705,6 +788,20 @@ impl OD {
             x: alg::mul_f(&self.x, b),
         }
     }
+    /// od + dd: bitwise `self + OD::from_dd(b)`, without the steps for the zero parts (`alg::add_dd`)
+    #[inline]
+    pub fn add_dd(self, b: DD) -> OD {
+        OD {
+            x: alg::add_dd(&self.x, b.hi, b.lo),
+        }
+    }
+    /// od x dd: bitwise `self * OD::from_dd(b)`, without the partial products of the zero parts (`alg::expand_dd`)
+    #[inline]
+    pub fn mul_dd(self, b: DD) -> OD {
+        OD {
+            x: alg::mul_dd(&self.x, b.hi, b.lo),
+        }
+    }
     /// 1 / self
     #[inline]
     pub fn recip(self) -> OD {
@@ -906,6 +1003,14 @@ impl OdAcc {
     #[inline]
     pub fn add_prod(self, a: OD, b: OD) -> OdAcc {
         let t = alg::expand(&a.x, &b.x);
+        let mut s = self.s;
+        alg::acc_levels(&mut s, &t);
+        OdAcc { s }
+    }
+    /// self + a b for a double-double b: bitwise `add_prod(a, OD::from_dd(b))` (`alg::expand_dd`)
+    #[inline]
+    pub fn add_prod_dd(self, a: OD, b: DD) -> OdAcc {
+        let t = alg::expand_dd(&a.x, b.hi, b.lo);
         let mut s = self.s;
         alg::acc_levels(&mut s, &t);
         OdAcc { s }

@@ -1023,10 +1023,9 @@ impl<S: Simd> Lane for Ou<S> {
     /// value and tangent times the constant c
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
-        let c = OV::from_dv(c);
         Ou {
-            v: self.v * c,
-            d: self.d * c,
+            v: self.v.mul_dv(c),
+            d: self.d.mul_dv(c),
         }
     }
     /// value and tangent times an exact f64
@@ -1049,7 +1048,7 @@ impl<S: Simd> Lane for Ou<S> {
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
         Ou {
-            v: self.v + OV::from_dv(c),
+            v: self.v.add_dv(c),
             d: self.d,
         }
     }
@@ -1101,10 +1100,9 @@ impl<S: Simd> Lane for Ou<S> {
     /// a + x c, c a constant lane vector
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
-        let c = OV::from_dv(c);
         let mut a = a;
-        a.0.add_prod_mut(&x.v, &c);
-        a.1.add_prod_mut(&x.d, &c);
+        a.0.add_prod_dv_mut(&x.v, &c);
+        a.1.add_prod_dv_mut(&x.d, &c);
         a
     }
     /// a + x
@@ -1240,10 +1238,9 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
     /// value and tangents times the constant c
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
-        let c = OV::from_dv(c);
         Oun {
-            v: self.v * c,
-            d: self.d.map(|x| x * c),
+            v: self.v.mul_dv(c),
+            d: self.d.map(|x| x.mul_dv(c)),
         }
     }
     /// value and tangents times an exact f64
@@ -1266,7 +1263,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
         Oun {
-            v: self.v + OV::from_dv(c),
+            v: self.v.add_dv(c),
             d: self.d,
         }
     }
@@ -1338,11 +1335,10 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
     /// a + x c, c a constant lane vector
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
-        let c = OV::from_dv(c);
         let mut a = a;
-        a.0.add_prod_mut(&x.v, &c);
+        a.0.add_prod_dv_mut(&x.v, &c);
         for k in 0..N {
-            a.1[k].add_prod_mut(&x.d[k], &c);
+            a.1[k].add_prod_dv_mut(&x.d[k], &c);
         }
         a
     }
