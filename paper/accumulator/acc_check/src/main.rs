@@ -1,7 +1,9 @@
 //! Runs multidouble on inputs written by the emulator scripts, and prints results as f64 bit patterns in hex.
 //! `acc_check acc terms.txt`: OdAcc over the terms (one per line, eight parts), `finish()` of `add` and of
 //! `add_prod(a, 1)`. `acc_check add8 ab.txt` / `add4 ab.txt`: a + b for the two lines a and b (OD or QD).
-//! `acc_check sqrt8 xs.txt`: the octo-double square root of each line.
+//! `acc_check sqrt8 xs.txt`: the octo-double square root of each line. `acc_check trig8 xs.txt` / `trig2 xs.txt`: the
+//! sine, cosine and tangent of each line (OD or DD), on one line.
+use multidouble::dd::DD;
 use multidouble::od::{OdAcc, OD};
 use multidouble::qd::QD;
 use std::io::BufRead;
@@ -15,8 +17,8 @@ fn hex(x: &[f64]) -> String {
 }
 
 fn main() {
-    let mode = std::env::args().nth(1).expect("usage: acc_check acc|add8|add4|sqrt8 file");
-    let path = std::env::args().nth(2).expect("usage: acc_check acc|add8|add4|sqrt8 file");
+    let mode = std::env::args().nth(1).expect("usage: acc_check acc|add8|add4|sqrt8|trig8|trig2 file");
+    let path = std::env::args().nth(2).expect("usage: acc_check acc|add8|add4|sqrt8|trig8|trig2 file");
     let lines: Vec<String> = std::io::BufReader::new(std::fs::File::open(path).unwrap()).lines().map(|l| l.unwrap()).collect();
     match mode.as_str() {
         "acc" => {
@@ -44,6 +46,20 @@ fn main() {
         "sqrt8" => {
             for line in &lines {
                 println!("{}", hex(&OD { x: parts(line).try_into().unwrap() }.sqrt().x));
+            }
+        }
+        "trig8" => {
+            for line in &lines {
+                let x = OD { x: parts(line).try_into().unwrap() };
+                println!("{} {} {}", hex(&x.sin().x), hex(&x.cos().x), hex(&x.tan().x));
+            }
+        }
+        "trig2" => {
+            for line in &lines {
+                let p = parts(line);
+                let x = DD { hi: p[0], lo: p[1] };
+                let h = |d: DD| hex(&[d.hi, d.lo]);
+                println!("{} {} {}", h(x.sin()), h(x.cos()), h(x.tan()));
             }
         }
         _ => panic!("unknown mode"),
