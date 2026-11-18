@@ -90,7 +90,7 @@ E_t &= (1+\epsilon_z)E_1 + \epsilon_z|s_1| + \epsilon_t, \\
 (\epsilon_w, \omega) &= G_{\rm MUL}\bigl(\bar a, \tau';\ |s_1| + E_t\bigr), \\
 D &= R^2(E_t + \epsilon_w) + R^{2K}/(2K+1)!, \\
 (\epsilon_y, \psi_{\rm s}) &= G_{\rm ADD}\bigl(\bar a, R^2\omega;\ 1 + D\bigr), \\
-E_{\rm S} &= (1+u^n)D + \epsilon_y - u^n(1+D),
+E_{\rm S} &= D + \epsilon_y - u^n,
 \end{align*}
 and $\delta_{\rm S} = u^n + E_{\rm S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same recursion with the
 parts of $\hat c_k$ gives $E_1$ and $\pi^{(1)}$, and with $|c_1| = \frac12$
@@ -98,7 +98,7 @@ parts of $\hat c_k$ gives $E_1$ and $\pi^{(1)}$, and with $|c_1| = \frac12$
 (\epsilon_t, \tau') &= G_{\rm MUL}\bigl(\zeta, \pi^{(1)};\ (1+\epsilon_z)(\tfrac12 + E_1)\bigr), \\
 E_t &= (1+\epsilon_z)E_1 + \tfrac12\epsilon_z + \epsilon_t, \quad D_{\rm c} = R^2E_t + \frac{R^{2K}}{(2K)!}, \\
 (\epsilon_y, \psi_{\rm c}) &= G_{\rm ADDF}\bigl(R^2\tau', 1;\ 1 + D_{\rm c}\bigr), \\
-E_{\rm C} &= (1+u^n)D_{\rm c} + \epsilon_y - u^n(1+D_{\rm c}),
+E_{\rm C} &= D_{\rm c} + \epsilon_y - u^n,
 \end{align*}
 and $\delta_{\rm C} = u^n + E_{\rm C}/\cos_- R$, where $\cos_- R = 1 - R^2/2 + R^4/24 - R^6/720 \le \cos R$. For the
 bucket $|r_0| < T_n$, $\delta_{\rm S} = T^2/(6 - T^2)$ and $\delta_{\rm C} = T^2/(2\cos_- T)$ with $T = T_n(1 +
@@ -125,8 +125,8 @@ whose third arguments bound $|zp_{k+1}|$ and $|m + \hat s_k|$. The same expansio
 R^2(E_t + \epsilon_w)\rho$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\omega\rho^3$ are at most $R^2\omega\rho$.
 The series' remainder after $K$ terms is at most its first omitted term, so $|r + rz_{\rm e}p^{\rm e}_1 - \sin r| \le
 \rho R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D\rho$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
-w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, so
-$|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
+w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, and
+$|r + w| \le |\sin r| + D\rho$, so $|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
 (A2) both scalings are exact, so in units of $2^\sigma\rho$ the bounds are those above. COSR is the same
 with $|c_1| = \frac12$ and the absolute units of ADDF, and $\cos r \ge \cos_- R$. For $|r_0| < T_n$, $|\sin r - r| \le
 \rho^3/6$ and $|1 - \cos r| \le \rho^2/2$.
@@ -187,9 +187,10 @@ has $\cos r$. By (A2), $\RN(v)$, which is not zero as $P$ is odd and $|k| < 2^{1
 2^{-89}$. If $2A \le u^n|\sin r_{\rm e}|$ the factor is within $\epsilon$. Otherwise its excess over $\epsilon$, at
 most $2^{-88}$, multiplies a term below $2A/|\sin r_{\rm e}|$, which the absolute term absorbs. The rest is as for even
 $q$. For the double-double functions
-the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, whose operands are
-double-word numbers, since every algorithm ends with a $\FastTwoSum$, $r$ passes through one, and the constants are
-greedy.
+the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, and with the last
+operation's $e_{\rm op}$ in place of $u^n$ in $E_{\rm S}$, $E_{\rm C}$, $\delta_{\rm S}$ and $\delta_{\rm C}$. Their
+operands are double-word numbers, since every algorithm ends with a $\FastTwoSum$, $r$ passes through one, and the
+constants are greedy.
 
 The values are those of \texttt{trig\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers. It
 evaluates one bucket per pair $(K_{\rm s}(j), K_{\rm c}(j))$, the one with the largest $R_j$: every bound above holds
