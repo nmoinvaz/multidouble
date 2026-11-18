@@ -875,8 +875,10 @@ const OD_TABLE1: [(Fun, [u64; 8], f64); 3] = [
 ];
 
 /// The octo-double sin, cos and tan on the inputs of the paper's Table 1. Pass: each result 2^E (1, u, ..., u^7) up to
-/// sign, each error at least its floor and within the proven bound, scalar and lanes alike. Control: each input with
-/// its leading part one ulp up errs by less than its floor.
+/// sign, scalar and lanes alike, and the check, the error between its floor and the proven bound. Controls: the check
+/// rejects a wrong result past the bound (the last part 16 2^E u^8 further out) and one far more accurate (the greedy
+/// eight parts of the sum of the result's parts and 2^E u^8), and each input with its leading part one ulp up errs by
+/// less than its floor.
 #[test]
 fn trig_od_table1_inputs() {
     use crate::native::OV;
@@ -890,24 +892,35 @@ fn trig_od_table1_inputs() {
         let x = OD {
             x: b.map(f64::from_bits),
         };
+        let sc = reference(&exact(x));
+        let bound = if f == Fun::Tan { OD_BOUND[1] } else { OD_BOUND[0] };
+        // the error of y as f(x) in units of u^8, and whether the check passes it
+        let check = |y: OD| -> (f64, bool) {
+            let e = err(f, x, y, &sc);
+            (e, e >= floor && e <= bound)
+        };
         let (got, lane) = eval(f, x);
-        let e = err(f, x, got, &reference(&exact(x)));
         let top = got.x[0];
         let pow = f64::from_bits(top.abs().to_bits() & 0x7ff0_0000_0000_0000).copysign(top);
         let ladder = (1..8).all(|k| got.x[k] == pow * u.powi(k as i32));
-        println!("{f:?}: error {e:.9} u^8, floor {floor}");
         assert!(ladder, "{f:?}: the result is not 2^E (1, u, ..., u^7)");
         assert_eq!(got.x, lane.x, "{f:?}: lanes differ from the scalar result");
-        let bound = if f == Fun::Tan { OD_BOUND[1] } else { OD_BOUND[0] };
-        assert!(
-            e >= floor && e <= bound,
-            "{f:?}: error {e} u^8 outside [{floor}, {bound}]"
-        );
+        let (e, ok) = check(got);
+        println!("{f:?}: error {e:.9} u^8, floor {floor}");
+        assert!(ok, "{f:?}: error {e} u^8 outside [{floor}, {bound}]");
+        let mut hi = got;
+        hi.x[7] += 16.0 * pow * u.powi(8);
+        let lo: OD = greedy(&exact(got).add(&Dy::from_f64(pow * u.powi(8))));
+        let ((eh, okh), (el, okl)) = (check(hi), check(lo));
         let mut y = x;
         y.x[0] = y.x[0].next_up();
         let ey = err(f, y, eval(f, y).0, &reference(&exact(y)));
-        println!("  control, leading part one ulp up: {ey:.3e} u^8");
-        assert!(ey < floor, "{f:?} control: {ey} u^8, the check cannot fail");
+        println!("  controls: {eh:.3e} and {el:.3e} u^8 for the wrong results, {ey:.3e} u^8 for x one ulp up");
+        assert!(!okh && !okl, "{f:?} control: the check passes a wrong result");
+        assert!(
+            ey < floor,
+            "{f:?} control: {ey} u^8, the input one ulp up still reaches the floor"
+        );
     }
 }
 

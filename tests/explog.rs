@@ -891,18 +891,19 @@ const OD_TABLE1: [(bool, [u64; 8], f64); 2] = [
 ];
 
 /// `OD::exp` and `OD::ln` on the inputs of the paper's Table 1. Pass: each input on the ladder, each result 2^E (1, u,
-/// ..., u^7) up to sign, each error at least its floor and within the proven bound, scalar and lanes alike. Control:
-/// each input with its leading part one ulp up errs by less than its floor.
+/// ..., u^7) up to sign, scalar and lanes alike, and the check, the error between its floor and the proven bound.
+/// Controls: the check rejects a wrong result past the bound (the last part 16 2^E u^8 further out) and one far more
+/// accurate (the greedy eight parts of the sum of the result's parts and 2^E u^8), and each input with its leading part
+/// one ulp up errs by less than its floor.
 #[test]
 fn od_table1_inputs() {
     let u = 2f64.powi(-53);
-    let eval = |exp: bool, x: OD| -> (OD, OD, f64) {
+    // the error of y as f(x) in units of u^8
+    let err = |exp: bool, x: OD, y: OD| -> f64 {
         if exp {
-            let y = x.exp();
-            (y, native::OV::splat(x).exp().lane(0), exp_err_of(x, y).0)
+            exp_err_of(x, y).0
         } else {
-            let y = x.ln();
-            (y, native::OV::splat(x).ln().lane(0), ln_err_of(x, y, OD_LN_FLOOR).0)
+            ln_err_of(x, y, OD_LN_FLOOR).0
         }
     };
     for (exp, b, floor) in OD_TABLE1 {
@@ -911,23 +912,37 @@ fn od_table1_inputs() {
             x: b.map(f64::from_bits),
         };
         assert!(ladder(x), "{name}: input off the ladder");
-        let (y, lane, e) = eval(exp, x);
+        let bound = if exp { OD_EXP } else { OD_LN };
+        let check = |y: OD| -> (f64, bool) {
+            let e = err(exp, x, y);
+            (e, e >= floor && e <= bound)
+        };
+        let (y, lane) = if exp {
+            (x.exp(), native::OV::splat(x).exp().lane(0))
+        } else {
+            (x.ln(), native::OV::splat(x).ln().lane(0))
+        };
         let top = y.x[0];
         let pow = f64::from_bits(top.abs().to_bits() & 0x7ff0_0000_0000_0000).copysign(top);
         let shape = (1..8).all(|k| y.x[k] == pow * u.powi(k as i32));
-        println!("{name}: error {e:.9} u^8, floor {floor}");
         assert!(shape, "{name}: the result is not 2^E (1, u, ..., u^7)");
         assert_eq!(y.x, lane.x, "{name}: lanes differ from the scalar result");
-        let bound = if exp { OD_EXP } else { OD_LN };
-        assert!(
-            e >= floor && e <= bound,
-            "{name}: error {e} u^8 outside [{floor}, {bound}]"
-        );
+        let (e, ok) = check(y);
+        println!("{name}: error {e:.9} u^8, floor {floor}");
+        assert!(ok, "{name}: error {e} u^8 outside [{floor}, {bound}]");
+        let mut hi = y;
+        hi.x[7] += 16.0 * pow * u.powi(8);
+        let lo: OD = greedy(&exact(y).add(&Dy::from_f64(pow * u.powi(8))));
+        let ((eh, okh), (el, okl)) = (check(hi), check(lo));
         let mut z = x;
         z.x[0] = z.x[0].next_up();
-        let ez = eval(exp, z).2;
-        println!("  control, leading part one ulp up: {ez:.3e} u^8");
-        assert!(ez < floor, "{name} control: {ez} u^8, the check cannot fail");
+        let ez = err(exp, z, if exp { z.exp() } else { z.ln() });
+        println!("  controls: {eh:.3e} and {el:.3e} u^8 for the wrong results, {ez:.3e} u^8 for x one ulp up");
+        assert!(!okh && !okl, "{name} control: the check passes a wrong result");
+        assert!(
+            ez < floor,
+            "{name} control: {ez} u^8, the input one ulp up still reaches the floor"
+        );
     }
 }
 
