@@ -2,7 +2,8 @@
 //! `acc_check acc terms.txt`: OdAcc over the terms (one per line, eight parts), `finish()` of `add` and of
 //! `add_prod(a, 1)`. `acc_check add8 ab.txt` / `add4 ab.txt`: a + b for the two lines a and b (OD or QD).
 //! `acc_check sqrt8 xs.txt`: the octo-double square root of each line. `acc_check trig8 xs.txt` / `trig2 xs.txt`: the
-//! sine, cosine and tangent of each line (OD or DD), on one line.
+//! sine, cosine and tangent of each line (OD or DD), on one line. `acc_check exp8|ln8|expdd|lndd xs.txt`: the
+//! octo-double or double-double exp or ln of each line.
 use multidouble::dd::DD;
 use multidouble::od::{OdAcc, OD};
 use multidouble::qd::QD;
@@ -17,8 +18,9 @@ fn hex(x: &[f64]) -> String {
 }
 
 fn main() {
-    let mode = std::env::args().nth(1).expect("usage: acc_check acc|add8|add4|sqrt8|trig8|trig2 file");
-    let path = std::env::args().nth(2).expect("usage: acc_check acc|add8|add4|sqrt8|trig8|trig2 file");
+    let usage = "usage: acc_check acc|add8|add4|sqrt8|trig8|trig2|exp8|ln8|expdd|lndd file";
+    let mode = std::env::args().nth(1).expect(usage);
+    let path = std::env::args().nth(2).expect(usage);
     let lines: Vec<String> = std::io::BufReader::new(std::fs::File::open(path).unwrap()).lines().map(|l| l.unwrap()).collect();
     match mode.as_str() {
         "acc" => {
@@ -60,6 +62,20 @@ fn main() {
                 let x = DD { hi: p[0], lo: p[1] };
                 let h = |d: DD| hex(&[d.hi, d.lo]);
                 println!("{} {} {}", h(x.sin()), h(x.cos()), h(x.tan()));
+            }
+        }
+        "exp8" | "ln8" => {
+            for line in &lines {
+                let a = OD { x: parts(line).try_into().unwrap() };
+                println!("{}", hex(&if mode == "exp8" { a.exp() } else { a.ln() }.x));
+            }
+        }
+        "expdd" | "lndd" => {
+            for line in &lines {
+                let p = parts(line);
+                let a = DD { hi: p[0], lo: p[1] };
+                let y = if mode == "expdd" { a.exp() } else { a.ln() };
+                println!("{}", hex(&[y.hi, y.lo]));
             }
         }
         _ => panic!("unknown mode"),
