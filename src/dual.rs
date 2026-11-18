@@ -270,6 +270,9 @@ pub trait Lane:
     /// all 8 lanes = lane j
     fn bcast(self, j: usize) -> Self;
     fn val(self) -> DV<Self::S>;
+    /// the tangent (derivative part) rounded to double-double, zero on a lane without one. `DV`, `QV` and `OV` also
+    /// have an inherent `tan`, the trigonometric tangent, which a method call on the concrete type resolves to:
+    /// write `Lane::tan(x)` for this one there.
     fn tan(self) -> DV<Self::S>;
     fn from_vt(v: DV<Self::S>, t: DV<Self::S>) -> Self;
     fn acc0() -> Self::Acc;
