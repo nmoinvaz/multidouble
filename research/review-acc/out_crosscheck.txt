@@ -1,0 +1,5 @@
+model: 2000 cases, 33036 terms; level mismatches 0, finish mismatches 0
+nice -n 10 python3 crosscheck.py 2000 2  25.33s user 0.19s system 66% cpu 38.509 total
+model, deposits in reversed order: 300 cases, 5391 terms; level mismatches 234, finish mismatches 0
+model, finish without its last ADDF: 300 cases, 5391 terms; level mismatches 0, finish mismatches 282
+crate with ACC_L3 (mutation 8): 300 cases, 5391 terms; level mismatches 252, finish mismatches 252

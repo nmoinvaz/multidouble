@@ -1,0 +1,130 @@
+% The level accumulator (multidouble's OdAcc, generalized to n parts): an error bound, and inputs that show its
+% growth in the number of terms is real. Written to be \input after the appendix of expansion-error-bounds.tex,
+% whose macros and labels it uses. Scripts: research/theory/acc*.py.
+
+\section{Sums of products accumulated in levels}\label{sec:acc}
+
+The accumulator keeps $n+1$ levels $s_0, \dots, s_n$, initially zero. A \emph{deposit} of $t = (t_0, \dots, t_N)$,
+$N \in \{n-1, n\}$, performs $\dep(s, l, t_l)$ for $l = 0, \dots, n-1$ (with $t_{n-1}$ last), and then $s_n \gets
+\RN(s_n + t_n)$ if $N = n$. ADDPROD$(a, b)$ deposits the $n+1$ levels of MUL before renormalization (steps (1)--(4)),
+ADDX$(a)$ deposits the $n$ parts of $a$, and FINISH returns $r^{(n)}$, where $r^{(0)} = (s_0, 0, \dots, 0)$ and
+$r^{(l)} = \mathrm{ADDF}(r^{(l-1)}, s_l)$. At $n = 8$ and $p = 53$ these are \texttt{OdAcc::add\_prod}, \texttt{add}
+and \texttt{finish} of multidouble~4.8.2 (identical bits on the inputs of Proposition~\ref{prop:acc-low}). We write
+$k^{(r)} = k(k+1)\cdots(k+r-1)$, $k^{(0)} = 1$, for the rising factorial.
+
+\begin{lemma}\label{lem:acc}
+Assume~\ref{as:fp}. Let $K$ deposits be made into zero levels, the $k$-th with $|t^{(k)}_l| \le \tau_l\mu_k$ ($0 \le l
+\le n$, $\tau_n = 0$ when $N = n - 1$), let $W = \sum_k \mu_k$, and assume $(n+1)Ku < 1$, $\beta = 1/(1 - (n+1)Ku)$.
+\begin{enumerate}
+\item[(a)] At every moment up to the end of the $k$-th deposit, $|s_m| \le S_m(k)$, where
+\[
+S_m(k) = \beta W\sum_{l=0}^{m}\binom{m}{l}\tau_l\,(\beta u)^{m-l}\,k^{(m-l)}.
+\]
+\item[(b)] At the end, $\sum_m s_m = \sum_{k,l} t^{(k)}_l - E_{\rm lev}$ with
+\[
+|E_{\rm lev}| \le W\sum_{l=0}^{n}\binom{n+1}{l}\tau_l\,(\beta u)^{n+1-l}\,K^{(n+1-l)}.
+\]
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+In one deposit, level $m < n$ performs at most $m+1$ $\TwoSum$s, one for each dep started at a level $l \le m$, and
+level $n$ at most $n+1$ roundings, the last steps of the $n$ deps and the addition of $t_n$. A carry out of level $m$,
+and a rounding error at level $n$, is at most $u$ times the new value of the level, by~\eqref{eq:rn}. Let $\hat S_m(k)$
+be the largest $|s_m|$ up to the end of deposit $k$, and $G_m(k)$ the sum of the absolute carries out of level $m$
+(for $m = n$, of the rounding errors there) in deposits $1, \dots, k$, with $G_{-1} = 0$. Level $m$ holds what was put
+into it, deposits and carries from level $m-1$, minus what left it, so
+\[
+\hat S_m(k) \le \tau_m W + G_{m-1}(k) + G_m(k), \qquad G_m(k) \le (m+1)u\sum_{j \le k}\hat S_m(j) \le (m+1)uk\,\hat
+S_m(k).
+\]
+Since $(m+1)uk \le (n+1)uK$, $\hat S_m(k) \le \beta(\tau_mW + G_{m-1}(k))$. We show $\hat S_m(j) \le S_m(j)$ for all
+$j$ by induction on $m$. For $m = 0$ it reads $\hat S_0 \le \beta\tau_0W$. For $m \ge 1$, by the hypothesis for
+$m - 1$ and $\sum_{j=1}^{k} j^{(r)} = k^{(r+1)}/(r+1)$,
+\[
+G_{m-1}(k) \le mu\,\beta W\sum_{l=0}^{m-1}\binom{m-1}{l}\tau_l(\beta u)^{m-1-l}\frac{k^{(m-l)}}{m-l} = W\sum_{l=0}^{m-1}
+\binom{m}{l}\tau_l\,\beta^{m-l}u^{m-l}k^{(m-l)},
+\]
+and $\beta(\tau_mW + G_{m-1}(k)) = S_m(k)$. This is (a). For (b), every operation but the roundings at level $n$ is
+exact, so $E_{\rm lev}$ is the sum of those rounding errors, and $|E_{\rm lev}| \le G_n(K) \le (n+1)u\sum_{k \le K}
+S_n(k)$; the same sum identity and $\binom{n}{l}\frac{n+1}{n+1-l} = \binom{n+1}{l}$ give (b).
+\end{proof}
+
+\begin{theorem}\label{thm:acc}
+Assume~\ref{as:fp}, $(n+1)Ku < 1$, and for products the hypotheses of Theorem~\ref{thm:t2} for MUL. Let the accumulator
+receive $K$ terms, each ADDPROD$(a, b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$, and let $x = $ FINISH. Let
+$Z$ be the exact sum of the terms, $\mu_k = |a_0b_0|$ or $|a_0|$, $W = \sum_k\mu_k$, $\tau_l = \max(L_lu^l,
+\rho^l)$ with the $L_l$ of Theorem~\ref{thm:t2} for MUL ($\tau_l = \rho^l$, $\tau_n = 0$ if all terms are ADDX), and
+$E_{\rm prod} = (R + \Delta)u^{n+1}W$ with the $R$, $\Delta$ of MUL ($0$ if all terms are ADDX). Then
+\[
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + (1 + u^n)(E_{\rm lev} + E_{\rm prod}) + \Phi,
+\]
+with $E_{\rm lev}$ the bound of Lemma~\ref{lem:acc}(b) and $\Phi = \sum_{j=1}^{n}(u^n + u^{n+1-j})V_j$ the bound of
+Lemma~\ref{lem:g}(a) for the last ADDF of FINISH, its part bounds obtained by Lemma~\ref{lem:g}(b) along FINISH from
+$|s_m| \le S_m(K)$. In particular, for $Ku$ bounded away from $1/(n+1)$,
+\[
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + \bigl(\tau_0\beta^{n+1}u\,K^{(n+1)} + O(K^nu) + O(1)\bigr)\,u^nW, \qquad \tau_0 \le
+1 + u.
+\]
+\end{theorem}
+
+\begin{proof}
+By Theorem~\ref{thm:t2}(a) the levels of a product satisfy $|t_l| \le L_lu^l\mu_k$, and by (b) they sum to $a b$
+up to $(R+\Delta)u^{n+1}\mu_k$; the parts of an ADDX term satisfy $|a_l| \le \rho^l\mu_k$ and sum to $a$. So
+Lemma~\ref{lem:acc} applies, and $S = \sum_m s_m$ satisfies $|Z - S| \le E_{\rm lev} + E_{\rm prod}$.
+
+FINISH loses only in its last ADDF. By induction $r^{(l)}$ has at most $l+1$ nonzero parts: the $\TwoSum$ chain of
+ADDF stops at the first zero part of $r^{(l-1)}$, so the levels of ADDF$(r^{(l-1)}, s_l)$ have at most $l+1$ nonzero
+terms, VecSum gives a nonzero $v_j$, $j \ge 1$, only after a nonzero term, and a step of the second pass with $v_j = 0$
+neither emits nor loses. By Theorem~\ref{thm:t1}(a) a loss needs $n$ nonzero $v_1, \dots, v_n$, so ADDF$(r^{(l-1)},
+s_l)$ is exact for $l \le n-1$ (for $l = n-1$, a loss would need $v_n \ne 0$, while its last term $s_n$ of VecSum is
+zero), and FINISH's result is $R_n$ of the levels of the last ADDF, whose exact sum is $S$. Theorem~\ref{thm:t1}(b) with
+$k = 0$, and $|v_0| \le |S| + \sum_{j \ge 1}|v_j|$, give $|S - \sum x| \le u^n|S| + \Phi$, the $V_j$ bounding
+$|v_j|$ as in Lemma~\ref{lem:g}. Then $|Z - \sum x| \le |Z - S| + u^n|S| + \Phi$ and $|S| \le |Z| + E_{\rm lev} +
+E_{\rm prod}$. The asymptotic form is the $l = 0$ term of $E_{\rm lev}$ ($\tau_0 = 1 + u$ for MUL by
+Theorem~\ref{thm:t2}, $1$ for ADDX); the other terms carry at most $K^{(n)}$, and $E_{\rm prod}$ and $\Phi$ are $O(u^{n+1}W)$.
+\end{proof}
+
+At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is $2^{-14.9}$ for $K = 1$ (Theorem~\ref{thm:t3}
+for MUL), $2^{-10.6}$ for $K = 16$, $2^{-4.8}$ for $K = 32$, $2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.1}$
+for $K = 1024$ (\texttt{acc\_bound.py}). The second term is at most $u^8W/8$ for $K \le 38$ products and at most $u^8W$
+for $K \le 50$ ($\theta = 2$; $40$ and $52$ for $\theta = 1$, $42$ and $54$ for sums of octo-doubles). Beyond, the bound
+grows like $(Ku)^{9}W$, and the growth is real.
+
+\begin{proposition}\label{prop:acc-low}
+At $p = 53$ and $n = 8$ there are $K = 2048$ terms, $1$ and $2047$ positive octo-doubles of size about $u$ with
+$|a_{m+1}| \le \frac12\ulp(a_m)$, on which the accumulator errs by $1.4676 \cdot 10^7\,u^8|Z| = 2^{23.81}u^8|Z|$, with
+$W = |Z|(1 + 2^{-96})$. Its first $256$, $512$ and $1024$ terms give errors of about $0.10$, $36$ and $1.2 \cdot 10^4$
+times $u^8|Z|$: doubling $K$ from $1024$ to $2048$ multiplies the error by $2^{10.3}$, and at $K = 2048$ it is
+about $900$ times the threshold $8(8 + K)\,u^8W$ of multidouble's accumulator test, which runs $K \le 64$.
+\end{proposition}
+
+\begin{proof}
+Exact computation (\texttt{acc\_construct.py}, inputs in \texttt{out/acc\_p53\_n8\_K2048\_terms.txt}); multidouble's
+\texttt{OdAcc} returns the same eight parts through \texttt{add} and through \texttt{add\_prod} with $b = 1$
+(\texttt{acc\_check/}), and \texttt{acc\_crate\_err.py} recomputes the error from those parts without the emulator.
+\end{proof}
+
+The inputs are adversarial: $2048$ random positive terms of the same sizes give errors below $0.004\,u^8W$.
+
+\begin{remark}
+The inputs are built one part at a time: each part is aimed at a midpoint of the ulp of a lower level, so that the
+$\TwoSum$ there carries about half an ulp down, and the next level grows by that carry at every deposit. Level $m$
+then grows like $(ku)^m/m!$ in units of $W$, and the final rounding errors at level $n$ like $(Ku)^{n+1}/(n+1)!$; the
+bound of Lemma~\ref{lem:acc} counts $m+1$ roundings per level and deposit where the construction realizes about one, and
+lies $2^{22}$ above it at $n = 8$ ($2^{46.0}$ against $2^{23.8}$ at $K = 2048$). Measured, level $m+1$ grows per
+deposit by about $0.6\,u|s_m|$ in the construction, and aiming a part at the midpoints of two or three levels at once
+(\texttt{acc\_construct.py \dots\ joint}) gains nothing. A carry chain started by a part $t_l$ consists of multiples of
+the last bit of $t_l$ as long as the levels it passes are coarser, so it can round at level $m$ only if that bit lies
+below $\ulp(s_m)$; with the sizes of the construction, for $K$ well below $u^{-2/m}$ only the chains with $l \ge m -
+2$ qualify ($K \lesssim 3.7 \cdot 10^4$ at $m = 8$). This suggests at most two
+or three roundings per level and deposit, which would lower the bound by about $(n+1)!/3^{n+1}$; it is not proven. At
+$n = 2$, $p = 8$, $K = 64$ the construction reaches $0.42$ of the bound.
+
+Ogita, Rump and Oishi's SumK~\cite{ORO05}, in its vertical form (their Algorithm~4.12), is the same cascade for summands
+that are single floating-point numbers, rounded at the end to one number; their bound $\gamma_{2N-2}^{K}\sum|p_i|$
+($N$ summands, $K$ levels) has the same growth in $N$, and they note that its factors are conservative. The
+accumulator here deposits a term into every level, which their analysis by repeated VecSum does not cover, and returns
+$n$ parts, whence the leading term $u^n|Z|$. A summand of $p$ bits can feed only the two or three levels below it
+(its lowest bit is about $u$ times its size), so the construction above needs terms with parts at every level.
+\end{remark}
