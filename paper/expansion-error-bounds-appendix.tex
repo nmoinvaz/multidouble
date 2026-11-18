@@ -530,7 +530,7 @@ as an operand $|c|$ stands for the magnitudes of the parts of a constant expansi
 degree one in the operands' part bounds, $\lambda$ and $\bar Z$ together, so an operation on operands scaled exactly by
 powers of two has the scaled bounds.
 
-The square root of multidouble generalizes as SQRT$_{n,J}$: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
+SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
 (exact), $h = a/2$, $r = (\RN(1/\RN(\sqrt{a_0})), 0, \dots, 0)$; $J$ times $m = \mathrm{MUL}(r, r)$, $g =
 \mathrm{MUL}(h, m)$, $c = \mathrm{ADDF}(-g, 1/2)$, $d = \mathrm{MUL}(c, r)$, $r \gets \mathrm{ADD}(r, d)$; then $z =
 \mathrm{MUL}(r, a)$, and the result is $zs$.
