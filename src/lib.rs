@@ -18,6 +18,7 @@
 //! * [`trig`]: `sin`, `cos`, `tan` and `sin_cos` of [`dd::DD`], [`qd::QD`] and [`od::OD`], reducing by pi/2 to 1216
 //!   fraction bits in exact integer arithmetic for |x_0| up to 2^52.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
+//! * [`explog`]: `exp` and `ln` of [`dd::DD`], [`qd::QD`] and [`od::OD`].
 //! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
 //!   ([`precision::Quad`]) and octo-double ([`precision::Octo`]), naming each kind of type once and delegating to
 //!   each precision's own methods, so code written once gives bitwise the results of the code written for one
@@ -66,6 +67,7 @@ pub mod dd;
 pub mod dual;
 pub mod dv;
 pub mod exact;
+pub mod explog;
 pub mod field;
 pub mod jet;
 pub mod linalg;
