@@ -537,8 +537,9 @@ $2^{-20}$ mismatch and break the bounds. The same script hooks every product, fu
 steps to find which leave the normal range (Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor
 degree that must find some. A reviewer's code, written from an earlier text of the appendix and sharing no code with
 \texttt{explog\_consts.py} (\texttt{review/}), recomputes the largest cases of Theorems~\ref{thm:exp}
-and~\ref{thm:log}, $3.660060\,u^8$ and $9.925819\,u^8$, and the absolute term $2^{-509.17}$, to the digits the script
-prints; the degree of step (3) and the cases chosen by $U$, which it does not model, leave those digits unchanged.
+and~\ref{thm:log}, $3.66006045\,u^8$ and $9.925819\,u^8$, and the absolute term $2^{-509.17}$, rounded to nearest,
+which the script's values rounded up, $3.660061\,u^8$, $9.925819\,u^8$ and $2^{-509.16}$, match; the degree of step (3)
+and the cases chosen by $U$, which it does not model, leave those cases unchanged.
 
 Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
 meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}. They check the bounds of the exponential and

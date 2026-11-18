@@ -282,10 +282,12 @@ $|\log(1+c) - c| \le c^2/(2(1 - |c|)) \le 2^{-B-13}C/(1-C)$; and $|\log(1+c) - \
 \emph{The cases.} $k = 0$ only if $|y_h| < 1/(2\Lambda)$, and $k \ne 0$ only if $|y_h| \ge 1/(2\Lambda(1+u))$; with
 $|y_0 - \ln x| \le E(\ell)$ this splits $\ell = |\ln x|$ into $[0, \ell_k^+]$ and $[\ell_k^-, X]$. For $k = 0$, $r =
 -y_0$ exactly, and its two parts select $e$ through $U$, with $\sum_i|r_i| \in [2^e(1 - 2^{-46}), 2^{e+1})$ and $|y_0|
-\ge \sum_i|r_i|(1-u)/(1+u)$; so each case holds for $\ell$ in an interval $[\ell_e^-, \ell_e^+]$, and we take $a =
-2^e(1 - 2^{-46})(1-u)/(1+u)$ and $b = \ell + E(\ell)$, or, for the cases with $\ell_e^- = 0$, where $E(0)$ can exceed
-$|r|$ by far, the constant $b = \min(2^{e+1}, \bar y_0)$, $\bar y_0$ the largest $|y_0|$ with $k = 0$. For $k \ne 0$
-the cases are those of Theorem~\ref{thm:exp} for $|r|$, at every $\ell \in [\ell_k^-, X]$.
+\ge \sum_i|r_i|(1-u)/(1+u)$; so each case holds for $\ell$ in an interval $[\ell_e^-, \ell_e^+]$, and we take $a = 2^e(1
+- 2^{-46})(1-u)/(1+u)$ and $b = \ell + E(\ell)$. A case with $\ell_e^- < 2^{-60}$ is taken on $[0, \ell_e^+]$, and if
+moreover $\bar b = \min(2^{e+1}, \bar y_0) \le E(0)$, $\bar y_0$ the largest $|y_0|$ with $k = 0$, it takes the constant
+$b = \bar b$, since there $E(0)$ exceeds $|r|$ by far; either $b$ is linear in $\ell$, where their minimum would not be
+convex. For $k \ne 0$ the cases are those of Theorem~\ref{thm:exp} for $|r|$, with $\sigma$, $m$, $d'$, $a$ and $b$
+fixed, at every $\ell \in [\ell_k^-, X]$.
 
 \emph{Convexity.} Evaluate the bounds with VecSum's second bound alone in Lemma~\ref{lem:g} ($V_j = \us(1+u)^{n-j}
 \sigma_{j-1}$, larger than the minimum), with $b'$ and $\pi'$ of Lemma~\ref{lem:core} without their minima, and with
@@ -293,21 +295,25 @@ $\tau_j = 2^jb'$ for $\sigma = -1$ (larger than $1 - e^{-2^jb'}$), and likewise 
 2n\eta_0)$. Then every quantity above is built from $\ell$, for a fixed case, by sums with nonnegative coefficients, by
 products of nonnegative nondecreasing convex functions, which are convex, by maxima, and by $z \mapsto e^z$, $z \mapsto
 e^z - 1 - z$, $z \mapsto z^{q+1}/(1 - z)$ and $z \mapsto 1/(1-z)$ applied to nondecreasing convex arguments with $z <
-1$, all nonnegative, nondecreasing and convex there; so $\mathcal E$ is nondecreasing and convex in $\ell$ for a fixed
-case. On an interval $[\ell_1, \ell_2]$ with $\ell_1 > 0$, $\mathcal E(\ell)$ lies below its chord, so
-$\mathcal E(\ell)/\ell \le \max(\mathcal E(\ell_1)/\ell_1, \mathcal E(\ell_2)/\ell_2)$, and on $[0, \ell_2]$, $\mathcal
-E(\ell) \le \mathcal E(0) + \ell(\mathcal E(\ell_2) - \mathcal E(0))/\ell_2$. Let $\varepsilon_{\ln}$ be the largest of
-these ratios and slopes over the cases ($k = 0$: each case on $[\ell_e^-, \ell_e^+]$; $k \ne 0$: each case on
-$[\ell_k^-, 1]$, $[1, 4]$ and $[4, X]$), and $\Phi$ the largest $\mathcal E(0)$, which only the cases with $\ell_e^- =
-0$ have. The values are those of \texttt{explog\_consts.py}, as in Theorem~\ref{thm:exp}, with four intervals of $|r|$
-per case and sign for $k \ne 0$ where $|r|$ exceeds $2^{-12}$.
+1$, all nonnegative, nondecreasing and convex there. For $k = 0$, $\ell$ enters through $E(\ell)$ and $b$; for $k \ne
+0$, through $E(\ell)$, $\bar y = \ell + E(\ell)$ and Lemma~\ref{lem:red}'s $X = \bar y/(1-u)$, $\gamma = 2u\bar y$ and
+$\alpha = \pi^y$, all linear in $\ell$. So $\mathcal E$ is nondecreasing and convex in $\ell$ for a fixed case; the
+script evaluates it with every quantity rounded up, which only raises its values at the ends of an interval and keeps
+the chord above $\mathcal E$. On an interval $[\ell_1, \ell_2]$ with $\ell_1 > 0$, write $\ell = \lambda\ell_1 + (1 -
+\lambda)\ell_2$; then $\mathcal E(\ell) \le \lambda\mathcal E(\ell_1) + (1-\lambda)\mathcal E(\ell_2)$, so $\mathcal
+E(\ell)/\ell \le \max(\mathcal E(\ell_1)/\ell_1, \mathcal E(\ell_2)/\ell_2)$, and on $[0, \ell_2]$, $\mathcal E(\ell)
+\le \mathcal E(0) + \ell(\mathcal E(\ell_2) - \mathcal E(0))/\ell_2$. Let $\varepsilon_{\ln}$ be the largest of these
+ratios and slopes over the cases ($k = 0$: each case on $[\ell_e^-, \ell_e^+]$; $k \ne 0$: each case on $[\ell_k^-, 1]$,
+$[1, 4]$ and $[4, X]$, which takes $\mathcal E(\ell)/\ell$ at $\ell_k^-$, 1, 4 and $X$), and $\Phi$ the largest
+$\mathcal E(0)$, which only the cases taken on $[0, \ell_e^+]$ have. The values are those of \texttt{explog\_consts.py},
+as in Theorem~\ref{thm:exp}, with four intervals of $|r|$ per case and sign for $k \ne 0$ where $|r|$ exceeds $2^{-12}$.
 \end{proof}
 
 The bound is largest near $|\ln x| = \frac12\ln 2$, where $|r|$ is near $\frac12\ln 2$ too and $t$'s error, as in
 Theorem~\ref{thm:exp}, enters relative to $|\ln x|$ instead of to $e^r$. For larger $|\ln x|$ that share falls like
 $1/|\ln x|$, toward the last ADD's $u^8$. The term $\Phi$ is the
 second-order part of Lemma~\ref{lem:g} for $f$, whose part bounds follow $x$'s ladder from $x_0 \approx 1$ rather than
-$|f|$; it matters only within $2^{-85}$ of $x = 1$.
+$|f|$; at $n = 8$, as quoted, it exceeds the relative term only where $|\ln x| < 2^{-88}$.
 
 \paragraph{Double words} \texttt{DD::exp} and \texttt{DD::ln} run EXP and LOG with the double-word operations of
 Joldes, Muller and Popescu~\cite{JMP17}, whose relative errors are bounded: AccurateDWPlusDW (their Algorithm 6, the
@@ -327,7 +333,7 @@ Assume~\ref{as:fp} with $p = 53$ and binary64's exponent range. For a positive $
 \mu = \RN(\sqrt 2)$, $m \gets m/2$ and $e \gets e + 1$; $s = \RN((m - 1)/\RN(m + 1))$ and $z = \RN(s^2)$; $v \gets
 c_9$ and $v \gets \RN(zv + c_j)$, a fused multiply-add, for $j = 8, \dots, 0$, with $c_j = \RN(1/(2j+1))$; and return
 $\RN(ec_{\rm L} + \RN(2sv))$, a fused multiply-add, with $c_{\rm L} = \RN(\ln 2)$. Then $\ln_{\rm b}(1) = 0$ and
-$|\ln_{\rm b}(h) - \ln h| \le \eta_{\rm b}|\ln h|$ with $\eta_{\rm b} = 5.915\,u$ ($2^{-50.44}$). This is
+$|\ln_{\rm b}(h) - \ln h| \le \eta_{\rm b}|\ln h|$ with $\eta_{\rm b} = 5.915\,u$ ($2^{-50.43}$). This is
 multidouble's \texttt{ln\_f64}.
 \end{lemma}
 
