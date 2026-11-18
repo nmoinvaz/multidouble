@@ -88,7 +88,10 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
   kilobytes per term.
 - One coefficient of the jet variable at a time (`cs_at`, `cs_range_at`, `cs_w_at`, and the lane's `acc_at`, `mul_at`,
   `div_at`, `mulp_at`, `copy_at`), bit for bit the full operations' coefficient, forms a series order by order from the
-  lower orders kept: k + 1 products per term at order k instead of a jet product's N (N + 1) / 2.
+  lower orders kept: k + 1 products per term at order k instead of a jet product's N (N + 1) / 2. These sums also run
+  one lane vector at a time (`cs_lane_at`, `cs_w_lane_at`), or with the lane vectors on separate threads once their
+  products, weighted by their precision's cost, reach `CS_AT_PAR_MIN` (`cs_at_par`, `cs_range_at_par`, `cs_w_at_par`),
+  bitwise the same.
 - `FieldSolve::solve_lanes_refine` refines in the lane type, to quad-double for `QV`. `solve_lanes_refine_t` solves
   value and tangent together, takes a complex tangent by its real part, and refuses a jet. `solve_lanes_jet`,
   `solve_lanes_jet_refine` and `solve_lanes_jet_refine_od` solve a jet's system order by order with the LU at the

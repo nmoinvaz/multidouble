@@ -10,8 +10,11 @@
 //! same sums, bitwise, into a caller's field, with the accumulator and the terms borrowed (`Lane::acc_mut`), which
 //! for jet lanes saves copying kilobytes per term. `cs_lane_into` and `cs_w_lane_into` are one lane vector of them,
 //! for a caller that sums the lane vectors on separate threads, and `cs_par`, `cs_range_par` and `cs_w_par` do so for
-//! long jet sums (`cs_splits`), bitwise the same. A matrix product is `MatLane::dmat_apply`: the
-//! double-double columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
+//! long jet sums (`cs_splits`), bitwise the same. The order-k sums of a series formed one jet coefficient at a time
+//! (`cs_at`, `cs_range_at`, `cs_w_at`) have the same pieces: one lane vector (`cs_lane_at`, `cs_w_lane_at`), and the
+//! lane vectors on separate threads (`cs_at_par`, `cs_range_at_par`, `cs_w_at_par`, when `cs_at_splits`, which weighs
+//! a product by its precision's cost), bitwise the same. A matrix product is `MatLane::dmat_apply`: the double-double columns through the accumulator by default, the
+//! columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
 use crate::dv::{DotAcc, DV};
@@ -460,11 +463,7 @@ pub fn cs_range_at<T: Lane, const B: usize>(
         return;
     }
     for b in 0..B {
-        let mut a = T::acc0();
-        for i in lo..=hi {
-            T::acc_at(&mut a, &x[i].0[b], &y[j - i].0[b], k);
-        }
-        T::fin_at(&a, k, &mut out.0[b]);
+        cs_lane_at(&mut out.0[b], b, x, y, j, lo, hi, k);
     }
 }
 
@@ -486,12 +485,52 @@ pub fn cs_w_at<T: Lane, const B: usize>(
         return;
     }
     for b in 0..B {
-        let mut a = T::acc0();
-        for i in lo..=hi {
-            T::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[j - i].0[b], k);
-        }
-        T::fin_at(&a, k, &mut out.0[b]);
+        cs_w_lane_at(&mut out.0[b], b, x, y, j, lo, hi, &w, k);
     }
+}
+
+/// Lane vector b of `cs_range_at`: coefficient k of `sum_{i=lo..=hi} x[i].0[b] y[j-i].0[b]` into coefficient k of out,
+/// its other coefficients unchanged, bitwise `cs_range_at`'s lane vector b on a jet lane. On every other lane, out is
+/// the whole sum's lane vector b, bitwise `cs_lane_into`'s. A caller can form the B lane vectors, or the lane vectors
+/// of several independent sums, on separate threads.
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn cs_lane_at<T: Lane, const B: usize>(
+    out: &mut T,
+    b: usize,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    k: usize,
+) {
+    let mut a = T::acc0();
+    for i in lo..=hi {
+        T::acc_at(&mut a, &x[i].0[b], &y[j - i].0[b], k);
+    }
+    T::fin_at(&a, k, out);
+}
+
+/// Lane vector b of `cs_w_at`, coefficient k of `sum_{i=lo..=hi} (w(i) x[i].0[b]) y[j-i].0[b]`, as `cs_lane_at`
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn cs_w_lane_at<T: Lane, const B: usize>(
+    out: &mut T,
+    b: usize,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64,
+    k: usize,
+) {
+    let mut a = T::acc0();
+    for i in lo..=hi {
+        T::acc_at(&mut a, &x[i].0[b].mulf(w(i)), &y[j - i].0[b], k);
+    }
+    T::fin_at(&a, k, out);
 }
 
 /// Cauchy product coefficient `sum_{j=0..k} x[j] y[k-j]`
@@ -768,6 +807,126 @@ pub fn cs_w_par<T: Lane, const B: usize>(
     let mut out = Fl::<T, B>::zero();
     cs_w_into(&mut out, x, y, k, lo, hi, w);
     out
+}
+
+/// Work per lane vector, in products of jet coefficients weighted by `cs_at_cost`, from which `cs_at_par`,
+/// `cs_range_at_par` and `cs_w_at_par` form the B lane vectors on separate threads: 48 octo-double products. At 48 the
+/// split of an `OJet<28>` sum gained 1.1–2.4× on four threads of a loaded Apple M5, and at 24 nothing.
+pub const CS_AT_PAR_MIN: usize = 48 * 64;
+
+/// The weight of one product of T's jet coefficients in `CS_AT_PAR_MIN`, about its time against a double-double one:
+/// 64 in octo-double, 8 in quad-double, 1 in double-double (about 1 µs, 140 ns and 15 ns on a loaded Apple M5)
+#[inline(always)]
+pub fn cs_at_cost<T: Lane>() -> usize {
+    if T::VAL_OD {
+        64
+    } else if T::VAL_QD {
+        8
+    } else {
+        1
+    }
+}
+
+/// Whether `cs_at_par`, `cs_range_at_par` and `cs_w_at_par` split coefficient k of a sum of `terms` products of T over
+/// its lane vectors: jet lanes only, once the k + 1 products of each term, terms × (k + 1) × `cs_at_cost`, reach
+/// `CS_AT_PAR_MIN`
+#[inline(always)]
+pub fn cs_at_splits<T: Lane>(terms: usize, k: usize) -> bool {
+    T::NJ > 0 && terms * (k + 1) * cs_at_cost::<T>() >= CS_AT_PAR_MIN
+}
+
+/// Coefficient k of `sum_{i=lo..=hi} (w(i) x[i]) y[j-i]` into out, weighted only if w is given, with each lane vector
+/// formed by its own rayon task, which enters the backend's target features again (`Simd::vectorize`)
+#[allow(clippy::too_many_arguments)]
+fn cs_split_at<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: Option<&(dyn Fn(usize) -> f64 + Sync)>,
+    k: usize,
+) {
+    // read on the calling thread: a mutation is selected per thread, and the tasks run on rayon's workers
+    let moved = mutate::on(mutate::CS_AT_SPLIT);
+    out.0.par_iter_mut().enumerate().for_each(|(b, o)| {
+        T::S::vectorize(
+            #[inline(always)]
+            || {
+                match w {
+                    Some(w) => cs_w_lane_at(o, b, x, y, j, lo, hi, w, k),
+                    None => cs_lane_at(o, b, x, y, j, lo, hi, k),
+                }
+                if moved && b + 1 == B {
+                    let mut l = o.coef_od(k).lanes();
+                    l[0].x[0] = f64::from_bits(l[0].x[0].to_bits() + 1);
+                    o.set_coef_od(k, OV::from_lanes(&l));
+                }
+            },
+        )
+    });
+}
+
+/// `cs_at`, bitwise, with a jet's lane vectors formed on separate threads of rayon's current pool when the sum is long
+/// enough (`cs_at_splits`); every other sum is `cs_at`'s. Each lane vector's terms are summed in `cs_at`'s order by
+/// one task, so the split changes no bit, whatever the pool's size.
+///
+/// ```
+/// use multidouble::dd::DD;
+/// use multidouble::dual::Lane;
+/// use multidouble::field::{cs_at, cs_at_par, cs_at_splits, Fl};
+/// use multidouble::native::OJet;
+/// // the series variable j + h at every point, so that coefficient 1 of the sum is not zero
+/// let x: Vec<Fl<OJet<4>, 2>> = (1..30).map(|j| Fl([OJet::var(DD::from_f64(j as f64)); 2])).collect();
+/// assert!(cs_at_splits::<OJet<4>>(29, 1));
+/// let (mut a, mut b) = (Fl::zero(), Fl::zero());
+/// cs_at(&mut a, &x, &x, 28, 1);
+/// cs_at_par(&mut b, &x, &x, 28, 1);
+/// assert_eq!(a.coef_od(1).get(9), b.coef_od(1).get(9));
+/// ```
+#[inline(always)]
+pub fn cs_at_par<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y: &[Fl<T, B>], j: usize, k: usize) {
+    cs_range_at_par(out, x, y, j, 0, j, k)
+}
+
+/// `cs_range_at`, bitwise, split as `cs_at_par`
+#[inline(always)]
+pub fn cs_range_at_par<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    k: usize,
+) {
+    if hi >= lo && cs_at_splits::<T>(hi - lo + 1, k) {
+        cs_split_at(out, x, y, j, lo, hi, None, k);
+    } else {
+        cs_range_at(out, x, y, j, lo, hi, k);
+    }
+}
+
+/// `cs_w_at`, bitwise, split as `cs_at_par`, for a w that gives an index the same weight on every call and thread. A
+/// split sum calls w from several threads.
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn cs_w_at_par<T: Lane, const B: usize>(
+    out: &mut Fl<T, B>,
+    x: &[Fl<T, B>],
+    y: &[Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: impl Fn(usize) -> f64 + Sync,
+    k: usize,
+) {
+    if hi >= lo && cs_at_splits::<T>(hi - lo + 1, k) {
+        cs_split_at(out, x, y, j, lo, hi, Some(&w), k);
+    } else {
+        cs_w_at(out, x, y, j, lo, hi, w, k);
+    }
 }
 
 /// `cs_il` into out, with the accumulators and the terms borrowed (`Lane::acc_mut`): bitwise `cs_il`

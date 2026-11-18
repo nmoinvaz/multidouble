@@ -45,14 +45,18 @@ pub mod mutate {
     pub const OJET_REFINE_QD: u32 = 2;
     /// `crate::dual::Ou`'s product: the tangent's term d o.v dropped
     pub const OU_TAN: u32 = 3;
+    /// `crate::field::cs_range_at_par`'s and `cs_w_at_par`'s split sums: the last lane vector's coefficient k moved by
+    /// one ulp of the leading part of its lane 0
+    pub const CS_AT_SPLIT: u32 = 4;
     /// number of ids
-    pub const N: u32 = 3;
+    pub const N: u32 = 4;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 4] = [
+    pub const NAMES: [&str; 5] = [
         "none",
         "octo-double jet product: last convolution term dropped",
         "octo-double jet solve: residual at the iterate rounded to quad-double",
         "octo-double dual product: tangent term d o.v dropped",
+        "split order-k Cauchy sum: last lane vector moved by an ulp",
     ];
 
     #[cfg(feature = "mutate")]
