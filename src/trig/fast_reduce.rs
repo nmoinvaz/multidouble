@@ -1,10 +1,10 @@
-//! The reduction by pi/2 in f64 arithmetic, written once for one value (`f64`) and eight (`V8`): per lane the n greedy
-//! parts of x - k pi/2 that `reduce` gives, where a test decides them, and a mask of the lanes it decides. The others
-//! take `reduce` itself.
+//! The reduction by pi/2 in f64 arithmetic, written once for one value (`f64`) and eight (`V8`): per lane the multiple
+//! of pi/2 and the n greedy parts that the integer reduction (`reduce_exact`) gives, where a test decides them, and a
+//! mask of the lanes it decides. The others take the integer reduction.
 //!
 //! Notation: u = 2^-53, C = P 2^-F (`tables::P`, pi/2 to 1216 fraction bits), c = RN(2/pi), k = round(RN(x_0 c)) != 0
-//! as in `reduce`, and v = x_0 + ... + x_(n-1) - k C, the value whose greedy parts `reduce` returns when |RN(v)| <=
-//! 0.7854 (for |x_i| < 2^53 its accumulator holds v exactly).
+//! as in `reduce_exact`, and v = x_0 + ... + x_(n-1) - k C, which its accumulator holds exactly for |x_i| < 2^53. It
+//! subtracts k_2 C more, k_2 = round(RN(RN(v) c)), where |RN(v)| > 0.7854, and returns the greedy parts of the rest.
 //!
 //! * Limbs: L f64s (8, 12, 20 for n = 2, 4, 8), limb j a multiple of U_j = 2^(-26(j+1)) below 2^53 U_j, so that their
 //!   sums are exact. Rounding y to a multiple of 2^e as (y + 1.5 2^(52+e)) - 1.5 2^(52+e) is exact for |y| <= 2^(51+e)
@@ -16,24 +16,30 @@
 //! * x_0: t0 = (x_0 - k_h c0) - k_l c0 = x_0 - k c0 exactly. With |x_0 - k/c| <= 1/(2c) + u|x_0| < 1.29 and |c0 - 1/c|
 //!   < 2^-27 (1 + 2^-24), |x_0 - k c0| < 1.29 + |k| 2^-27 (1 + 2^-24) < 2^25, a multiple of m = min(ulp(x_0), 2^-26)
 //!   below 2^53 m (|x_0| > 0.78 gives ulp(x_0) >= 2^-53, and |k| < 0.64 |x_0| + 1), so representable. If k_h != 0,
-//!   |k| > 2^25 and |x_0| > 2^25, and x_0 - k_h c0 = (x_0 - k c0) + k_l c0 is below 2^26 for |x_0| < 2^27 (where |k| 2^-27
-//!   < 0.65) and below 2^28 otherwise, a multiple of min(ulp(x_0), 1) >= 2^-27, or >= 2^-25 for |x_0| >= 2^27: exact as
-//!   well. t0, a multiple of 2^-53, fills limbs 0 to 2 exactly.
-//! * x_1, ..., x_(n-1), each at most 2^20 (larger parts take `reduce`): rounded to limb 0's multiple, the rest to limb
-//!   1's, and so on, each within U_(L-1)/2 of its limbs. The limbs then hold V with |v - V| <= eps = (|k| + n - 1)
-//!   U_(L-1)/2, and carries make |D_j| <= U_(j-1)/2 for j >= 1.
+//!   |k| > 2^25 and |x_0| > 2^25, and x_0 - k_h c0 = (x_0 - k c0) + k_l c0 is below 2^26 for |x_0| < 2^27 (where |k|
+//!   2^-27 < 0.65) and below 2^28 otherwise, a multiple of min(ulp(x_0), 1) >= 2^-27, or >= 2^-25 for |x_0| >= 2^27:
+//!   exact as well. t0, a multiple of 2^-53, fills limbs 0 to 2 exactly.
+//! * x_1, ..., x_(n-1), each at most 2^20 (larger parts take the integer reduction): rounded to limb 0's multiple, the
+//!   rest to limb 1's, and so on, each within U_(L-1)/2 of its limbs. The limbs then hold V with |v - V| <= (|k| + n -
+//!   1) U_(L-1)/2, and carries make |D_j| <= U_(j-1)/2 for j >= 1.
+//! * k_2: a = RN(D_0 + D_1) is within 2^-49 of RN(v) for |a| < 2.8. So |a| <= 0.7854 - 2^-47 means no correction, and
+//!   |a| >= 0.7854 + 2^-47 a correction by round(RN(a c)) = k_2 where |RN(a c)| is 2^-46 or more from 1.5 (and |a| <
+//!   2.8). The limbs then take -k_2 c0 and -k_2 G_j (|k_2| <= 2, exact) and their carries again, k is k + k_2, and eps
+//!   = (|k| + n - 1) U_(L-1)/2 bounds |v - V| for the corrected v. Lanes within those margins take the integer
+//!   reduction.
 //! * Rounding: pass 0 sums the limbs from the last up by FastTwoSum (exact: a nonzero D_j has |D_j| >= U_j and the sum
 //!   below it at most U_j (1 + 2^-25)/2), giving s_0 and the expansion E_1 = V - s_0 of its errors; pass i sums E_i by
 //!   TwoSum likewise into s_i and E_(i+1) = E_i - s_i. Each pass has one term less than the one before.
-//! * The test: lane passes if, for every i, sum |E_(i+1)| + eps < g(s_i) (1 - 2^-40), with g(s) = ulp(s)/2, or ulp(s)/4
-//!   when |s| is a power of two, |s_0| <= 0.7854, and no |x_i| above 2^20.
+//! * The test: lane passes if, for every i, B_(i+1) < g(s_i) (1 - 2^-40), with B_n = eps + sum |E_n|, B_i = B_(i+1) +
+//!   |s_i|, g(s) = ulp(s)/2, or ulp(s)/4 when |s| is a power of two, and no |x_i| above 2^20.
 //!
-//! Why the bits are those of `reduce`: by induction on i, v - s_0 - ... - s_(i-1) = E_i + (v - V), so the remainder
-//! that `reduce` rounds at step i is within sum |E_(i+1)| + eps of s_i, both computed upper bounds (the sums of at most
-//! 20 terms, rounded, lose less than the factor 1 - 2^-40). It is therefore strictly inside the interval of reals that
-//! round to s_i, s_i != 0 is normal (the limbs are multiples of 2^-520), and round-to-nearest of the remainder is s_i,
-//! ties or not, the same rounding `Acc::round` performs. No remainder is zero, so `reduce`'s greedy loop runs all n
-//! steps, and |s_0| <= 0.7854 means it makes no correction of k. A lane that fails the test is reduced by `reduce`.
+//! Why the bits are those of `reduce_exact`: by induction on i, the remainder that `reduce_exact` rounds at step i is
+//! v - s_0 - ... - s_(i-1) = E_i + (v - V), and E_i = s_i + E_(i+1). So it is within |E_(i+1)| + eps <= B_(i+1) of
+//! s_i, an upper bound computed with at most 30 rounded additions of nonnegative terms, which lose less than the factor
+//! 1 - 2^-40. It is therefore strictly inside the interval of reals that round to s_i, s_i != 0 is normal (the limbs
+//! are multiples of 2^-520), and round-to-nearest of the remainder is s_i, ties or not, the same rounding `Acc::round`
+//! performs. No remainder is zero, so its greedy loop runs all n steps, and it corrects k exactly where the fast
+//! reduction does, by the same k_2. A lane that fails the test is reduced by `reduce_exact`.
 use super::{mutate, tables, R_TH};
 use crate::simd::Simd;
 use crate::v8::{M8, V8};
@@ -54,6 +60,9 @@ pub(crate) trait Fl: Copy {
     fn ge(self, o: Self) -> Self::M;
     fn eq(self, o: Self) -> Self::M;
     fn and(m: Self::M, n: Self::M) -> Self::M;
+    fn or(m: Self::M, n: Self::M) -> Self::M;
+    /// whether m is set on any lane
+    fn any(m: Self::M) -> bool;
     /// per lane a where m is set, b elsewhere
     fn sel(m: Self::M, a: Self, b: Self) -> Self;
 }
@@ -103,6 +112,14 @@ impl Fl for f64 {
     #[inline(always)]
     fn and(m: bool, n: bool) -> bool {
         m && n
+    }
+    #[inline(always)]
+    fn or(m: bool, n: bool) -> bool {
+        m || n
+    }
+    #[inline(always)]
+    fn any(m: bool) -> bool {
+        m
     }
     #[inline(always)]
     fn sel(m: bool, a: f64, b: f64) -> f64 {
@@ -159,6 +176,14 @@ impl<S: Simd> Fl for V8<S> {
     #[inline(always)]
     fn and(m: M8<S>, n: M8<S>) -> M8<S> {
         m.and(n)
+    }
+    #[inline(always)]
+    fn or(m: M8<S>, n: M8<S>) -> M8<S> {
+        m.or(n)
+    }
+    #[inline(always)]
+    fn any(m: M8<S>) -> bool {
+        m.bits() != 0
     }
     #[inline(always)]
     fn sel(m: M8<S>, a: Self, b: Self) -> Self {
@@ -285,10 +310,10 @@ const G4: f64 = p2(-54) * (1.0 - p2(-40));
 const X_LOW: f64 = p2(20);
 
 /// The fast reduction of x by k pi/2 for k = round(RN(x_0 RN(2/pi))) != 0 and finite parts with |x_0| <= 2^52, on L
-/// limbs: (r, ok), r the n greedy parts of x - k pi/2 that `reduce` returns where ok is set (see the module's comment);
-/// elsewhere r is to be discarded.
+/// limbs: (k', r, ok), where ok is set k' the multiple of pi/2 that `reduce` removes, k or k corrected, and r the n
+/// greedy parts it returns (see the module's comment); elsewhere k' and r are to be discarded.
 #[inline(always)]
-pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> ([T; N], T::M) {
+pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> (T, [T; N], T::M) {
     let (a, b) = if mutate::on(mutate::REDUCE_FAST_PI) {
         const { digits::<L>(2) }
     } else {
@@ -321,11 +346,25 @@ pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> (
     for j in 0..L {
         d[j] = d[j].sub(khs.mul(T::splat(a[j]))).sub(kl.mul(T::splat(b[j])));
     }
-    // carries: |D_j| <= U_(j-1)/2 for j >= 1
-    for j in (1..L).rev() {
-        let (h, r) = split(d[j], -26 * j as i32);
-        d[j] = r;
-        d[j - 1] = d[j - 1].add(h);
+    carries(&mut d);
+    // `reduce`'s correction of k where |RN(v)| > 0.7854: a = RN(D_0 + D_1) is within 2^-49 of RN(v) for |a| < 2.8, so
+    // a 2^-47 from 0.7854 decides whether it corrects, and round(RN(a c)) is its k_2 where RN(a c) is 2^-46 from 1.5
+    let v0 = d[0].add(d[1]);
+    let a0 = v0.abs();
+    let fix = a0.ge(T::splat(R_TH + p2(-47)));
+    let t = v0.mul(T::splat(tables::TWO_OVER_PI));
+    let half = t.abs().sub(T::splat(1.5)).abs().ge(T::splat(p2(-46)));
+    let corr = T::and(fix, T::and(T::splat(2.8).gt(a0), half));
+    ok = T::and(ok, T::or(T::splat(R_TH - p2(-47)).ge(a0), corr));
+    let mut k = k;
+    if T::any(fix) {
+        let k2 = T::sel(corr, round_away(t), T::splat(0.0));
+        d[0] = d[0].sub(k2.mul(c0));
+        for j in 1..L {
+            d[j] = d[j].sub(k2.mul(T::splat(b[j])));
+        }
+        carries(&mut d);
+        k = k.add(k2);
     }
     let eps = if mutate::on(mutate::REDUCE_FAST_EPS) {
         T::splat(0.0)
@@ -334,8 +373,8 @@ pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> (
             .add(T::splat((N - 1) as f64))
             .mul(T::splat(p2(-26 * L as i32 - 1)))
     };
-    let check = !mutate::on(mutate::REDUCE_FAST_UNCHECKED);
-    // pass i: the terms d[i..L] (the limbs for i = 0, then the errors of pass i - 1) summed from the last up
+    // pass i: the terms d[i..L] (the limbs for i = 0, then the errors of pass i - 1) summed from the last up into r_i,
+    // their errors left in d[i + 1..L]
     let mut r = [T::splat(0.0); N];
     for (i, ri) in r.iter_mut().enumerate() {
         let mut s = d[L - 1];
@@ -349,21 +388,34 @@ pub(crate) fn fast<T: Fl, const N: usize, const L: usize>(x: &[T; N], k: T) -> (
             d[j + 1] = e;
         }
         *ri = s;
-        if check {
-            let mut bound = eps;
-            for e in &d[i + 1..] {
-                bound = bound.add(e.abs());
-            }
-            let p = s.pow2_floor();
-            let g = T::sel(s.abs().eq(p), p.mul(T::splat(G4)), p.mul(T::splat(G2)));
+    }
+    // the test, from the last part up: bound >= |E_(i+1)| + eps, as E_i = r_i + E_(i+1)
+    if !mutate::on(mutate::REDUCE_FAST_UNCHECKED) {
+        let mut bound = eps;
+        for e in &d[N..] {
+            bound = bound.add(e.abs());
+        }
+        for ri in r.iter().rev() {
+            let p = ri.pow2_floor();
+            let g = T::sel(ri.abs().eq(p), p.mul(T::splat(G4)), p.mul(T::splat(G2)));
             ok = T::and(ok, g.gt(bound));
+            bound = bound.add(ri.abs());
         }
     }
-    ok = T::and(ok, T::splat(R_TH).ge(r[0].abs()));
     if mutate::on(mutate::REDUCE_TAIL) {
         r[N - 1] = T::splat(0.0);
     }
-    (r, ok)
+    (k, r, ok)
+}
+
+/// the carries of the limbs: |D_j| <= U_(j-1)/2 for j >= 1, exactly, for |D_j| < 2^53 U_j
+#[inline(always)]
+fn carries<T: Fl, const L: usize>(d: &mut [T; L]) {
+    for j in (1..L).rev() {
+        let (h, r) = split(d[j], -26 * j as i32);
+        d[j] = r;
+        d[j - 1] = d[j - 1].add(h);
+    }
 }
 
 /// limbs of the fast reduction for n parts: 26 L bits below the binary point, about 53 n + 51 + 49 for n = 2 and 4 and

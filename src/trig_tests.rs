@@ -830,17 +830,17 @@ fn trig_od_accuracy() {
 fn reduce_parts(x: &[f64]) -> (u32, Vec<f64>) {
     match x.len() {
         2 => {
-            let (q, r) = crate::trig::reduce::<2>(&[x[0], x[1]]);
+            let (q, r) = crate::trig::reduce::<2, 8>(&[x[0], x[1]]);
             (q, r.to_vec())
         }
         4 => {
-            let (q, r) = crate::trig::reduce::<4>(&[x[0], x[1], x[2], x[3]]);
+            let (q, r) = crate::trig::reduce::<4, 12>(&[x[0], x[1], x[2], x[3]]);
             (q, r.to_vec())
         }
         _ => {
             let mut a = [0.0; 8];
             a.copy_from_slice(x);
-            let (q, r) = crate::trig::reduce::<8>(&a);
+            let (q, r) = crate::trig::reduce::<8, 20>(&a);
             (q, r.to_vec())
         }
     }
@@ -1003,7 +1003,7 @@ fn trig_dd_reduced_is_double_word() {
             lo: f64::from_bits(l),
         };
         assert_eq!(x.hi + x.lo, x.hi, "{x:?} is not a double-word number");
-        let (_, g) = crate::trig::reduce::<2>(&[x.hi, x.lo]);
+        let (_, g) = crate::trig::reduce_exact::<2>(&[x.hi, x.lo]);
         assert_ne!(
             g[0] + g[1],
             g[0],
@@ -1058,6 +1058,328 @@ fn trig_controls() {
         if f == 0 {
             missed.push(format!("reduction check under '{}'", mutate::NAMES[id as usize]));
         }
+    }
+    assert!(missed.is_empty(), "controls that did not fail: {missed:#?}");
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the fast reduction
+// ---------------------------------------------------------------------------------------------------------------
+
+/// k P 2^-F, k times the reduction's pi/2, exactly
+fn k_c(k: i64) -> Dy {
+    Dy {
+        neg: k < 0,
+        m: BigU(crate::trig::tables::P.to_vec()).mul_small(k.unsigned_abs()),
+        e: -(crate::trig::tables::F as i64),
+    }
+}
+
+fn sign(r: &mut Rng) -> f64 {
+    if r.next() & 1 == 1 {
+        -1.0
+    } else {
+        1.0
+    }
+}
+
+/// ulp(v) for a normal v
+fn ulp(v: f64) -> f64 {
+    f64::from_bits(v.abs().to_bits() & 0x7ff0_0000_0000_0000) * f64::EPSILON
+}
+
+/// the kinds of argument of the fast reduction's checks
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum FCat {
+    /// greedy parts, |x| from 2^-1 to 2^52
+    Wide,
+    /// |x| below 1: k = 0 and k = +-1 side by side
+    Small,
+    /// the greedy rounding of k pi/2 (k up to 2^51), of k pi/2 plus a few units of its last part (k up to 2^40), the
+    /// deepest cancellations, or of k pi/2 + t with |t| from 2^-20 to 2^-(53 (n - 1) + 20)
+    NearPi2,
+    /// k pi/2 + t, t's remainder after its part i at or within 2^-27 ulp(t_i) of the tie ulp(t_i)/2
+    NearTie,
+    /// k pi/2 +- 0.7854 (1 +- 2^-30), k up to 2^50: the correction of k
+    Edge,
+    /// parts off the ladder: a lower part above 2^20, parts that do not decrease, a subnormal lower part
+    Off,
+}
+
+const FCATS: [FCat; 6] = [
+    FCat::Wide,
+    FCat::Small,
+    FCat::NearPi2,
+    FCat::NearTie,
+    FCat::Edge,
+    FCat::Off,
+];
+
+/// k C + t, t = t_0 + ... + t_i + ulp(t_i)/2 + d with d = 0 or +-2^-(27 + m) ulp(t_i), m in [0, 40]: the remainder that
+/// the greedy rounding meets at step i is within d + ulp(x_(n-1)) of a tie. k <= 2^10 keeps ulp(x_(n-1)) below
+/// 2^-21 of the zone, as i <= n - 2 (i = 0 for n = 2).
+fn near_tie<T: Ty>(r: &mut Rng) -> T {
+    let n = T::N as i64;
+    let i = r.int(0, (n - 2).max(0)) as usize;
+    let k = (1 + r.int(0, 1 << 10)) * sign(r) as i64;
+    let mut t = vec![sign(r) * (0.1 + 0.68 * unit(r))];
+    for l in 0..i {
+        t.push(sign(r) * (1.0 + unit(r)) * ulp(t[l]) / 4.0);
+    }
+    let u = ulp(t[i]);
+    let d = match r.int(0, 3) {
+        0 => 0.0,
+        _ => sign(r) * u * 2f64.powi(-27 - r.int(0, 40) as i32),
+    };
+    let target = k_c(k)
+        .add(&Dy::sum(&t))
+        .add(&Dy::from_f64(sign(r) * u / 2.0))
+        .add(&Dy::from_f64(d));
+    greedy(&target)
+}
+
+fn fast_input<T: Ty>(r: &mut Rng, cat: FCat) -> T {
+    let n = T::N;
+    match cat {
+        FCat::Wide => greedy(&rand_r(r, -1, 51)),
+        FCat::Small => greedy(&rand_r(r, -3, -1)),
+        FCat::NearPi2 => match r.int(0, 2) {
+            0 => {
+                let k = (1i64 << r.int(0, 50)) + r.int(0, 1 << 20);
+                greedy(&k_c(k * sign(r) as i64))
+            }
+            1 => {
+                let k = (1i64 << r.int(0, 40)) + r.int(0, 1 << 10);
+                let x: T = greedy(&k_half_pi(k * sign(r) as i64));
+                let d = r.int(-3, 3) as f64 * ulp(x.parts()[n - 1]);
+                greedy(&exact(x).add(&Dy::from_f64(d)))
+            }
+            // r from 2^-20 down to past the limbs' last bit: the depths where the fast reduction runs out of bits
+            _ => {
+                let k = (1i64 << r.int(0, 40)) + r.int(0, 1 << 10);
+                let e = r.int(20, 53 * (n as i64 - 1) + 20);
+                greedy(&k_c(k * sign(r) as i64).add(&rand_at(r, -e)))
+            }
+        },
+        FCat::NearTie => near_tie(r),
+        FCat::Edge => {
+            let e = r.int(1, 50);
+            let k = r.int(1, 1 << e);
+            let off = sign(r) * R_TH * (1.0 + (2.0 * unit(r) - 1.0) * 2f64.powi(-30));
+            greedy(&k_half_pi(k * sign(r) as i64).add(&Dy::from_f64(off)))
+        }
+        FCat::Off => {
+            let mut p = vec![0.0; n];
+            p[0] = sign(r) * (1.0 + unit(r)) * 2f64.powi(r.int(0, 40) as i32);
+            match r.int(0, 2) {
+                0 => p[1] = sign(r) * (1.0 + unit(r)) * 2f64.powi(r.int(19, 40) as i32),
+                1 => {
+                    for v in p.iter_mut().skip(1) {
+                        *v = sign(r) * unit(r) * 2f64.powi(-r.int(0, 60) as i32);
+                    }
+                }
+                _ => p[n - 1] = sign(r) * f64::from_bits(1 + r.next() % (1 << 52)),
+            }
+            T::from_parts(&p)
+        }
+    }
+}
+
+/// vectors of 8 arguments with their kinds: of one kind on every fourth vector, of a kind per lane on the others
+fn fast_vectors<T: Ty>(n: usize, seed: u64) -> Vec<[(T, FCat); 8]> {
+    let mut r = Rng::new(seed ^ (T::N as u64) << 40);
+    (0..n)
+        .map(|v| {
+            let one = FCATS[r.int(0, 5) as usize];
+            std::array::from_fn(|_| {
+                let cat = if v % 4 == 0 { one } else { FCATS[r.int(0, 5) as usize] };
+                (fast_input(&mut r, cat), cat)
+            })
+        })
+        .collect()
+}
+
+fn parts_n<T: Ty, const N: usize>(x: T) -> [f64; N] {
+    x.parts().try_into().unwrap()
+}
+
+/// the counts of a run of the fast reduction, by kind of argument
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+struct FastCount {
+    /// lanes with k != 0
+    k: usize,
+    /// of those, the lanes the fast reduction decides
+    decided: usize,
+    /// lanes whose `reduce` (scalar) differs from `reduce_exact` in any bit of q or r
+    scalar_bad: usize,
+}
+
+/// The scalar fast reduction on vectors of arguments: per kind, the lanes with k != 0, those it decides, and the
+/// lanes where `reduce` differs from `reduce_exact`
+fn fast_counts<T: Ty, const N: usize, const L: usize>(vs: &[[(T, FCat); 8]]) -> Vec<(FCat, FastCount)> {
+    let mut c: Vec<(FCat, FastCount)> = FCATS.iter().map(|&f| (f, FastCount::default())).collect();
+    for v in vs {
+        for &(x, cat) in v {
+            let p = parts_n::<T, N>(x);
+            let row = &mut c.iter_mut().find(|e| e.0 == cat).unwrap().1;
+            let k = (p[0] * crate::trig::tables::TWO_OVER_PI).round();
+            if k != 0.0 {
+                row.k += 1;
+                row.decided += crate::trig::fast_reduce::fast::<f64, N, L>(&p, k).2 as usize;
+            }
+            let (a, b) = (crate::trig::reduce::<N, L>(&p), crate::trig::reduce_exact::<N>(&p));
+            let same = a.0 == b.0 && a.1.iter().zip(&b.1).all(|(u, v)| u.to_bits() == v.to_bits());
+            row.scalar_bad += !same as usize;
+        }
+    }
+    c
+}
+
+/// by kind: lanes whose q or r differs from `reduce_exact`, lanes whose decision differs from the scalar one
+type LaneRows = Vec<(FCat, usize, usize)>;
+
+/// a kernel: the lanes' reduction on the vectors, (lanes whose q or r differs from `reduce_exact` in any bit, lanes
+/// whose decision differs from the scalar fast reduction's), by kind
+#[derive(Clone)]
+struct FastLanes<const N: usize, const L: usize>(Vec<[([f64; N], FCat); 8]>);
+
+impl<const N: usize, const L: usize> crate::simd::Kernel for FastLanes<N, L> {
+    type Output = LaneRows;
+    #[inline(always)]
+    fn run<S: crate::simd::Simd>(self) -> Self::Output {
+        use crate::v8::V8;
+        let mut out: LaneRows = FCATS.iter().map(|&f| (f, 0, 0)).collect();
+        for v in &self.0 {
+            let c: [V8<S>; N] = std::array::from_fn(|i| V8::from_array(std::array::from_fn(|l| v[l].0[i])));
+            let (q, r) = crate::trig::reduce_lanes::<S, N, L>(&c);
+            let (q, r) = (q.to_array(), r.map(|x| x.to_array()));
+            let t = c[0].mul(V8::splat(crate::trig::tables::TWO_OVER_PI));
+            let k = crate::trig::fast_reduce::round_away(t);
+            let ok = crate::trig::fast_reduce::fast::<V8<S>, N, L>(&c, k).2.bits();
+            let k = k.to_array();
+            for l in 0..8 {
+                let (x, cat) = v[l];
+                let (qe, re) = crate::trig::reduce_exact::<N>(&x);
+                let same = q[l] == qe as f64 && (0..N).all(|i| r[i][l].to_bits() == re[i].to_bits());
+                let one = k[l] != 0.0 && crate::trig::fast_reduce::fast::<f64, N, L>(&x, k[l]).2;
+                let row = out.iter_mut().find(|e| e.0 == cat).unwrap();
+                row.1 += !same as usize;
+                row.2 += (k[l] != 0.0 && one != (ok >> l & 1 == 1)) as usize;
+            }
+        }
+        out
+    }
+}
+
+/// per backend, by kind: lanes that differ from `reduce_exact`, and decisions that differ from the scalar ones
+fn fast_lanes<T: Ty, const N: usize, const L: usize>(vs: &[[(T, FCat); 8]]) -> Vec<(&'static str, LaneRows)> {
+    let v = vs.iter().map(|v| v.map(|(x, c)| (parts_n::<T, N>(x), c))).collect();
+    crate::simd::for_each_available(FastLanes::<N, L>(v))
+}
+
+/// The fast reduction, scalar and on the lanes of every backend the CPU runs, against `reduce_exact`, bit for bit, on
+/// vectors that mix the kinds of `FCat` lane by lane; and the lanes' decisions are the scalar ones. TRIG_REPORT=1
+/// prints the share of the lanes with k != 0 that the fast reduction decides, by kind.
+#[test]
+fn trig_fast_reduce_bitwise() {
+    fn check<T: Ty, const N: usize, const L: usize>(n: usize) {
+        let vs = fast_vectors::<T>(samples(n), 17);
+        let counts = fast_counts::<T, N, L>(&vs);
+        for (cat, c) in &counts {
+            if report() {
+                println!(
+                    "{} {cat:?}: {} of {} lanes with k != 0 decided ({:.4}%)",
+                    T::NAME,
+                    c.decided,
+                    c.k,
+                    100.0 * c.decided as f64 / c.k.max(1) as f64
+                );
+            }
+            assert_eq!(
+                c.scalar_bad,
+                0,
+                "{} {cat:?}: scalar `reduce` differs from `reduce_exact`",
+                T::NAME
+            );
+        }
+        // the fast reduction decides almost every random argument, and leaves some of the deepest cancellations
+        let share = |f: FCat| {
+            let c = counts.iter().find(|e| e.0 == f).unwrap().1;
+            c.decided as f64 / c.k as f64
+        };
+        assert!(
+            share(FCat::Wide) > 0.999,
+            "{} decides {} of Wide",
+            T::NAME,
+            share(FCat::Wide)
+        );
+        assert!(
+            share(FCat::NearPi2) < 1.0 && share(FCat::NearTie) < 1.0,
+            "{} decides every near case",
+            T::NAME
+        );
+        for (isa, rows) in fast_lanes::<T, N, L>(&vs) {
+            for (cat, bad, decisions) in rows {
+                assert_eq!(
+                    (bad, decisions),
+                    (0, 0),
+                    "{} on {isa}, {cat:?}: lanes, decisions that differ",
+                    T::NAME
+                );
+            }
+        }
+    }
+    check::<DD, 2, 8>(400);
+    check::<QD, 4, 12>(150);
+    check::<OD, 8, 20>(60);
+}
+
+/// Controls (feature `mutate`): the fast reduction with its test skipped fails the bitwise check on the near ties and
+/// near the multiples of pi/2, with eps = 0 near the multiples, and with pi/2 two digits short on the wide arguments,
+/// scalar and on the lanes of every backend
+#[cfg(feature = "mutate")]
+#[test]
+fn trig_fast_reduce_controls() {
+    fn bad<T: Ty, const N: usize, const L: usize>(id: u32, n: usize, cats: &[FCat]) -> Vec<String> {
+        let vs = fast_vectors::<T>(n, 23);
+        mutate::set(id);
+        let counts = fast_counts::<T, N, L>(&vs);
+        let lanes = fast_lanes::<T, N, L>(&vs);
+        mutate::set(0);
+        let mut missed = Vec::new();
+        for &cat in cats {
+            let s = counts.iter().find(|e| e.0 == cat).unwrap().1.scalar_bad;
+            println!("'{}': {} {cat:?}: scalar {s}", mutate::NAMES[id as usize], T::NAME);
+            if s == 0 {
+                missed.push(format!(
+                    "{} scalar {cat:?} under '{}'",
+                    T::NAME,
+                    mutate::NAMES[id as usize]
+                ));
+            }
+            for (isa, rows) in &lanes {
+                let b = rows.iter().find(|e| e.0 == cat).unwrap().1;
+                println!("'{}': {} {cat:?}: {isa} {b}", mutate::NAMES[id as usize], T::NAME);
+                if b == 0 {
+                    missed.push(format!(
+                        "{} {isa} {cat:?} under '{}'",
+                        T::NAME,
+                        mutate::NAMES[id as usize]
+                    ));
+                }
+            }
+        }
+        missed
+    }
+    let mut missed = Vec::new();
+    for (id, cats) in [
+        (mutate::REDUCE_FAST_UNCHECKED, &[FCat::NearTie, FCat::NearPi2][..]),
+        (mutate::REDUCE_FAST_EPS, &[FCat::NearPi2][..]),
+        (mutate::REDUCE_FAST_PI, &[FCat::Wide][..]),
+    ] {
+        missed.extend(bad::<DD, 2, 8>(id, 400, cats));
+        missed.extend(bad::<QD, 4, 12>(id, 300, cats));
+        missed.extend(bad::<OD, 8, 20>(id, 300, cats));
     }
     assert!(missed.is_empty(), "controls that did not fail: {missed:#?}");
 }
