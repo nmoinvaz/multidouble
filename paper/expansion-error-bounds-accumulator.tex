@@ -80,7 +80,7 @@ ADDF stops at the first zero part of $r^{(l-1)}$, so the levels of ADDF$(r^{(l-1
 terms, VecSum gives a nonzero $v_j$, $j \ge 1$, only after a nonzero term, and a step of the second pass with $v_j = 0$
 neither emits nor loses. By Theorem~\ref{thm:t1}(a) a loss needs $n$ nonzero $v_1, \dots, v_n$, so ADDF$(r^{(l-1)},
 s_l)$ is exact for $l \le n-1$ (for $l = n-1$, a loss would need $v_n \ne 0$, while its last term $s_n$ of VecSum is
-zero), and FINISH's result is $R_n$ of the levels of the last ADDF, whose exact sum is $S$. Theorem~\ref{thm:t1}(b) with
+zero), and FINISH's result is $\Ren_n$ of the levels of the last ADDF, whose exact sum is $S$. Theorem~\ref{thm:t1}(b) with
 $k = 0$, and $|v_0| \le |S| + \sum_{j \ge 1}|v_j|$, give $|S - \sum x| \le u^n|S| + \Phi$, the $V_j$ bounding
 $|v_j|$ as in Lemma~\ref{lem:g}. Then $|Z - \sum x| \le |Z - S| + u^n|S| + \Phi$ and $|S| \le |Z| + \bar E_{\rm lev} +
 E_{\rm prod}$. The asymptotic form is the $l = 0$ term of $\bar E_{\rm lev}$ ($\tau_0 = 1 + u$ for MUL by
@@ -128,7 +128,7 @@ Ogita, Rump and Oishi's SumK~\cite{ORO05}, in its vertical form (their Algorithm
 that are single floating-point numbers, rounded at the end to one number. Their bound $\gamma_{2N-2}^{J}\sum|p_i|$
 ($N$ summands, $J$ levels) has the same growth in $N$, and they note that its factors are conservative. Their DotK
 splits each product of two floating-point numbers into two summands for SumK, with the bound $(\mathrm{eps} +
-2\gamma_{4N-2}^2)|x^Ty| + \gamma_{4N-2}^J|x^T||y|$ (their Proposition~5.11), the form of Theorem~\ref{thm:acc}. The
+2\gamma_{4N-2}^2)|x^\top y| + \gamma_{4N-2}^J|x^\top||y|$ (their Proposition~5.11), the form of Theorem~\ref{thm:acc}. The
 accumulator here deposits a term into every level, which their analysis by repeated VecSum does not cover, and returns
 $n$ parts, whence the leading term $u^n|Z|$. A summand of $p$ bits can feed only the two or three levels below it
 (its lowest bit is about $u$ times its size), so the construction above needs terms with parts at every level.

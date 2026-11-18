@@ -4,7 +4,7 @@
 The sloppy multiply of n-part expansions (SLOPPY-MUL there) keeps levels 0..n-2 error-free (every deposit carried down
 with two-sums to level n-2) and sums level n-1 in plain arithmetic: the products of orders n-1 and n by a chain of fused
 multiply-adds, the errors of the products of order n-2, and the carries out of level n-2. The products of order n+1
-and above are dropped. Its n levels go to the renormalization R_n, which is exact for n terms (Theorem 9(a)). So its
+and above are dropped. Its n levels go to the renormalization RENORM_n, which is exact for n terms (Theorem 9(a)). So its
 error is the roundings at level n-1 and the dropped products. Lemma 11 with level n-1 as the plain level gives
 (Theorem 30(a) and (b))
 
