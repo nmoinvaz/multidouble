@@ -1,20 +1,29 @@
-//! Fields: N = 8 B values of a lane type as B lane vectors (`Fl<T, B>`; a function on a grid of 8 B points, or 8 B
-//! independent problems), with the power-series arithmetic that series methods for ODEs need on them: Cauchy products
-//! of coefficient sequences (`cs`, `cs_range`, `cs_w`), Horner evaluation (`horner`), and a constant double-double
-//! matrix applied to a field (`DMat`, for instance a spectral derivative). Every operation is the lane type's, so code
-//! written over `Fl<T, B>` runs with values, dual numbers or quad-double lanes alike (`dual::Lane`).
+//! Fields hold N = 8 B values of a lane type as B lane vectors (`Fl<T, B>`), for a function on a grid of 8 B points or
+//! for 8 B independent problems. They carry the power-series arithmetic that series methods for ODEs need on them.
 //!
-//! The products accumulate with the lane type's dot accumulator (`Lane::acc`), in the order of the index; for the f64
+//! * Cauchy products of coefficient sequences (`cs`, `cs_range`, `cs_w`).
+//! * Horner evaluation (`horner`).
+//! * A constant double-double matrix applied to a field (`DMat`), for instance a spectral derivative.
+//!
+//! Every operation is the lane type's, so code written over `Fl<T, B>` runs with values, dual numbers or quad-double
+//! lanes alike (`dual::Lane`).
+//!
+//! The products accumulate with the lane type's dot accumulator (`Lane::acc`), in the order of the index. For the f64
 //! lanes (`VAL_F64` or `TAN_F64`) the B lane vectors' accumulations are interleaved, since a single f64 chain is
-//! latency-bound, and each still sums its terms in index order. `cs_into`, `cs_range_into` and `cs_w_into` write the
-//! same sums, bitwise, into a caller's field, with the accumulator and the terms borrowed (`Lane::acc_mut`), which
-//! for jet lanes saves copying kilobytes per term. `cs_lane_into` and `cs_w_lane_into` are one lane vector of them,
-//! for a caller that sums the lane vectors on separate threads, and `cs_par`, `cs_range_par` and `cs_w_par` do so for
-//! long jet sums (`cs_splits`), bitwise the same. The order-k sums of a series formed one jet coefficient at a time
-//! (`cs_at`, `cs_range_at`, `cs_w_at`) have the same pieces: one lane vector (`cs_lane_at`, `cs_w_lane_at`), and the
-//! lane vectors on separate threads (`cs_at_par`, `cs_range_at_par`, `cs_w_at_par`, when `cs_at_splits`, which weighs
-//! a product by its precision's cost), bitwise the same. A matrix product is `MatLane::dmat_apply`: the double-double
-//! columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
+//! latency-bound, and each still sums its terms in index order. The variants below give the same sums, bitwise.
+//!
+//! * `cs_into`, `cs_range_into` and `cs_w_into` write the sums into a caller's field, with the accumulator and the
+//!   terms borrowed (`Lane::acc_mut`), which for jet lanes saves copying kilobytes per term.
+//! * `cs_lane_into` and `cs_w_lane_into` form one lane vector of them, for a caller that sums the lane vectors on
+//!   separate threads.
+//! * `cs_par`, `cs_range_par` and `cs_w_par` sum the lane vectors on separate threads for long jet sums (`cs_splits`).
+//! * The order-k sums of a series formed one jet coefficient at a time (`cs_at`, `cs_range_at`, `cs_w_at`) have the
+//!   same pieces, one lane vector (`cs_lane_at`, `cs_w_lane_at`) and the lane vectors on separate threads (`cs_at_par`,
+//!   `cs_range_at_par`, `cs_w_at_par`). These split when `cs_at_splits`, which weighs a product by its precision's
+//!   cost.
+//!
+//! A matrix product is `MatLane::dmat_apply`. By default it takes the double-double columns through the accumulator,
+//! and the f64 lanes take the columns' f64 copy.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
 use crate::dv::{DotAcc, DV};
@@ -29,11 +38,11 @@ use crate::v8::V8;
 use rayon::prelude::*;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// 8 B values of the lane type T as B lane vectors: value j is lane j % 8 of vector j / 8.
+/// 8 B values of the lane type T as B lane vectors. Value j is lane j % 8 of vector j / 8.
 #[derive(Clone, Copy, Debug)]
 pub struct Fl<T: Lane, const B: usize>(pub [T; B]);
 
-/// The lane type's double-double vector (constants and values of `Fl<T, B>` come as these)
+/// The lane type's double-double vector, in which the constants and values of `Fl<T, B>` come.
 type Dv<T> = DV<<T as Lane>::S>;
 
 macro_rules! fl_binop {
@@ -77,7 +86,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
     pub fn splat(x: DD) -> Self {
         Fl([T::splat(x); B])
     }
-    /// a constant field (zero tangents)
+    /// A constant field, with zero tangents.
     #[inline(always)]
     pub fn cst(c: &Fl<Dv<T>, B>) -> Self {
         let mut r = [T::zero(); B];
@@ -103,7 +112,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// times a power of two, every part exact (`Lane::mul_pwr2`): bitwise `mulf(s)` for such s
+    /// Times a power of two, every part exact (`Lane::mul_pwr2`). It is bitwise `mulf(s)` for such s.
     #[inline(always)]
     pub fn mul_pwr2(self, s: f64) -> Self {
         let mut r = self.0;
@@ -112,7 +121,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// times a lane-constant scalar of the lane type (e.g. a frequency that carries a tangent)
+    /// Times a lane-constant scalar of the lane type, e.g. a frequency that carries a tangent.
     #[inline(always)]
     pub fn mul_t(self, s: T) -> Self {
         let mut r = self.0;
@@ -137,7 +146,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// times a parameter constant (`Lane::mulp`)
+    /// Times a parameter constant (`Lane::mulp`).
     pub fn mulp(self, p: T::P) -> Self {
         let mut r = self.0;
         for b in 0..B {
@@ -145,44 +154,44 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// coefficient k of every lane of `from` into this field's, the others unchanged (`Lane::copy_at`)
+    /// Coefficient k of every lane of `from` into this field's, the others unchanged (`Lane::copy_at`).
     #[inline(always)]
     pub fn copy_at(&mut self, from: &Self, k: usize) {
         for b in 0..B {
             T::copy_at(&from.0[b], k, &mut self.0[b]);
         }
     }
-    /// coefficient k of `self * o` into coefficient k of every lane of `out`, the others unchanged (`Lane::mul_at`):
-    /// one order of a product whose lower orders `out` keeps
+    /// Coefficient k of `self * o` into coefficient k of every lane of `out`, the others unchanged (`Lane::mul_at`). It
+    /// is one order of a product whose lower orders `out` keeps.
     #[inline(always)]
     pub fn mul_at(&self, o: &Self, k: usize, out: &mut Self) {
         for b in 0..B {
             T::mul_at(&self.0[b], &o.0[b], k, &mut out.0[b]);
         }
     }
-    /// coefficient k of `self.mul_t(s)` into coefficient k of every lane of `out` (`Lane::mul_at`)
+    /// Coefficient k of `self.mul_t(s)` into coefficient k of every lane of `out` (`Lane::mul_at`).
     #[inline(always)]
     pub fn mul_t_at(&self, s: &T, k: usize, out: &mut Self) {
         for b in 0..B {
             T::mul_at(&self.0[b], s, k, &mut out.0[b]);
         }
     }
-    /// coefficient k of `self / o` into coefficient k of every lane of `out`, from the quotient's coefficients
-    /// 0..k - 1 already in `out` (`Lane::div_at`)
+    /// Coefficient k of `self / o` into coefficient k of every lane of `out`, from the quotient's coefficients 0..k - 1
+    /// already in `out` (`Lane::div_at`).
     #[inline(always)]
     pub fn div_at(&self, o: &Self, k: usize, out: &mut Self) {
         for b in 0..B {
             T::div_at(&self.0[b], &o.0[b], k, &mut out.0[b]);
         }
     }
-    /// coefficient k of `self.mulp(p)` into coefficient k of every lane of `out` (`Lane::mulp_at`)
+    /// Coefficient k of `self.mulp(p)` into coefficient k of every lane of `out` (`Lane::mulp_at`).
     #[inline(always)]
     pub fn mulp_at(&self, p: &T::P, k: usize, out: &mut Self) {
         for b in 0..B {
             T::mulp_at(&self.0[b], p, k, &mut out.0[b]);
         }
     }
-    /// plus a parameter constant (`Lane::addp`)
+    /// Plus a parameter constant (`Lane::addp`).
     pub fn addp(self, p: T::P) -> Self {
         let mut r = self.0;
         for b in 0..B {
@@ -190,7 +199,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// coefficient k of every lane (`Lane::coef`)
+    /// Coefficient k of every lane (`Lane::coef`).
     pub fn coef(&self, k: usize) -> Fl<Dv<T>, B> {
         let mut r = [DV::zero(); B];
         for b in 0..B {
@@ -198,13 +207,13 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// set coefficient k of every lane (`Lane::set_coef`, jets)
+    /// Sets coefficient k of every lane (`Lane::set_coef`, jets).
     pub fn set_coef(&mut self, k: usize, c: &Fl<Dv<T>, B>) {
         for b in 0..B {
             self.0[b].set_coef(k, c.0[b]);
         }
     }
-    /// coefficient k of every lane in quad-double (`Lane::coef_qd`)
+    /// Coefficient k of every lane in quad-double (`Lane::coef_qd`).
     pub fn coef_qd(&self, k: usize) -> Fl<QV<T::S>, B> {
         let mut r = [QV::zero(); B];
         for b in 0..B {
@@ -212,13 +221,13 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// set coefficient k of every lane from quad-double (`Lane::set_coef_qd`, jets)
+    /// Sets coefficient k of every lane from quad-double (`Lane::set_coef_qd`, jets).
     pub fn set_coef_qd(&mut self, k: usize, c: &Fl<QV<T::S>, B>) {
         for b in 0..B {
             self.0[b].set_coef_qd(k, c.0[b]);
         }
     }
-    /// coefficient k of every lane in octo-double (`Lane::coef_od`)
+    /// Coefficient k of every lane in octo-double (`Lane::coef_od`).
     pub fn coef_od(&self, k: usize) -> Fl<OV<T::S>, B> {
         let mut r = [OV::zero(); B];
         for b in 0..B {
@@ -226,7 +235,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// set coefficient k of every lane from octo-double (`Lane::set_coef_od`, jets)
+    /// Sets coefficient k of every lane from octo-double (`Lane::set_coef_od`, jets).
     pub fn set_coef_od(&mut self, k: usize, c: &Fl<OV<T::S>, B>) {
         for b in 0..B {
             self.0[b].set_coef_od(k, c.0[b]);
@@ -246,18 +255,18 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// tangent k of every lane rounded to double-double (`Lane::tan_k`)
+    /// Tangent k of every lane rounded to double-double (`Lane::tan_k`).
     pub fn tan_k(&self, k: usize) -> Fl<Dv<T>, B> {
         Fl(std::array::from_fn(|b| self.0[b].tan_k(k)))
     }
-    /// value v and tangents t of every lane, exactly (`Lane::from_vt_n`)
+    /// Value v and tangents t of every lane, exactly (`Lane::from_vt_n`).
     pub fn from_vt_n(v: &Fl<Dv<T>, B>, t: &[Fl<Dv<T>, B>]) -> Self {
         Fl(std::array::from_fn(|b| {
             let tb: Vec<Dv<T>> = t.iter().map(|f| f.0[b]).collect();
             T::from_vt_n(v.0[b], &tb)
         }))
     }
-    /// f64 tangent k of every value, as an `F8` field (the `TAN_F64` lane types)
+    /// The f64 tangent k of every value as an `F8` field (the `TAN_F64` lane types).
     pub fn tan64(&self, k: usize) -> Fl<F8<T::S>, B> {
         let mut r = [F8(V8::zero()); B];
         for b in 0..B {
@@ -265,7 +274,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         }
         Fl(r)
     }
-    /// set f64 tangent k of every value from an `F8` field, the inverse of `tan64`, on the `TAN_F64` lane types
+    /// Sets the f64 tangent k of every value from an `F8` field, the inverse of `tan64`, on the `TAN_F64` lane types
     /// (`Fu`, `Dtn`, `Fun`) with k < `Lane::NT`. Any other lane type, or a k past the last tangent, panics.
     pub fn set_tan64(&mut self, k: usize, t: &Fl<F8<T::S>, B>) {
         assert!(
@@ -277,7 +286,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
             self.0[b].set_tan64(k, t.0[b].0);
         }
     }
-    /// the unit field e_j, one at value j and zero at the others, as constants of the lane type (zero tangents)
+    /// The unit field e_j, one at value j and zero at the others, as constants of the lane type (zero tangents).
     pub fn unit(j: usize) -> Self {
         assert!(j < 8 * B, "Fl::unit: value {j} of a field of {} values", 8 * B);
         let mut e = [0.0; 8];
@@ -289,10 +298,9 @@ impl<T: Lane, const B: usize> Fl<T, B> {
         });
         r
     }
-    /// values v with the tangent e_j (`unit`), the seed of a Jacobian column in forward mode. It is `from_vt(v, e_j)`,
-    /// so it sets the tangent of `Du` and `Qu`, the real part of `Dc`'s, order 1 of a jet, and the first f64 tangent
-    /// of `Fu`, `Dtn` and `Fun`, whose other tangents `set_tan64` with `unit` seeds. A lane type without a tangent
-    /// panics.
+    /// Values v with the tangent e_j (`unit`), the seed of a Jacobian column in forward mode. It is `from_vt(v, e_j)`,
+    /// so it sets the tangent of `Du` and `Qu`, the real part of `Dc`'s, order 1 of a jet, and the first f64 tangent of
+    /// `Fu`, `Dtn` and `Fun`, whose other tangents `set_tan64` with `unit` seeds. A lane type without a tangent panics.
     pub fn unit_tangent(v: &Fl<Dv<T>, B>, j: usize) -> Self {
         assert!(T::TANGENT, "Fl::unit_tangent: a lane type without a tangent");
         Self::from_vt(v, &Fl::<Dv<T>, B>::unit(j))
@@ -300,7 +308,7 @@ impl<T: Lane, const B: usize> Fl<T, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
-    /// the real part of the tangent (`Lane::tan`)
+    /// The real part of the tangent (`Lane::tan`).
     pub fn tan_re(&self) -> Fl<DV<S>, B> {
         let mut r = [DV::zero(); B];
         for b in 0..B {
@@ -308,7 +316,7 @@ impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
         }
         Fl(r)
     }
-    /// the imaginary part of the tangent
+    /// The imaginary part of the tangent.
     pub fn tan_im(&self) -> Fl<DV<S>, B> {
         let mut r = [DV::zero(); B];
         for b in 0..B {
@@ -316,7 +324,7 @@ impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
         }
         Fl(r)
     }
-    /// a field from its values and the real and imaginary parts of its tangent
+    /// A field from its values and the real and imaginary parts of its tangent.
     pub fn from_vri(v: &Fl<DV<S>, B>, re: &Fl<DV<S>, B>, im: &Fl<DV<S>, B>) -> Self {
         let mut r = [Dc::zero(); B];
         for b in 0..B {
@@ -331,8 +339,8 @@ impl<S: Simd, const B: usize> Fl<Dc<S>, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<Qu<S>, B> {
-    /// a field from quad-double values and tangents, exactly (`from_vt` takes them in double-double), for instance the
-    /// values with the tangent `Fl::<QV<S>, B>::unit(j)`, a quad-double Jacobian column's seed. `coef_qd(0)` and
+    /// A field from quad-double values and tangents, exactly, where `from_vt` takes them in double-double. An example
+    /// is the values with the tangent `Fl::<QV<S>, B>::unit(j)`, a quad-double Jacobian column's seed. `coef_qd(0)` and
     /// `coef_qd(1)` read them back.
     pub fn from_vt_qd(v: &Fl<QV<S>, B>, t: &Fl<QV<S>, B>) -> Self {
         let mut r = [Qu::zero(); B];
@@ -344,9 +352,9 @@ impl<S: Simd, const B: usize> Fl<Qu<S>, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<Ou<S>, B> {
-    /// a field from octo-double values and tangents, exactly (`from_vt` takes them in double-double), for instance the
-    /// values with the tangent `Fl::<OV<S>, B>::unit(j)`, an octo-double Jacobian column's seed. `coef_od(0)` and
-    /// `coef_od(1)` read them back.
+    /// A field from octo-double values and tangents, exactly, where `from_vt` takes them in double-double. An example
+    /// is the values with the tangent `Fl::<OV<S>, B>::unit(j)`, an octo-double Jacobian column's seed. `coef_od(0)`
+    /// and `coef_od(1)` read them back.
     pub fn from_vt_od(v: &Fl<OV<S>, B>, t: &Fl<OV<S>, B>) -> Self {
         let mut r = [Ou::zero(); B];
         for b in 0..B {
@@ -357,7 +365,7 @@ impl<S: Simd, const B: usize> Fl<Ou<S>, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<DV<S>, B> {
-    /// from 8 B values (hi, lo)
+    /// From 8 B values (hi, lo).
     pub fn load(hi: &[f64], lo: &[f64]) -> Self {
         let mut r = [DV::zero(); B];
         for b in 0..B {
@@ -373,7 +381,7 @@ impl<S: Simd, const B: usize> Fl<DV<S>, B> {
     pub fn get(&self, j: usize) -> DD {
         self.0[j / 8].lane(j % 8)
     }
-    /// max |hi| over the values
+    /// The maximum |hi| over the values.
     pub fn amax(&self) -> f64 {
         let mut m = 0.0f64;
         for b in 0..B {
@@ -384,8 +392,8 @@ impl<S: Simd, const B: usize> Fl<DV<S>, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<QV<S>, B> {
-    /// from 8 B quad-double values given as their four parts' arrays (c0 + c1 + c2 + c3 each, `QV::load` per lane
-    /// vector: the parts as they are, not renormalized)
+    /// From 8 B quad-double values given as their four parts' arrays, c0 + c1 + c2 + c3 each. Each lane vector takes
+    /// the parts as they are through `QV::load`, not renormalized.
     pub fn load_parts(c0: &[f64], c1: &[f64], c2: &[f64], c3: &[f64]) -> Self {
         let mut r = [QV::zero(); B];
         for b in 0..B {
@@ -394,7 +402,7 @@ impl<S: Simd, const B: usize> Fl<QV<S>, B> {
         }
         Fl(r)
     }
-    /// the 8 B values' four parts into four arrays
+    /// The 8 B values' four parts into four arrays.
     pub fn store_parts(&self, c0: &mut [f64], c1: &mut [f64], c2: &mut [f64], c3: &mut [f64]) {
         for b in 0..B {
             let o = 8 * b;
@@ -412,9 +420,10 @@ impl<S: Simd, const B: usize> Fl<QV<S>, B> {
 }
 
 impl<S: Simd, const B: usize> Fl<OV<S>, B> {
-    /// from 8 B octo-double values given as their eight parts' arrays (part q of value j at `c[q][j]`, `OV::load` per
-    /// lane vector: the parts as they are, not renormalized). Arrays shorter than 8 B panic. It has a name of its own
-    /// so that `Fl::load_parts(..)`, the quad-double one, keeps its type inferred from where it is used.
+    /// From 8 B octo-double values given as their eight parts' arrays, with part q of value j at `c[q][j]`. Each lane
+    /// vector takes the parts as they are through `OV::load`, not renormalized. Arrays shorter than 8 B panic. It has a
+    /// name of its own so that `Fl::load_parts(..)`, the quad-double one, keeps its type inferred from where it is
+    /// used.
     pub fn load_parts_od(c: [&[f64]; 8]) -> Self {
         let mut r = [OV::zero(); B];
         for b in 0..B {
@@ -423,7 +432,7 @@ impl<S: Simd, const B: usize> Fl<OV<S>, B> {
         }
         Fl(r)
     }
-    /// the 8 B values' eight parts into eight arrays, the inverse of `load_parts_od`
+    /// The 8 B values' eight parts into eight arrays, the inverse of `load_parts_od`.
     pub fn store_parts_od(&self, c: [&mut [f64]; 8]) {
         for (q, part) in c.into_iter().enumerate() {
             for b in 0..B {
@@ -431,23 +440,23 @@ impl<S: Simd, const B: usize> Fl<OV<S>, B> {
             }
         }
     }
-    /// value j as a scalar octo-double
+    /// Value j as a scalar octo-double.
     pub fn get(&self, j: usize) -> OD {
         self.0[j / 8].lane(j % 8)
     }
 }
 
-/// Coefficient k (in the jet variable) of `cs(x, y, j)` into coefficient k of every lane of `out`, the others
-/// unchanged: on jets the terms' products of order k alone (`Lane::acc_at`), in `cs`'s order, so bit for bit `cs`'s
-/// coefficient k when x and y hold their coefficients 0..=k. A series in the jet variable is then formed one order at
-/// a time from the lower orders kept, at k + 1 products per term instead of a jet product's (N + 1) N / 2. On every
-/// other lane `out` is `cs(x, y, j)`.
+/// Coefficient k, in the jet variable, of `cs(x, y, j)` into coefficient k of every lane of `out`, the others
+/// unchanged. On jets it forms the terms' products of order k alone (`Lane::acc_at`) in `cs`'s order, so the result is
+/// bit for bit `cs`'s coefficient k when x and y hold their coefficients 0..=k. A series in the jet variable is then
+/// formed one order at a time from the lower orders kept, at k + 1 products per term instead of a jet product's (N + 1)
+/// N / 2. On every other lane `out` is `cs(x, y, j)`.
 #[inline(always)]
 pub fn cs_at<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y: &[Fl<T, B>], j: usize, k: usize) {
     cs_range_at(out, x, y, j, 0, j, k)
 }
 
-/// `cs_range(x, y, j, lo, hi)`'s coefficient k into `out`, as `cs_at`
+/// `cs_range(x, y, j, lo, hi)`'s coefficient k into `out`, as in `cs_at`.
 #[inline(always)]
 pub fn cs_range_at<T: Lane, const B: usize>(
     out: &mut Fl<T, B>,
@@ -467,7 +476,7 @@ pub fn cs_range_at<T: Lane, const B: usize>(
     }
 }
 
-/// `cs_w(x, y, j, lo, hi, w)`'s coefficient k into `out`, as `cs_at`
+/// `cs_w(x, y, j, lo, hi, w)`'s coefficient k into `out`, as in `cs_at`.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub fn cs_w_at<T: Lane, const B: usize>(
@@ -489,10 +498,10 @@ pub fn cs_w_at<T: Lane, const B: usize>(
     }
 }
 
-/// Lane vector b of `cs_range_at`: coefficient k of `sum_{i=lo..=hi} x[i].0[b] y[j-i].0[b]` into coefficient k of out,
-/// its other coefficients unchanged, bitwise `cs_range_at`'s lane vector b on a jet lane. On every other lane, out is
-/// the whole sum's lane vector b, bitwise `cs_lane_into`'s. A caller can form the B lane vectors, or the lane vectors
-/// of several independent sums, on separate threads.
+/// Lane vector b of `cs_range_at`. On a jet lane it puts coefficient k of `sum_{i=lo..=hi} x[i].0[b] y[j-i].0[b]` into
+/// coefficient k of out, its other coefficients unchanged, bitwise `cs_range_at`'s lane vector b. On every other lane,
+/// out is the whole sum's lane vector b, bitwise `cs_lane_into`'s. A caller can form the B lane vectors, or the lane
+/// vectors of several independent sums, on separate threads.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub fn cs_lane_at<T: Lane, const B: usize>(
@@ -512,8 +521,8 @@ pub fn cs_lane_at<T: Lane, const B: usize>(
     T::fin_at(&a, k, out);
 }
 
-/// Lane vector b of `cs_w_at`, coefficient k of `sum_{i=lo..=hi} (w(i) x[i].0[b]) y[j-i].0[b]`, as `cs_lane_at`. Each
-/// term weights only the coefficients 0..=k that its products read (`Lane::mulf_upto`), so the bits are the whole
+/// Lane vector b of `cs_w_at`, coefficient k of `sum_{i=lo..=hi} (w(i) x[i].0[b]) y[j-i].0[b]`, as in `cs_lane_at`.
+/// Each term weights only the coefficients 0..=k that its products read (`Lane::mulf_upto`), so the bits are the whole
 /// weighted jet's.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -535,7 +544,7 @@ pub fn cs_w_lane_at<T: Lane, const B: usize>(
     T::fin_at(&a, k, out);
 }
 
-/// Cauchy product coefficient `sum_{j=0..k} x[j] y[k-j]`
+/// The Cauchy product coefficient `sum_{j=0..k} x[j] y[k-j]`.
 #[inline(always)]
 pub fn cs<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize) -> Fl<T, B> {
     if T::VAL_F64 || T::TAN_F64 {
@@ -552,7 +561,7 @@ pub fn cs<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize) -> 
     Fl(out)
 }
 
-/// `sum_{j=lo..=hi} x[j] y[k-j]`
+/// The partial Cauchy sum `sum_{j=lo..=hi} x[j] y[k-j]`.
 #[inline(always)]
 pub fn cs_range<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize, lo: usize, hi: usize) -> Fl<T, B> {
     if T::VAL_F64 || T::TAN_F64 {
@@ -569,8 +578,8 @@ pub fn cs_range<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usiz
     Fl(out)
 }
 
-/// `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]` with exact f64 weights w(j) (small integers, as in the coefficients of a
-/// derivative)
+/// The weighted sum `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]` with exact f64 weights w(j), small integers as in the
+/// coefficients of a derivative.
 #[inline(always)]
 pub fn cs_w<T: Lane, const B: usize>(
     x: &[Fl<T, B>],
@@ -594,9 +603,9 @@ pub fn cs_w<T: Lane, const B: usize>(
     Fl(out)
 }
 
-/// sum_{j=lo..=hi} (w(j) x[j]) y[k-j] (weights only if weighted) with the B lane vectors' accumulations interleaved,
-/// for the f64 lanes, whose single accumulation chains are latency-bound; each lane vector still sums its terms in the
-/// order j = lo..=hi.
+/// The sum `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]`, weighted only if `weighted`, with the B lane vectors' accumulations
+/// interleaved. It serves the f64 lanes, whose single accumulation chains are latency-bound. Each lane vector still
+/// sums its terms in the order j = lo..=hi.
 #[inline(always)]
 fn cs_il<T: Lane, const B: usize>(
     x: &[Fl<T, B>],
@@ -624,9 +633,9 @@ fn cs_il<T: Lane, const B: usize>(
     Fl(a.map(T::fin))
 }
 
-/// `cs` into out: bitwise `cs(x, y, k)`, with the accumulator and the terms borrowed (`Lane::acc_mut`) and the sum
-/// written in place, so a jet lane's sum makes no copy of its kilobytes per term. out is borrowed apart from x and y;
-/// to write a series' own order k, split the vector (`split_at_mut`).
+/// `cs` into out, bitwise `cs(x, y, k)`, with the accumulator and the terms borrowed (`Lane::acc_mut`) and the sum
+/// written in place, so a jet lane's sum makes no copy of its kilobytes per term. `out` is borrowed apart from x and y.
+/// To write a series' own order k, split the vector (`split_at_mut`).
 ///
 /// ```
 /// use multidouble::dd::DD;
@@ -642,7 +651,7 @@ pub fn cs_into<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y: &
     cs_range_into(out, x, y, k, 0, k);
 }
 
-/// `cs_range` into out: bitwise `cs_range(x, y, k, lo, hi)`, in place as `cs_into`
+/// `cs_range` into out, bitwise `cs_range(x, y, k, lo, hi)`, in place as in `cs_into`.
 #[inline(always)]
 pub fn cs_range_into<T: Lane, const B: usize>(
     out: &mut Fl<T, B>,
@@ -661,7 +670,7 @@ pub fn cs_range_into<T: Lane, const B: usize>(
     }
 }
 
-/// `cs_w` into out: bitwise `cs_w(x, y, k, lo, hi, w)`, in place as `cs_into`
+/// `cs_w` into out, bitwise `cs_w(x, y, k, lo, hi, w)`, in place as in `cs_into`.
 #[inline(always)]
 pub fn cs_w_into<T: Lane, const B: usize>(
     out: &mut Fl<T, B>,
@@ -681,9 +690,9 @@ pub fn cs_w_into<T: Lane, const B: usize>(
     }
 }
 
-/// Lane vector b of `cs_range_into`, `sum_{j=lo..=hi} x[j].0[b] y[k-j].0[b]` into out: bitwise `cs_range`'s lane
-/// vector b on every lane type, the f64 lanes included (their interleaved sums take each vector's terms in the order
-/// j = lo..=hi too), so a caller can sum the B lane vectors on separate threads.
+/// Lane vector b of `cs_range_into`, `sum_{j=lo..=hi} x[j].0[b] y[k-j].0[b]`, into out. It is bitwise `cs_range`'s lane
+/// vector b on every lane type, the f64 lanes included, since their interleaved sums take each vector's terms in the
+/// order j = lo..=hi too. A caller can thus sum the B lane vectors on separate threads.
 #[inline(always)]
 pub fn cs_lane_into<T: Lane, const B: usize>(
     out: &mut T,
@@ -701,8 +710,8 @@ pub fn cs_lane_into<T: Lane, const B: usize>(
     *out = T::fin(a);
 }
 
-/// Lane vector b of `cs_w_into`, `sum_{j=lo..=hi} (w(j) x[j].0[b]) y[k-j].0[b]` into out: bitwise `cs_w`'s lane
-/// vector b on every lane type, as `cs_lane_into`
+/// Lane vector b of `cs_w_into`, `sum_{j=lo..=hi} (w(j) x[j].0[b]) y[k-j].0[b]`, into out. It is bitwise `cs_w`'s lane
+/// vector b on every lane type, as in `cs_lane_into`.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub fn cs_w_lane_into<T: Lane, const B: usize>(
@@ -735,8 +744,8 @@ pub fn cs_splits<T: Lane>(terms: usize) -> bool {
     T::NJ > 0 && terms * T::NJ >= CS_PAR_MIN
 }
 
-/// `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]`, weighted only if w is given, with each lane vector summed by its own rayon
-/// task. Each task enters the backend's target features again (`Simd::vectorize`).
+/// The sum `sum_{j=lo..=hi} (w(j) x[j]) y[k-j]`, weighted only if w is given, with each lane vector summed by its own
+/// rayon task. Each task enters the backend's target features again (`Simd::vectorize`).
 fn cs_split<T: Lane, const B: usize>(
     x: &[Fl<T, B>],
     y: &[Fl<T, B>],
@@ -775,7 +784,7 @@ pub fn cs_par<T: Lane, const B: usize>(x: &[Fl<T, B>], y: &[Fl<T, B>], k: usize)
     cs_range_par(x, y, k, 0, k)
 }
 
-/// `cs_range`, bitwise, split as `cs_par`
+/// `cs_range`, bitwise, split as in `cs_par`.
 #[inline(always)]
 pub fn cs_range_par<T: Lane, const B: usize>(
     x: &[Fl<T, B>],
@@ -792,7 +801,7 @@ pub fn cs_range_par<T: Lane, const B: usize>(
     out
 }
 
-/// `cs_w`, bitwise, split as `cs_par`, for a w that gives an index the same weight on every call and thread. A split
+/// `cs_w`, bitwise, split as in `cs_par`, for a w that gives an index the same weight on every call and thread. A split
 /// sum calls w from several threads and in another order than `cs_w`.
 #[inline(always)]
 pub fn cs_w_par<T: Lane, const B: usize>(
@@ -811,13 +820,14 @@ pub fn cs_w_par<T: Lane, const B: usize>(
     out
 }
 
-/// Work per lane vector, in products of jet coefficients weighted by `cs_at_cost`, from which `cs_at_par`,
-/// `cs_range_at_par` and `cs_w_at_par` form the B lane vectors on separate threads: 48 octo-double products. At 48 the
-/// split of an `OJet<28>` sum gained 1.2–2.4× on four threads of a loaded Apple M5, and at 24 nothing.
+/// Work per lane vector from which `cs_at_par`, `cs_range_at_par` and `cs_w_at_par` form the B lane vectors on separate
+/// threads, in products of jet coefficients weighted by `cs_at_cost`. It is 48 octo-double products. At 48 the split of
+/// an `OJet<28>` sum gained 1.2–2.4× on four threads of a loaded Apple M5, and at 24 nothing.
 pub const CS_AT_PAR_MIN: usize = 48 * 64;
 
-/// The weight of one product of T's jet coefficients in `CS_AT_PAR_MIN`, about its time against a double-double one:
-/// 64 in octo-double, 8 in quad-double, 1 in double-double (about 1 µs, 140 ns and 15 ns on a loaded Apple M5)
+/// The weight of one product of T's jet coefficients in `CS_AT_PAR_MIN`, about its time against a double-double one. It
+/// is 64 in octo-double, 8 in quad-double and 1 in double-double, for about 1 µs, 140 ns and 15 ns on a loaded
+/// Apple M5.
 #[inline(always)]
 pub fn cs_at_cost<T: Lane>() -> usize {
     if T::VAL_OD {
@@ -830,15 +840,15 @@ pub fn cs_at_cost<T: Lane>() -> usize {
 }
 
 /// Whether `cs_at_par`, `cs_range_at_par` and `cs_w_at_par` split coefficient k of a sum of `terms` products of T over
-/// its lane vectors: jet lanes only, once the k + 1 products of each term, terms × (k + 1) × `cs_at_cost`, reach
-/// `CS_AT_PAR_MIN`
+/// its lane vectors. Only jet lanes split, once the k + 1 products of each term, terms × (k + 1) × `cs_at_cost`, reach
+/// `CS_AT_PAR_MIN`.
 #[inline(always)]
 pub fn cs_at_splits<T: Lane>(terms: usize, k: usize) -> bool {
     T::NJ > 0 && terms * (k + 1) * cs_at_cost::<T>() >= CS_AT_PAR_MIN
 }
 
 /// Coefficient k of `sum_{i=lo..=hi} (w(i) x[i]) y[j-i]` into out, weighted only if w is given, with each lane vector
-/// formed by its own rayon task, which enters the backend's target features again (`Simd::vectorize`)
+/// formed by its own rayon task. Each task enters the backend's target features again (`Simd::vectorize`).
 #[allow(clippy::too_many_arguments)]
 fn cs_split_at<T: Lane, const B: usize>(
     out: &mut Fl<T, B>,
@@ -850,7 +860,7 @@ fn cs_split_at<T: Lane, const B: usize>(
     w: Option<&(dyn Fn(usize) -> f64 + Sync)>,
     k: usize,
 ) {
-    // read on the calling thread: a mutation is selected per thread, and the tasks run on rayon's workers
+    // Read on the calling thread, since a mutation is selected per thread and the tasks run on rayon's workers.
     let moved = mutate::on(mutate::CS_AT_SPLIT);
     out.0.par_iter_mut().enumerate().for_each(|(b, o)| {
         T::S::vectorize(
@@ -871,12 +881,13 @@ fn cs_split_at<T: Lane, const B: usize>(
 }
 
 /// `cs_at`, bitwise, with a jet's lane vectors formed on separate threads of rayon's current pool when the sum is long
-/// enough (`cs_at_splits`); every other sum is `cs_at`'s. Each lane vector's terms are summed in `cs_at`'s order by
-/// one task, so the split changes no bit, whatever the pool's size.
-/// Per-thread state stays on the caller: a counting lane (`Counted`) makes the counts of a split sum on the threads
-/// that form it, and a mutation selected on the caller (`od`, `qd` and `dual::mutate`, but `CS_AT_SPLIT`) does not
+/// enough (`cs_at_splits`). Every other sum is `cs_at`'s. Each lane vector's terms are summed in `cs_at`'s order by one
+/// task, so the split changes no bit, whatever the pool's size.
+///
+/// Per-thread state stays on the caller. A counting lane (`Counted`) makes the counts of a split sum on the threads
+/// that form it, and a mutation selected on the caller (`od`, `qd` and `dual::mutate`, except `CS_AT_SPLIT`) does not
 /// reach a split sum's tasks. The bits are the serial sum's when the caller and rayon's workers share the
-/// floating-point environment: a flush-to-zero set on the caller alone changes the serial sum and not the split one.
+/// floating-point environment. A flush-to-zero set on the caller alone changes the serial sum and not the split one.
 ///
 /// ```
 /// use multidouble::dd::DD;
@@ -896,7 +907,7 @@ pub fn cs_at_par<T: Lane, const B: usize>(out: &mut Fl<T, B>, x: &[Fl<T, B>], y:
     cs_range_at_par(out, x, y, j, 0, j, k)
 }
 
-/// `cs_range_at`, bitwise, split as `cs_at_par`
+/// `cs_range_at`, bitwise, split as in `cs_at_par`.
 #[inline(always)]
 pub fn cs_range_at_par<T: Lane, const B: usize>(
     out: &mut Fl<T, B>,
@@ -914,7 +925,7 @@ pub fn cs_range_at_par<T: Lane, const B: usize>(
     }
 }
 
-/// `cs_w_at`, bitwise, split as `cs_at_par`, for a w that gives an index the same weight on every call and thread. A
+/// `cs_w_at`, bitwise, split as in `cs_at_par`, for a w that gives an index the same weight on every call and thread. A
 /// split sum calls w from several threads.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -935,7 +946,7 @@ pub fn cs_w_at_par<T: Lane, const B: usize>(
     }
 }
 
-/// `cs_il` into out, with the accumulators and the terms borrowed (`Lane::acc_mut`): bitwise `cs_il`
+/// `cs_il` into out, bitwise, with the accumulators and the terms borrowed (`Lane::acc_mut`).
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 fn cs_il_into<T: Lane, const B: usize>(
@@ -968,7 +979,7 @@ fn cs_il_into<T: Lane, const B: usize>(
     }
 }
 
-/// Horner evaluation `sum_k s[k] h^k`
+/// Horner evaluation of `sum_k s[k] h^k`.
 #[inline(always)]
 pub fn horner<T: Lane, const B: usize>(s: &[Fl<T, B>], h: DD) -> Fl<T, B> {
     let mut out = Fl::<T, B>::zero();
@@ -979,34 +990,34 @@ pub fn horner<T: Lane, const B: usize>(s: &[Fl<T, B>], h: DD) -> Fl<T, B> {
 }
 
 impl<T: Tangents, const B: usize> Fl<T, B> {
-    /// the field with values v and tangents t (`Tangents::from_tangents`, lane by lane, exactly)
+    /// The field with values v and tangents t, exactly, lane by lane (`Tangents::from_tangents`).
     pub fn from_tangents(v: &Fl<T::V, B>, t: &[Fl<T::V, B>]) -> Self {
         Fl(std::array::from_fn(|b| {
             let tb: Vec<T::V> = t.iter().map(|f| f.0[b]).collect();
             T::from_tangents(v.0[b], &tb)
         }))
     }
-    /// every lane's value (`Tangents::value`)
+    /// Every lane's value (`Tangents::value`).
     pub fn value(&self) -> Fl<T::V, B> {
         Fl(std::array::from_fn(|b| self.0[b].value()))
     }
-    /// every lane's tangent k (`Tangents::tangent`)
+    /// Every lane's tangent k (`Tangents::tangent`).
     pub fn tangent(&self, k: usize) -> Fl<T::V, B> {
         Fl(std::array::from_fn(|b| self.0[b].tangent(k)))
     }
 }
 
-/// A constant (8 B) x (8 B) double-double matrix stored by columns (column j as a field over the rows), with a copy
-/// of the columns' hi parts for the f64 lanes.
+/// A constant (8 B) x (8 B) double-double matrix stored by columns, column j as a field over the rows, with a copy of
+/// the columns' hi parts for the f64 lanes.
 #[derive(Clone)]
 pub struct DMat<S: Simd, const B: usize> {
     pub cols: Vec<Fl<DV<S>, B>>,
-    /// `cols64[j][b] = cols[j].0[b].hi`
+    /// The hi parts, `cols64[j][b] = cols[j].0[b].hi`.
     pub cols64: Vec<[V8<S>; B]>,
 }
 
 impl<S: Simd, const B: usize> DMat<S, B> {
-    /// from row-major (8 B, 8 B) hi / lo arrays
+    /// From row-major (8 B, 8 B) hi and lo arrays.
     pub fn from_rows(hi: &[f64], lo: &[f64]) -> Self {
         let m = 8 * B;
         let mut cols = Vec::with_capacity(m);
@@ -1019,13 +1030,14 @@ impl<S: Simd, const B: usize> DMat<S, B> {
         DMat { cols, cols64 }
     }
 
-    /// D f in the lane type's precision (`MatLane::dmat_apply`)
+    /// The product D f in the lane type's precision (`MatLane::dmat_apply`).
     #[inline(always)]
     pub fn apply<T: MatLane<S = S>>(&self, f: &Fl<T, B>) -> Fl<T, B> {
         T::dmat_apply(self, f)
     }
 
-    /// D f with the double-double columns, accumulated by `Lane::accc` (column j's contribution in the order j)
+    /// The product D f with the double-double columns, accumulated by `Lane::accc` with column j's contribution in the
+    /// order j.
     #[inline(always)]
     pub fn apply_dd<T: Lane<S = S>>(&self, f: &Fl<T, B>) -> Fl<T, B> {
         let mut acc = [T::acc0(); B];
@@ -1046,9 +1058,9 @@ impl<S: Simd, const B: usize> DMat<S, B> {
     }
 }
 
-/// A lane type with the product of a constant matrix: `DMat::apply_dd` by default (the double-double columns through
-/// the dot accumulator); the f64 lanes multiply by the columns' f64 copy with fused multiply-adds, `Dtn<N>` its value
-/// by the double-double columns and its tangents by the f64 copy.
+/// A lane type with the product of a constant matrix. The default is `DMat::apply_dd`, the double-double columns
+/// through the dot accumulator. The f64 lanes multiply by the columns' f64 copy with fused multiply-adds, and `Dtn<N>`
+/// multiplies its value by the double-double columns and its tangents by the f64 copy.
 pub trait MatLane: Lane {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<Self::S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
@@ -1165,7 +1177,7 @@ impl<S: Simd, const N: usize> MatLane for Fun<S, N> {
     }
 }
 
-/// The wrapped type's product, bitwise; counted as the default product would be (8 B x B `accc` and B `fin`).
+/// The wrapped type's product, bitwise, counted as the default product would be (8 B x B `accc` and B `fin`).
 impl<L: MatLane> MatLane for Counted<L> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<Self::S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
@@ -1175,26 +1187,30 @@ impl<L: MatLane> MatLane for Counted<L> {
     }
 }
 
-/// Solves of a `DDLu` of order 8 B for a field: `solve_lanes` in double-double, `solve_lanes_hi` in plain f64 with
-/// the hi parts of the factors (`DDLu::solve_hi`; the lo parts out zero), `solve_lanes_refine`, the double-double
-/// solve refined in the field's lane type, and `solve_lanes_jet`, `solve_lanes_jet_refine` and
-/// `solve_lanes_jet_refine_od`, a jet's system solved order by order in double-double, quad-double and octo-double.
-/// All panic if the order is not 8 B.
+/// Solves of a `DDLu` of order 8 B for a field. All panic if the order is not 8 B.
+///
+/// * `solve_lanes` solves in double-double.
+/// * `solve_lanes_hi` solves in plain f64 with the hi parts of the factors (`DDLu::solve_hi`), and the lo parts come
+///   out zero.
+/// * `solve_lanes_refine` refines the double-double solve in the field's lane type, and `solve_lanes_refine_t` refines
+///   a value and its tangents together.
+/// * `solve_lanes_jet`, `solve_lanes_jet_refine` and `solve_lanes_jet_refine_od` solve a jet's system order by order in
+///   double-double, quad-double and octo-double.
 pub trait FieldSolve {
     fn solve_lanes<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
     fn solve_lanes_hi<S: Simd, const B: usize>(&self, f: &Fl<DV<S>, B>) -> Fl<DV<S>, B>;
-    /// x with A x = rhs to the precision of the lane type T, by iterative refinement with the residual in that
-    /// precision (Wilkinson; Moler, J. ACM 14 (1967) 316, doi:10.1145/321386.321394). This is the LU of A or of a
-    /// double-double approximation of it; `resid(x)` returns rhs - A x formed by the caller in T's arithmetic, with
-    /// its own A. x starts as the double-double solve of rhs's values (`Lane::val`), and each of the `steps` steps
-    /// adds the solve of the residual's values (`Lane::from_vt` with a zero tangent, then `+`). With the LU of A to
-    /// double-double, each step multiplies the error by about cond(A) 2^-104, so for quad-double lanes (`QV`) two
-    /// steps reach quad-double where cond(A) is below about 10^10. For `QV` this is `DDLu::solve_refine_qd` on the
-    /// field's values, bitwise.
+    /// Solves A x = rhs for x to the precision of the lane type T, by iterative refinement with the residual in that
+    /// precision (Wilkinson; Moler, J. ACM 14 (1967) 316, doi:10.1145/321386.321394). `self` is the LU of A or of a
+    /// double-double approximation of it, and `resid(x)` returns rhs - A x formed by the caller in T's arithmetic with
+    /// its own A. x starts as the double-double solve of rhs's values (`Lane::val`), and each of the `steps` steps adds
+    /// the solve of the residual's values (`Lane::from_vt` with a zero tangent, then `+`). With the LU of A to
+    /// double-double, each step multiplies the error by about cond(A) 2^-104, so for quad-double lanes (`QV`) two steps
+    /// reach quad-double where cond(A) is below about 10^10. For `QV` this is `DDLu::solve_refine_qd` on the field's
+    /// values, bitwise.
     ///
-    /// Values only: the solves and corrections carry no tangent, so a lane type with tangents (`Lane::TANGENT`: `Du`,
-    /// `Fu`, `Dtn`, `Fun`) panics rather than being given a zero derivative. A jet has tangents too and panics, and
-    /// `solve_lanes_jet_refine` refines its orders.
+    /// It refines values only. The solves and corrections carry no tangent, so a lane type with tangents
+    /// (`Lane::TANGENT`, such as `Du`, `Fu`, `Dtn`, `Fun`) panics rather than being given a zero derivative. A jet has
+    /// tangents too and panics, and `solve_lanes_jet_refine` refines its orders.
     ///
     /// ```
     /// use multidouble::dd::DD;
@@ -1208,7 +1224,7 @@ pub trait FieldSolve {
     /// assert_eq!(x.get(0).to_f64(), 0.5);
     /// ```
     ///
-    /// The same with `Du` lanes (a value and a tangent) panics:
+    /// The same with `Du` lanes, a value and a tangent, panics.
     ///
     /// ```should_panic
     /// use multidouble::dd::DD;
@@ -1227,15 +1243,15 @@ pub trait FieldSolve {
         steps: usize,
         resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B>;
-    /// `solve_lanes_refine` for a lane type with a tangent (`Du`, `Qu`, `Ou`): the value and the tangent are refined
-    /// together. The value solves use `self`, the tangent solves `lu_t`, the LU of the differentiated system's matrix
-    /// (`self` again where that is the value system's matrix), and `resid(x)` returns rhs - A x formed by the caller
-    /// in T's arithmetic for the value and for the tangent, so that the tangent's residual is that of the
+    /// `solve_lanes_refine` for a lane type with a tangent (`Du`, `Qu`, `Ou`), refining the value and the tangent
+    /// together. The value solves use `self` and the tangent solves `lu_t`, the LU of the differentiated system's
+    /// matrix, which is `self` again where that is the value system's matrix. `resid(x)` returns rhs - A x formed by
+    /// the caller in T's arithmetic for the value and for the tangent, so that the tangent's residual is that of the
     /// differentiated system (rhs_d - A_d x_v - A x_d, with the caller's A_d). The first solve of a tangent ignores
-    /// A_d (its right-hand side is rhs's tangent), so a tangent takes one step more than a value to reach the same
+    /// A_d, its right-hand side being rhs's tangent, so a tangent takes one step more than a value to reach the same
     /// precision. Without a tangent (`Lane::TANGENT` false) it is `solve_lanes_refine`, bitwise. A complex tangent
-    /// (`Dc`) is carried by its real part only (`Lane::tan`). A lane with several tangents (`Lane::NTD` > 1, `Oun`)
-    /// has each solved as the one tangent of `Ou` is (`Lane::tan_k`, `Lane::from_vt_n`).
+    /// (`Dc`) is carried by its real part only (`Lane::tan`). A lane with several tangents (`Lane::NTD` > 1, `Oun`) has
+    /// each solved as the one tangent of `Ou` is (`Lane::tan_k`, `Lane::from_vt_n`).
     ///
     /// A jet (`Lane::NJ` > 0) panics. `Lane::from_vt` sets only its orders 0 and 1, so the orders past 1 would come
     /// back zero, and `solve_lanes_jet` and `solve_lanes_jet_refine` solve a jet order by order instead.
@@ -1248,11 +1264,11 @@ pub trait FieldSolve {
     ) -> Fl<T, B>
     where
         Self: Sized;
-    /// x(h) with A(h) x(h) = rhs(h) for a jet lane (`Lane::NJ` > 0), with A(h) = A_0 + sum_j A_j h^j and this the LU
-    /// of A_0. The orders are solved in turn in double-double (`Lane::coef`, `Lane::set_coef`), x_k = A_0^-1 r_k with
-    /// r_k = rhs_k - sum_{j=1..k} A_j x_{k-j}. The caller forms the coupling. `couple(j, x, r)` returns r - A_j x,
-    /// called for j = 1, ..., k in that order with x = x_{k-j}, so the caller also fixes the order of the operations
-    /// and with it the bits. A quad-double jet's coefficients are rounded to double-double here, and
+    /// Solves A(h) x(h) = rhs(h) for x(h) on a jet lane (`Lane::NJ` > 0), with A(h) = A_0 + sum_j A_j h^j and `self`
+    /// the LU of A_0. The orders are solved in turn in double-double (`Lane::coef`, `Lane::set_coef`), x_k = A_0^-1 r_k
+    /// with r_k = rhs_k - sum_{j=1..k} A_j x_{k-j}. The caller forms the coupling. `couple(j, x, r)` returns r - A_j x
+    /// and is called for j = 1, ..., k in that order with x = x_{k-j}, so the caller also fixes the order of the
+    /// operations and with it the bits. A quad-double jet's coefficients are rounded to double-double here, and
     /// `solve_lanes_jet_refine` keeps them. A lane type without jet coefficients panics.
     ///
     /// ```
@@ -1274,13 +1290,13 @@ pub trait FieldSolve {
         rhs: &Fl<T, B>,
         couple: impl FnMut(usize, &Fl<DV<T::S>, B>, Fl<DV<T::S>, B>) -> Fl<DV<T::S>, B>,
     ) -> Fl<T, B>;
-    /// `solve_lanes_jet` in quad-double, for a quad-double jet (`crate::jet::QJet`). The coefficients are read and
-    /// set in quad-double (`Lane::coef_qd`, `Lane::set_coef_qd`), and `couple(j, x, r)` returns r - A_j x in
-    /// quad-double. Each order's solve is `solve_lanes_refine` on `QV` lanes with `steps` steps, its residual
-    /// `resid0(r, x)` = r - A_0 x formed by the caller in quad-double with its own A_0 (r the order's right-hand side).
-    /// When this is the LU of A_0 to double-double, two steps reach quad-double where cond(A_0) is below about 10^10,
-    /// as for `solve_lanes_refine`. A double-double jet's coefficients are rounded back to double-double. A lane type
-    /// without jet coefficients panics.
+    /// `solve_lanes_jet` in quad-double, for a quad-double jet (`crate::jet::QJet`). The coefficients are read and set
+    /// in quad-double (`Lane::coef_qd`, `Lane::set_coef_qd`), and `couple(j, x, r)` returns r - A_j x in quad-double.
+    /// Each order's solve is `solve_lanes_refine` on `QV` lanes with `steps` steps. Its residual
+    /// `resid0(r, x)` = r - A_0 x is formed by the caller in quad-double with its own A_0, r being the order's
+    /// right-hand side. When `self` is the LU of A_0 to double-double, two steps reach quad-double where cond(A_0) is
+    /// below about 10^10, as for `solve_lanes_refine`. A double-double jet's coefficients are rounded back to
+    /// double-double. A lane type without jet coefficients panics.
     ///
     /// ```
     /// use multidouble::dd::DD;
@@ -1311,12 +1327,13 @@ pub trait FieldSolve {
     /// octo-double, and each order's solve is `solve_lanes_refine` on `OV` lanes with `steps` steps and the residual
     /// `resid0(r, x)` = r - A_0 x formed by the caller in octo-double. Each step multiplies the error by about
     /// cond(A_0) 2^-104, so with the LU of A_0 to double-double four steps reach octo-double where cond(A_0) is below
-    /// about 10^6, five where it is below about 10^10: twice the steps of the quad-double solve. A quad-double jet's
-    /// coefficients are rounded back to quad-double, a double-double jet's to double-double. A lane type without jet
-    /// coefficients panics. Provided in terms of `solve_lanes_refine`, so every implementation has it.
+    /// about 10^6, and five where it is below about 10^10. That is twice the steps of the quad-double solve. A
+    /// quad-double jet's coefficients are rounded back to quad-double, and a double-double jet's to double-double. A
+    /// lane type without jet coefficients panics. It is provided in terms of `solve_lanes_refine`, so every
+    /// implementation has it.
     ///
     /// With the feature `mutate`, `crate::dual::mutate::OJET_REFINE_QD` forms each refinement residual at the iterate
-    /// rounded to quad-double, which leaves the solve at quad-double accuracy (the control of its tests).
+    /// rounded to quad-double, which leaves the solve at quad-double accuracy, the control of its tests.
     ///
     /// ```
     /// use multidouble::dd::DD;
@@ -1342,7 +1359,7 @@ pub trait FieldSolve {
         mut couple: impl FnMut(usize, &Fl<OV<T::S>, B>, Fl<OV<T::S>, B>) -> Fl<OV<T::S>, B>,
         mut resid0: impl FnMut(&Fl<OV<T::S>, B>, &Fl<OV<T::S>, B>) -> Fl<OV<T::S>, B>,
     ) -> Fl<T, B> {
-        // run-time, as in solve_lanes_refine
+        // A run-time check, as in `solve_lanes_refine`.
         assert!(
             T::NJ > 0,
             "FieldSolve::solve_lanes_jet_refine_od solves jets: a lane type without jet coefficients has no orders"
@@ -1409,8 +1426,8 @@ impl FieldSolve for DDLu {
         steps: usize,
         mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B> {
-        // a run-time check, not a const block: generic callers (a lane-generic solve that refines only for some
-        // lane types) instantiate this for every lane type, so a const assertion would fail their builds
+        // A run-time check, not a const block. Generic callers, such as a lane-generic solve that refines only for some
+        // lane types, instantiate this for every lane type, so a const assertion would fail their builds.
         assert!(
             !T::TANGENT,
             "FieldSolve::solve_lanes_refine refines values only: a lane type with tangents would lose them"
@@ -1431,14 +1448,14 @@ impl FieldSolve for DDLu {
         steps: usize,
         mut resid: impl FnMut(&Fl<T, B>) -> Fl<T, B>,
     ) -> Fl<T, B> {
-        // run-time, as in solve_lanes_refine
+        // A run-time check, as in `solve_lanes_refine`.
         assert!(
             T::NJ == 0,
             "FieldSolve::solve_lanes_refine_t refines one tangent: a jet would lose its orders past 1 (solve_lanes_jet)"
         );
         let z = Fl::<Dv<T>, B>::zero();
         if T::NTD > 1 {
-            // each tangent solved as `Ou`'s one is
+            // Each tangent is solved as `Ou`'s one tangent is.
             let tsolve_n =
                 |r: &Fl<T, B>| -> Vec<Fl<Dv<T>, B>> { (0..T::NTD).map(|k| lu_t.solve_lanes(&r.tan_k(k))).collect() };
             let mut x = Fl::<T, B>::from_vt_n(&self.solve_lanes(&rhs.val()), &tsolve_n(rhs));
@@ -1462,7 +1479,7 @@ impl FieldSolve for DDLu {
         rhs: &Fl<T, B>,
         mut couple: impl FnMut(usize, &Fl<DV<T::S>, B>, Fl<DV<T::S>, B>) -> Fl<DV<T::S>, B>,
     ) -> Fl<T, B> {
-        // run-time, as in solve_lanes_refine
+        // A run-time check, as in `solve_lanes_refine`.
         assert!(
             T::NJ > 0,
             "FieldSolve::solve_lanes_jet solves jets: a lane type without jet coefficients has no orders"
@@ -1508,17 +1525,18 @@ impl FieldSolve for DDLu {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// early end of a series for the tangents
+// Early end of a series for the tangents
 // ---------------------------------------------------------------------------------------------------------------
 
 /// Early end of a power series for the tangents of a dual lane type, when they are needed to less precision than the
-/// values whose accuracy sets the series' order (the f64 tangents of a Jacobian in f64, or double-double tangents
-/// that would otherwise run to the values' order). Call `done(k, &[c_k of each field])` for k = 0, 1, 2, ... in
-/// turn, with the coefficients of order k; it returns true once the tangent terms max |c_k| r^k (r the evaluation
-/// radius; the maximum over the fields, lanes and tangents given, f64 tangents through `Lane::tan64`, else the hi
-/// part of `Lane::tan`, so a complex tangent (`Dc`) by its real part) of `run` consecutive orders are all below
-/// `tol` times the largest tangent term so far, and k >= kmin. The values are not looked at, so a value lane type
-/// never ends early.
+/// values whose accuracy sets the series' order. Examples are the f64 tangents of a Jacobian in f64, or double-double
+/// tangents that would otherwise run to the values' order.
+///
+/// Call `done(k, &[c_k of each field])` for k = 0, 1, 2, ... in turn, with the coefficients of order k. It returns true
+/// once k >= kmin and the tangent terms max |c_k| r^k of `run` consecutive orders are all at most `tol` times the
+/// largest tangent term so far. Here r is the evaluation radius, and the maximum runs over the fields, lanes and
+/// tangents given, the f64 tangents through `Lane::tan64` and the others through the hi part of `Lane::tan`, so a
+/// complex tangent (`Dc`) counts by its real part. The values are not looked at, so a value lane type never ends early.
 pub struct TangentTail {
     rk: f64,
     r: f64,
@@ -1542,7 +1560,7 @@ impl TangentTail {
         }
     }
 
-    /// record the coefficients of order k; true when the series may end after it
+    /// Records the coefficients of order k, and returns true when the series may end after it.
     pub fn done<T: Lane, const B: usize>(&mut self, k: usize, f: &[&Fl<T, B>]) -> bool {
         let mut a = 0.0f64;
         for x in f {
