@@ -62,7 +62,7 @@ slower than a plain copy. On 2²⁰ octo-doubles (64 MiB) on an Apple M5, from `
 | operation | time per value | throughput of raw values |
 |---|---|---|
 | copy the raw values | 3.2 ns | 18.8 GiB/s |
-| `get(i)` for every `i` | 19 ns | 3.1 GiB/s |
+| `get(i)` for every `i` | 21 ns | 2.9 GiB/s |
 | `unpack` | 23 ns | 2.6 GiB/s |
 | `pack` | 32 ns | 1.9 GiB/s |
 
