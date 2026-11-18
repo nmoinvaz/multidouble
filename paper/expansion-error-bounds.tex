@@ -527,19 +527,20 @@ section with its own emulator. Its model of the accumulator matches multidouble 
 random, sharp and hill-climbed inputs at precisions 8 to 53, and its controls fired.
 
 The constants of the exponential and the logarithm were evaluated in exact rational arithmetic
-(\texttt{explog\_consts.py}), which also samples the convexity that the logarithm's chords use, on every case at $k =
-0$ and four at $k \ne 0$, with a concave function as the control. The emulator's operations run EXP and LOG as the
-appendix states them (\texttt{explog\_bits.py}) and give multidouble's \texttt{OD::exp}, \texttt{OD::ln},
-\texttt{DD::exp} and \texttt{DD::ln} bit for bit on 3746 arguments, random, near 0, near multiples of $\frac12\ln 2$,
-near 1, subnormal, and with parts at the top of the ladder; their results are within the bounds against Python's
-correctly rounded exp and ln at 1300 digits. Controls that halve the Taylor degree or move the logarithm's start by
-$2^{-20}$ mismatch and break the bounds. The same script hooks every product, fused multiply-add and quotient of the
-steps to find which leave the normal range (Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor
+(\texttt{explog\_consts.py}), which also samples the convexity that the logarithm's chords use, on every case at $k = 0$
+and four at $k \ne 0$, with a concave function as the control. The emulator's operations run EXP and LOG as the appendix
+states them (\texttt{explog\_bits.py}) and give multidouble's \texttt{OD::exp}, \texttt{OD::ln}, \texttt{DD::exp} and
+\texttt{DD::ln} bit for bit on 3746 arguments, random, near 0, near multiples of $\frac12\ln 2$, near 1, subnormal, and
+with parts at the top of the ladder; their results are within the bounds against Python's correctly rounded exp and ln
+at 1300 digits. Controls that halve the Taylor degree or move the logarithm's start by $2^{-20}$ mismatch and break the
+bounds. The same script hooks every product, fused multiply-add and quotient of the steps to find which leave the normal
+range, and how far the closest clears it (Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor
 degree that must find some. A reviewer's code, written from an earlier text of the appendix and sharing no code with
-\texttt{explog\_consts.py} (\texttt{review/}), recomputes the largest cases of Theorems~\ref{thm:exp}
-and~\ref{thm:log}, $3.66006045\,u^8$ and $9.925819\,u^8$, and the absolute term $2^{-509.17}$, rounded to nearest,
-which the script's values rounded up, $3.660061\,u^8$, $9.925819\,u^8$ and $2^{-509.16}$, match; the degree of step (3)
-and the cases chosen by $U$, which it does not model, leave those cases unchanged.
+\texttt{explog\_consts.py} (\texttt{review/}), recomputes the largest cases of Theorems~\ref{thm:exp} and~\ref{thm:log},
+$3.66006045\,u^8$ and $9.925819\,u^8$, and the absolute term $2^{-509.17}$, rounded to nearest, which the script's
+values rounded up, $3.660061\,u^8$, $9.925819\,u^8$ and $2^{-509.16}$, match. It models neither the degree of step (3),
+the cases chosen by $U$, the scaled products and their losses, nor step (5) as it now stands, so the agreement is of the
+largest cases' digits, not of every step.
 
 Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
 meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}. They check the bounds of the exponential and

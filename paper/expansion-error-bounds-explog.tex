@@ -17,11 +17,11 @@ Z$ together, so an operation on operands scaled exactly by powers of two has the
 a power of two is exact while each part stays zero or at least $2^{-1022}$ in magnitude; a part that falls below is
 rounded to a multiple of $2^{-1074}$ and moves by at most $\eta_0 = 2^{-1075}$. The product $x_0\Lambda$ of step (1) of
 EXP decides only $k$: if it underflows, $|x_0\Lambda| < 2^{-1022}$ and $k = 0$, as with an unbounded exponent range. The
-product that forms $U$ in step (2) decides only $e$: if it underflows, every partial sum of $\sum_i|r_i|$ is below
-$2^{-1022}$, so exact, and $\sum_i|r_i| < 2^{-1022} \le 2^{e+1}$. The quotient $x_l/x_h$ of the double-word logarithm's
-start errs by at most $u|x_l/x_h| + \eta_0$. We write (A2$'$) for (A2) required of every other operation of a run, the
-products, fused multiply-adds and quotients among them; a sum never leaves (A2), as one that underflows is exact. The
-theorems below assume (A2$'$) and no overflow.
+products that form $U$ in step (2) and $U_f$, $U_t$ and $U_c$ in steps (4) and (5) of LOG decide only $e$ or a branch:
+if one underflows, every partial sum of $\sum_i|v_i|$ is below $2^{-1022}$, so exact, and $\sum_i|v_i| < 2^{-1022} \le
+2^{e+1}$. The quotient $x_l/x_h$ of the double-word logarithm's start errs by at most $u|x_l/x_h| + \eta_0$. We write
+(A2$'$) for (A2) required of every other operation of a run, the products, fused multiply-adds and quotients among them;
+a sum never leaves (A2), as one that underflows is exact. The theorems below assume (A2$'$) and no overflow.
 
 \paragraph{Constants} $c_h$ is $\ln 2$ rounded to 42 significant bits, so that for every integer $|k| < 2^{11}$, $kc_h$
 is in $\F$ and is a multiple of $2^{-42}$. $c_\ell$ is the greedy $n$-part expansion of $\ln 2 - c_h$ ($v_0 = \RN(v)$,
@@ -83,10 +83,10 @@ $|r - r_e| \le \epsilon_2 + \epsilon_1 + K\eta_\ell$.
 \begin{lemma}\label{lem:core}
 Assume (A2$'$), $(n^2+n)u < 1$ and $n \le 31$. Let $r$ be an $n$-part expansion of sign $\sigma \in \{1, -1\}$ with $a
 \le |r| \le b$ and $|r_i| \le \pi_i$, and let steps (2)--(4) of EXP$_{n,s,d}$ run on it with $m$ squarings, degree $d'$
-and $U < \bar c = 2^{e+1}$. Write $[m > 0]$ for 1 if $m > 0$ and 0 otherwise. Let $b' = 2^{-m}\min(b, \bar c)$ and
-$\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\tau_j = e^{2^jb'} - 1$ and $g_j = 1 +
-\tau_j$ if $\sigma = 1$, and $\tau_j = 1 - e^{-2^jb'}$ and $g_j = e^{-2^ja2^{-m}}$ if $\sigma = -1$. Let $v_{d'} =
-1/d'!$, $e_{d'} = \phi_{d'}$, $\kappa_{d'} = |F_{d'}|$, and for $j = d'-1, \dots, 2$
+and $U < \bar c = 2^{e+1}$. Write $[m > 0]$ for 1 if $m > 0$ and 0 otherwise. Let $b' = 2^{-m}\min(b, \bar c) +
+n\eta_0[m > 0]$ and $\pi'_i = 2^{-m}\min(\pi_i, \bar c) + \eta_0[m > 0]$, and for $j \ge 0$ let $\tau_j = e^{2^jb'} - 1$
+and $g_j = 1 + \tau_j$ if $\sigma = 1$, and $\tau_j = 1 - e^{-2^jb'}$ and $g_j = e^{-2^ja2^{-m}}$ if $\sigma = -1$. Let
+$v_{d'} = 1/d'!$, $e_{d'} = \phi_{d'}$, $\kappa_{d'} = |F_{d'}|$, and for $j = d'-1, \dots, 2$
 \begin{align*}
 (\epsilon^p_j, \mu_j) &= G_{\rm MUL}\bigl(\pi', \kappa_{j+1};\ b'(v_{j+1} + e_{j+1})\bigr), \\
 (\epsilon^a_j, \kappa_j) &= G_{\rm ADD}\bigl(|F_j|, \mu_j;\ \tfrac1{j!} + \phi_j + b'(v_{j+1} + e_{j+1}) +
@@ -178,18 +178,20 @@ products and Horner's inner steps add terms smaller by factors of $|t|$ or $|r'|
   + \RN(x_2 + \dots)))$.
 \item[(2)] $(k, t)$ by steps (1)--(4) of EXP$_{n,s,d}$ on $(-y_h, -y_l, 0, \dots, 0)$.
 \item[(3)] $x' = 2^kx$, scaled in two steps, and $f = \mathrm{ADDF}(x', -1)$.
-\item[(4)] With $2^{e_v} \le |v_0| < 2^{e_v + 1}$ for $v = f, t$: $p = 0$ if $f_0$ or $t_0$ is zero or $\min(e_f, e_t) <
-  -B - 13$, and $p = 2^{e_t}(2^{e_f}\mathrm{MUL}(2^{-e_f}f, 2^{-e_t}t))$ otherwise; $c = \mathrm{ADD}(\mathrm{ADD}(f,
-  t), p)$.
-\item[(5)] With $2^{e_c} \le |c_0| < 2^{e_c+1}$: if $c_0 = 0$ or $e_c < -B - 13$, $\gamma = c$. Otherwise, with $c
-  \otimes v = 2^{e_c}\mathrm{MUL}(2^{-e_c}c, v)$, $h \gets A_q$; $h \gets \mathrm{ADD}(A_i, c \otimes h)$ for $i = q-1,
+\item[(4)] With $e_v$ the exponent of $U_v = \RN(\RN(\sum_i|v_i|)(1 + 2^{-48}))$ for $v = f, t$, as $U$ in step (2) of
+  EXP: if $\min(e_f, e_t) < -B - 13$, $c = \mathrm{ADD}(f, t)$; otherwise $p = 2^{e_t}(2^{e_f}\mathrm{MUL}(2^{-e_f}f,
+  2^{-e_t}t))$ and $c = \mathrm{ADD}(\mathrm{ADD}(f, t), p)$.
+\item[(5)] With $e_c$ the exponent of $U_c$: if $e_c < -B - 13$, $\gamma = c$. Otherwise, with $c \otimes v =
+  2^{e_c}\mathrm{MUL}(2^{-e_c}c, v)$, $h \gets A_q$; $h \gets \mathrm{ADD}(A_i, c \otimes h)$ for $i = q-1,
   \dots, 2$; $\gamma = c \otimes \mathrm{ADDF}(c \otimes h, 1)$. Return $\mathrm{ADD}(y_0, \gamma)$.
 \end{enumerate}
 Up to rounding, $1 + c = (1 + f)(1 + t) = xe^{-y_0}$, so $y_0 + \log(1 + c) = \ln x$, and step (5) sums $\log(1 + c) =
 c(1 + cH(c))$ to order $q$: one Newton step on $e^y = x$, with its correction carried to order $q$ (QD's logarithm
 takes $y_0 + c$, the first order~\cite{QD237}). Step (4) forms $c$ from $f$ and $t$ without cancelling their leading
 $1$s, so its error stays relative to $|\ln x|$ near $x = 1$. The products of steps (4) and (5) are formed with their
-small factors scaled to $[1, 2)$, so no product leaves the normal range because $x$ is near 1. At $n = 8$, $s = 6$, $d
+small factors scaled by $2^{-e_v}$, to sizes in $[1 - 2^{-46}, 2)$, so no product leaves the normal range because $x$ is
+near 1. The exponents come from $U_v$, as in EXP, because the leading part's does not bound $|v|$: an exact
+renormalization can return a leading part below half the value. At $n = 8$, $s = 6$, $d
 = 43$ and $q = 4$ this is \texttt{OD::ln}.
 
 \begin{lemma}\label{lem:fexact}
@@ -224,9 +226,10 @@ Theorem~\ref{thm:exp}, of the reduction of $-y_0$, define:
 \item $(\epsilon_{ft}, \nu) = G_{\rm MUL}(\pi^f, \psi_m;\ \bar f(\tau_m + E_m))$, then $\epsilon_{ft}$ plus $2n\eta_0 +
   2^{-B-12}\max(\bar f, \tau_m + E_m)$ and each $\nu_i$ plus $2\eta_0$; $(\epsilon_{f+t}, \zeta) = G_{\rm ADD}(\pi^f,
   \psi_m;\ 2(e^{\hat b} - 1 - \hat b) + e^{\hat b}(e^{E + \delta} - 1) + E_m + 2n\eta_0)$ with $\hat b = b + \delta$;
-  $\bar c^* = e^E - 1$, $\Delta = e^E(e^\delta - 1) + 2n\eta_0(1 + \tau_m + E_m)$, $(\epsilon_c, \chi) = G_{\rm
+  $\bar c^* = e^E - 1$, $\Delta = e^E(e^\delta - 1) + 2n\eta_0(1 + \tau_m + E_m)$, $(\epsilon_c, \chi') = G_{\rm
   ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + \Delta + \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + \Delta +
-  \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$ and $C = \bar c^* + E_c$;
+  \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$, $C = \bar c^* + E_c$, $(\cdot, \zeta') = G_{\rm ADD}(\pi^f, \psi_m;\
+  C)$ and $\chi = \max(\chi', \zeta')$ part by part;
 \item for each MUL of step (5), its $G_{\rm MUL}$ with $n\eta_0$ added to the error and $\eta_0$ to each part bound;
   $v_q = 1/q$, $e_q = \phi'_q$, $\kappa_q = |A_q|$, and for $i = q-1, \dots, 2$
   \begin{align*}
@@ -241,8 +244,9 @@ Theorem~\ref{thm:exp}, of the reduction of $-y_0$, define:
   (\epsilon^h, \omega^h) &= G_{\rm MUL}\bigl(\chi, \kappa_2;\ C(v_2 + e_2)\bigr), \\
   (\epsilon^g, \omega^g) &= G_{\rm ADDF}\bigl(\omega^h, 1;\ 1 + \bar h, 1 + \bar h + \textstyle\sum_{j \ge
   1}\omega^h_j\bigr), \\
-  (\epsilon^r, \omega_r) &= G_{\rm MUL}\bigl(\chi, \omega^g;\ C(1 + \bar h + \epsilon^g)\bigr);
+    (\epsilon^r, \omega'_r) &= G_{\rm MUL}\bigl(\chi, \omega^g;\ C(1 + \bar h + \epsilon^g)\bigr),
   \end{align*}
+  and $\omega_r = \max(\omega'_r, \chi)$ part by part;
 \item $P = \epsilon^r + C(\epsilon^g + \epsilon^h + Ce_2) + \frac{\max(C^{q+1}/(q+1),\ 2^{-B-13}C)}{1-C} +
   \frac{E_c}{1-C}$, $(\epsilon_y, \cdot) = G_{\rm ADD}(\pi^y, \omega_r;\ \ell + P)$, and $\mathcal E(\ell) = \epsilon_y
   + P$.
@@ -259,25 +263,29 @@ so $|x - \tilde x| \le g\sum_{i \ge 1}|x_i| \le g\rho x_0/(1-\rho)$, $\tilde x \
 2\rho - g\rho)/(1 - \rho)$, and $|\ln x - \ln\tilde x| \le \delta_0$; so $e_0 = y_0 - \ln x$ satisfies $|e_0| \le
 E(\ell)$, and $|y_0| \le \bar y$.
 
-\emph{The steps.} Lemmas~\ref{lem:red} and~\ref{lem:core} apply to $-y_0$, with $X = \bar y/(1-u) \ge |y_h|$ and
-$|y_0 - y_h| \le 2u\bar y$. With $T = e^r - 1$ and $|t - T| \le E_m$, the computed $x'$ is within $2n\eta_0$ of $2^kx =
-e^{-e_0 - r_e}$, the two scalings moving each part by at most $2\eta_0$, so it lies within the bounds $\xi$ and $1 -
-\bar f$, and $f = x' - 1$ exactly (Lemma~\ref{lem:fexact}), with $|f| \le \bar f$ and parts bounded by $\pi^f$
+\emph{The steps.} Lemmas~\ref{lem:red} and~\ref{lem:core} apply to $-y_0$, with $X = \bar y/(1-u) \ge |y_h|$ and $|y_0 -
+y_h| \le 2u\bar y$. With $T = e^r - 1$ and $|t - T| \le E_m$, the computed $x'$ is within $2n\eta_0$ of $2^kx = e^{-e_0
+- r_e}$, the two scalings moving each part by at most $2\eta_0$, so it lies within the bounds $\xi$ and $1 - \bar f$,
+and $f = x' - 1$ exactly (Lemma~\ref{lem:fexact}), with $|f| \le \bar f$ and parts bounded by $\pi^f$
 (Lemma~\ref{lem:g}(b)). $f + t = (x' - e^{-r}) + (e^{-r} + e^r - 2) + (t - T)$, where $|2^kx - e^{-r}| = e^{-r}|e^{-e_0
 + r - r_e} - 1|$ and $e^{-r} + e^r - 2 = 2(\cosh r - 1) \le 2(e^{|r|} - 1 - |r|)$, which gives the bound of the inner
 ADD. The product $p$ is within $\epsilon_{ft}$ of $ft$: the scaled MUL has $2^{-e_f-e_t}$ times the bounds of $G_{\rm
-MUL}$, the two scalings back move each part by at most $2\eta_0$, and a $p$ set to zero leaves out $|ft| <
-2^{-B-12}\max(|f|, |t|)$. The exact value of the outer ADD is $f + t + ft$ plus these errors, and $f + t + ft = x'(1 +
-t) - 1 = c^* + 2^kx(e^r - e^{r_e}) + x'(t - T) + (x' - 2^kx)(1 + T)$ with $c^* = 2^kxe^{r_e} - 1 = e^{-e_0} - 1$, $|c^*|
-\le \bar c^*$ and $|2^kx(e^r - e^{r_e})| = e^{-e_0}|e^{r - r_e} - 1|$, the last two terms within $\Delta$. So $|c - c^*|
-\le E_c$ and $|c|, |c^*| \le C$. Step (5) computes $h$ within $e_2$ of $H(c) = \sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, as in
-the proof of Lemma~\ref{lem:core}, each product $c \otimes v$ having $2^{-e_c}$ times the bounds of $G_{\rm MUL}$ before
-its scaling back, which moves each part by at most $\eta_0$. Then $\gamma - S_q(c) = (\gamma - cg) + c(g - 1 - \hat h)
-+ c(\hat h - ch) + c^2(h - H(c))$ for $\hat h = c \otimes h$ and $g = \mathrm{ADDF}(\hat h, 1)$, where $S_q(c) = c(1 +
-cH(c)) = \sum_{i=1}^q(-1)^{i+1}c^i/i$, so $|\gamma - S_q(c)| \le \epsilon^r + C(\epsilon^g + \epsilon^h + Ce_2)$.
-Finally $|\log(1+c) - S_q(c)| \le C^{q+1}/((q+1)(1 - C))$; where step (5) takes $\gamma = c$, $|c| < 2^{-B-12}$ and
-$|\log(1+c) - c| \le c^2/(2(1 - |c|)) \le 2^{-B-13}C/(1-C)$; and $|\log(1+c) - \log(1+c^*)| \le E_c/(1-C)$, and $y_0 +
-\log(1 + c^*) = \ln x$, which gives $|y_0 + \gamma - \ln x| \le P$ and the last ADD's bound.
+MUL}$, and the two scalings back move each part by at most $2\eta_0$. Where step (4) drops $p$, the smaller of $|f|$ and
+$|t|$ is at most $\sum_i|v_i| \le U_v < 2^{e_v+1} \le 2^{-B-13}$ (as in Lemma~\ref{lem:core}, or by the exemption for
+$U_v$), so $|ft| < 2^{-B-12}\max(|f|, |t|)$, and $c = \mathrm{ADD}(f, t)$. The exact value of the outer ADD, or of the
+one ADD, is $f + t + ft$ plus these errors, and $f + t + ft = x'(1 + t) - 1 = c^* + 2^kx(e^r - e^{r_e}) + x'(t - T) +
+(x' - 2^kx)(1 + T)$ with $c^* = 2^kxe^{r_e} - 1 = e^{-e_0} - 1$, $|c^*| \le \bar c^*$ and $|2^kx(e^r - e^{r_e})| =
+e^{-e_0}|e^{r - r_e} - 1|$, the last two terms within $\Delta$. So $|c - c^*| \le E_c$ and $|c|, |c^*| \le C$; where $p$
+is dropped, $|f + t| \le C$ too, so $\zeta'$ bounds the parts of $c = \mathrm{ADD}(f, t)$, and $|c_i| \le \chi_i$ either
+way. Step (5) computes $h$ within $e_2$ of $H(c) = \sum_{i=2}^q(-1)^{i+1}c^{i-2}/i$, as in the proof of
+Lemma~\ref{lem:core}, each product $c \otimes v$ having $2^{-e_c}$ times the bounds of $G_{\rm MUL}$ before its scaling
+back, which moves each part by at most $\eta_0$. Then $\gamma - S_q(c) = (\gamma - cg) + c(g - 1 - \hat h) + c(\hat h -
+ch) + c^2(h - H(c))$ for $\hat h = c \otimes h$ and $g = \mathrm{ADDF}(\hat h, 1)$, where $S_q(c) = c(1 + cH(c)) =
+\sum_{i=1}^q(-1)^{i+1}c^i/i$, so $|\gamma - S_q(c)| \le \epsilon^r + C(\epsilon^g + \epsilon^h + Ce_2)$. Finally
+$|\log(1+c) - S_q(c)| \le C^{q+1}/((q+1)(1 - C))$; where step (5) takes $\gamma = c$, whose parts $\chi$ bounds, $|c|
+\le U_c < 2^{e_c+1} \le 2^{-B-13}$ and $|\log(1+c) - c| \le c^2/(2(1 - |c|)) \le 2^{-B-13}C/(1-C)$; and $|\log(1+c) -
+\log(1+c^*)| \le E_c/(1-C)$, and $y_0 + \log(1 + c^*) = \ln x$, which gives $|y_0 + \gamma - \ln x| \le P$ and the last
+ADD's bound.
 
 \emph{The cases.} $k = 0$ only if $|y_h| < 1/(2\Lambda)$, and $k \ne 0$ only if $|y_h| \ge 1/(2\Lambda(1+u))$; with
 $|y_0 - \ln x| \le E(\ell)$ this splits $\ell = |\ln x|$ into $[0, \ell_k^+]$ and $[\ell_k^-, X]$. For $k = 0$, $r =
@@ -380,13 +388,17 @@ remaining steps follow the recursions of Lemma~\ref{lem:core} and Theorems~\ref{
 values are those of \texttt{explog\_consts.py}.
 \end{proof}
 
-\paragraph{Which runs meet (A2$'$)} The size of the argument does not take a run outside (A2$'$): step (3) of EXP forms
-no term far below its result, and the products whose factors are small are formed with those factors scaled to $[1, 2)$.
-\texttt{explog\_bits.py} runs EXP and LOG as stated here on the emulator's operations, with every product, fused
-multiply-add and quotient hooked, and finds none outside the normal range but $x_0\Lambda$ and the product forming $U$,
-on two greedy arguments per binade, from the overflow threshold down to the subnormals for EXP and over every binade of
-$x$ and of $x - 1$ for LOG, and, where the parts stay normal, as many with parts at the top of the ladder at $n = 8$:
-23870 runs. A part far below the one above it can still make a product underflow, as for the other operations.
+\paragraph{Which runs meet (A2$'$)} Step (3) of EXP forms no term far below its result, and the products whose factors
+are small are formed with those factors scaled to sizes near 1, so the size of the argument does not by itself push a
+product toward the underflow threshold. That the products then clear it is checked, not proved: the Horner values $q_j$
+of a small $r'$ are expansions with gaps, their parts following the powers of $r'$, so no count from contiguous parts
+applies. \texttt{explog\_bits.py} runs EXP and LOG as stated here on the emulator's operations, with every product,
+fused multiply-add and quotient hooked, and finds none outside the normal range but $x_0\Lambda$ and the products
+forming the $U$'s, on two greedy arguments per binade, from the overflow threshold down to the subnormals for EXP and
+over every binade of $x$ and of $x - 1$ for LOG, and, where the parts stay normal, as many with parts at the top of the
+ladder at $n = 8$: 23870 runs, the closest product 48 binades above the threshold of its kind ($e_a + e_b \ge -970$ for
+a $\TwoProd$, $|ab| \ge 2^{-1022}$ for a rounded product). A part far below the one above it can make a product
+underflow, as for the other operations.
 
 The quad-double \texttt{QD::exp} and \texttt{QD::ln} run the same steps with QD's own operations, which have no proven
 bounds, and are tested to $64u^4$.
@@ -394,6 +406,7 @@ bounds, and are tested to $64u^4$.
 \begin{remark}
 Against a reference accurate to $2^{-1600}$, multidouble's tests measure at most $0.25\,u^8$ for \texttt{OD::exp} (at
 $x$ near $-450$, where the result's last part nears $2^{-1022}$) and $0.0070\,u^8$ for \texttt{OD::ln}, and $1.04\,u^2$
-and $1.27\,u^2$ for \texttt{DD::exp} and \texttt{DD::ln} (measured), and at most $3.34\,u$ for $\ln_{\rm b}$. Whether
-the bounds are approached is not known; they charge every operation its full rounding.
+and $1.27\,u^2$ for \texttt{DD::exp} and \texttt{DD::ln} (measured), and at most $3.491\,u$ for $\ln_{\rm b}$, at
+\texttt{0x1.22e14015c154dp+0}, found by a search and kept among the tests' arguments. Whether the bounds are approached
+is not known; they charge every operation its full rounding.
 \end{remark}
