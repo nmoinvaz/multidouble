@@ -193,15 +193,6 @@ pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -
     )
 }
 
-/// arr[idx] per lane for idx in {0, 1, 2, 3} held as f64 (idx 4: arr[3], never used)
-#[inline(always)]
-fn pick<S: Simd>(arr: &[V8<S>; 4], idx: V8<S>) -> V8<S> {
-    let mut h = arr[0];
-    h = idx.ge(V8::splat(1.0)).sel(arr[1], h);
-    h = idx.ge(V8::splat(2.0)).sel(arr[2], h);
-    idx.ge(V8::splat(3.0)).sel(arr[3], h)
-}
-
 /// a0 b3 + a1 b2 + a2 b1 + a3 b0 by FMA in QD's order (as qd::eps3)
 #[inline(always)]
 fn eps3<S: Simd>(a: &[V8<S>; 4], b: &[V8<S>; 4]) -> V8<S> {
@@ -392,52 +383,45 @@ impl<S: Simd> QV<S> {
                         x.abs().gt(y.abs())
                     }
                 };
+                // a's and b's parts not yet read, as queues: qa[0] is a[i], the next part of a, and qb[0] is b[j]. A
+                // read shifts its queue and fills it with zeros.
+                let shift =
+                    |q: [V8<S>; 4], m: M8<S>| [m.sel(q[1], q[0]), m.sel(q[2], q[1]), m.sel(q[3], q[2]), m.sel(z, q[3])];
                 // the first two parts
                 let ta = gt(a[0], b[0]);
                 let u = ta.sel(a[0], b[0]);
                 let mut i = ta.sel(one, z);
                 let mut j = ta.sel(z, one);
-                let (ha, hb) = (pick(&a, i), pick(&b, j));
+                let mut qa = shift(a, ta);
+                let mut qb = shift(b, ta.not());
+                let (ha, hb) = (qa[0], qb[0]);
                 let ta = gt(ha, hb);
                 let v = ta.sel(ha, hb);
                 i = i.add_where(ta, one);
                 j = j.add_where(ta.not(), one);
+                qa = shift(qa, ta);
+                qb = shift(qb, ta.not());
                 let (mut u, mut v) = quick_two_sum(u, v);
+                // the parts emitted, last in x[3]: an emission shifts x left, so a lane's k parts end in x[4 - k..]
                 let mut x = [z; 4];
                 let mut k = z;
                 let mut done = z.ne(z); // all false
-                                        // lanes that read every part with three emitted keep v as a fifth term (renorm5 below), as QD::ieee_add
-                let mut fifth = z;
-                let mut five = z.ne(z);
-                for _ in 0..7 {
+                for it in 0..7 {
                     let ea = i.ge(four);
                     let eb = j.ge(four);
-                    // all parts read: x[k] = u, x[k+1] = v (k < 3), or x[3] = u and v as a fifth term (k = 3); stop
-                    let fin = done.not().and(ea.and(eb));
-                    for m in 0..4 {
-                        let at = fin.and_eq(k, V8::splat(m as f64));
-                        if m < 3 {
-                            x[m] = at.sel(u, x[m]);
-                            x[m + 1] = at.sel(v, x[m + 1]);
-                        } else {
-                            x[m] = at.sel(u, x[m]);
-                            fifth = at.sel(v, fifth);
-                            five = five.or(at);
-                        }
-                    }
-                    done = done.or(fin);
+                    // all parts read: the lane stops, and u, v are placed after its parts below
+                    done = done.or(ea.and(eb));
                     let act = done.not();
                     // the next part by magnitude
-                    let ia = if mutate::on(mutate::QV_IEEE_HEAD) {
-                        i.add(one)
-                    } else {
-                        i
-                    };
-                    let (ha, hb) = (pick(&a, ia), pick(&b, j));
+                    let ha = if mutate::on(mutate::QV_IEEE_HEAD) { qa[1] } else { qa[0] };
+                    let hb = qb[0];
                     let take_a = ea.not().and(eb.or(gt(ha, hb)));
                     let t = take_a.sel(ha, hb);
-                    i = i.add_where(act.and(take_a), one);
-                    j = j.add_where(act.and(take_a.not()), one);
+                    let (sa, sb) = (act.and(take_a), act.and(take_a.not()));
+                    i = i.add_where(sa, one);
+                    j = j.add_where(sb, one);
+                    qa = shift(qa, sa);
+                    qb = shift(qb, sb);
                     // quick_three_accum(u, v, t)
                     let (s, bb) = two_sum(v, t);
                     let (s, aa) = two_sum(u, s);
@@ -449,27 +433,40 @@ impl<S: Simd> QV<S> {
                     let ret = both.sel(s, z);
                     // a part that does not fit: x[k++] = ret
                     let w = act.and_ne(ret, z);
-                    for m in 0..4 {
-                        x[m] = w.and_eq(k, V8::splat(m as f64)).sel(ret, x[m]);
-                    }
+                    x = [
+                        w.sel(x[1], x[0]),
+                        w.sel(x[2], x[1]),
+                        w.sel(x[3], x[2]),
+                        w.sel(ret, x[3]),
+                    ];
                     k = k.add_where(w, one);
                     done = done.or(k.ge(four));
-                    if done.bits() == 0xff {
+                    // a lane stops after four emissions or eight reads, so not before the fourth step
+                    if it >= 3 && done.bits() == 0xff {
                         break;
                     }
                 }
+                // every lane has stopped. A lane that read every part with k < 4 emitted has x[k] = u, x[k + 1] = v
+                // (k < 3), or x[3] = u and v as a fifth term (k = 3), as QD::ieee_add.
+                let (k0, k1, k2, k3) = (k.eq(z), k.eq(one), k.eq(V8::splat(2.0)), k.eq(V8::splat(3.0)));
+                let full = k.ge(four);
+                let x = [
+                    k0.sel(u, k1.sel(x[3], k2.sel(x[2], k3.sel(x[1], x[0])))),
+                    k0.sel(v, k1.sel(u, k2.sel(x[3], k3.sel(x[2], x[1])))),
+                    k0.sel(z, k1.sel(v, k2.sel(u, k3.sel(x[3], x[2])))),
+                    k0.sel(z, k1.sel(z, k2.sel(v, k3.sel(u, x[3])))),
+                ];
                 // lanes that emitted four parts: u, v and the parts not read, a's first, in order, form a fifth term
                 // (QD::ieee_add); the others have read every part
-                let full = k.ge(four);
                 let mut e = v;
-                for kk in 0..4 {
-                    e = e.add_where(V8::splat(kk as f64 + 1.0).gt(i), a[kk]);
+                for m in 0..4 {
+                    e = e.add_where(V8::splat(4.0 - m as f64).gt(i), qa[m]);
                 }
-                for kk in 0..4 {
-                    e = e.add_where(V8::splat(kk as f64 + 1.0).gt(j), b[kk]);
+                for m in 0..4 {
+                    e = e.add_where(V8::splat(4.0 - m as f64).gt(j), qb[m]);
                 }
-                let fifth = full.sel(u.add(e), fifth);
-                let five = five.or(full);
+                let fifth = full.sel(u.add(e), k3.sel(v, z));
+                let five = full.or(k3);
                 let r4 = renorm4(x[0], x[1], x[2], x[3]);
                 if five.bits() == 0 {
                     return QV { c: r4 };
