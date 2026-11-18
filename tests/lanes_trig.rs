@@ -5,8 +5,12 @@
 //! zeros, near multiples of pi/2, near the reduction's correction of k, near and beyond 2^52, NaN and infinities, and
 //! parts off the ladder. Every fourth vector has one kind on all lanes, for the paths where the lanes agree.
 //!
-//! Control (feature `mutate`): with Horner's steps masked by lane 0's number of terms, or lane 0's quadrant, on every
-//! lane (`trig::mutate::LANE_TERMS`, `LANE_QUADRANT`), the same check fails for each type on every backend.
+//! The comparison is strict, NaN signs and payloads included: the lanes take a NaN lane's result from the scalar
+//! function.
+//!
+//! Controls (feature `mutate`): with Horner's steps masked by lane 0's number of terms, lane 0's quadrant on every
+//! lane, or the NaN lanes left to the lanes' arithmetic with their NaNs' signs flipped (`trig::mutate::LANE_TERMS`,
+//! `LANE_QUADRANT`, `LANE_NAN`), the same check fails for each type on every backend.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -24,7 +28,7 @@ use std::ops::{Add, Div, Mul, Sub};
 const R_TH: f64 = 0.7854;
 
 fn same(a: f64, b: f64) -> bool {
-    a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())
+    a.to_bits() == b.to_bits()
 }
 
 /// a scalar type: its parts, a renormalizing constructor, its arithmetic and its functions
@@ -224,11 +228,16 @@ fn arg<T: Scalar>(r: &mut Rng, kind: u64) -> T {
             _ => padded(&[0.0, sign(r) * f64::INFINITY]),
         },
         // parts off the ladder: lower parts as large as the first, larger, or below a tiny first part
-        9 => match int(r, 0, 3) {
+        9 => match int(r, 0, 4) {
             0 => padded(&[1.0, 2f64.powi(60)]),
             1 => padded(&[r.sym(), r.sym(), r.sym(), r.sym(), r.sym(), r.sym(), r.sym(), r.sym()]),
             2 => padded(&[sign(r) * 1e-40, 1e20]),
-            _ => padded(&[3.0 * r.sym(), 1e-3 * r.sym(), 1e-20, 1e-30, 1e-40, 1e-50, 1e-60, 1e-70]),
+            3 => padded(&[3.0 * r.sym(), 1e-3 * r.sym(), 1e-20, 1e-30, 1e-40, 1e-50, 1e-60, 1e-70]),
+            // a second part from 1e8 to 1e300 below a first one under pi/4: results with NaN parts
+            _ => {
+                let e = int(r, 8, 300) as i32;
+                padded(&[0.78 * r.sym(), sign(r) * 10f64.powi(e)])
+            }
         },
         // signed zeros in the lower parts of a value in range
         _ => {
@@ -395,7 +404,7 @@ fn lanes_trig_controls() {
     common::big_stack(|| {
         use multidouble::trig::mutate;
         let mut missed = Vec::new();
-        for id in [mutate::LANE_TERMS, mutate::LANE_QUADRANT] {
+        for id in [mutate::LANE_TERMS, mutate::LANE_QUADRANT, mutate::LANE_NAN] {
             mutate::set(id);
             let ran = [
                 ("dv", mismatches(DvTrig(200))),
