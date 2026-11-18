@@ -1,19 +1,19 @@
-//! 8 lanes of octo-double: eight `V8` registers (structure of arrays, part k of the 8 lanes in `c[k]`), with the
-//! algorithms of the scalar `od::OD` and bitwise the same results lane by lane, on every `v8` backend (AVX-512,
-//! AVX2, SSE2, NEON, portable).
+//! 8 lanes of octo-double in eight `V8` registers (structure of arrays, part k of the 8 lanes in `c[k]`). They run the
+//! algorithms of the scalar `od::OD` with bitwise the same results lane by lane on every `v8` backend (AVX-512, AVX2,
+//! SSE2, NEON, portable).
 //!
-//! The arithmetic is `od::alg`, written once over `od::Limb` and run here on `V8<S>`: the same IEEE operations in the
-//! same order, with the fused multiply-subtract of two-product as `V8::fms` (one fused instruction on AVX-512, AVX2
-//! and NEON, `f64::mul_add` per lane on SSE2 and portable), so each lane is the scalar computation bit for bit. The
-//! one data-dependent branch, the renormalization's test for a zero error, is run on all lanes with masks: a per-lane
-//! slot index k (as f64) says which part an emitted value goes to, every slot is updated by a select where k equals
-//! it, and lanes whose error is zero keep accumulating, as `od::renorm_scalar` does with its branch.
+//! The arithmetic is `od::alg`, written once over `od::Limb` and run here on `V8<S>`, so each lane performs the scalar
+//! computation's IEEE operations in the same order, bit for bit. Two-product's fused multiply-subtract is `V8::fms`,
+//! one fused instruction on AVX-512, AVX2 and NEON and `f64::mul_add` per lane on SSE2 and portable. The one
+//! data-dependent branch, the renormalization's test for a zero error, runs on all lanes with masks. A per-lane slot
+//! index k (as f64) says which part an emitted value goes to, every slot is updated by a select where k equals it, and
+//! lanes whose error is zero keep accumulating, as `od::renorm_scalar` does with its branch.
 //!
-//! `ODotAcc` is the 8-lane twin of `od::OdAcc`: each product's nine levels (`od::alg::expand`) added into nine
-//! running levels with two-sums, the last level plain. Its error bound is `od::OdAcc`'s.
+//! `ODotAcc` is the 8-lane twin of `od::OdAcc`. It adds each product's nine levels (`od::alg::expand`) into nine
+//! running levels with two-sums, the last level plain, and has `od::OdAcc`'s error bound.
 //!
-//! The large operations run inside `Simd::vectorize` and are not forced inline (an octo-double product is about a
-//! thousand lane operations), so a copy the compiler keeps out of line still runs with the backend's instructions.
+//! The large operations are not forced inline, as an octo-double product is about a thousand lane operations. They run
+//! inside `Simd::vectorize`, so a copy the compiler keeps out of line still runs with the backend's instructions.
 use crate::dd::DD;
 use crate::dual::dd_param;
 use crate::dv::DV;
@@ -27,7 +27,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 /// Eight octo-doubles, part k of lane j at `c[k]` lane j.
 #[derive(Clone, Copy, Debug)]
 pub struct OV<S: Simd> {
-    /// the parts, largest first, each of the 8 lanes
+    /// The parts, largest first, each holding the 8 lanes.
     pub c: [V8<S>; 8],
 }
 
@@ -102,8 +102,8 @@ impl<S: Simd> Limb for V8<S> {
     }
 }
 
-/// The renormalization of N parts to eight on all lanes, bitwise `od::renorm_scalar` per lane (see the module doc):
-/// the slot index k held as f64, each emitted value stored where k equals the slot.
+/// The renormalization of N parts to eight on all lanes, bitwise `od::renorm_scalar` per lane (module doc). The slot
+/// index k is held as f64, and each emitted value is stored where k equals the slot.
 #[inline(always)]
 fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
     let z = V8::<S>::zero();
@@ -116,21 +116,21 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
     let mut k = z;
     let mut acc = c[0];
     for i in 1..N {
-        // two-sum, as od::renorm_scalar
+        // The two-sum, as in od::renorm_scalar.
         let (t, e) = if mutate::on(mutate::RENORM_FAST) {
             quick_two_sum(acc, c[i])
         } else {
             two_sum(acc, c[i])
         };
-        // k < 7 and a nonzero error: t goes to slot k, k advances, e carries on. room is hidden from
-        // the optimizer (`Simd::opaque`), so that the masks built from it stay bitwise operations on NEON
+        // Where k < 7 and the error is nonzero, t goes to slot k, k advances and e carries on. room is hidden from the
+        // optimizer (`Simd::opaque`), so that the masks built from it stay bitwise operations on NEON.
         let room = seven.gt(k).opaque();
         let emit = if mutate::on(mutate::OV_RENORM_MASK) {
             room
         } else {
             room.and_ne(e, z)
         };
-        // before this step k <= i - 1, and an emitting lane has k <= 6
+        // Before this step k <= i - 1, and an emitting lane has k <= 6.
         for m in 0..i.min(7) {
             out[m] = emit.and_eq(k, V8::splat(m as f64)).sel(t, out[m]);
         }
@@ -151,12 +151,12 @@ fn renorm_lanes<S: Simd, const N: usize>(c: [V8<S>; N]) -> [V8<S>; 8] {
 }
 
 impl<S: Simd> OV<S> {
-    /// 0 on every lane
+    /// 0 on every lane.
     #[inline(always)]
     pub fn zero() -> Self {
         OV { c: [V8::zero(); 8] }
     }
-    /// renormalized from eight parts, lane j bitwise `OD::new` of the parts' lane j
+    /// Renormalized from eight parts, lane j bitwise `OD::new` of the parts' lane j.
     #[inline]
     pub fn new(c: [V8<S>; 8]) -> Self {
         S::vectorize(
@@ -166,7 +166,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// x on every lane
+    /// x on every lane.
     #[inline(always)]
     pub fn splat(x: OD) -> Self {
         let mut c = [V8::zero(); 8];
@@ -175,29 +175,29 @@ impl<S: Simd> OV<S> {
         }
         OV { c }
     }
-    /// x on every lane, exactly
+    /// x on every lane, exactly.
     #[inline(always)]
     pub fn splat_f(x: f64) -> Self {
         OV::splat(OD::from_f64(x))
     }
-    /// x on every lane, exactly
+    /// x on every lane, exactly.
     #[inline(always)]
     pub fn splat_dd(x: DD) -> Self {
         OV::splat(OD::from_dd(x))
     }
-    /// x on every lane, exactly
+    /// x on every lane, exactly.
     #[inline(always)]
     pub fn splat_qd(x: QD) -> Self {
         OV::splat(OD::from_qd(x))
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_v8(x: V8<S>) -> Self {
         let mut c = [V8::zero(); 8];
         c[0] = x;
         OV { c }
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_dv(x: DV<S>) -> Self {
         let mut c = [V8::zero(); 8];
@@ -205,20 +205,20 @@ impl<S: Simd> OV<S> {
         c[1] = x.lo;
         OV { c }
     }
-    /// exact
+    /// Exact.
     #[inline(always)]
     pub fn from_qv(x: QV<S>) -> Self {
         let mut c = [V8::zero(); 8];
         c[..4].copy_from_slice(&x.c);
         OV { c }
     }
-    /// double-double, to about 2^-106 relative (as `OD::to_dd`)
+    /// Double-double, to about 2^-106 relative (as `OD::to_dd`).
     #[inline(always)]
     pub fn to_dv(self) -> DV<S> {
         let (hi, lo) = alg::to_dd(&self.c);
         DV { hi, lo }
     }
-    /// quad-double, to about 2^-212 relative (as `OD::to_qd`)
+    /// Quad-double, to about 2^-212 relative (as `OD::to_qd`).
     #[inline(always)]
     pub fn to_qv(self) -> QV<S> {
         let [a, b, c, d] = alg::to_qd_parts(&self.c);
@@ -226,13 +226,13 @@ impl<S: Simd> OV<S> {
             c: crate::qv::renorm4(a, b, c, d),
         }
     }
-    /// nearest f64 (as `OD::to_f64`: a zero tail leaves the leading part as it is, so a zero keeps its sign)
+    /// The nearest f64, as `OD::to_f64`. A zero tail leaves the leading part as it is, so a zero keeps its sign.
     #[inline(always)]
     pub fn to_v8(self) -> V8<S> {
         let (h, t) = alg::to_f64_parts(&self.c);
         t.eq(V8::zero()).sel(h, h.add(t))
     }
-    /// from the eight parts' arrays (8 values each)
+    /// From the eight parts' arrays, 8 values each.
     #[inline(always)]
     pub fn load(c: [&[f64]; 8]) -> Self {
         let mut v = [V8::zero(); 8];
@@ -241,14 +241,14 @@ impl<S: Simd> OV<S> {
         }
         OV { c: v }
     }
-    /// into the eight parts' arrays (8 values each)
+    /// Into the eight parts' arrays, 8 values each.
     #[inline(always)]
     pub fn store(self, c: [&mut [f64]; 8]) {
         for (v, s) in self.c.iter().zip(c) {
             v.store(s);
         }
     }
-    /// lane j = x\[j\]
+    /// Lane j = x\[j\].
     #[inline(always)]
     pub fn from_lanes(x: &[OD; 8]) -> Self {
         let mut a = [[0.0f64; 8]; 8];
@@ -263,7 +263,7 @@ impl<S: Simd> OV<S> {
         }
         OV { c }
     }
-    /// lane j as a scalar octo-double
+    /// Lane j as a scalar octo-double.
     #[inline(always)]
     pub fn lane(self, j: usize) -> OD {
         let mut x = [0.0; 8];
@@ -272,7 +272,7 @@ impl<S: Simd> OV<S> {
         }
         OD { x }
     }
-    /// the 8 lanes as scalar octo-doubles
+    /// The 8 lanes as scalar octo-doubles.
     pub fn lanes(self) -> [OD; 8] {
         let mut a = [[0.0; 8]; 8];
         for k in 0..8 {
@@ -282,7 +282,7 @@ impl<S: Simd> OV<S> {
             x: std::array::from_fn(|k| a[k][j]),
         })
     }
-    /// all lanes = lane j
+    /// Every lane set to lane j.
     #[inline(always)]
     pub fn bcast(self, j: usize) -> Self {
         OV {
@@ -294,7 +294,7 @@ impl<S: Simd> OV<S> {
     pub fn abs_hi(self) -> V8<S> {
         self.c[0].abs()
     }
-    /// |self|: negated where the leading part is negative (as `OD::abs`)
+    /// |self|, negated where the leading part is negative (as `OD::abs`).
     #[inline]
     pub fn abs(self) -> Self {
         S::vectorize(
@@ -308,7 +308,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
+    /// self times a power of two b (`dd::is_pwr2`), every part scaled, exact barring overflow and underflow.
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> Self {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
@@ -316,7 +316,7 @@ impl<S: Simd> OV<S> {
             c: alg::mul_pwr2(&self.c, V8::splat(b)),
         }
     }
-    /// od + exact f64 vector, as `OD::add_f`
+    /// od + exact f64 vector, as `OD::add_f`.
     #[inline]
     pub fn add_v(self, b: V8<S>) -> Self {
         S::vectorize(
@@ -326,12 +326,12 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// od + f64 on every lane, as `OD::add_f`
+    /// od + f64 on every lane, as `OD::add_f`.
     #[inline]
     pub fn add_f(self, b: f64) -> Self {
         self.add_v(V8::splat(b))
     }
-    /// times an exact f64 vector, as `OD::mul_f`
+    /// self times an exact f64 vector, as `OD::mul_f`.
     #[inline]
     pub fn mul_v(self, b: V8<S>) -> Self {
         S::vectorize(
@@ -341,12 +341,12 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// od x f64 on every lane, as `OD::mul_f`
+    /// od x f64 on every lane, as `OD::mul_f`.
     #[inline]
     pub fn mul_f(self, b: f64) -> Self {
         self.mul_v(V8::splat(b))
     }
-    /// od + dd lanes, as `OD::add_dd`: bitwise `self + OV::from_dv(b)`
+    /// od + dd lanes, as `OD::add_dd`, bitwise `self + OV::from_dv(b)`.
     #[inline]
     pub fn add_dv(self, b: DV<S>) -> Self {
         S::vectorize(
@@ -356,7 +356,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// times double-double lanes, as `OD::mul_dd`: bitwise `self * OV::from_dv(b)`
+    /// self times double-double lanes, as `OD::mul_dd`, bitwise `self * OV::from_dv(b)`.
     #[inline]
     pub fn mul_dv(self, b: DV<S>) -> Self {
         S::vectorize(
@@ -366,7 +366,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// a b by the sloppy multiply on every lane, as `OD::sloppy_mul` (opt-in; its bits differ from `*`)
+    /// a b by the opt-in sloppy multiply on every lane, as `OD::sloppy_mul`. Its bits differ from `*`'s.
     #[inline]
     pub fn sloppy_mul(self, b: Self) -> Self {
         S::vectorize(
@@ -397,7 +397,7 @@ impl<S: Simd> OV<S> {
     pub fn recip(self) -> Self {
         OV::splat_f(1.0) / self
     }
-    /// the square root, as `OD::sqrt` (zero lanes give zero)
+    /// The square root, as `OD::sqrt`. Zero lanes give zero.
     #[inline]
     pub fn sqrt(self) -> Self {
         S::vectorize(
@@ -415,7 +415,7 @@ impl<S: Simd> OV<S> {
             },
         )
     }
-    /// per lane self < o, lexicographic on the parts (as `OD`'s `PartialOrd`)
+    /// self < o per lane, lexicographic on the parts (as `OD`'s `PartialOrd`).
     #[inline(always)]
     pub fn lt(self, o: Self) -> M8<S> {
         let mut r = self.c[7].gt(self.c[7]); // all false
@@ -426,12 +426,12 @@ impl<S: Simd> OV<S> {
         }
         r
     }
-    /// per lane self > o
+    /// self > o per lane.
     #[inline(always)]
     pub fn gt(self, o: Self) -> M8<S> {
         o.lt(self)
     }
-    /// per lane every part equal (so -0 equals +0, and a NaN part is unequal)
+    /// Whether every part is equal, per lane, so that -0 equals +0 and a NaN part is unequal.
     #[inline(always)]
     pub fn eq(self, o: Self) -> M8<S> {
         let mut eq = self.c[0].eq(o.c[0]);
@@ -440,12 +440,12 @@ impl<S: Simd> OV<S> {
         }
         eq
     }
-    /// per lane self <= o (no part NaN)
+    /// self <= o per lane, when no part is NaN.
     #[inline(always)]
     pub fn le(self, o: Self) -> M8<S> {
         self.lt(o).or(self.eq(o))
     }
-    /// per lane self >= o (no part NaN)
+    /// self >= o per lane, when no part is NaN.
     #[inline(always)]
     pub fn ge(self, o: Self) -> M8<S> {
         o.le(self)
@@ -454,7 +454,8 @@ impl<S: Simd> OV<S> {
 
 impl<S: Simd> Neg for OV<S> {
     type Output = Self;
-    /// as `OD`'s: the leading part's sign bit flipped, the lower seven as -x + 0 (a zero lower part is +0)
+    /// As `OD`'s, the leading part's sign bit flipped and the lower seven computed as -x + 0, so that a zero lower part
+    /// is +0.
     #[inline(always)]
     fn neg(self) -> Self {
         OV { c: alg::neg(&self.c) }
@@ -463,7 +464,7 @@ impl<S: Simd> Neg for OV<S> {
 
 impl<S: Simd> Add for OV<S> {
     type Output = Self;
-    /// a + b on every lane, as `OD`'s
+    /// a + b on every lane, as `OD`'s.
     #[inline]
     fn add(self, b: Self) -> Self {
         S::vectorize(
@@ -477,7 +478,7 @@ impl<S: Simd> Add for OV<S> {
 
 impl<S: Simd> Sub for OV<S> {
     type Output = Self;
-    /// a + (-b) on every lane
+    /// a + (-b) on every lane.
     #[inline]
     fn sub(self, b: Self) -> Self {
         self + (-b)
@@ -486,7 +487,7 @@ impl<S: Simd> Sub for OV<S> {
 
 impl<S: Simd> Mul for OV<S> {
     type Output = Self;
-    /// a b on every lane, as `OD`'s
+    /// a b on every lane, as `OD`'s.
     #[inline]
     fn mul(self, b: Self) -> Self {
         S::vectorize(
@@ -500,7 +501,7 @@ impl<S: Simd> Mul for OV<S> {
 
 impl<S: Simd> Div for OV<S> {
     type Output = Self;
-    /// a / b on every lane, as `OD`'s
+    /// a / b on every lane, as `OD`'s.
     #[inline]
     fn div(self, b: Self) -> Self {
         S::vectorize(
@@ -512,15 +513,15 @@ impl<S: Simd> Div for OV<S> {
     }
 }
 
-/// Accumulator for sums of octo-double products (see the module doc); the 8-lane twin of `od::OdAcc`.
+/// Accumulator for sums of octo-double products, the 8-lane twin of `od::OdAcc` (module doc).
 #[derive(Clone, Copy, Debug)]
 pub struct ODotAcc<S: Simd> {
-    /// the running levels, the largest first
+    /// The running levels, largest first.
     pub s: [V8<S>; 9],
 }
 
 impl<S: Simd> ODotAcc<S> {
-    /// the empty sum on every lane
+    /// The empty sum on every lane.
     #[inline(always)]
     pub fn zero() -> Self {
         ODotAcc { s: [V8::zero(); 9] }
@@ -538,9 +539,9 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// self + a b into self, with a and b borrowed: bitwise `add_prod`, the nine levels updated where they are rather
-    /// than copied in and out, which saves an octo-double jet's sums (`crate::jet::OJet`) the copy of its accumulator
-    /// per product
+    /// self + a b into self, with a and b borrowed, bitwise `add_prod`. The nine levels are updated where they are
+    /// rather than copied in and out, which saves an octo-double jet's sums (`crate::jet::OJet`) the copy of its
+    /// accumulator per product.
     #[inline]
     pub fn add_prod_mut(&mut self, a: &OV<S>, b: &OV<S>) {
         S::vectorize(
@@ -551,7 +552,7 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// self + a b for double-double lanes b, as `OdAcc::add_prod_dd`: bitwise `add_prod(a, OV::from_dv(b))`
+    /// self + a b for double-double lanes b, as `OdAcc::add_prod_dd`, bitwise `add_prod(a, OV::from_dv(b))`.
     #[inline]
     pub fn add_prod_dv(self, a: OV<S>, b: DV<S>) -> Self {
         S::vectorize(
@@ -564,8 +565,8 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// self + a b by the sloppy multiply's eight levels, as `od::OdAcc::add_prod_sloppy` (opt-in; its bits differ
-    /// from `add_prod`)
+    /// self + a b by the opt-in sloppy multiply's eight levels, as `od::OdAcc::add_prod_sloppy`. Its bits differ from
+    /// `add_prod`'s.
     #[inline]
     pub fn add_prod_sloppy(self, a: OV<S>, b: OV<S>) -> Self {
         S::vectorize(
@@ -578,7 +579,7 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// `add_prod_dv` into self, with a and b borrowed (as `add_prod_mut`)
+    /// `add_prod_dv` into self, with a and b borrowed (as `add_prod_mut`).
     #[inline]
     pub fn add_prod_dv_mut(&mut self, a: &OV<S>, b: &DV<S>) {
         S::vectorize(
@@ -589,7 +590,7 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// `add_prod_sloppy` into self, with a and b borrowed (as `add_prod_mut`)
+    /// `add_prod_sloppy` into self, with a and b borrowed (as `add_prod_mut`).
     #[inline]
     pub fn add_prod_sloppy_mut(&mut self, a: &OV<S>, b: &OV<S>) {
         S::vectorize(
@@ -612,7 +613,7 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
-    /// the sum as octo-doubles: the nine levels added in turn with od + f64 (as `OdAcc::finish`)
+    /// The sum as octo-doubles, the nine levels added in turn with od + f64 (as `OdAcc::finish`).
     #[inline]
     pub fn finish(self) -> OV<S> {
         S::vectorize(
@@ -631,15 +632,15 @@ impl<S: Simd> ODotAcc<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// octo-double lanes as a `Lane`
+// Octo-double lanes as a `Lane`
 // ---------------------------------------------------------------------------------------------------------------
 
 /// Octo-double values as a `Lane`, so that code generic over `Lane` compiles and runs with octo-double lanes. As for
-/// `QV`, the trait passes constants and inputs as double-double (`DV`): they enter exactly (`from_dv`) but carry only
+/// `QV`, the trait passes constants and inputs as double-double (`DV`). They enter exactly (`from_dv`) but carry only
 /// double-double accuracy, and `val` rounds back to double-double, so this instantiation computes in octo-double with
 /// double-double data. `coef_qd(0)` is the value rounded to quad-double (`to_qv`), `coef_od(0)` the value itself.
-/// `VAL_OD` is set and `VAL_QD` is not: a solve with a double-double LU is refined for these lanes with the residual
-/// in octo-double (`crate::field::FieldSolve::solve_lanes_refine`), and needs about twice the steps of a quad-double
+/// `VAL_OD` is set and `VAL_QD` is not, so a solve with a double-double LU is refined for these lanes with the residual
+/// in octo-double (`crate::field::FieldSolve::solve_lanes_refine`). It needs about twice the steps of a quad-double
 /// lane.
 impl<S: Simd> crate::dual::Lane for OV<S> {
     type S = S;
@@ -695,7 +696,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     fn acc(a: ODotAcc<S>, x: Self, y: Self) -> ODotAcc<S> {
         a.add_prod(x, y)
     }
-    /// `acc` in place (`ODotAcc::add_prod_mut`)
+    /// `acc` in place (`ODotAcc::add_prod_mut`).
     #[inline(always)]
     fn acc_mut(a: &mut ODotAcc<S>, x: &Self, y: &Self) {
         a.add_prod_mut(x, y);
@@ -712,7 +713,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
     fn fin(a: ODotAcc<S>) -> Self {
         a.finish()
     }
-    /// the value rounded to quad-double (k = 0), zero past it
+    /// The value rounded to quad-double for k = 0, zero past it.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<S> {
         if k == 0 {
@@ -721,7 +722,7 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
             QV::zero()
         }
     }
-    /// the value itself (k = 0), zero past it
+    /// The value itself for k = 0, zero past it.
     #[inline(always)]
     fn coef_od(self, k: usize) -> OV<S> {
         if k == 0 {
@@ -733,11 +734,11 @@ impl<S: Simd> crate::dual::Lane for OV<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// octo-double vectors as eight part arrays
+// Octo-double vectors as eight part arrays
 // ---------------------------------------------------------------------------------------------------------------
 
-/// y + a x on eight-part arrays: 8 elements at a time on the backend S, the rest in scalar octo-double (bitwise the
-/// same per element)
+/// y + a x on eight-part arrays, 8 elements at a time on the backend S and the rest in scalar octo-double, bitwise the
+/// same per element.
 struct AxpyParts<'a> {
     a: f64,
     x: [&'a [f64]; 8],
@@ -747,7 +748,7 @@ struct AxpyParts<'a> {
 
 impl Kernel for AxpyParts<'_> {
     type Output = ();
-    /// the lanes, then the scalar tail
+    /// The lanes, then the scalar tail.
     #[inline(always)]
     fn run<S: Simd>(self) {
         let n = self.y[0].len();
@@ -773,9 +774,9 @@ impl Kernel for AxpyParts<'_> {
     }
 }
 
-/// y + a x for octo-double vectors given as eight part arrays (part q of element i at `x[q][i]`, as `OD::x`, the
-/// parts normalized as `OD` keeps them), a an f64: each element `OD::mul_f` then `+`, 8 at a time on the best backend
-/// the CPU has and the rest in scalar octo-double, bitwise the same per element. Returns the eight parts of the
+/// y + a x for an f64 a and octo-double vectors given as eight part arrays, part q of element i at `x[q][i]` (as
+/// `OD::x`), the parts normalized as `OD` keeps them. Each element takes `OD::mul_f` then `+`, 8 at a time on the best
+/// backend the CPU has and the rest in scalar octo-double, bitwise the same per element. Returns the eight parts of the
 /// result. Panics unless the sixteen arrays have one length.
 pub fn axpy_parts(a: f64, x: [&[f64]; 8], y: [&[f64]; 8]) -> [Vec<f64>; 8] {
     let n = y[0].len();
