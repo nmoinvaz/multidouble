@@ -750,15 +750,16 @@ const ACC_CATS: [&str; 4] = ["random", "cancel", "wide", "mixed"];
 /// The accumulator's proven bound for len products of operands on the ladder |a_i| <= 2^(-52 i) |a_0|, in units of
 /// 2^-418 relative to W = sum |a_i b_i|: |Z - x| <= (|Z| + c W) u^8 <= (1 + c) W / 64 units. c is the second term's
 /// constant, rounded up, for len = 1, 4, 16 and 64 at n = 8, p = 53, theta = 2 (2^-14.92, 2^-14.28, 2^-10.55,
-/// 2^2.68). It grows like len^9 u^9, so the bound stays near u^8 W only up to about 50 products, and a sum of 2048
-/// constructed terms reaches 2^23.8 u^8 |Z|. The proof (by hand, checked in exact arithmetic, not yet refereed) is
-/// research/theory/accumulator.tex on branch wip/discover-a.
+/// 2^2.68). The paper's W sums the leading parts' |a_0 b_0|, within a factor 1 + 5u of the W here, which the rounding
+/// up absorbs. c grows like len^9 u, so the bound stays near u^8 W only up to about 50 products, and a sum of 2048
+/// constructed terms reaches 2^23.8 u^8 |Z|. The proof is the paper's section on sums of products
+/// (paper/expansion-error-bounds-accumulator.tex), and paper/accumulator/ computes the constants.
 fn acc_thr(len: usize) -> f64 {
     let c = match len {
         1 => 3.3e-5,
         4 => 5.1e-5,
         16 => 6.7e-4,
-        64 => 6.42,
+        64 => 6.43,
         _ => panic!("acc_thr: no constant for {len} terms"),
     };
     (1.0 + c) / 64.0
