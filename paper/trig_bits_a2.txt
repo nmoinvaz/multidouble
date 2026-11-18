@@ -1,0 +1,8 @@
+z = MUL(r, r): 0 of 6784 runs with a result outside binary64 (none); 0 with a subnormal result
+SINR: 0 of 6784 runs with a result outside binary64 (none); 0 with a subnormal result
+COSR: 0 of 6784 runs with a result outside binary64 (none); 0 with a subnormal result
+DIV(s,c): 0 of 6784 runs with a result outside binary64 (none); 0 with a subnormal result
+DIV(c,s): 0 of 6784 runs with a result outside binary64 (none); 0 with a subnormal result
+SINR unscaled: 591 of 6784 runs with a result outside binary64 (buckets 189 to 211, from |r| < 2^-189); 633 with a subnormal result
+DIV(s,c) unscaled: 4059 of 6784 runs with a result outside binary64 (buckets 81 to 211, from |r| < 2^-81); 1155 with a subnormal result
+a2: PASS
