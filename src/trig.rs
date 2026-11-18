@@ -89,10 +89,12 @@ pub mod mutate {
     /// lanes only: the lanes with a NaN part left as the lanes' arithmetic gives them, their NaNs' signs flipped, as
     /// another order of the operands can give them
     pub const LANE_NAN: u32 = 8;
+    /// lanes only: lane 0's powers of two on every lane
+    pub const LANE_POW2: u32 = 9;
     /// number of ids
-    pub const N: u32 = 8;
+    pub const N: u32 = 9;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 9] = [
+    pub const NAMES: [&str; 10] = [
         "none",
         "reduction: last part of r dropped",
         "reduction: pi/2 cut to 64 (n + 1) + 1 bits",
@@ -102,6 +104,7 @@ pub mod mutate {
         "lanes: Horner's mask from lane 0's terms",
         "lanes: lane 0's quadrant on every lane",
         "lanes: NaN lanes from the lanes' arithmetic, NaN signs flipped",
+        "lanes: lane 0's powers of two on every lane",
     ];
 
     #[cfg(feature = "mutate")]
@@ -783,7 +786,12 @@ macro_rules! eight_lanes {
         }
         #[inline(always)]
         fn pow2_j(j: V8<S>, m: i32) -> V8<S> {
-            V8::from_array(j.to_array().map(|v| pow2(m * (v as i32 + 1))))
+            let j = j.to_array();
+            let lane0 = mutate::on(mutate::LANE_POW2);
+            V8::from_array(j.map(|v| {
+                let v = if lane0 { j[0] } else { v };
+                pow2(m * (v as i32 + 1))
+            }))
         }
         #[inline(always)]
         fn unit_where(u: M8<S>, p: V8<S>) -> V8<S> {
