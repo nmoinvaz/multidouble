@@ -75,12 +75,20 @@ impl Ref {
     }
 }
 
-/// e^x for an exact dyadic x with |x| <= 745.2. y = x 2^-12, Y = floor(|y| 2^P); the terms T_k = floor(T_(k-1) Y /
+/// the reference's domain: |x| 2^-12 <= 0.182, where its Taylor series converges as its error bound assumes
+const REF_MAX: f64 = 745.2;
+
+/// e^x for an exact dyadic x with |x| <= REF_MAX, or None outside it, so that a result far off fails at once instead of
+/// running the series where its terms grow. y = x 2^-12, Y = floor(|y| 2^P); the terms T_k = floor(T_(k-1) Y /
 /// (2^P k)) of e^(+-Y 2^-P) are each within 2 units below the true ones (T_(k-1) is within 2 units, and Y 2^-P / k <
 /// 1), so the K terms' sum S is within 2K + 4 units of e^(Y 2^-P) 2^P counting the tail after the first zero term,
 /// and |y - Y 2^-P| < 2^-P adds 2 units. S >= 0.83 2^P. Each squaring doubles the relative error and its truncation
-/// to P + 64 bits adds 2^-(P + 63). cut: keep only that many terms (the control).
-fn exp_ref(x: &Dy, cut: Option<usize>) -> Ref {
+/// to P + 64 bits adds 2^-(P + 63). cut: keep only that many terms (the control); a series cut before its first zero
+/// term has no certified bound, err2 = +inf.
+fn exp_ref(x: &Dy, cut: Option<usize>) -> Option<Ref> {
+    if x.to_f64().abs() > REF_MAX {
+        return None;
+    }
     let sh = x.e + P as i64 - SQ as i64;
     let y = if sh >= 0 {
         x.m.shl(sh as u64)
@@ -91,9 +99,11 @@ fn exp_ref(x: &Dy, cut: Option<usize>) -> Ref {
     let (mut pos, mut neg) = (one.clone(), BigU::zero());
     let mut t = one;
     let mut k = 0u64;
+    let mut early = false;
     loop {
         k += 1;
         if cut.is_some_and(|c| k as usize >= c) {
+            early = true;
             break;
         }
         t = t.mul(&y).shr(P).divrem_small(k).0;
@@ -120,7 +130,10 @@ fn exp_ref(x: &Dy, cut: Option<usize>) -> Ref {
         // 2 eps + eps^2 + 2^-(P + 63) <= 2^(err2 + 1.001) while err2 < -100
         err2 = (err2 + 1.0).max(-(P as f64) - 63.0) + 0.001;
     }
-    Ref { m, e, err2 }
+    if early {
+        err2 = f64::INFINITY;
+    }
+    Some(Ref { m, e, err2 })
 }
 
 /// the decimal d.ddd...e+NNN as (digits, power of ten)
@@ -198,25 +211,40 @@ fn vectors() -> Vec<(Dy, BigU, i64)> {
         .collect()
 }
 
-/// whether the reference agrees with e = sum 1/k!, and with each 700-digit decimal value, and |x| of each
+/// whether the reference agrees with e = sum 1/k!, and with each 700-digit decimal value, and |x| of each. The uncut
+/// reference must certify its bound below 2^-1600, and no reference may certify a bound that its value misses: a
+/// series cut before its first zero term certifies none.
 fn planted(cut: Option<usize>) -> (bool, Vec<(bool, f64)>) {
-    let e = exp_ref(&Dy::from_f64(1.0), cut);
+    let e = exp_ref(&Dy::from_f64(1.0), cut).unwrap();
+    let e_ok = e_check(&e);
+    assert!(e_ok || e.err2 > -1550.0, "e certified within 2^{} and missed", e.err2);
     let vs = vectors()
         .iter()
         .map(|(x, d, p)| {
-            let r = exp_ref(x, cut);
-            assert!(r.err2 < -1600.0, "reference error bound 2^{}", r.err2);
+            let r = exp_ref(x, cut).unwrap();
+            if cut.is_none() {
+                assert!(r.err2 < -1600.0, "reference error bound 2^{}", r.err2);
+            }
             // 10^-470 = 2^-1561, above the reference's bound
-            (agrees(&r, d, *p, 470), x.to_f64().abs())
+            let ok = agrees(&r, d, *p, 470);
+            assert!(
+                ok || r.err2 > -1561.0,
+                "x = {x:?} certified within 2^{} and missed",
+                r.err2
+            );
+            (ok, x.to_f64().abs())
         })
         .collect();
-    (e_check(&e), vs)
+    (e_ok, vs)
 }
 
 #[test]
 fn reference_is_planted_truth() {
     let (e, vs) = planted(None);
     assert!(e && vs.iter().all(|v| v.0), "e {e}, decimal values {vs:?}");
+    // the domain ends at REF_MAX: a wrong ln result such as 800 or 2^600 is refused at once
+    assert!(exp_ref(&Dy::from_f64(REF_MAX), None).is_some() && exp_ref(&Dy::from_f64(-REF_MAX), None).is_some());
+    assert!(exp_ref(&Dy::from_f64(800.0), None).is_none() && exp_ref(&Dy::from_f64(2f64.powi(600)), None).is_none());
     // control: 60 Taylor terms of e^(x/4096) err by about 2^-990 for |x| near 1, which fails both checks wherever
     // |x| >= 1/4 (smaller x need fewer terms)
     let (e, vs) = planted(Some(60));
@@ -423,7 +451,7 @@ fn exp_err<T: Ty>(x: T) -> (f64, f64, bool, bool) {
     if !y.parts().iter().all(|v| v.is_finite()) {
         return (f64::INFINITY, 0.0, false, false);
     }
-    let r = exp_ref(&exact(x), None);
+    let r = exp_ref(&exact(x), None).expect("exp's inputs lie in the reference's domain");
     let yd = exact(y);
     let e = yd.sub(&r.dy()).ratio(&r.dy()) / un::<T>();
     // n 2^-1074 / e^x / u^n, from its bits: a debug build gives 2f64.powi(-1074) = 0, as 2^1074 overflows first
@@ -445,7 +473,10 @@ fn ln_err<T: Ty>(x: T, fl: i32) -> (f64, f64) {
         let one = xd.sub(&Dy::from_f64(1.0)).is_zero();
         return (if one { 0.0 } else { f64::INFINITY }, 0.0);
     }
-    let r = exp_ref(&yd, None);
+    // a result outside the reference's domain is far from ln x, |ln x| < 745
+    let Some(r) = exp_ref(&yd, None) else {
+        return (f64::INFINITY, 0.0);
+    };
     let e = r.dy().sub(&xd).ratio(&xd.mul(&yd)) / un::<T>();
     let floor = pow2i(fl) / y.parts()[0].abs() / un::<T>();
     (e, floor)
@@ -632,7 +663,10 @@ fn start_bound(n: usize, seed: u64, nudge: f64) -> (usize, f64) {
             continue;
         }
         // |e^l - h| / (h |l|) = |e^(l - ln h) - 1| / |l| ~ |l - ln h| / |l|
-        let rf = exp_ref(&Dy::from_f64(l), None);
+        let Some(rf) = exp_ref(&Dy::from_f64(l), None) else {
+            bad += 1;
+            continue;
+        };
         let e = rf
             .dy()
             .sub(&Dy::from_f64(h))
@@ -678,6 +712,11 @@ fn exp_and_ln_within_bounds() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(400);
+    // n / 4 octo-double inputs per category: fewer than 4 would check none
+    assert!(
+        n >= 4,
+        "EXPLOG_N = {n} leaves the octo-double without inputs; use 4 or more"
+    );
     let rows = all_rows(n, 1);
     show(&rows);
     let bad: Vec<&Row> = rows.iter().filter(|r| r.fails > 0).collect();
