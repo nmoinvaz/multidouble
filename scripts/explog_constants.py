@@ -15,8 +15,8 @@ reciprocals and 1/3 are exact rationals.
 A greedy expansion's first n parts are the greedy n-part expansion, so the double-double and quad-double code takes
 the first two and four parts. usage: python3 scripts/explog_constants.py [check FILE [control]]; `check` exits
 non-zero when the generated block of FILE (src/explog.rs) differs from the source derived here, compared with all
-whitespace removed, so that a changed value, sign, operator, type or comment fails. `control` first negates LN2_HI in
-the text it reads, and exits non-zero unless the check then fails."""
+whitespace removed, so that a changed value, sign, operator, type or comment fails. `control` requires the untouched
+file to pass, then negates LN2_HI inside the generated block, and exits non-zero unless the check then fails."""
 import re
 import struct
 import sys
@@ -143,13 +143,15 @@ if __name__ == '__main__':
     src = rust(c)
     if len(sys.argv) > 2 and sys.argv[1] == 'check':
         text = open(sys.argv[2]).read()
-        control = len(sys.argv) > 3 and sys.argv[3] == 'control'
-        if control:
-            text = text.replace('const LN2_HI: f64 = f64::from_bits(', 'const LN2_HI: f64 = -f64::from_bits(', 1)
         same = block(text) is not None and block(text) == block(src)
-        if control:
-            print('control, LN2_HI negated:', 'caught' if not same else 'NOT caught')
-            sys.exit(0 if not same else 1)
+        if len(sys.argv) > 3 and sys.argv[3] == 'control':
+            # the untouched file must pass, the negation must land inside its generated block, and then fail
+            neg = text.replace('const LN2_HI: f64 = f64::from_bits(', 'const LN2_HI: f64 = -f64::from_bits(', 1)
+            moved = block(neg) is not None and block(neg) != block(text)
+            caught = moved and block(neg) != block(src)
+            print('control, LN2_HI negated:', 'caught' if same and caught else
+                  'NOT caught' if same else 'not run: the untouched file fails the check')
+            sys.exit(0 if same and caught else 1)
         if not same:
             print('the generated block of', sys.argv[2], 'differs from the derived source')
             sys.exit(1)
