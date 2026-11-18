@@ -54,7 +54,7 @@ On levels $s_0, \dots, s_n$, $\dep(s, l, t)$ sets $e \gets t$, then for $m = l, 
 \TwoSum(c_i, s)$; then $v_0 \gets s$. We write $s_i$ for the value of $s$ after the step with index $i$, so $s_{N-1} =
 c_{N-1}$, $s_i = \RN(c_i + s_{i+1})$ and $v_0 = s_0$.
 
-\paragraph{Renormalization $R_n$} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
+\paragraph{Renormalization $\Ren_n$} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
 \gets v_0$ and $x \gets 0 \in \F^n$. Step $j$, for $j = 1, \dots, N-1$, forms $(t, e) \gets \TwoSum(\acc, v_j)$. If $k <
 n-1$ and $e \ne 0$, the step \emph{emits}: $x_k \gets t$, $k \gets k+1$, $\acc \gets e$. Otherwise $\acc \gets t$.
 Finally $x_k \gets \acc$. We write $\acc_j$ for $\acc$ after step $j$, and $\acc_0 = v_0$.
@@ -62,15 +62,15 @@ Finally $x_k \gets \acc$. We write $\acc_j$ for $\acc$ after step $j$, and $\acc
 \paragraph{Operations} For $n$-part $a$ and $b$, and $b \in \F$ where noted:
 \begin{itemize}
 \item ADD: $(s_i, t_i) \gets \TwoSum(a_i, b_i)$ for $i < n$; $s_n \gets t_{n-1}$; $\dep(s, l, t_{l-1})$ for $l = 1,
-\dots, n-1$; return $R_n(s)$.
+\dots, n-1$; return $\Ren_n(s)$.
 \item ADDF ($b \in \F$): $e \gets b$; $(s_i, e) \gets \TwoSum(a_i, e)$ for $i = 0, \dots, n-1$; $s_n \gets e$; return
-$R_n(s)$.
+$\Ren_n(s)$.
 \item MULF ($b \in \F$): $(s_i, e_i) \gets \TwoProd(a_i, b)$ for $i < n$; $s_n \gets e_{n-1}$; $\dep(s, l, e_{l-1})$ for
-$l = 1, \dots, n-1$; return $R_n(s)$.
+$l = 1, \dots, n-1$; return $\Ren_n(s)$.
 \item MUL: (1) $(s_j, e_{0j}) \gets \TwoProd(a_0, b_j)$ for $j < n$. (2) $f \gets \RN(a_1 b_{n-1})$, then $f \gets
 \RN(a_i b_{n-i} + f)$ for $i = 2, \dots, n-1$; $s_n \gets f$. (3) $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n$. (4) For
 $i = 1, \dots, n-1$ and $j = 0, \dots, n-1-i$: $(p_{ij}, e_{ij}) \gets \TwoProd(a_i, b_j)$, $\dep(s, i+j, p_{ij})$,
-$\dep(s, i+j+1, e_{ij})$. (5) Return $R_n(s)$.
+$\dep(s, i+j+1, e_{ij})$. (5) Return $\Ren_n(s)$.
 \end{itemize}
 At $n = 8$ and $p = 53$ these are the octo-double algorithms of multidouble~\cite{md}. Its scalar type takes $\FastTwoSum$
 instead of $\TwoSum$ in the second pass when $|\acc| \ge |v_j|$, which by Lemma~\ref{lem:facts}(b) gives the same bits.
@@ -92,10 +92,10 @@ equal $a + b - s$. (c) Under (A2), $ab - p \in \F$, so the FMA returns it exactl
 \section{Renormalization in any order}
 
 \begin{theorem}\label{thm:t1}
-Assume~\ref{as:fp}. Let $c \in \F^{n+1}$, in any order of magnitudes, $v = \mathrm{VecSum}(c)$, $x = R_n(c)$, $S =
+Assume~\ref{as:fp}. Let $c \in \F^{n+1}$, in any order of magnitudes, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S =
 \sum_m c_m$ and $E = S - \sum_k x_k$.
 \begin{enumerate}
-\item[(a)] $\sum_j v_j = S$. If $R_n$ is given $N \le n$ terms, $E = 0$. With $N = n+1$, $E \ne 0$ only if each of the
+\item[(a)] $\sum_j v_j = S$. If $\Ren_n$ is given $N \le n$ terms, $E = 0$. With $N = n+1$, $E \ne 0$ only if each of the
 steps $1, \dots, n-1$ emitted. Then $\acc_j$ is the error of the $\TwoSum$ of step $j$ for $1 \le j \le n-1$, and $E =
 \acc_{n-1} + v_n - x_{n-1}$ is the error of the $\TwoSum$ of step $n$.
 \item[(b)] $|E| \le \min_{0 \le k \le n} B_k$, where
@@ -334,18 +334,18 @@ second term dominates.
 \section{The parts of the result}
 
 \begin{lemma}\label{lem:o}
-Assume~\ref{as:fp}. For $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = R_n(c)$, $S = \sum_m c_m$ and $W_k =
+Assume~\ref{as:fp}. For $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S = \sum_m c_m$ and $W_k =
 \sum_{j=k+1}^{n}|v_j|$: $(|S| - W_1)/(1+u) \le |x_0| \le (1+u)(|S| + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$
 for $1 \le i \le n-1$.
 \end{lemma}
 
 \begin{proof}
-Let the pass emit $K$ times, at steps $j_0 < \dots < j_{K-1}$, with errors $\varepsilon_0, \dots, \varepsilon_{K-1}$. By
+Let the pass emit $q$ times, at steps $j_0 < \dots < j_{q-1}$, with errors $\varepsilon_0, \dots, \varepsilon_{q-1}$. By
 \eqref{eq:rn}, $|\varepsilon_i| \le u|x_i|$. Each emission happens at a later step than the one before, so $j_{i-1}
 \ge i$. Between two emissions every step has $e = 0$ and adds exactly, except a final lossy step $n$ (Theorem
-\ref{thm:t1}(a)). So for $1 \le i \le K - 1$, $x_i = \RN(\varepsilon_{i-1} + \sum_{j_{i-1} < j \le j_i} v_j)$, and $x_K$
-is $\varepsilon_{K-1} + \sum_{j > j_{K-1}} v_j$, exactly or rounded once; the parts after $x_K$ are zero. With
-\eqref{eq:rn}, $|x_i| \le (1+u)(u|x_{i-1}| + W_{j_{i-1}}) \le (1+u)(u|x_{i-1}| + W_i)$. If $K = 0$, nothing is lost
+\ref{thm:t1}(a)). So for $1 \le i \le q - 1$, $x_i = \RN(\varepsilon_{i-1} + \sum_{j_{i-1} < j \le j_i} v_j)$, and $x_q$
+is $\varepsilon_{q-1} + \sum_{j > j_{q-1}} v_j$, exactly or rounded once; the parts after $x_q$ are zero. With
+\eqref{eq:rn}, $|x_i| \le (1+u)(u|x_{i-1}| + W_{j_{i-1}}) \le (1+u)(u|x_{i-1}| + W_i)$. If $q = 0$, nothing is lost
 ($n \ge 2$), and $x_0 = S$. Otherwise $x_0 = \RN(\sum_{j \le j_0} v_j)$ with $\bigl||\sum_{j \le j_0} v_j| - |S|\bigr|
 \le W_{j_0} \le W_1$.
 \end{proof}
@@ -399,23 +399,23 @@ outside $H(2)$, and the theorems above do not chain through it.
 
 QD's accurate division, with $n+1$ quotient terms, generalizes as follows. Let $r^{(0)} = a$
 and $q_0 = \RN(r^{(0)}_0/b_0)$, and for $k = 1, \dots, n$ let $r^{(k)} = \mathrm{SMF}(r^{(k-1)}, b, q_{k-1})$ and $q_k =
-\RN(r^{(k)}_0/b_0)$; return $x = R_n(q_0, \dots, q_n)$. Here $\mathrm{SMF}(r, b, q)$ forms $(p_i, \pi_i) \gets
+\RN(r^{(k)}_0/b_0)$; return $x = \Ren_n(q_0, \dots, q_n)$. Here $\mathrm{SMF}(r, b, q)$ forms $(p_i, \pi_i) \gets
 \TwoProd(b_i, q)$ and $(s_i, t_i) \gets \TwoSum(r_i, -p_i)$ for $i < n$, sets $s_n \gets \RN(t_{n-1} - \pi_{n-1})$,
-performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -\pi_l)$ for $l = 0, \dots, n-2$, and returns $R_n(s)$. At $n = 8$ and $p =
+performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -\pi_l)$ for $l = 0, \dots, n-2$, and returns $\Ren_n(s)$. At $n = 8$ and $p =
 53$ this is multidouble's division (identical bits on 645 inputs).
 
 \begin{theorem}\label{thm:t6}
 Assume~\ref{as:fp} and $(2n-1)u < 1$, and let $a$ and $b$ satisfy $H(\theta)$
 with $b_0 \ne 0$. Define, in units of $|a_0|$, $P^{(0)}_i = \rho^i$ ($0 \le i \le n-1$), and for $k = 0, \dots, n$ let
-$Q_k = (1+u)P^{(k)}_0$. For $k = 0, \dots, n-1$, with $P = P^{(k)}$, let
+$\bar q_k = (1+u)P^{(k)}_0$. For $k = 0, \dots, n-1$, with $P = P^{(k)}$, let
 \[
-G_0 = u(P_0 + Q_k), \quad G_i = P_i + (1+u)\rho^iQ_k \ (1 \le i < n),
+G_0 = u(P_0 + \bar q_k), \quad G_i = P_i + (1+u)\rho^i\bar q_k \ (1 \le i < n),
 \]
 \begin{gather*}
 A_0 = (1+u)G_0, \\
-A_m = (1+u)G_m + uG_{m-1} + u\rho^{m-1}Q_k \ (1 \le m < n),
+A_m = (1+u)G_m + uG_{m-1} + u\rho^{m-1}\bar q_k \ (1 \le m < n),
 \end{gather*}
-$A_n = uG_{n-1} + u\rho^{n-1}Q_k$,
+$A_n = uG_{n-1} + u\rho^{n-1}\bar q_k$,
 let $X_m$ and $R$ be those of Lemma~\ref{lem:l} with these $A_m$, $T_m = 2m$ and $Q = 2n-1$, let $\sigma_l = \sum_{m \ge l}X_m$, $V_0 = (1+u)^n\sigma_0$, $V_j =
 \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_i = \sum_{j > i}V_j$, and set
 \begin{align*}
@@ -426,19 +426,19 @@ let $X_m$ and $R$ be those of Lemma~\ref{lem:l} with these $A_m$, $T_m = 2m$ and
 P^{(k+1)}_0 = (1+u)(\sigma_0 + W_1), \\
 P^{(k+1)}_i = (1+u)(uP^{(k+1)}_{i-1} + W_i).
 \end{gather*}
-Let $\tau = \sum_{i \ge 1}P^{(n)}_i + uP^{(n)}_0 + Q_n\rho/(1-\rho)$ and $\Theta = \tau + \sum_{k=1}^n \varepsilon_k$; let
-$V^q_j$ be the bounds $V_j$ above computed from $X_m = Q_m$ ($0 \le m \le n$), and $\Xi = u^n\sum_{j \ge 1}V^q_j +
+Let $\Theta_0 = \sum_{i \ge 1}P^{(n)}_i + uP^{(n)}_0 + \bar q_n\rho/(1-\rho)$ and $\Theta = \Theta_0 + \sum_{k=1}^n \varepsilon_k$; let
+$V^q_j$ be the bounds $V_j$ above computed from $X_m = \bar q_m$ ($0 \le m \le n$), and $\Xi = u^n\sum_{j \ge 1}V^q_j +
 \sum_{j \ge 1}u^{n+1-j}V^q_j$. Then the result satisfies
 \begin{gather*}
-\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + K u^{n+1})\Bigl|\frac ab\Bigr|, \\
-K = \frac{(1+u^n)\Theta\frac{1-\rho}{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
+\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + \kdiv u^{n+1})\Bigl|\frac ab\Bigr|, \\
+\kdiv = \frac{(1+u^n)\Theta\frac{1-\rho}{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
 \end{gather*}
-At $n = 8$, $p = 53$: $K = 2^{25.9}$ for $\theta = 1$ and $K = 2^{27.47}$ for $\theta = 2$, so $|a/b - x| \le (1 +
+At $n = 8$, $p = 53$: $\kdiv = 2^{25.9}$ for $\theta = 1$ and $\kdiv = 2^{27.47}$ for $\theta = 2$, so $|a/b - x| \le (1 +
 2^{-25.5})\,2^{-424}|a/b|$ for ulp-nonoverlapping $a$ and $b$.
 \end{theorem}
 
 \begin{proof}
-We show by induction on $k$ that $|r^{(k)}_i| \le P^{(k)}_i|a_0|$ and $|q_kb_0| \le Q_k|a_0|$, and that the $k$-th
+We show by induction on $k$ that $|r^{(k)}_i| \le P^{(k)}_i|a_0|$ and $|q_kb_0| \le \bar q_k|a_0|$, and that the $k$-th
 update errs by $|\varepsilon^{\rm true}_k| \le \varepsilon_k|a_0|$, where $\varepsilon^{\rm true}_{k+1} = (r^{(k)} -
 q_kb) - r^{(k+1)}$. For $k = 0$, $H(\theta)$ gives the first claim, and $|q_k| \le (1+u)|r^{(k)}_0|/|b_0|$ by
 \eqref{eq:rn} gives the second for every $k$.
@@ -457,12 +457,12 @@ bounds $P^{(k+1)}$.
 \emph{The quotient.} Summing the updates, $a - b\sum_{k \le n}q_k = r^{(n)} - q_nb + \sum_{k=1}^n
 \varepsilon^{\rm true}_k$, and
 \[
-|r^{(n)} - q_nb| \le \sum_{i \ge 1}|r^{(n)}_i| + |r^{(n)}_0 - b_0q_n| + |q_n|\,|b - b_0| \le \tau|a_0|,
+|r^{(n)} - q_nb| \le \sum_{i \ge 1}|r^{(n)}_i| + |r^{(n)}_0 - b_0q_n| + |q_n|\,|b - b_0| \le \Theta_0|a_0|,
 \]
 using $|b - b_0| \le |b_0|\rho/(1-\rho)$. So $|a - b\sum q| \le \Theta|a_0|$, and with $|b| \ge |b_0|(1-2\rho)/(1-\rho)$
 from \eqref{eq:a0}, $|a/b - \sum q| \le \Theta\frac{1-\rho}{1-2\rho}|a_0|/|b_0|$.
 
-\emph{The result.} The $n+1$ terms $q_k$, in whatever order of magnitudes, satisfy $|q_k| \le Q_k|a_0|/|b_0|$, so by
+\emph{The result.} The $n+1$ terms $q_k$, in whatever order of magnitudes, satisfy $|q_k| \le \bar q_k|a_0|/|b_0|$, so by
 Theorem~\ref{thm:t1}(b) with $k' = 0$ and (d), and $|v_0| \le |\sum q| + \sum_{j \ge 1}|v_j|$,
 \begin{align*}
 \Bigl|\sum q - \sum x\Bigr| &\le u^n\Bigl|\sum q\Bigr| + \Xi\,|a_0|/|b_0| \\
@@ -475,8 +475,8 @@ arithmetic.
 
 \begin{remark}
 The bound on the remainders grows by about $7u$ per update at $\theta = 2$ ($P^{(k)}_0 \approx 6.7^k u^k$ at $n = 8$),
-so $K$ grows like $7^{n+1}$ times the cost of an update, and $Ku < 1$ for $n \le 13$ at $p = 53$
-($Ku = 2^{-8.1}$ at $n = 12$ and $2^{-3.4}$ at $n = 13$, $\theta = 2$). The remainders after cancellation do not satisfy $H(\theta)$ for a useful
+so $\kdiv$ grows like $7^{n+1}$ times the cost of an update, and $\kdiv u < 1$ for $n \le 13$ at $p = 53$
+($\kdiv u = 2^{-8.1}$ at $n = 12$ and $2^{-3.4}$ at $n = 13$, $\theta = 2$). The remainders after cancellation do not satisfy $H(\theta)$ for a useful
 $\theta$, so the proof carries part bounds $P^{(k)}$ relative to $|a_0|$ through Lemma~\ref{lem:o} instead of applying
 Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposition~\ref{prop:sharp}(d)).
 \end{remark}
@@ -538,17 +538,18 @@ SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start
 \mathrm{MUL}(r, a)$, and the result is $zs$.
 
 \begin{theorem}\label{thm:t7}
-Assume~\ref{as:fp} and (A3), and let $x$ satisfy $H(\theta)$ with $x_0 > 0$. Let $A = \sum_i a_i$ and $y = A^{-1/2}$, and measure $r$ and $d$ in units of $y$, $a$ and $h$ in units of
-$A$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. With the $\bar a_i$ of \eqref{eq:abar}, let $\bar
+Assume~\ref{as:fp} and (A3), and let $x$ satisfy $H(\theta)$ with $x_0 > 0$. Write $a$ also for its value $\sum_i
+a_i$, as in \eqref{eq:a0}, let $y = a^{-1/2}$, and measure $r$ and $d$ in units of $y$, the parts of $a$ and $h$ in
+units of $a$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. With the $\bar a_i$ of \eqref{eq:abar}, let $\bar
 h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1-2\rho)}{1-\rho}\bigr)$ and $\pi^{(0)} =
 (1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\pi, \pi;\ (1+E)^2\bigr), \\
 (\epsilon_g, \gamma) &= G_{\rm MUL}\bigl(\bar h, \mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
-(\epsilon_c, \kappa) &= G_{\rm ADDF}\bigl(\gamma, \tfrac12;\ \zeta,\ \lambda_0\bigr), \\
+(\epsilon_c, \chi) &= G_{\rm ADDF}\bigl(\gamma, \tfrac12;\ \zeta,\ \lambda_0\bigr), \\
 \lambda_0 &= \zeta + {\textstyle\sum_{i \ge 1}}\gamma_i, \\
 \zeta &= \tfrac12(2E + E^2) + \tfrac12\epsilon_m + \epsilon_g, \\
-(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\kappa, \pi;\ (\zeta + \epsilon_c)(1+E)\bigr), \\
+(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\chi, \pi;\ (\zeta + \epsilon_c)(1+E)\bigr), \\
 (\epsilon_r, \pi') &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) \\
 &\qquad + (\zeta + \epsilon_c)(1+E) + \epsilon_d\bigr),
 \end{align*}
@@ -563,28 +564,28 @@ satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8
 \end{theorem}
 
 \begin{proof}
-Since $s$ is a power of two, $a = x/s^2$ and $h = a/2$ are exact, $a$ satisfies $H(\theta)$, $\sqrt x = s\sqrt A$, and
-$a_0(1-2\rho)/(1-\rho) \le A \le a_0/(1-\rho)$ by \eqref{eq:a0}; and $|a_i| \le \bar a_iA$ and $|h_i| \le \bar h_iA$ by \eqref{eq:abar}.
+Since $s$ is a power of two, $a = x/s^2$ and $h = a/2$ are exact, $a$ satisfies $H(\theta)$, $\sqrt x = s\sqrt a$, and
+$a_0(1-2\rho)/(1-\rho) \le a \le a_0/(1-\rho)$ by \eqref{eq:a0}; and $|a_i| \le \bar a_ia$ and $|h_i| \le \bar h_ia$ by \eqref{eq:abar}.
 
-\emph{Start.} By \eqref{eq:rn}, $r_0\sqrt{a_0} \in [1/(1+2u), 1+2u]$, and $\sqrt{A/a_0}$ lies between $\frac{1-2\rho}
+\emph{Start.} By \eqref{eq:rn}, $r_0\sqrt{a_0} \in [1/(1+2u), 1+2u]$, and $\sqrt{a/a_0}$ lies between $\frac{1-2\rho}
 {1-\rho}$ and $\frac1{1-\rho}$; so $|r_0/y - 1| \le E_0$.
 
 \emph{A step.} Let $r = y(1+e)$ with $|e| \le E$ and $|r_i| \le \pi_i y$. The exact Newton map satisfies $N(r) = r +
-(\frac12 - \frac A2 r^2)r = y(1 - \frac32e^2 - \frac12e^3)$, since $\frac A2r^2 = \frac12(1+e)^2$. With the signed
-errors $\hat\epsilon_m = m - r^2$, $\hat\epsilon_g = g - \frac A2 m$, $\hat\epsilon_c = c - (\frac12 - g)$,
+(\frac12 - \frac a2 r^2)r = y(1 - \frac32e^2 - \frac12e^3)$, since $\frac a2r^2 = \frac12(1+e)^2$. With the signed
+errors $\hat\epsilon_m = m - r^2$, $\hat\epsilon_g = g - \frac a2 m$, $\hat\epsilon_c = c - (\frac12 - g)$,
 $\hat\epsilon_d = d - cr$ and $\hat\epsilon_r = r' - (r + d)$,
 \[
-r' = N(r) + r\bigl(-\tfrac A2\hat\epsilon_m - \hat\epsilon_g + \hat\epsilon_c\bigr) + \hat\epsilon_d + \hat\epsilon_r,
+r' = N(r) + r\bigl(-\tfrac a2\hat\epsilon_m - \hat\epsilon_g + \hat\epsilon_c\bigr) + \hat\epsilon_d + \hat\epsilon_r,
 \]
 so $|r'/y - 1| \le E_{k+1}$ once the five errors are bounded. Lemma~\ref{lem:g} bounds each, given part bounds of the
-operands and a bound $\bar Z$ on the exact result: $|r^2| \le (1+E)^2y^2$; $|\frac A2 m| \le \frac12((1+E)^2 +
-\epsilon_m)$; the exact value of the ADDF satisfies $|\frac12 - g| \le |\frac12 - \frac A2r^2| + \frac A2|\hat\epsilon_m|
+operands and a bound $\bar Z$ on the exact result: $|r^2| \le (1+E)^2y^2$; $|\frac a2 m| \le \frac12((1+E)^2 +
+\epsilon_m)$; the exact value of the ADDF satisfies $|\frac12 - g| \le |\frac12 - \frac a2r^2| + \frac a2|\hat\epsilon_m|
 + |\hat\epsilon_g| \le \zeta$, and its level 0 adds $\frac12 - g_0$, with $|\frac12 - g_0| \le \zeta + \sum_{i \ge 1}
 |g_i|$; $|cr| \le (\zeta + \epsilon_c)(1+E)y$; and $|r + d| \le ((1+E) + (\zeta + \epsilon_c)(1+E) + \epsilon_d)y$. The
-part bounds $\mu$, $\gamma$, $\kappa$, $\delta$ and $\pi'$ of the results are Lemma~\ref{lem:g}(b), so the induction
+part bounds $\mu$, $\gamma$, $\chi$, $\delta$ and $\pi'$ of the results are Lemma~\ref{lem:g}(b), so the induction
 carries on to the next step.
 
-\emph{End.} $|z - \sqrt A| \le |z - rA| + A|r - y| \le \epsilon_z\sqrt A + E_J\sqrt A$, and $zs$ is exact. The values at
+\emph{End.} $|z - \sqrt a| \le |z - ra| + a|r - y| \le \epsilon_z\sqrt a + E_J\sqrt a$, and $zs$ is exact. The values at
 $n = 8$ are those of \texttt{sqrt\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers; every
 formula above is nondecreasing in the quantities so rounded, so the computed values are upper bounds.
 \end{proof}
@@ -598,20 +599,20 @@ then $z = \mathrm{MUL}(r, a)$, and the result is $zs$. At $n = 8$ this is multid
 2000 inputs, \texttt{sqrt\_bits.py}).
 
 \begin{theorem}\label{thm:t8}
-Assume the hypotheses of Theorem~\ref{thm:t7}, with its units, $\bar a$ and $\bar h$, and $p \ge 7$. Let $\tau =
-\rho^2/(1-\rho)^2$, $\eta_1 = \frac{25}{8}u^2$, $\eta_2 = 15u^2 + 56u^3$,
+Assume the hypotheses of Theorem~\ref{thm:t7}, with its units, $\bar a$ and $\bar h$, and $p \ge 7$. Let $\eta_1 =
+\frac{25}{8}u^2$, $\eta_2 = 15u^2 + 56u^3$, $\eta_3 = \rho^2/(1-\rho)^2$,
 \begin{gather*}
-E_0 = \max\Bigl(\frac{(1 + \tau/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\tau)(1-\eta_2)}{1+\eta_1}\Bigr),
+E_0 = \max\Bigl(\frac{(1 + \eta_3/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\eta_3)(1-\eta_2)}{1+\eta_1}\Bigr),
 \\
 \pi^{(0)} = \Bigl(\frac{1+E_0}{1-u},\ \frac{u(1+E_0)}{1-u},\ 0, \dots, 0\Bigr).
 \end{gather*}
-With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \gamma, \epsilon_c, \kappa$ and $\zeta$ be those
+With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \gamma, \epsilon_c, \chi$ and $\zeta$ be those
 of Theorem~\ref{thm:t7}, $\gamma' = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \zeta + \epsilon_c$, and
 \begin{align*}
-(\epsilon_q, \nu) &= G_{\rm MUL}\bigl(\kappa, \kappa;\ \bar c^2\bigr), \quad \bar q = \bar c^2 + \epsilon_q, \\
-(\epsilon_t, \sigma) &= G_{\rm ADD}\bigl(\nu, \tfrac12\nu;\ \tfrac32\bar q\bigr), \quad \bar t = \tfrac32\bar q +
+(\epsilon_q, \nu) &= G_{\rm MUL}\bigl(\chi, \chi;\ \bar c^2\bigr), \quad \bar q = \bar c^2 + \epsilon_q, \\
+(\epsilon_t, \vartheta) &= G_{\rm ADD}\bigl(\nu, \tfrac12\nu;\ \tfrac32\bar q\bigr), \quad \bar t = \tfrac32\bar q +
 \epsilon_t, \\
-(\epsilon_w, \omega) &= G_{\rm ADD}\bigl(\kappa, \sigma;\ \bar c + \bar t\bigr), \quad \bar w = \bar c + \bar t +
+(\epsilon_w, \omega) &= G_{\rm ADD}\bigl(\chi, \vartheta;\ \bar c + \bar t\bigr), \quad \bar w = \bar c + \bar t +
 \epsilon_w, \\
 (\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\omega, \pi;\ \bar w(1+E)\bigr), \\
 (\epsilon_r, \pi^{(1)}) &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) + \bar w(1+E) + \epsilon_d\bigr),
@@ -632,9 +633,9 @@ $\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $
 \emph{Start.} $\FastTwoSum$ is exact, since $|a_1| \le \rho|a_0|$, and $(a_0', a_1')$ is a double-word number far from
 underflow, as $a_0 \in [1, 4)$. Theorem~3.5 of~\cite{LLMPR23} gives $v = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
 \eta_1$, and Theorem~7.1 of~\cite{JMP17}, which~\cite{MR22} proved formally, gives $r v = 1 + d_2$ with $|d_2| \le
-\eta_2$ for $p \ge 7$. With $A = (a_0 + a_1)(1 + \vartheta)$, where $|\vartheta| \le \tau$ by $|a_2 + \dots| \le
-\rho^2a_0/(1-\rho)$ and $|a_0 + a_1| \ge (1-\rho)a_0$, $r/y = (1+\vartheta)^{1/2}(1+d_2)/(1+d_1)$ for $y = A^{-1/2}$,
-and $1 - \tau \le (1+\vartheta)^{1/2} \le 1 + \tau/2$ for $|\vartheta| \le \tau \le 1$ give $|r/y - 1| \le E_0$. The output of $\FastTwoSum$ has $|r_1| \le u|r_0|$, so $|r_0| \le |r|/(1-u)$,
+\eta_2$ for $p \ge 7$. With $a = (a_0 + a_1)(1 + d_3)$, where $|d_3| \le \eta_3$ by $|a_2 + \dots| \le
+\rho^2a_0/(1-\rho)$ and $|a_0 + a_1| \ge (1-\rho)a_0$, $r/y = (1+d_3)^{1/2}(1+d_2)/(1+d_1)$ for $y = a^{-1/2}$,
+and $1 - \eta_3 \le (1+d_3)^{1/2} \le 1 + \eta_3/2$ for $|d_3| \le \eta_3 \le 1$ give $|r/y - 1| \le E_0$. The output of $\FastTwoSum$ has $|r_1| \le u|r_0|$, so $|r_0| \le |r|/(1-u)$,
 which is $\pi^{(0)}$.
 
 \emph{The second-order step.} With $r = y(1+e)$, the exact $c$ is $-e - \frac12e^2$, and $(1+e)(1 + c + \frac32c^2) = 1 +

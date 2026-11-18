@@ -36,6 +36,8 @@
 \newcommand{\FastTwoSum}{\mathrm{Fast2Sum}}
 \newcommand{\TwoProd}{\mathrm{TwoProd}}
 \newcommand{\dep}{\mathrm{dep}}
+\newcommand{\Ren}{\mathrm{RENORM}}
+\newcommand{\kdiv}{\kappa_{\rm DIV}}
 
 \makeatletter
 \let\kept@itemize\itemize \def\itemize{\@beginparpenalty\@M\kept@itemize}
@@ -224,7 +226,7 @@ to, its order $i + j$. The five levels $0, \dots, 4$ are renormalized into four 
   \State $(p, e) \gets \TwoProd(a_i, b_j)$
   \State $\dep(s, i+j, p)$; \ $\dep(s, i+j+1, e)$
 \EndFor
-\State \Return $R_n(s_0, \dots, s_n)$ \Comment{Algorithm~\ref{alg:renorm}}
+\State \Return $\Ren_n(s_0, \dots, s_n)$ \Comment{Algorithm~\ref{alg:renorm}}
 \Statex
 \Statex \textbf{procedure} $\dep(s, l, t)$: add $t$ to level $l$, carry down
 \For{$m = l, \dots, n-1$} $(s_m, t) \gets \TwoSum(s_m, t)$
@@ -239,7 +241,7 @@ all four operations.
 
 \subsection{Renormalization}
 
-The levels overlap: level $m$ can hold bits that belong in level $m - 1$. The renormalization $R_n$
+The levels overlap: level $m$ can hold bits that belong in level $m - 1$. The renormalization $\Ren_n$
 (Algorithm~\ref{alg:renorm}) turns $n + 1$ such terms into $n$ parts. Its first pass, VecSum~\cite{ORO05}, sweeps
 from the smallest term to the largest with $\TwoSum$, which leaves the sum exact. Its second pass sweeps from the
 largest term down and adds each term to an accumulator. When the addition is inexact, the rounded sum becomes the next
@@ -248,7 +250,7 @@ stays in the accumulator.
 
 \nopagebreak
 \begin{algorithm}[H]
-\caption{Renormalization $R_n$}\label{alg:renorm}
+\caption{Renormalization $\Ren_n$}\label{alg:renorm}
 \small
 \begin{algorithmic}[1]
 \Require terms $c_0, \dots, c_N$, $N \le n$, in any order
@@ -350,8 +352,8 @@ $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
 \end{table}
 
 \begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t8}]\label{thm:divsqrt}
-For expansions on the ladder, long division with $n+1$ quotient terms errs by at most $(u^n + K_nu^{n+1})|a/b|$, with
-$K_8u = 2^{-25.5}$ and $K_nu < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
+For expansions on the ladder, long division with $n+1$ quotient terms errs by at most $(u^n + \kdiv u^{n+1})|a/b|$, with
+$\kdiv u = 2^{-25.5}$ at $n = 8$ and $\kdiv u < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
 double-double square root, the first with its second-order term, errs by at most $3.00004\,u^8\sqrt a$ at $n = 8$.
 \end{theorem}
 
