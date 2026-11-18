@@ -22,6 +22,7 @@ operations with part bounds carried through every step, err by at most 3.661 u^8
 | `review/` | a reviewer's recomputation of Theorems 39 and 41 from an earlier text of the appendix, sharing no code with `explog_consts.py` (`indep_exp.py`, `indep_log.py`, rationals rounded to nearest at 420 bits): the same largest cases, 3.66006045 u^8 and 9.925819 u^8 to nearest, which `explog_consts.txt` gives rounded up as 3.660061 u^8 and 9.925819 u^8; its absolute term, 2^-509.17, is that of the earlier start, where the script now gives 2^-509.08 |
 | `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with controls that skip its last step and its two-sum of the leading parts |
 | `trig_bits.py` | the sine, cosine and tangent of the trig appendix on `fpemu.py`, at eight parts and with the double-word algorithms at two, against multidouble's `OD` and `DD` functions, bit for bit, with controls that halve the sine series and skip the reduction's correction of k; `a2` scans every bucket of the reduced argument from 2^-212 to 1 for results outside binary64 (Remark 36), with the unscaled steps as its control; its output is `trig_bits_a2.txt` |
+| `table1_inputs.py` | the inputs of Table 1 for the square root, sine, cosine, tangent, exponential and logarithm (Table V): the emulator's results on them, the exact values enclosed by code of its own (an integer square root, fixed-point Taylor series, Python's decimal exp and ln), the errors as multiples of u^8\|Z\|, and multidouble's bits on the same inputs; `ties_away` and `perturb` are its controls |
 | `accumulator/` | the accumulator of Theorems 5 and 27 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`) and the error recomputed without the emulator (`acc_crate_err.py`); outputs in `accumulator/out/` |
 
 From this folder:
@@ -52,6 +53,9 @@ python3 trig_bits.py a2 32  # trig_bits_a2.txt, prints a2: PASS (about a minute 
 python3 sloppy_consts.py # Theorem 30, the sloppy multiply's bound, 2^31.9242 u^8 |a_0 b_0| at n = 8
 python3 sloppy_consts.py check  # prints PASS
 python3 sloppy_emu.py bound     # prints PASS; also bits and control
+python3 table1_inputs.py        # six inputs, their errors as multiples of u^8|Z|, prints PASS (about 10 seconds)
+python3 table1_inputs.py ties_away   # ties rounded away from zero: 6 of 6 below their quoted ratios (control)
+python3 table1_inputs.py perturb     # each leading part one ulp up: 6 of 6 below their quoted ratios (control)
 tectonic -X compile expansion-error-bounds.tex
 ```
 
