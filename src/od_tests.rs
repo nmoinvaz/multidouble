@@ -2206,8 +2206,10 @@ fn od_bits(b: [u64; 8]) -> OD {
 /// An input on which the square root errs by u^8 |sqrt x| to within a factor 1 - 5u (the paper's Table 1,
 /// paper/table1_inputs.py): x = (1 + 2u, x_1, ..., x_7), its parts chosen one at a time so that the levels of the last
 /// product, r x, are 1, u, ..., u^7 with a ninth just below u^8, which the renormalization drops, so that the result is
-/// (1, u, ..., u^7). Pass: that result, the measure |z^2 - x| / (2x) between 0.99 u^8 and the proven bound, scalar and
-/// lanes alike, and x within `proven`'s hypotheses. Control: x with its leading part one ulp up measures below 0.99 u^8.
+/// (1, u, ..., u^7). Pass: that result, scalar and lanes alike, x within `proven`'s hypotheses, and the check, the
+/// measure |z^2 - x| / (2x) between 0.99 u^8 and the proven bound. Controls: the check rejects a wrong result past the
+/// bound (the last part 16 u^8 up) and one far more accurate (the greedy eight parts of the sum of the result's parts
+/// and u^8), and x with its leading part one ulp up measures below 0.99 u^8.
 #[test]
 fn od_sqrt_worst_case_input() {
     let u = 2f64.powi(-53);
@@ -2221,30 +2223,41 @@ fn od_sqrt_worst_case_input() {
         0x2b60624dd2f1be00,
         0x28b0000000000009,
     ]);
-    let measure = |x: OD| -> (OD, f64, bool) {
-        let (rs, rv) = results(Op::Sqrt, &[(x, OD::ONE)]);
-        let (err, scale, _, _) = exact_err(Op::Sqrt, x, OD::ONE, rs[0], false);
-        let inside = within(&err, &scale, SQRT_PROVEN_THR, &Dy::zero());
-        (rs[0], err.ratio(&scale) / unit(), inside && same(rs[0], rv[0]))
+    // the measure of z as sqrt(x) in units of 2^-418, and whether the check passes it
+    let check = |x: OD, z: OD| -> (f64, bool) {
+        let (err, scale, _, _) = exact_err(Op::Sqrt, x, OD::ONE, z, false);
+        let m = err.ratio(&scale) / unit();
+        (
+            m,
+            m >= 0.99 / 64.0 && within(&err, &scale, SQRT_PROVEN_THR, &Dy::zero()),
+        )
     };
     assert!(proven(Op::Sqrt, x, OD::ONE), "sqrt: input outside the hypotheses");
-    let (z, m, ok) = measure(x);
+    let (rs, rv) = results(Op::Sqrt, &[(x, OD::ONE)]);
+    let z = rs[0];
     let ladder: [f64; 8] = std::array::from_fn(|k| u.powi(k as i32));
+    assert_eq!(z.x, ladder, "sqrt: the result is not (1, u, ..., u^7)");
+    assert!(same(z, rv[0]), "sqrt: lanes differ from the scalar result");
+    let (m, ok) = check(x, z);
     println!(
         "sqrt error {m:.10} units of 2^-418, (m - 1/64) / (u/64) = {:.3}",
         (m * 64.0 - 1.0) / u
     );
-    assert_eq!(z.x, ladder, "sqrt: the result is not (1, u, ..., u^7)");
-    assert!(
-        ok,
-        "sqrt: past the proven bound, or lanes differ from the scalar result"
-    );
-    assert!(m >= 0.99 / 64.0, "sqrt: {m} units, below 0.99 u^8");
+    assert!(ok, "sqrt: {m} units, outside [0.99 u^8, the proven bound]");
+    let mut hi = z;
+    hi.x[7] += 16.0 * u.powi(8);
+    let lo = od_of(&z.exact().add(&Dy::from_f64(u.powi(8))));
+    let (mh, okh) = check(x, hi);
+    let (ml, okl) = check(x, lo);
     let mut y = x;
     y.x[0] = y.x[0].next_up();
-    let (_, my, _) = measure(y);
-    println!("control, leading part one ulp up: {my:.3e} units");
-    assert!(my < 0.99 / 64.0, "control: {my} units, the check cannot fail");
+    let my = check(y, y.sqrt()).0;
+    println!("controls: {mh:.3e} and {ml:.3e} units for the wrong results, {my:.3e} for x one ulp up");
+    assert!(!okh && !okl, "control: the check passes a wrong result");
+    assert!(
+        my < 0.99 / 64.0,
+        "control: {my} units, the input one ulp up still reaches 0.99 u^8"
+    );
 }
 
 /// The proven bound catches what the 1-unit thresholds miss: with the products of order 8 dropped, an error of a few
