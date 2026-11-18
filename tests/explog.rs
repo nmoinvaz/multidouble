@@ -856,6 +856,81 @@ fn all_rows(n: usize, seed: u64) -> Vec<Row> {
     rows
 }
 
+/// The inputs of the paper's Table 1 for the octo-double exp and ln (paper/table1_inputs.py), with the floors their
+/// errors reach in units of u^8: x chosen so that f(x) lies just past 2^E (1 + u + ... + u^7) and the result is 2^E (1,
+/// u, ..., u^7) up to sign, the ninth part that the renormalization drops near u^8 2^E.
+const OD_TABLE1: [(bool, [u64; 8], f64); 2] = [
+    (
+        true,
+        [
+            0x3cd1fffffffffffe,
+            0xb97dffffffffffe3,
+            0x3617fffffffffe78,
+            0x3290000000005734,
+            0xaf399999999ea6ee,
+            0xabd1111110c3fec7,
+            0x286c09c092a9409b,
+            0x25442702796c90a9,
+        ],
+        0.999999999999,
+    ),
+    (
+        false,
+        [
+            0x3fef80feabfeefa4,
+            0x3c7804fa722c50e6,
+            0xb90d33e543ae606f,
+            0xb5a9c51096bddb1f,
+            0xb220568c7ee0a0ac,
+            0xaeb561138ac7c121,
+            0x2b51118a13c0f359,
+            0x27f77c36d87db0bc,
+        ],
+        0.99998,
+    ),
+];
+
+/// `OD::exp` and `OD::ln` on the inputs of the paper's Table 1. Pass: each input on the ladder, each result 2^E (1, u,
+/// ..., u^7) up to sign, each error at least its floor and within the proven bound, scalar and lanes alike. Control:
+/// each input with its leading part one ulp up errs by less than its floor.
+#[test]
+fn od_table1_inputs() {
+    let u = 2f64.powi(-53);
+    let eval = |exp: bool, x: OD| -> (OD, OD, f64) {
+        if exp {
+            let y = x.exp();
+            (y, native::OV::splat(x).exp().lane(0), exp_err_of(x, y).0)
+        } else {
+            let y = x.ln();
+            (y, native::OV::splat(x).ln().lane(0), ln_err_of(x, y, OD_LN_FLOOR).0)
+        }
+    };
+    for (exp, b, floor) in OD_TABLE1 {
+        let name = if exp { "exp" } else { "ln" };
+        let x = OD {
+            x: b.map(f64::from_bits),
+        };
+        assert!(ladder(x), "{name}: input off the ladder");
+        let (y, lane, e) = eval(exp, x);
+        let top = y.x[0];
+        let pow = f64::from_bits(top.abs().to_bits() & 0x7ff0_0000_0000_0000).copysign(top);
+        let shape = (1..8).all(|k| y.x[k] == pow * u.powi(k as i32));
+        println!("{name}: error {e:.9} u^8, floor {floor}");
+        assert!(shape, "{name}: the result is not 2^E (1, u, ..., u^7)");
+        assert_eq!(y.x, lane.x, "{name}: lanes differ from the scalar result");
+        let bound = if exp { OD_EXP } else { OD_LN };
+        assert!(
+            e >= floor && e <= bound,
+            "{name}: error {e} u^8 outside [{floor}, {bound}]"
+        );
+        let mut z = x;
+        z.x[0] = z.x[0].next_up();
+        let ez = eval(exp, z).2;
+        println!("  control, leading part one ulp up: {ez:.3e} u^8");
+        assert!(ez < floor, "{name} control: {ez} u^8, the check cannot fail");
+    }
+}
+
 #[test]
 fn exp_and_ln_within_bounds() {
     let n = std::env::var("EXPLOG_N")
