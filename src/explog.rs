@@ -49,7 +49,10 @@
 //! backend, so the bounds above hold per lane. The same code runs on them: each lane's choices (the special values, k,
 //! m, the degree, the branches of ln) are made in f64 as the scalar types make them, the steps run as far as the lane
 //! that needs most, and a lane keeps its value through each step it does not take (masked), so that it performs the
-//! scalar type's operations and no others.
+//! scalar type's operations and no others. A NaN that the arithmetic makes, as parts off the ladder can when the run
+//! overflows, may differ in sign and payload between a lane and the scalar function: Rust leaves those unspecified, and
+//! the compiler's choice of instructions sets them, for the scalar types too. The special values' results, x_0 itself
+//! for exp of a NaN x_0 included, are made without arithmetic and match bit for bit.
 use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
 use crate::dv::{self, DV};
 use crate::od::{Limb, OD};
@@ -1733,7 +1736,7 @@ impl OD {
 }
 
 impl<S: Simd> DV<S> {
-    /// e^x on every lane, each lane bitwise `DD::exp` of its value
+    /// e^x on every lane, each lane bitwise `DD::exp` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
@@ -1741,7 +1744,7 @@ impl<S: Simd> DV<S> {
             || exp_of(self),
         )
     }
-    /// ln x on every lane, each lane bitwise `DD::ln` of its value
+    /// ln x on every lane, each lane bitwise `DD::ln` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
@@ -1752,7 +1755,7 @@ impl<S: Simd> DV<S> {
 }
 
 impl<S: Simd> QV<S> {
-    /// e^x on every lane, each lane bitwise `QD::exp` of its value
+    /// e^x on every lane, each lane bitwise `QD::exp` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
@@ -1760,7 +1763,7 @@ impl<S: Simd> QV<S> {
             || exp_of(self),
         )
     }
-    /// ln x on every lane, each lane bitwise `QD::ln` of its value
+    /// ln x on every lane, each lane bitwise `QD::ln` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
@@ -1771,7 +1774,7 @@ impl<S: Simd> QV<S> {
 }
 
 impl<S: Simd> OV<S> {
-    /// e^x on every lane, each lane bitwise `OD::exp` of its value
+    /// e^x on every lane, each lane bitwise `OD::exp` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
@@ -1779,7 +1782,7 @@ impl<S: Simd> OV<S> {
             || exp_of(self),
         )
     }
-    /// ln x on every lane, each lane bitwise `OD::ln` of its value
+    /// ln x on every lane, each lane bitwise `OD::ln` of its value, a computed NaN's sign and payload aside
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
