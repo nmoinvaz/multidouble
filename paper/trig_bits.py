@@ -176,6 +176,32 @@ def horner(o, z, c, K):
     return p
 
 
+def scale(x, k):
+    """every part times 2^k"""
+    return [F.mul(t, (1, k)) for t in x]
+
+
+def sinr(o, r, z, j, K, cs, scaled=True):
+    """SINR: r + r (z p_1), its last two steps on 2^(j+1) r and scaled back (unscaled: the control of the a2 scan)"""
+    t = o['mul'](z, horner(o, z, cs, K))
+    if not scaled:
+        return o['add'](r, o['mul'](r, t))
+    r1 = scale(r, j + 1)
+    return scale(o['add'](r1, o['mul'](r1, t)), -(j + 1))
+
+
+def cosr(o, z, j, K, cc):
+    return o['one_plus'](o['mul'](z, horner(o, z, cc, K)))
+
+
+def quot(o, s, c, j, scaled=True):
+    """sin r / cos r, on the numerator times 2^(3(j+1)) and scaled back (j None: |r_0| < T_n, unscaled)"""
+    if j is None or not scaled:
+        return o['div'](s, c)
+    e = 3 * (j + 1)
+    return scale(o['div'](scale(s, e), c), -e)
+
+
 def trig(x, n, tabs):
     """(sin, cos, tan) by SIN_n, COS_n, TAN_n"""
     ks, kc, cs, cc = tabs
@@ -184,19 +210,85 @@ def trig(x, n, tabs):
     if tiny(x[0], n):
         return x, one, x
     q, r = red(x, n)
+    if n == 2:
+        # the double-double r passes through a fast two-sum, so that it is a double-word number
+        r = list(F.quick_two_sum(r[0], r[1]))
     z = o['mul'](r, r)
     if tiny(r[0], n):
-        s, c = r, one
+        s, c, j = r, one, None
     else:
         j = bucket(r[0])
         K = max(2, ks[j] // 2) if CONTROL == 'control' else ks[j]
-        s = o['add'](r, o['mul'](r, o['mul'](z, horner(o, z, cs, K))))
-        c = o['one_plus'](o['mul'](z, horner(o, z, cc, kc[j])))
+        s = sinr(o, r, z, j, K, cs)
+        c = cosr(o, z, j, kc[j], cc)
     ng = o['neg']
     sx = [s, c, ng(s), ng(c)][q]
     cx = [c, ng(s), ng(c), s][q]
-    tx = o['div'](s, c) if q % 2 == 0 else ng(o['div'](c, s))
+    tx = quot(o, s, c, j) if q % 2 == 0 else ng(o['div'](c, s))
     return sx, cx, tx
+
+
+def a2_scan(per):
+    """(A2) at n = 8 for every bucket j from 0 to 211, |r_0| in [2^-(j+1), 2^-j): per random r (greedy roundings, and
+    every other one at the top of the ladder, each part in (1/2, 1] ulp of the one above), the runs of z = MUL(r, r),
+    SINR, COSR, DIV(sin r, cos r) and DIV(cos r, sin r) whose results include a value that is not a binary64 number
+    (bits below 2^-1074), and those with a subnormal result; the same for the unscaled SINR and quotient (the
+    control), which must have some. Exits 1 otherwise."""
+    n = 8
+    ks, kc, cs, cc = setup(n)
+    o = OPS[n]
+    hits = {'inexact': 0, 'subnormal': 0}
+    orig = F._fin
+
+    def fin(a, e, neg_):
+        y = orig(a, e, neg_)
+        m, ee = y
+        if m:
+            if ee < -1074:
+                hits['inexact'] += 1
+            elif abs(m).bit_length() - 1 + ee < -1022:
+                hits['subnormal'] += 1
+        return y
+
+    def run(f):
+        hits.update(inexact=0, subnormal=0)
+        f()
+        return hits['inexact'], hits['subnormal']
+
+    F._fin = fin
+    rnd = random.Random(2)
+    names = ['z = MUL(r, r)', 'SINR', 'COSR', 'DIV(s,c)', 'DIV(c,s)', 'SINR unscaled', 'DIV(s,c) unscaled']
+    bad = {k: [] for k in names}
+    sub = {k: 0 for k in names}
+    for j in range(53 * n // 2):
+        for i in range(per):
+            v = Q(rnd.getrandbits(500) | (1 << 499), 1 << 500) * Q(2) ** -j * rnd.choice((-1, 1))
+            r = greedy(v, n)
+            if i % 2:
+                for k in range(1, n):
+                    r[k] = rnd.choice((-1.0, 1.0)) * (0.5 + 0.5 * rnd.random()) * math.ulp(r[k - 1])
+            r = [fp(t) for t in r]
+            z = o['mul'](r, r)
+            jj = bucket(r[0])
+            s = sinr(o, r, z, jj, ks[jj], cs)
+            c = cosr(o, z, jj, kc[jj], cc)
+            for name, f in (('z = MUL(r, r)', lambda: o['mul'](r, r)), ('SINR', lambda: sinr(o, r, z, jj, ks[jj], cs)), ('COSR', lambda: cosr(o, z, jj, kc[jj], cc)),
+                            ('DIV(s,c)', lambda: quot(o, s, c, jj)), ('DIV(c,s)', lambda: o['div'](c, s)),
+                            ('SINR unscaled', lambda: sinr(o, r, z, jj, ks[jj], cs, False)),
+                            ('DIV(s,c) unscaled', lambda: quot(o, s, c, jj, False))):
+                ni, ns = run(f)
+                if ni:
+                    bad[name].append(jj)
+                sub[name] += ns > 0
+    F._fin = orig
+    for name in names:
+        b = bad[name]
+        where = f'buckets {min(b)} to {max(b)}, from |r| < 2^-{min(b)}' if b else 'none'
+        print(f'{name}: {len(b)} of {53 * n // 2 * per} runs with a result outside binary64 ({where}); '
+              f'{sub[name]} with a subnormal result')
+    ok = all(not bad[k] for k in names[:5]) and bad['SINR unscaled'] and bad['DIV(s,c) unscaled']
+    print('a2: PASS' if ok else 'a2: FAIL')
+    return 0 if ok else 1
 
 
 def inputs(N, seed, n):
@@ -233,6 +325,8 @@ def inputs(N, seed, n):
 
 def main():
     global CONTROL
+    if len(sys.argv) > 1 and sys.argv[1] == 'a2':
+        sys.exit(a2_scan(int(sys.argv[2]) if len(sys.argv) > 2 else 8))
     N = int(sys.argv[1]) if len(sys.argv) > 1 else 600
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else 1
     manifest = sys.argv[3] if len(sys.argv) > 3 else os.path.join(HERE, 'accumulator', 'acc_check', 'Cargo.toml')
