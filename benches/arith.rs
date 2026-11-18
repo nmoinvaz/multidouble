@@ -69,6 +69,9 @@ fn scalar(c: &mut Criterion) {
     let od: Vec<OD> = qd.iter().map(|&q| OD::from_qd(q)).collect();
     g.bench_function("od add", |bch| bch.iter(|| od.iter().fold(OD::ZERO, |s, &x| s + x)));
     g.bench_function("od mul", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s * x)));
+    g.bench_function("od sloppy_mul", |bch| {
+        bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s.sloppy_mul(x)))
+    });
     g.bench_function("od div", |bch| bch.iter(|| od.iter().fold(OD::ONE, |s, &x| s / x)));
     g.finish();
 }
@@ -336,6 +339,20 @@ impl Kernel for Lanes<'_, '_> {
                 )
             })
         });
+        g.bench_function("ov sloppy_mul", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = OV::splat_f(1.0);
+                        for &x in &ov {
+                            s = s.sloppy_mul(x);
+                        }
+                        s
+                    },
+                )
+            })
+        });
         g.bench_function("ov div", |bch| {
             bch.iter(|| {
                 S::vectorize(
@@ -358,6 +375,20 @@ impl Kernel for Lanes<'_, '_> {
                         let mut s = ODotAcc::zero();
                         for &x in &ov {
                             s = s.add_prod(x, x);
+                        }
+                        s.finish()
+                    },
+                )
+            })
+        });
+        g.bench_function("ov dot sloppy (ODotAcc)", |bch| {
+            bch.iter(|| {
+                S::vectorize(
+                    #[inline(always)]
+                    || {
+                        let mut s = ODotAcc::zero();
+                        for &x in &ov {
+                            s = s.add_prod_sloppy(x, x);
                         }
                         s.finish()
                     },
