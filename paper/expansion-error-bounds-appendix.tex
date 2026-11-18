@@ -508,6 +508,13 @@ Theorem~\ref{thm:t1}(d) gives $|v_j| \le V_j$ for $j \ge 1$, and Theorem~\ref{th
 Theorems~\ref{thm:t2} and~\ref{thm:t3} are the case $\alpha_i = \rho^i|a_0|$, $\beta_j = \rho^j|b_0|$, with the
 constants gathered into $\kappa$.
 
+We write $(\epsilon, \pi') = G_{\rm OP}(\alpha, \beta;\ \bar Z)$ for the error bound (a) and the part bounds (b) that
+Lemma~\ref{lem:g} gives for the operation OP, with the triangle inequality's $\lambda_m = \alpha_m + \beta_m$ for ADD
+and ADDF, and $G_{\rm OP}(\alpha, \beta;\ \bar Z, \lambda)$ for those with the $\lambda$ given. A one-part operand $f$ has part bounds $(|f|, 0, \dots, 0)$, and
+as an operand $|c|$ stands for the magnitudes of the parts of a constant expansion $c$. The bounds are homogeneous of
+degree one in the operands' part bounds, $\lambda$ and $\bar Z$ together, so an operation on operands scaled exactly by
+powers of two has the scaled bounds.
+
 The square root of multidouble generalizes as SQRT$_{n,J}$: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
 (exact), $h = a/2$, $r = (\RN(1/\RN(\sqrt{a_0})), 0, \dots, 0)$; $J$ times $m = \mathrm{MUL}(r, r)$, $g =
 \mathrm{MUL}(h, m)$, $c = \mathrm{ADDF}(-g, 1/2)$, $d = \mathrm{MUL}(c, r)$, $r \gets \mathrm{ADD}(r, d)$; then $z =
@@ -518,8 +525,7 @@ Assume~\ref{as:fp}, $(n^2+n)u < 1$, $\theta \ge 1$, $\rho = \theta u \le 1/4$, a
 $x_0 > 0$. Let $A = \sum_i a_i$ and $y = A^{-1/2}$, and measure $r$ and $d$ in units of $y$, $a$ and $h$ in units of
 $A$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. Let $\bar a_i = \rho^i(1-\rho)/(1-2\rho)$, $\bar
 h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1-2\rho)}{1-\rho}\bigr)$ and $\pi^{(0)} =
-(1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let Lemma~\ref{lem:g} give the
-error bounds and part bounds
+(1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\pi, \pi;\ (1+E)^2\bigr), \\
 (\epsilon_g, \gamma) &= G_{\rm MUL}\bigl(\bar h, \mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
@@ -530,7 +536,7 @@ error bounds and part bounds
 (\epsilon_r, \pi') &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) \\
 &\qquad + (\zeta + \epsilon_c)(1+E) + \epsilon_d\bigr),
 \end{align*}
-the third argument being $\bar Z$, with $\lambda_m = \pi_m + \delta_m$ for the ADD, and let
+and let
 \begin{align*}
 E_{k+1} &= \tfrac32E^2 + \tfrac12E^3 + (1+E)\bigl(\tfrac12\epsilon_m + \epsilon_g + \epsilon_c\bigr) \\
 &\quad + \epsilon_d + \epsilon_r, \qquad \pi^{(k+1)} = \pi'.

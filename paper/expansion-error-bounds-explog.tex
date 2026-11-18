@@ -6,12 +6,7 @@
 \section{The exponential and the logarithm}\label{sec:explog}
 
 The exponential and the logarithm are built from MUL, ADD, MULF and ADDF, and their errors are bounded as the square
-root's are (Theorem~\ref{thm:t7}). We write $(\epsilon, \pi') = G_{\rm OP}(\alpha, \beta;\ \bar Z)$ for the error
-bound (a) and the part bounds (b) that Lemma~\ref{lem:g} gives for operation OP from part bounds $\alpha$ and $\beta$
-of its operands and a bound $\bar Z$ on its exact result, and $G_{\rm OP}(\alpha, \beta;\ \bar Z, \lambda)$ when it is
-also given $\lambda$, a bound on $|a_0 + b_0|$. Part bounds of a value of one part $f$ are $(|f|, 0, \dots, 0)$. In
-binary64, $p = 53$. The bounds of Lemma~\ref{lem:g} are homogeneous of degree one in the operands' part bounds and $\bar
-Z$ together, so an operation on operands scaled exactly by powers of two has the scaled bounds.
+root's are (Theorem~\ref{thm:t7}), by the bounds $G_{\rm OP}$ of Lemma~\ref{lem:g}. In binary64, $p = 53$.
 
 \paragraph{Underflow} A few steps below may leave the normal range, and the bounds include what they lose. A scaling by
 a power of two is exact while each part stays zero or at least $2^{-1022}$ in magnitude; a part that falls below is

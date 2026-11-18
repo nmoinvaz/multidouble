@@ -74,16 +74,15 @@ remainder of the greedy rounding is at most $u_*$ times the one before, so $|r -
 |r_0|/(1-2u)$, and the part bounds from \eqref{eq:a0} with $\rho = 2u$, since $H(1)$ implies $H(2)$.
 \end{proof}
 
-The evaluation is a program of the operations of Lemma~\ref{lem:g}, in the notation $(\epsilon, \pi) =
-G_{\rm op}(\alpha, \beta;\ \bar Z)$ of Theorem~\ref{thm:t7}. Its bounds are those of Lemma~\ref{lem:g} applied in
-turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket $j$ with
-$R = R_j$ and $K = K_{\rm s}(j)$, let $\sigma_k$ be the magnitudes of the parts of $\hat s_k$, $\delta_k = |\hat s_k -
-s_k|$, $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar\alpha, \bar\alpha;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} =
-\sigma_{K-1}$, and for $k = K-2, \dots, 1$
+The evaluation is a program of the operations of Lemma~\ref{lem:g}, and its bounds are the $G_{\rm OP}$ of that lemma
+applied in turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket
+$j$ with $R = R_j$ and $K = K_{\rm s}(j)$, let $\delta_k = |\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm
+MUL}(\bar\alpha, \bar\alpha;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} = |\hat s_{K-1}|$, and for $k = K-2,
+\dots, 1$
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(R^2\zeta, \pi^{(k+1)};\ R^2(1+\epsilon_z)(|s_{k+1}| + E_{k+1})\bigr), \\
 D_k &= R^2(1+\epsilon_z)E_{k+1} + R^2\epsilon_z|s_{k+1}| + \delta_k + \epsilon_m, \\
-(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, \sigma_k;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
+(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, |\hat s_k|;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
 \end{align*}
 Then let
 \begin{align*}
@@ -129,8 +128,7 @@ The series' remainder after $K$ terms is at most its first omitted term, so $|r 
 \rho R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D\rho$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
 w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, so
 $|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
-(A2) both scalings are exact, and Lemma~\ref{lem:g}'s bounds scale with its operands, so in units of $2^\sigma\rho$
-they are those above. COSR is the same
+(A2) both scalings are exact, so in units of $2^\sigma\rho$ the bounds are those above. COSR is the same
 with $|c_1| = \frac12$ and the absolute units of ADDF, and $\cos r \ge \cos_- R$. For $|r_0| < T_n$, $|\sin r - r| \le
 \rho^3/6$ and $|1 - \cos r| \le \rho^2/2$.
 \end{proof}
