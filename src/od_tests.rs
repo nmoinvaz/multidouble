@@ -1046,6 +1046,15 @@ fn od_edges() -> Vec<OD> {
             x: [1.0, 0.0, 0.0, f64::INFINITY, 0.0, 0.0, 0.0, 0.0],
         },
     ];
+    // a non-finite value or a -0 in each part: the skipped products are then not all zeros
+    let full = [-1.25, u, -u * u, u.powi(3), -u.powi(4), u.powi(5), -u.powi(6), u.powi(7)];
+    for i in 0..8 {
+        for s in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN, -0.0] {
+            let mut x = full;
+            x[i] = s;
+            v.push(OD { x });
+        }
+    }
     let mut r = Rng::new(0xed9e);
     for _ in 0..12 {
         let e = r.int(-30, 30);
@@ -1064,6 +1073,10 @@ fn dd_edges() -> Vec<DD> {
     let u = 2f64.powi(-53);
     vec![
         d(0.0, 0.0),
+        d(0.0, 1.0),
+        d(-0.0, -u),
+        d(u, 1.0),
+        d(1.0, f64::INFINITY),
         d(-0.0, 0.0),
         d(0.0, -0.0),
         d(-0.0, -0.0),
