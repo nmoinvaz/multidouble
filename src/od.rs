@@ -29,8 +29,8 @@
 //!   renormalized: QD's accurate multiply, extended to eight parts. The levels carry the product's terms to order 8,
 //!   below the eighth part, so its error is that of the renormalization's rounding to eight parts.
 //! * Division: long division, nine quotient terms q_k = r_0 / b_0 with the remainder r - b q_k updated in one pass
-//!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), four steps, after scaling by a
-//!   power of four (QD's, with this crate's scaling, `qd::QD::sqrt`).
+//!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), two steps from the reciprocal of
+//!   the double-double square root, after scaling by a power of four.
 //! * `OdAcc`: sums of products, each product's nine levels added into nine running levels with two-sums (the scalar
 //!   twin of `ov::ODotAcc`); `finish` adds the levels with octo-double + f64.
 //!
@@ -61,7 +61,7 @@ pub mod mutate {
     pub const MUL_F_E3: u32 = 5;
     /// divide: the remainder update before the sixth quotient term skipped
     pub const DIV_REM: u32 = 6;
-    /// sqrt: two Newton iterations instead of four
+    /// sqrt: the second Newton step skipped
     pub const SQRT_ITER: u32 = 7;
     /// dot accumulator: the error of the running sum at level 3 dropped
     pub const ACC_L3: u32 = 8;
@@ -89,7 +89,7 @@ pub mod mutate {
         "mul: error of a2 b3 dropped",
         "od x f64: error of a3 b dropped",
         "divide: sixth remainder update skipped",
-        "sqrt: two Newton iterations instead of four",
+        "sqrt: second Newton step skipped",
         "dot accumulator: level-3 running error dropped",
         "parse: last part truncated",
         "8-lane renorm: zero test ignored",
@@ -606,11 +606,10 @@ pub(crate) mod alg {
         r
     }
 
-    /// The square root: Newton's iteration on 1/sqrt(a), four steps from the f64 value (each about doubling the
-    /// correct bits, 53 to 424 in three, the fourth for the rounding), then times a, applied to a scaled by an exact
-    /// power of four into [1, 4) and the result scaled back (as `QD::sqrt`). A zero gives zero. The products and sums
-    /// are the caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here sixteen
-    /// times over).
+    /// The square root: Newton's iteration on 1/sqrt(a), two steps from the reciprocal of the double-double square
+    /// root of a's two leading parts, the first with its second-order term, then times a, applied to a scaled by an
+    /// exact power of four into [1, 4) and the result scaled back. A zero gives zero. The products and sums are the
+    /// caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here at every call).
     #[inline(always)]
     pub fn sqrt<L: Limb>(
         x: &[L; 8],
@@ -626,14 +625,31 @@ pub(crate) mod alg {
         for k in 0..8 {
             a[k] = x[k].mul(inv).mul(inv);
         }
+        let one = L::splat(1.0);
+        // r_0 = 1 / y for y the double-double square root of a_0 + a_1, renormalized to a double-word number by a
+        // quick two-sum: y by Algorithm 8 of Lefevre, Louvet, Muller, Picot and Rideau (`DD::sqrt`, within 25/8 u^2;
+        // a_0 is in [1, 4)) and 1 / y by DWDivDW2 of Joldes, Muller and Popescu (`DD::fast_div`, within
+        // 15 u^2 + 56 u^3)
+        let (a0, a1) = quick_two_sum(a[0], a[1]);
+        let sh = a0.sqrt();
+        let (yh, yl) = quick_two_sum(sh, a1.add(sh.neg().fma(sh, a0)).div(sh.add(sh)));
+        let th = one.div(yh);
+        let (ch, cl1) = two_prod(yh, th);
+        let (g, tl1) = quick_two_sum(ch, yl.mul(th));
+        let (rh, rl) = quick_two_sum(g, tl1.add(cl1));
+        let (r0, r1) = quick_two_sum(th, one.sub(rh).sub(rl).div(yh));
         let mut r = [z; 8];
-        r[0] = L::splat(1.0).div(a[0].sqrt());
+        r[0] = r0;
+        r[1] = r1;
         let h = mul_pwr2(&a, L::splat(0.5));
-        let n = if mutate::on(mutate::SQRT_ITER) { 2 } else { 4 };
-        for _ in 0..n {
-            // r + (1/2 - h r^2) r
-            let hr2 = mul(&h, &mul(&r, &r));
-            let c = add_f(&neg(&hr2), L::splat(0.5));
+        // first step, with its second-order term: r + (c + 3/2 c^2) r for c = 1/2 - h r^2, an error cubic in r_0's
+        let c = add_f(&neg(&mul(&h, &mul(&r, &r))), L::splat(0.5));
+        let c2 = mul(&c, &c);
+        let w = add(&c, &add(&c2, &mul_pwr2(&c2, L::splat(0.5))));
+        r = add(&r, &mul(&w, &r));
+        // second step, Newton's: r + (1/2 - h r^2) r
+        if !mutate::on(mutate::SQRT_ITER) {
+            let c = add_f(&neg(&mul(&h, &mul(&r, &r))), L::splat(0.5));
             r = add(&r, &mul(&c, &r));
         }
         let mut r = mul(&r, &a);

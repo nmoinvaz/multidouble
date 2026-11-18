@@ -326,8 +326,9 @@ fn fold_bits(h: u64, v: &[OV]) -> u64 {
     h
 }
 
-/// The lanes' outputs pinned bit for bit on fixed inputs, against hashes recorded with the first implementation:
-/// add, sub, mul, div, div_by, sqrt, od + f64, od x f64, the accumulator, and the conversions. Every backend gives
+/// The lanes' outputs pinned bit for bit on fixed inputs, against hashes recorded with the first implementation (the
+/// square root's when it began from the double-double square root): add, sub, mul, div, div_by, sqrt, od + f64,
+/// od x f64, the accumulator, and the conversions. Every backend gives
 /// these bits (the lanes are the scalar arithmetic's, `tests/lanes.rs`).
 #[test]
 fn octo_double_outputs_are_pinned() {
@@ -351,7 +352,7 @@ fn octo_double_outputs_are_pinned() {
         0x655b_a7a1_b76c_0210,
         0x9498_3801_6702_91da,
         0x8c28_dd00_f1e5_9716,
-        0xb29b_ca8b_321a_996c,
+        0x357b_0b16_2153_e318,
         0xecd0_e4f5_cde6_4549,
         0xecbd_3e15_e6e7_2432,
     ];
