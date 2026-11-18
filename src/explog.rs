@@ -16,26 +16,29 @@
 //!   that of x/2 plus ln 2, as x's double-double can round past f64::MAX there): with (k, t) the reduction of
 //!   exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is exact (its leading part lies in [1/2, 2], Sterbenz), so
 //!   c = x e^(-y0) - 1 = (f + t) + f t keeps its relative accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c)
-//!   = c (1 + c h(c)) to order `Q` (QD's log takes y0 + c, the plain Newton step on exp, from f64's logarithm).
+//!   = c (1 + c h(c)) to order `Q` (the QD library's own log takes y0 + c, the plain Newton step on exp, from f64's
+//!   logarithm). `QD::ln` runs these steps with QD's operations, from the same start (`start_dd`) and with Q = 2, so
+//!   its correction is c (1 - c/2).
 //!
 //! A product of a small factor is formed from the factor scaled by a power of two to below 2, from a bound of its
 //! whole value (`bound_expo`), and scaled back after, so that no product's parts leave the normal range because the
 //! argument is small; the scalings are exact while the parts stay normal, and each part that falls below 2^-1022 loses
 //! at most 2^-1075.
 //!
-//! Error bounds (u = 2^-53): `OD::exp` errs by at most 3.661 u^8 e^x + 8 2^-1074 and `OD::ln` by 9.926 u^8 |ln x| +
-//! 2^-509, for inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient
-//! below the normal range (the paper's (A2), apart from the scalings above, whose losses the bounds include, and the
-//! products that only choose k, m, the degree or a branch of ln), proved in
-//! the paper (paper/expansion-error-bounds.pdf, its appendix on exp and log) from Lemma 20 at every operation;
-//! `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for
-//! double-words under the same condition, from the published bounds of the double-word operations they use and the
-//! proven bound of `ln_f64`. An emulator of these steps with every product hooked finds none below the normal range at
-//! any binade of the argument, the closest 48 binades above it (the paper's appendix on exp and log), so the
-//! argument's size does not break the condition there; a part far below the one above it can make a product
-//! underflow, as for the other operations. The constants come from
+//! Error bounds (u = 2^-53): `OD::exp` errs by at most 3.661 u^8 e^x + 8 2^-1074 for a finite result, e^x below
+//! f64::MAX + ulp/2 (an overflowing one is +inf, outside the bounds), and `OD::ln` by 9.926 u^8 |ln x| + 2^-509, for
+//! inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient below the
+//! normal range (the paper's (A2), apart from the scalings above, whose losses the bounds include, and the products
+//! that only choose k, m, the degree or a branch of ln), proved in the paper (paper/expansion-error-bounds.pdf, its
+//! appendix on exp and log) from Lemma 20 at every operation; `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 for a
+//! finite result, and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for double-words under the same condition, from the
+//! published bounds of the double-word operations they use and the proven bound of `ln_f64`. An emulator of these steps
+//! with every product hooked finds none below the normal range at any binade of the argument, the closest 48 binades
+//! above it (the paper's appendix on exp and log), so the argument's size does not break the condition there; a part
+//! far below the one above it can make a product underflow, as for the other operations. The constants come from
 //! `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no proven bounds, and are
-//! tested to 64 u^4.
+//! tested to: exp within 64 u^4 e^x + 4 2^-1074 for a finite result (the absolute term, as above, from the parts that
+//! fall below 2^-1022), ln to 64 u^4 |ln x|.
 //!
 //! Range: exp gives +inf for x_0 > 709.79 and +0 for x_0 < -745.2, and computes in between, where an overflowing
 //! result is +inf and an underflowing one loses its lower parts to the subnormals as the other operations do. ln
@@ -1055,8 +1058,9 @@ impl Prec for OD {
 }
 
 impl DD {
-    /// e^self, within 5.465 u^2 e^x + 2 2^-1074 (u = 2^-53) for a double-word, from the published bounds of the
-    /// double-word operations it uses (see the module doc for the condition); +inf above 709.79 and +0 below -745.2
+    /// e^self, within 5.465 u^2 e^x + 2 2^-1074 (u = 2^-53) for a double-word whose e^x is below f64::MAX + ulp/2, from
+    /// the published bounds of the double-word operations it uses (see the module doc for the condition); +inf above
+    /// 709.79 and where the result overflows, +0 below -745.2
     pub fn exp(self) -> DD {
         exp_of(self)
     }
@@ -1068,19 +1072,21 @@ impl DD {
 }
 
 impl QD {
-    /// e^self (see the module doc; QD's operations, tested to 64 u^4 relative)
+    /// e^self (see the module doc; QD's operations, tested to 64 u^4 e^x + 4 2^-1074 where e^x is below f64::MAX +
+    /// ulp/2); +inf above 709.79 and where the result overflows, +0 below -745.2
     pub fn exp(self) -> QD {
         exp_of(self)
     }
-    /// the natural logarithm (see the module doc; tested to 64 u^4 relative)
+    /// the natural logarithm (see the module doc; tested to 64 u^4 |ln x|); NaN for a negative argument, -inf for
+    /// zero
     pub fn ln(self) -> QD {
         ln_of(self)
     }
 }
 
 impl OD {
-    /// e^self, within 3.661 u^8 e^x + 8 2^-1074 (u = 2^-53) for an argument on the ladder (see the module doc for the
-    /// condition); +inf above 709.79 and +0 below -745.2
+    /// e^self, within 3.661 u^8 e^x + 8 2^-1074 (u = 2^-53) for an argument on the ladder whose e^x is below f64::MAX +
+    /// ulp/2 (see the module doc for the condition); +inf above 709.79 and where the result overflows, +0 below -745.2
     pub fn exp(self) -> OD {
         exp_of(self)
     }
