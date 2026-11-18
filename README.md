@@ -40,6 +40,10 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
   eight parts (a NaN's sign and payload aside), without the products and sums of its six zero parts (the product and
   the dot product's term about 1.5 times as fast). The octo-double lanes' constants (`Lane::mulc`, `addc`, `accc`) go
   through them.
+- The octo-double multiply has an opt-in sloppy form, `OD::sloppy_mul` and `OV::sloppy_mul`, with `add_prod_sloppy`
+  (and `ODotAcc::add_prod_sloppy_mut`) for the accumulators: QD's sloppy multiply carried to eight parts, which sums
+  the last level in plain `f64`. It takes about 1/1.35 of the time of `*` and gives up 7 to 9 bits of the 424
+  (Accuracy, below). Its bits differ from `*`, which is unchanged.
 - Values kept as one array per part convert with `dd::split` and `dd::join` (hi and lo arrays) and `qd::to_parts` and
   `qd::from_parts` (four arrays). `qv::axpy_parts` and `ov::axpy_parts` compute y + a x on four or eight part arrays,
   and `OV::new` renormalizes eight parts on the lanes.
@@ -275,6 +279,10 @@ are the thresholds the tests check.
   ARITH-15, 2001) with three repairs: the accurate add lost a term when all parts are read with three emitted, and its
   accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy far from
   1, now scales its argument by a power of four.
+- The sloppy multiply has no level below the eighth part. Its 64 roundings at that level are its whole error, at most
+  2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (computed by applying the paper's Lemma 11 and Theorem 9(a),
+  `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random operands give at most 98
+  u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
