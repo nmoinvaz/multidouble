@@ -725,13 +725,18 @@ def od_exp(n, s, d, theta=2):
 def od_start(n, eps_dd, fl_dd, theta=2):
     """E0(l) = e1 l + e0 for the expansion log's start: the double-double log of to_dd(x), within eps_dd |ln to_dd(x)|
     + fl_dd of ln(to_dd(x)); to_dd's sum of the n - 1 lower parts errs by gamma_(n-2) sum |x_i|, so |ln x - ln
-    to_dd(x)| <= delta"""
+    to_dd(x)| <= delta. For x_0 >= 2^1023 the start is that of x/2 (the halving moves each part by at most ETA0,
+    relative to x below 2^-2090) plus LN2_DD, within eta_l of ln 2, by AccurateDWPlusDW, within alpha_A (l + 1) of
+    the sum: E0 covers both."""
     u = Fr(1, 2 ** 53)
     rho = Fr(theta) * u
     g = (n - 2) * u / (1 - (n - 2) * u)
     w = up(g * rho / (1 - 2 * rho - g * rho))
     delta = up(w / (1 - w))
-    return eps_dd, up(delta * (1 + eps_dd) + fl_dd), delta
+    alpha_a = 3 * u * u / (1 - 4 * u)
+    dd = [Fr(x) for x in CONST['dd']]
+    eta_l = max(abs(LN2_A - sum(dd)), abs(LN2_B - sum(dd)))
+    return up(eps_dd + alpha_a), up(delta * (1 + eps_dd) + fl_dd + alpha_a + eta_l + Fr(1, 2 ** 2000)), delta
 
 
 def od_log(n, s, d, q, eps_dd, fl_dd, theta=2, verbose=False):
@@ -803,10 +808,13 @@ def check():
         r = convexity_check(f, pts)
         ok &= r
         count += 1
+    # the controls: a concave function fails convexity alone, a decreasing affine one monotonicity alone
     concave = convexity_check(lambda l: l * (2 - l), [Fr(0), Fr(1, 2), Fr(1)])
-    print(f'{count} cases sampled: nondecreasing and convex: {ok}; control, l (2 - l): {concave}')
-    print('PASS' if ok and not concave else 'FAIL')
-    return ok and not concave
+    decreasing = convexity_check(lambda l: 2 - l, [Fr(0), Fr(1, 2), Fr(1)])
+    print(f'{count} cases sampled: nondecreasing and convex: {ok}; controls, l (2 - l): {concave}, 2 - l: '
+          f'{decreasing}')
+    print('PASS' if ok and not concave and not decreasing else 'FAIL')
+    return ok and not concave and not decreasing
 
 
 if __name__ == '__main__':
