@@ -226,15 +226,16 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
   ADD}(\zeta, \nu;\ \bar c^* + \xi E_m + \Delta + \epsilon_{ft} + \epsilon_{f+t})$, $E_c = \xi E_m + \Delta +
   \epsilon_{ft} + \epsilon_{f+t} + \epsilon_c$, $C = \bar c^* + E_c$, $(\cdot, \zeta') = G_{\rm ADD}(\pi^f, \psi_m;\
   C)$ and $\chi = \max(\chi', \zeta')$ part by part;
-\item for each MUL of step (5), those of this recursion among them, its $G_{\rm MUL}$ with $n\eta_0$ added to the
-  error and $\eta_0$ to each part bound; $v_q = 1/q$, $e_q = \phi'_q$, $\kappa_q = |A_q|$, and for $i = q-1, \dots, 2$
+\item $v_q = 1/q$, $e_q = \phi'_q$, $\kappa_q = |A_q|$, and for $i = q-1, \dots, 2$
   \begin{align*}
   (\epsilon^p_i, \mu_i) &= G_{\rm MUL}\bigl(\chi, \kappa_{i+1};\ C(v_{i+1} + e_{i+1})\bigr), \\
   (\epsilon^a_i, \kappa_i) &= G_{\rm ADD}\bigl(|A_i|, \mu_i;\ \tfrac1i + \phi'_i \\
   &\qquad + C(v_{i+1} + e_{i+1}) + \epsilon^p_i\bigr), \\
   e_i &= \phi'_i + Ce_{i+1} + \epsilon^p_i + \epsilon^a_i, \\
-  v_i &= \tfrac1i + Cv_{i+1};
+  v_i &= \tfrac1i + Cv_{i+1},
   \end{align*}
+  each $G_{\rm MUL}$ of step (5), here and in the next item, with $n\eta_0$ added to its error and $\eta_0$ to each
+  part bound;
 \item with $\bar h = C(v_2 + e_2) + \epsilon^h$,
   \begin{align*}
   (\epsilon^h, \omega^h) &= G_{\rm MUL}\bigl(\chi, \kappa_2;\ C(v_2 + e_2)\bigr), \\
