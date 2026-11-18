@@ -1,4 +1,4 @@
-"""Theorem 17 of expansion-error-bounds.pdf (division): its recursion, in exact rationals. All magnitudes are in
+"""Theorem 18 of expansion-error-bounds.pdf (division): its recursion, in exact rationals. All magnitudes are in
 units of |a_0|, and quotient terms are multiplied by |b_0|. Returns per step k the part bounds P^(k), the quotient
 bounds Q_k, the level bounds X^(k) of each remainder update, the update errors eps_k, and the final K with
 |a/b - x| <= (u^n + K u^(n+1)) |a/b| for a, b satisfying H(theta).
