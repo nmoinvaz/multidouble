@@ -181,8 +181,8 @@ $0 \le m \le n-1$,
 C_m = \frac{T_m u\,D_m}{1 - T_m u}, \qquad D_{m+1} = A_{m+1} + C_m, \\
 R = \frac{Q u\,D_n}{1 - Qu}.
 \end{gather*}
-Then: (a) at every moment $|s_m| \le D_m/(1 - T_m u)$ for $m < n$ and $|s_n| \le D_n/(1-Qu)$; (b) the carries out of
-level $m$ have absolute sum at most $C_m$; (c) at the end, $\sum_m s_m = Y - \sum r$, where $Y$ is the sum (with signs)
+Then: (a) at every moment $|s_m| \le X_m$, where $X_m = D_m/(1 - T_m u)$ for $m < n$ and $X_n = D_n/(1-Qu)$; (b) the
+carries out of level $m$ have absolute sum at most $C_m$; (c) at the end, $\sum_m s_m = Y - \sum r$, where $Y$ is the sum (with signs)
 of the $y$ of (i) and (iii) and the $t$ of (ii), and the rounding errors $r$ at level $n$ satisfy $\sum|r| \le R$.
 \end{lemma}
 
@@ -414,8 +414,7 @@ A_0 = (1+u)G_0, \\
 A_m = (1+u)G_m + uG_{m-1} + u\rho^{m-1}Q_k \ (1 \le m < n),
 \end{gather*}
 $A_n = uG_{n-1} + u\rho^{n-1}Q_k$,
-let $X_0, \dots, X_n$ and $R$ be the bounds of Lemma~\ref{lem:l} with these $A_m$, $T_0 = 0$, $T_m = 2m$ and $Q = 2n-1$
-($X_m = D_m/(1-T_mu)$, $X_n = D_n/(1-Qu)$), let $\sigma_l = \sum_{m \ge l}X_m$, $V_0 = (1+u)^n\sigma_0$, $V_j =
+let $X_m$ and $R$ be those of Lemma~\ref{lem:l} with these $A_m$, $T_m = 2m$ and $Q = 2n-1$, let $\sigma_l = \sum_{m \ge l}X_m$, $V_0 = (1+u)^n\sigma_0$, $V_j =
 \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_i = \sum_{j > i}V_j$, and set
 \begin{align*}
 \varepsilon_{k+1} &= R + \min_{0 \le k' \le n}\Bigl(\us^{\,n-k'}V_{k'} \\
@@ -485,11 +484,11 @@ Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposi
 \begin{lemma}\label{lem:g}
 Assume~\ref{as:fp} and $(n^2+n)u < 1$. Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
 ($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$. For MUL let $P_m =
-\sum_{i+j=m}\alpha_i\beta_j$, $A_0 = (1+u)P_0$, $A_m = (1+u)P_m + uP_{m-1}$ for $1 \le m < n$, $A_n =
-\sum_{i=1}^{n-1}\alpha_i\beta_{n-i} + uP_{n-1}$, $T_m = m(m+1)$, $Q = n^2 + n - 1$ and $\Delta = \sum_{i+j \ge
-n+1}\alpha_i\beta_j$. For ADD and MULF let $\lambda_m \ge |a_m + b_m|$ (ADD) or $\lambda_m = \alpha_m\beta_0$ (MULF),
-$A_0 = (1+u)\lambda_0$, $A_m = (1+u)\lambda_m + u\lambda_{m-1}$, $A_n = u\lambda_{n-1}$, $T_m = m$, $Q = n-1$ and
-$\Delta = 0$. Let $X_m$ and $R$ be the bounds of Lemma~\ref{lem:l} ($X_m = D_m/(1 - T_mu)$, $X_n = D_n/(1-Qu)$). For
+\sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, with $P_{-1} = 0$, $A_m = (1+u)P_m + uP_{m-1}$
+for $m < n$, $A_n = P_n + uP_{n-1}$, $T_m = m(m+1)$, $Q = n^2 + n - 1$ and $\Delta = \sum_{m > n}P_m$. For ADD and
+MULF let $\lambda_m \ge |a_m + b_m|$ (ADD) or $\lambda_m = \alpha_m\beta_0$ (MULF), with $\lambda_{-1} = 0$, $A_m =
+(1+u)\lambda_m + u\lambda_{m-1}$ for $m < n$, $A_n = u\lambda_{n-1}$, $T_m = m$, $Q = n-1$ and $\Delta = 0$. Let $X_m$
+and $R$ be those of Lemma~\ref{lem:l}. For
 ADDF, with $\lambda_0 \ge |a_0 + b|$, let $\epsilon_0 = u\lambda_0$, $\epsilon_m = u(\alpha_m + \epsilon_{m-1})$, $X_0
 = (1+u)\lambda_0$, $X_m = (1+u)(\alpha_m + \epsilon_{m-1})$ for $1 \le m < n$, $X_n = \epsilon_{n-1}$ and $R = \Delta =
 0$. With $\sigma_l = \sum_{m \ge l}X_m$, $V_j = \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_k = \sum_{j > k}V_j$:
