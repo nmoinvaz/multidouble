@@ -19,7 +19,8 @@
 //! near 10^-4 units, the ladder category's inputs included, because the error is set by the result's parts.
 //!
 //! The opt-in sloppy multiply (`OD::sloppy_mul`) and its dot products are checked against 4 units (`SLOPPY_THR`, fixed
-//! before the first run) and their proven bounds, 2^31.93 u^8 |a_0 b_0| per product (`SLOPPY_C`, `SLOPPY_DOT_C`).
+//! before the first run) and their proven bounds, 2^31.93 u^8 |a_0 b_0| per product (`SLOPPY_C`, `SLOPPY_DOT_C`;
+//! Theorem 30 of paper/expansion-error-bounds.pdf).
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::{ODotAcc, OV, V8};
@@ -1051,11 +1052,13 @@ fn u8() -> f64 {
 }
 
 /// The sloppy multiply's proven bound for operands within `proven`'s hypotheses for the multiply: |ab - x| <= C u^8
-/// |a_0 b_0|, C = R_s + Delta u = 2^31.9242 = 4.075102e9 (`paper/sloppy_consts.py`, theta = 2), rounded up.
+/// |a_0 b_0|, C = R_s + Delta u = 2^31.9242 = 4.075102e9 (Theorem 30(b) of paper/expansion-error-bounds.pdf, theta =
+/// 2, computed by `paper/sloppy_consts.py`), rounded up.
 const SLOPPY_C: f64 = 4.0752e9;
 
-/// The sloppy dot's proven bound for up to 64 terms: |Z - x| <= (|Z| + c W) u^8, W = sum |a_i0 b_i0|, c the largest
-/// of `paper/sloppy_consts.py`'s c_K for K = 1, 4, 16 and 64 (4.075102e9 + 6.4), rounded up.
+/// The sloppy dot's proven bound for up to 64 terms (Theorem 30(c) of paper/expansion-error-bounds.pdf): |Z - x| <=
+/// (|Z| + c W) u^8, W = sum |a_i0 b_i0|, c the largest of `paper/sloppy_consts.py`'s c_K for K = 1, 4, 16 and 64
+/// (4.075102e9 + 6.4), rounded up.
 const SLOPPY_DOT_C: f64 = 4.0752e9;
 
 /// Pass threshold of the sloppy multiply's and the sloppy dot's measured error, in units of 2^-418 relative to |ab|

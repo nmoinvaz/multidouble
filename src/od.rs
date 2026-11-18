@@ -32,10 +32,11 @@
 //!   with two-sums, each carry taken down to level 6 only, and level 7 sums in plain f64 the products of orders 7
 //!   and 8 (by fused multiply-adds), the errors of order 6 and the carries out of level 6. There is no level 8, so
 //!   the 168 two-sums of the default's carries become 112, and the renormalization of the eight levels is exact. Its
-//!   error is the roundings at level 7: at most 2^31.93 u^8 |a_0 b_0| (u = 2^-53) for operands on the ladder
-//!   |a_i| <= (2u)^i |a_0|, from the level bounds of the error-bounds paper (`paper/sloppy_consts.py`). The bound is
-//!   a triangle inequality over 64 roundings: random operands give at most 98 u^8 |a_0 b_0| and a hill climb 582
-//!   (`od_tests`, `od_sloppy_mul`, `od_sloppy_worst_case`), where `*` errs by at most u^8. Its bits differ from `*`'s.
+//!   error is the 64 roundings at level 7 and the dropped products of order above 8: at most 2^31.93 u^8 |a_0 b_0|
+//!   (u = 2^-53) for operands on the ladder |a_i| <= (2u)^i |a_0|, Theorem 30 of the error-bounds paper (constant from
+//!   `paper/sloppy_consts.py`). The bound is a triangle inequality over the 64 roundings: random operands give at most
+//!   98 u^8 |a_0 b_0| and a hill climb 582 (`od_tests`, `od_sloppy_mul`, `od_sloppy_worst_case`), where `*` errs by at
+//!   most u^8. Its bits differ from `*`'s.
 //! * Division: long division, nine quotient terms q_k = r_0 / b_0 with the remainder r - b q_k updated in one pass
 //!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), two steps from the reciprocal of
 //!   the double-double square root, after scaling by a power of four.
