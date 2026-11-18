@@ -1,15 +1,23 @@
 //! `exp` and `ln` of the 8-lane types `DV`, `QV` and `OV` against the scalar functions of `DD`, `QD` and `OD`, bit for
-//! bit in every lane (a NaN matches any NaN, as in tests/lanes.rs), on every backend this CPU runs. Most vectors mix
+//! bit in every lane, on every backend this CPU runs. A NaN that arithmetic makes matches any NaN, as in
+//! tests/lanes.rs, since Rust leaves its sign and payload unspecified; the special values' results, a NaN x_0's exp
+//! (x_0 itself) and ln's NaN among them, are made without arithmetic and must match bit for bit. Most vectors mix
 //! kinds of argument, so that their lanes take different reductions k, squaring counts, Taylor degrees, branches of ln
 //! and special values in one call; every fourth takes one kind in all lanes. The kinds: for exp, random over the range,
 //! near 0 (subnormal included), near k ln 2 and (k + 1/2) ln 2, within 3 ulps of ln f64::MAX with tails near half an
-//! ulp, near underflow, subnormal, moderate, and the special values; for ln, random over the range, near 1, near
-//! sqrt(2) 2^k, subnormal, within 3 ulps of f64::MAX with tails near half an ulp (the start's x/2 branch), powers of 2,
-//! moderate, and the special values. Lower parts are absent, on the ladder with gaps, or at the top of the ladder.
+//! ulp, near underflow, subnormal, moderate, and the special values with NaN payloads; for ln, random over the range,
+//! near 1, near sqrt(2) 2^k, subnormal, within 3 ulps of f64::MAX with tails near half an ulp (the start's x/2 branch),
+//! powers of 2, moderate, and the special values. Lower parts are absent, on the ladder with gaps, or at the top of the
+//! ladder. Every eighth vector checks each lane's own powers of two in the exact scalings: lane 0 takes e^0 or ln 1,
+//! which scale by 1, and the other lanes take arguments whose results' last parts lie near the bottom of the range,
+//! where a scaling by another lane's power of two changes them (exp of one part near 2^-197, ln of 1 and one or two
+//! parts near 2^-330).
 //!
 //! Control (feature `mutate`): with `explog::mutate::LANE_STEP`, each lane skipping the first step of its Horner sum,
-//! the check fails for every type and function; with each of the scalar functions' mutations, which the lanes share,
-//! it still passes.
+//! the check fails for every type and function; with `LANE_POW2_POLY`, `LANE_POW2_FT` and `LANE_POW2_SERIES`, every
+//! lane taking lane 0's powers of two in one scaling, the octo-double check fails for the function that scales (the
+//! double-double and quad-double results end above the subnormals, so a wrong power of two cannot show there); with
+//! each of the scalar functions' mutations, which the lanes share, it still passes.
 //!
 //! ```text
 //! cargo test --release --test lanes_explog
@@ -53,13 +61,19 @@ enum F {
     Ln,
 }
 
-/// the kinds of argument of each function; the last is the special values
+/// the kinds of argument of each function drawn at random; the last is the special values
 const KINDS: u64 = 9;
 const SPECIAL: u64 = KINDS - 1;
+/// lane 0 of the scaling vectors: e^0 or ln 1, whose powers of two in the scalings are 1
+const COMPANION: u64 = KINDS;
+/// the other lanes of the scaling vectors (see the module doc)
+const SCALING: u64 = KINDS + 1;
 
 /// exp's special values and range ends
-const EXP_SPECIAL: [f64; 11] = [
+const EXP_SPECIAL: [f64; 13] = [
     f64::NAN,
+    f64::from_bits(0x7ff8_0000_0000_1234),
+    f64::from_bits(0xfff8_0000_0000_0001),
     f64::INFINITY,
     f64::NEG_INFINITY,
     0.0,
@@ -72,8 +86,10 @@ const EXP_SPECIAL: [f64; 11] = [
     -f64::MAX,
 ];
 /// ln's special values, and 1
-const LN_SPECIAL: [f64; 9] = [
+const LN_SPECIAL: [f64; 11] = [
     f64::NAN,
+    f64::from_bits(0x7ff8_0000_0000_1234),
+    f64::from_bits(0xfff8_0000_0000_0001),
     -1.0,
     -0.0,
     0.0,
@@ -105,6 +121,25 @@ fn arg(r: &mut Rng, f: F, kind: u64, n: usize) -> [f64; 8] {
         (_, SPECIAL) => {
             let s = if f == F::Exp { &EXP_SPECIAL[..] } else { &LN_SPECIAL[..] };
             p[0] = s[(r.next_u64() % s.len() as u64) as usize];
+            return p;
+        }
+        (F::Exp, COMPANION) => return p,
+        (F::Ln, COMPANION) => {
+            p[0] = 1.0;
+            return p;
+        }
+        (F::Exp, SCALING) => {
+            // 1 + x + x^2/2 + ... in eight parts ends near 2^-1022
+            p[0] = sign(r) * (1.0 + r.unit()) * pow2i(-195 - (r.next_u64() % 4) as i32);
+            return p;
+        }
+        (F::Ln, SCALING) => {
+            // ln(1 + e) = e - e^2/2 + ... has parts near 2^-330 k, so its later parts are subnormal
+            let e = -320 - (r.next_u64() % 22) as i32;
+            (p[0], p[1]) = (1.0, sign(r) * (1.0 + r.unit()) * pow2i(e));
+            if r.next_u64() & 1 == 0 {
+                p[2] = sign(r) * (1.0 + r.unit()) * pow2i(e - 53 - (r.next_u64() % 30) as i32);
+            }
             return p;
         }
         (F::Exp, 0) => -745.0 + 1455.0 * r.unit(),
@@ -172,12 +207,17 @@ fn arg(r: &mut Rng, f: F, kind: u64, n: usize) -> [f64; 8] {
     p
 }
 
-/// count vectors of n parts for f, each lane's kind with it
-fn vectors(r: &mut Rng, f: F, n: usize, count: usize) -> Vec<([[f64; 8]; 8], [u64; 8])> {
+/// count vectors of n parts for f, each lane's kind with it; all scaling vectors if `scaling`
+fn vectors(r: &mut Rng, f: F, n: usize, count: usize, scaling: bool) -> Vec<([[f64; 8]; 8], [u64; 8])> {
     (0..count)
         .map(|i| {
             let k0 = r.next_u64() % KINDS;
-            let kinds: [u64; 8] = std::array::from_fn(|_| if i % 4 == 3 { k0 } else { r.next_u64() % KINDS });
+            let kinds: [u64; 8] = std::array::from_fn(|j| match (scaling || i % 8 == 5, j) {
+                (true, 0) => COMPANION,
+                (true, _) => SCALING,
+                _ if i % 4 == 3 => k0,
+                _ => r.next_u64() % KINDS,
+            });
             (std::array::from_fn(|j| arg(r, f, kinds[j], n)), kinds)
         })
         .collect()
@@ -285,8 +325,8 @@ struct Row {
     first: Vec<String>,
 }
 
-/// V's exp and ln against the scalar functions, on COUNT[V::IX] / div vectors each
-fn rows<S: Simd, V: Lanes<S>>(div: usize) -> Vec<Row> {
+/// V's exp and ln against the scalar functions, on COUNT[V::IX] / div vectors each, all scaling vectors if `scaling`
+fn rows<S: Simd, V: Lanes<S>>(div: usize, scaling: bool) -> Vec<Row> {
     let div = if cfg!(debug_assertions) { 8 * div } else { div };
     let mut out = Vec::new();
     for (s, f) in [F::Exp, F::Ln].into_iter().enumerate() {
@@ -298,7 +338,7 @@ fn rows<S: Simd, V: Lanes<S>>(div: usize) -> Vec<Row> {
             mixed: 0,
             first: Vec::new(),
         };
-        for (x, kinds) in vectors(&mut r, f, V::N, (COUNT[V::IX] / div).max(8)) {
+        for (x, kinds) in vectors(&mut r, f, V::N, (COUNT[V::IX] / div).max(8), scaling) {
             let v = V::load(&x);
             let y = if f == F::Exp { v.exp() } else { v.ln() }.parts();
             let special = kinds.iter().filter(|&&k| k == SPECIAL).count();
@@ -306,7 +346,9 @@ fn rows<S: Simd, V: Lanes<S>>(div: usize) -> Vec<Row> {
             for j in 0..8 {
                 let want = V::scalar(f, &x[j]);
                 row.lanes += 1;
-                if !(0..V::N).all(|i| same(y[j][i], want[i])) {
+                // a special value's result is made without arithmetic, so a NaN there has defined bits too
+                let strict = kinds[j] == SPECIAL;
+                if !(0..V::N).all(|i| same(y[j][i], want[i]) && (!strict || y[j][i].to_bits() == want[i].to_bits())) {
                     row.misses += 1;
                     if row.first.len() < 3 {
                         row.first.push(format!(
@@ -325,26 +367,27 @@ fn rows<S: Simd, V: Lanes<S>>(div: usize) -> Vec<Row> {
     out
 }
 
-/// the three types' rows on one backend, each type on 1/div of its vectors
+/// the three types' rows on one backend, each type on 1/div of its vectors, all scaling vectors if `scaling`
 #[derive(Clone)]
 struct LanesVsScalar {
     div: usize,
+    scaling: bool,
 }
 
 impl Kernel for LanesVsScalar {
     type Output = Vec<Row>;
     #[inline(always)]
     fn run<S: Simd>(self) -> Vec<Row> {
-        let mut rows_ = rows::<S, DV<S>>(self.div);
-        rows_.extend(rows::<S, QV<S>>(self.div));
-        rows_.extend(rows::<S, OV<S>>(self.div));
+        let mut rows_ = rows::<S, DV<S>>(self.div, self.scaling);
+        rows_.extend(rows::<S, QV<S>>(self.div, self.scaling));
+        rows_.extend(rows::<S, OV<S>>(self.div, self.scaling));
         rows_
     }
 }
 
 /// every backend's rows, each named with its backend
-fn every_backend(div: usize) -> Vec<(&'static str, Row)> {
-    let ran = simd::for_each_available(LanesVsScalar { div });
+fn every_backend(div: usize, scaling: bool) -> Vec<(&'static str, Row)> {
+    let ran = simd::for_each_available(LanesVsScalar { div, scaling });
     assert_eq!(ran.iter().map(|r| r.0).collect::<Vec<_>>(), simd::available());
     ran.into_iter()
         .flat_map(|(isa, rows)| rows.into_iter().map(move |r| (isa, r)))
@@ -354,7 +397,7 @@ fn every_backend(div: usize) -> Vec<(&'static str, Row)> {
 #[test]
 fn lanes_match_scalar_bit_for_bit() {
     common::big_stack(|| {
-        let rows = every_backend(1);
+        let rows = every_backend(1, false);
         for (isa, r) in &rows {
             println!(
                 "{isa:<8} {:<7} {:>6} lanes, {:>5} vectors mixing special and other lanes, {} differ",
@@ -368,8 +411,9 @@ fn lanes_match_scalar_bit_for_bit() {
     });
 }
 
-/// The control (feature `mutate`): the lanes' own break fails every type and function on every backend, and the
-/// scalar functions' breaks, which the lanes take alike, leave the check passing.
+/// The controls (feature `mutate`): the lanes' own breaks fail the check on every backend, the skipped Horner step for
+/// every type and function and lane 0's powers of two for the octo-double function that scales, and the scalar
+/// functions' breaks, which the lanes take alike, leave it passing.
 #[cfg(feature = "mutate")]
 #[test]
 fn control_fires() {
@@ -377,13 +421,13 @@ fn control_fires() {
         use multidouble::explog::mutate;
         for id in 1..=mutate::N {
             mutate::set(id);
-            let rows = every_backend(4);
+            let rows = every_backend(4, false);
             mutate::set(0);
             let bad: Vec<_> = rows.iter().filter(|(_, r)| r.misses > 0).collect();
             assert!(bad.is_empty(), "under '{}': {bad:#?}", mutate::NAMES[id as usize]);
         }
         mutate::set(mutate::LANE_STEP);
-        let rows = every_backend(4);
+        let rows = every_backend(4, false);
         mutate::set(0);
         for (isa, r) in &rows {
             println!(
@@ -396,5 +440,27 @@ fn control_fires() {
         }
         let silent: Vec<_> = rows.iter().filter(|(_, r)| r.misses == 0).collect();
         assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
+        for (id, row) in [
+            (mutate::LANE_POW2_POLY, "ov Exp"),
+            (mutate::LANE_POW2_FT, "ov Ln"),
+            (mutate::LANE_POW2_SERIES, "ov Ln"),
+        ] {
+            mutate::set(id);
+            let rows = every_backend(4, true);
+            mutate::set(0);
+            let fired: Vec<_> = rows.iter().filter(|(_, r)| r.what == row).collect();
+            assert_eq!(fired.len(), simd::available().len());
+            for (isa, r) in &fired {
+                println!(
+                    "control '{}': {isa:<8} {:<7} {} of {} lanes differ",
+                    mutate::NAMES[id as usize],
+                    r.what,
+                    r.misses,
+                    r.lanes
+                );
+            }
+            let silent: Vec<_> = fired.iter().filter(|(_, r)| r.misses == 0).collect();
+            assert!(silent.is_empty(), "the control did not fire: {silent:#?}");
+        }
     });
 }
