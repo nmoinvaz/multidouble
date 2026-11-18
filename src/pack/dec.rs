@@ -1,26 +1,26 @@
-//! Block decoders: one block of 8 values from the words, its parts planar (`out[k][j]` is part k of value j). One per
-//! backend, all integer work in the same steps, so all give the same bits. The places of escaped values come out
-//! wrong; `Packed::decode` restores them from the side table.
+//! Block decoders, which decode one block of 8 values from the words with its parts planar (`out[k][j]` is part k of
+//! value j). There is one per backend, each doing its integer work in the same steps, so all give the same bits. The
+//! places of escaped values come out wrong, and `Packed::decode` restores them from the side table.
 //!
-//! Each lower part of a lane is `(field | 0xfc << 56) + (e << 52)` with e the biased exponent of the last nonzero part
-//! above, zero where the code is 12, and its sign put on top.
+//! Each lower part of a lane is `(field | 0xfc << 56) + (e << 52)` with its sign put on top, e the biased exponent of
+//! the last nonzero part above. A part of code 12 is a zero with its sign.
 use super::{mutate, Packed, ZERO};
 use crate::simd::{backend, Simd};
 use std::any::TypeId;
 
 const EXP: u64 = 0x7ff << 52;
-/// the top byte the decoders put on each field: -64 in the exponent
+/// The top byte the decoders put on each field, -64 in the exponent.
 const TOP: u64 = 0xfc << 56;
-/// a zero part's field with that top byte
+/// A zero part's field with that top byte.
 const ZERO_TOP: u64 = TOP | ZERO << 52;
 
-/// whether S is the backend B
+/// Whether S is the backend B.
 #[inline(always)]
 fn is<S: Simd, B: 'static>() -> bool {
     TypeId::of::<S>() == TypeId::of::<B>()
 }
 
-/// the decoder `block` runs on the backend S: neon, avx2, avx512 or portable
+/// The name of the decoder `block` runs on the backend S, one of neon, avx2, avx512 and portable.
 pub(super) fn name<S: Simd>() -> &'static str {
     #[cfg(all(target_arch = "aarch64", target_feature = "neon", target_endian = "little"))]
     if is::<S, backend::Neon>() {
@@ -38,13 +38,13 @@ pub(super) fn name<S: Simd>() -> &'static str {
     "portable"
 }
 
-/// block b of the words, decoded on the backend S (inside its `Simd::vectorize`)
+/// Block b of the words, decoded on the backend S inside its `Simd::vectorize`.
 #[inline(always)]
 pub(super) fn block<const N: usize, S: Simd>(words: &[u64], b: usize, out: &mut [[f64; 8]; N]) {
     let bytes = Packed::<N>::BITS;
     assert!((b + 1) * bytes <= 8 * words.len(), "block {b} past the words");
-    // SAFETY (all three): the decoders read only bytes of block b, which lie within the words; they run only on S,
-    // whose features dispatch has checked; the words are little-endian in memory on these targets.
+    // SAFETY (all three): the decoders read only bytes of block b, which lie within the words. They run only on S,
+    // whose features dispatch has checked. The words are little-endian in memory on these targets.
     #[cfg(all(target_arch = "aarch64", target_feature = "neon", target_endian = "little"))]
     if is::<S, backend::Neon>() {
         unsafe { neon::block::<N>((words.as_ptr() as *const u8).add(b * bytes), out) };
@@ -65,7 +65,7 @@ pub(super) fn block<const N: usize, S: Simd>(words: &[u64], b: usize, out: &mut 
     mutations(out)
 }
 
-/// block b of the words, decoded on the backend S into out (8 N f64), value by value: part k of value j at N j + k
+/// Block b of the words, decoded on the backend S into out (8 N f64) value by value, part k of value j at N j + k.
 #[inline(always)]
 pub(super) fn block_aos<const N: usize, S: Simd>(words: &[u64], b: usize, out: &mut [f64]) {
     assert!(
@@ -77,11 +77,11 @@ pub(super) fn block_aos<const N: usize, S: Simd>(words: &[u64], b: usize, out: &
     if is::<S, backend::Neon>() && !any_mutation() {
         let bytes = Packed::<N>::BITS;
         assert!((b + 1) * bytes <= 8 * words.len(), "block {b} past the words");
-        // SAFETY: as in `block`, and out holds the 8 N f64 the decoder writes
+        // SAFETY: as in `block`, and out holds the 8 N f64 the decoder writes.
         unsafe { neon::block_aos::<N>((words.as_ptr() as *const u8).add(b * bytes), out.as_mut_ptr()) };
         return;
     }
-    // planar, then value by value
+    // Planar, then value by value.
     let mut p = [[0.0; 8]; N];
     block::<N, S>(words, b, &mut p);
     for j in 0..8 {
@@ -91,14 +91,14 @@ pub(super) fn block_aos<const N: usize, S: Simd>(words: &[u64], b: usize, out: &
     }
 }
 
-/// whether a deliberate breakage of the decoders is selected (never, without the feature `mutate`)
+/// Whether a deliberate breakage of the decoders is selected, never without the feature `mutate`.
 #[cfg(all(target_arch = "aarch64", target_feature = "neon", target_endian = "little"))]
 #[inline(always)]
 fn any_mutation() -> bool {
     mutate::on(mutate::DEC_SIGN) || mutate::on(mutate::DEC_ZERO) || mutate::on(mutate::DEC_LAST)
 }
 
-/// the decoder's deliberate breakages (feature `mutate`), applied to its output
+/// The decoder's deliberate breakages (feature `mutate`), applied to its output.
 #[inline(always)]
 fn mutations<const N: usize>(out: &mut [[f64; 8]; N]) {
     if mutate::on(mutate::DEC_SIGN) {
@@ -137,7 +137,7 @@ fn mutations<const N: usize>(out: &mut [[f64; 8]; N]) {
     }
 }
 
-/// plain code, on every target and byte order
+/// Plain code, for every target and byte order.
 #[inline(always)]
 fn portable<const N: usize>(words: &[u64], b: usize, out: &mut [[f64; 8]; N]) {
     let at = Packed::<N>::block_at(b);
@@ -163,8 +163,8 @@ mod neon {
     use super::{EXP, TOP, ZERO_TOP};
     use core::arch::aarch64::*;
 
-    /// lanes 2r and 2r + 1 of the block at p, all parts: TBX puts each 7-byte field under the top byte 0xfc; the last
-    /// pair is loaded from byte 40 of the group, so as not to read past it
+    /// Lanes 2r and 2r + 1 of the block at p, all parts. TBX puts each 7-byte field under the top byte 0xfc. The last
+    /// pair is loaded from byte 40 of the group, so as not to read past it.
     #[inline(always)]
     unsafe fn pair<const N: usize>(p: *const u8, r: usize) -> [uint64x2_t; N] {
         const IDX: [[u8; 16]; 2] = [
@@ -189,7 +189,7 @@ mod neon {
             let f = vreinterpretq_u64_u8(vqtbx1q_u8(top, vld1q_u8(g.add(off)), idx));
             let z = vceqq_u64(f, zero);
             let v = vbicq_u64(vaddq_u64(f, last), z);
-            // lane j's sign, bit j of the group's last byte, to bit 0, then inserted at bit 63
+            // Lane j's sign, bit j of the group's last byte, goes to bit 0 and is then inserted at bit 63.
             let s = vshlq_u64(vreinterpretq_u64_u8(vld1q_dup_u8(g.add(56))), sh);
             out[k] = vsliq_n_u64::<63>(v, s);
             if k + 1 < N {
@@ -199,7 +199,7 @@ mod neon {
         out
     }
 
-    /// parts planar
+    /// Parts planar.
     #[inline(always)]
     pub unsafe fn block<const N: usize>(p: *const u8, out: &mut [[f64; 8]; N]) {
         for r in 0..4 {
@@ -210,7 +210,7 @@ mod neon {
         }
     }
 
-    /// value by value, interleaved by ST2, ST3, ST4 or pairs of parts zipped
+    /// Value by value, interleaved by ST2, ST3, ST4 or pairs of parts zipped.
     #[inline(always)]
     pub unsafe fn block_aos<const N: usize>(p: *const u8, out: *mut f64) {
         for r in 0..4 {
@@ -242,8 +242,8 @@ mod avx2 {
     use super::{EXP, TOP, ZERO_TOP};
     use std::arch::x86_64::*;
 
-    /// lanes 4h to 4h + 3 at a time: two 16-byte loads per half, PSHUFB to the low 7 bytes of each lane; the last pair
-    /// is loaded from byte 40 of the group, so as not to read past it
+    /// Lanes 4h to 4h + 3 at a time, from two 16-byte loads per half, by PSHUFB to the low 7 bytes of each lane. The
+    /// last pair is loaded from byte 40 of the group, so as not to read past it.
     #[inline(always)]
     pub unsafe fn block<const N: usize>(p: *const u8, out: &mut [[f64; 8]; N]) {
         let idx = [
@@ -272,7 +272,7 @@ mod avx2 {
                 let f = _mm256_or_si256(_mm256_shuffle_epi8(raw, idx[h]), top);
                 let z = _mm256_cmpeq_epi64(f, zero);
                 let v = _mm256_andnot_si256(z, _mm256_add_epi64(f, last));
-                // lane j's sign, bit j of the group's last byte, to bit 63
+                // Lane j's sign, bit j of the group's last byte, goes to bit 63.
                 let s = _mm256_sllv_epi64(_mm256_set1_epi64x(*g.add(56) as i64), sh[h]);
                 let part = _mm256_or_si256(v, _mm256_and_si256(s, sign));
                 _mm256_storeu_si256(out[k].as_mut_ptr().add(4 * h) as *mut __m256i, part);
@@ -289,8 +289,8 @@ mod avx512 {
     use super::{EXP, TOP, ZERO_TOP};
     use std::arch::x86_64::*;
 
-    /// all 8 lanes at once: lane j's field, at bit 56 j of the group, from the words before and at its own (variable
-    /// shifts), the last lane's upper word not loaded, so as not to read past the group
+    /// All 8 lanes at once. Lane j's field, at bit 56 j of the group, comes from the words before and at its own by
+    /// variable shifts. The last lane's upper word is not loaded, so as not to read past the group.
     #[inline(always)]
     pub unsafe fn block<const N: usize>(p: *const u8, out: &mut [[f64; 8]; N]) {
         let rsh = _mm512_setr_epi64(64, 56, 48, 40, 32, 24, 16, 8);
