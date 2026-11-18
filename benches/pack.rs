@@ -51,7 +51,8 @@ fn bench(c: &mut Criterion) {
             let p = black_box(&p);
             let mut a = 0.0;
             for i in 0..N {
-                a += p.get::<OD>(i).x[1];
+                // the whole value through black_box, so no part's reconstruction can be dropped
+                a += black_box(p.get::<OD>(i)).x[1];
             }
             black_box(a)
         })
