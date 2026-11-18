@@ -1,5 +1,5 @@
-"""Theorems 39 and 41, Lemma 42 and Proposition 43 of expansion-error-bounds.pdf: the error bounds of exp and ln
-(src/explog.rs) in exact rationals. For the octo-double algorithms at any number of parts n, Lemma 20 bounds every
+"""Theorems 40 and 42, Lemma 43 and Proposition 44 of expansion-error-bounds.pdf: the error bounds of exp and ln
+(src/explog.rs) in exact rationals. For the octo-double algorithms at any number of parts n, Lemma 13 bounds every
 operation's error and its result's parts from its operands' part bounds, and the bounds are carried through every step;
 for the double-double ones, the published relative bounds of the double-word operations. A scaling by a power of two
 that leaves the normal range, and the start's quotient, add at most ETA0 = 2^-1075 per part; the products obey (A2) but
@@ -79,8 +79,8 @@ def vecb(X, u, n, convex):
     return V
 
 
-def lemma20(name, n, u, al, be, Zb, lam=None, convex=False):
-    """Lemma 20: the error bound and the result's part bounds of MUL, ADD, MULF and ADDF from the operands' part
+def lemma13(name, n, u, al, be, Zb, lam=None, convex=False):
+    """Lemma 13: the error bound and the result's part bounds of MUL, ADD, MULF and ADDF from the operands' part
     bounds al, be (be = [|b|] for MULF and ADDF), Zb >= |Z| and, optionally, lam (lambda_m >= |a_m + b_m| for ADD,
     lambda_0 >= |a_0 + b| for ADDF). sqrt_consts.op_bounds, with convex as in vecb."""
     Rr = Fr(0); Dl = Fr(0)
@@ -121,7 +121,7 @@ def lemma20(name, n, u, al, be, Zb, lam=None, convex=False):
 # ---------------------------------------------------------------------------------------------------------------
 
 class Expansion:
-    """the n-part algorithms of the paper (OD at n = 8): Lemma 20 at every operation"""
+    """the n-part algorithms of the paper (OD at n = 8): Lemma 13 at every operation"""
 
     def __init__(self, n, p, convex=False):
         self.n, self.u, self.convex = n, Fr(1, 2 ** p), convex
@@ -132,17 +132,17 @@ class Expansion:
         return v + [Fr(0)] * (self.n - len(v))
 
     def mul(self, a, b, Zb):
-        return lemma20('mul', self.n, self.u, a, b, Zb, convex=self.convex)
+        return lemma13('mul', self.n, self.u, a, b, Zb, convex=self.convex)
 
     def add(self, a, b, Zb, lam=None):
-        return lemma20('add', self.n, self.u, a, b, Zb, lam=lam, convex=self.convex)
+        return lemma13('add', self.n, self.u, a, b, Zb, lam=lam, convex=self.convex)
 
     def add_f(self, a, f, Zb, lam0=None):
-        return lemma20('add_f', self.n, self.u, a, [abs(Fr(f))], Zb, lam=None if lam0 is None else [lam0],
+        return lemma13('add_f', self.n, self.u, a, [abs(Fr(f))], Zb, lam=None if lam0 is None else [lam0],
                        convex=self.convex)
 
     def mul_f(self, a, f, Zb):
-        return lemma20('mul_f', self.n, self.u, a, [abs(Fr(f))], Zb, convex=self.convex)
+        return lemma13('mul_f', self.n, self.u, a, [abs(Fr(f))], Zb, convex=self.convex)
 
     def scale(self, a, s):
         return [up(x * s) for x in a]
@@ -197,7 +197,7 @@ class DoubleWord:
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the start of the logarithm: the crate's binary64 logarithm (ln_f64), Lemma 42
+# the start of the logarithm: the crate's binary64 logarithm (ln_f64), Lemma 43
 # ---------------------------------------------------------------------------------------------------------------
 
 def start_eta(p=53, J=9):
@@ -338,7 +338,7 @@ class Exp:
                 ea, qp = M.add(M.const(self.F[j]), pp, up(cj + self.Ferr[j] + bp * (qv + qe) + ep))
                 qe = up(self.Ferr[j] + bp * qe + ep + ea)
                 qv = up(cj + bp * qv)
-            # t_0 = r' + r' (r' q_2), the outer product and sum in r' 2^-er (exact scalings, Lemma 20's bounds scale
+            # t_0 = r' + r' (r' q_2), the outer product and sum in r' 2^-er (exact scalings, Lemma 13's bounds scale
             # with them); scaling back loses at most ETA0 per part below 2^-1022
             e1, w1p = M.mul(rp, qp, up(bp * (qv + qe)))
             e2, wp = M.mul(rp, w1p, up(bp * (bp * (qv + qe) + e1)))
@@ -827,7 +827,7 @@ if __name__ == '__main__':
         sys.exit(0 if check() else 1)
     print('the crate (u = 2^-53; exp relative; log relative to |ln x|, plus an absolute term)')
     eta, se = start_eta()
-    print(f'the start ln_f64 (Lemma 42): within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
+    print(f'the start ln_f64 (Lemma 43): within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
           f'{up_dec(se["ew"] / u)} u')
     w, info, red = dd_exp()
     rdd, fdd, _ = dd_log()

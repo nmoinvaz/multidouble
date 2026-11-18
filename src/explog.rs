@@ -30,10 +30,10 @@
 //! inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient below the
 //! normal range (the paper's (A2), apart from the scalings above, whose losses the bounds include, and the products
 //! that only choose k, m, the degree or a branch of ln), proved in the paper (paper/expansion-error-bounds.pdf,
-//! Theorems 39 and 41) from Lemma 20 at every operation; `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 for a
+//! Theorems 40 and 42) from Lemma 13 at every operation; `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 for a
 //! finite result, and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for double-words under the same condition, from the
-//! published bounds of the double-word operations they use and the proven bound of `ln_f64` (Proposition 43 and Lemma
-//! 42). An emulator of these steps with every product hooked finds none below the normal range at any binade of the
+//! published bounds of the double-word operations they use and the proven bound of `ln_f64` (Proposition 44 and Lemma
+//! 43). An emulator of these steps with every product hooked finds none below the normal range at any binade of the
 //! argument, the closest 48 binades above it (`paper/explog_bits.py scan`), so the argument's size does not break the
 //! condition there; a part far below the one above it can make a product underflow, as for the other operations. The
 //! constants come from `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no
@@ -1001,7 +1001,7 @@ fn start_dv<S: Simd>(x0: V8<S>, dd: impl Fn() -> DV<S>, half: impl Fn() -> DV<S>
     <DV<S> as Prec>::sel(big, y + l2, y)
 }
 
-/// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper, Lemma 42), and 0 for h = 1: h = 2^e m
+/// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper, Lemma 43), and 0 for h = 1: h = 2^e m
 /// with m in (mu/2, mu], mu = RN(sqrt 2), m - 1 exact, and ln m = 2 atanh(s), s = (m - 1) / (m + 1), |s| <= 0.1716,
 /// by the first ten terms of its series in s^2 (by Horner's rule with fused multiply-adds), whose remainder is below
 /// 0.22 u relative; then e ln 2 is added by one fused multiply-add. No library logarithm is called, so the start of

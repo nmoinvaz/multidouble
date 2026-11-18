@@ -1,6 +1,6 @@
 """The sine, cosine and tangent of expansion-error-bounds.pdf (the appendix on the trigonometric functions): the bounds
 of the evaluation of sin r and cos r by Taylor series in r^2, step by step in exact rationals, from part bounds carried
-through every operation by Lemma 20 (the paper's algorithms at n parts, multidouble's octo-double at n = 8), or from
+through every operation by Lemma 13 (the paper's algorithms at n parts, multidouble's octo-double at n = 8), or from
 the double-word algorithms' published relative bounds (multidouble's double-double), then the reduction's and the
 quotient's errors. Every formula is nondecreasing in the quantities rounded up by `up`, so the values are upper
 bounds.
@@ -67,7 +67,7 @@ def tan_hi(x):
 # ---------------------------------------------------------------------------------------------------------------
 
 class Paper:
-    """the paper's algorithms at n parts: Lemma 20 (op_bounds), errors and part bounds"""
+    """the paper's algorithms at n parts: Lemma 13 (op_bounds), errors and part bounds"""
     def __init__(self, n):
         self.n = n
         self.name = f'paper n={n}'
@@ -269,7 +269,7 @@ def bucket_bounds(M, n, j, ks, kc, cs_s, cs_c):
         th = max(theta_of(sp, s_lo - sum(sp[1:])), theta_of(cp, c_lo - sum(cp[1:])))
     else:
         th = None
-    # Theorem 18 is stated for a ladder H(theta) with theta u <= 1/4 (Definition 7)
+    # Theorem 19 is stated for a ladder H(theta) with theta u <= 1/4 (Definition 7)
     require(th is None or th * U <= Fr(1, 4), f'theta_j u > 1/4 in bucket {j}')
     dD = M.div(th)
     dT = max((1 + dS) * (1 + dD) / (1 - dC), (1 + dC) * (1 + dD) / (1 - dS)) - 1
