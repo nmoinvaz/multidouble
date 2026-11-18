@@ -250,9 +250,9 @@ of the first. The other bounds are the thresholds the tests check.
   accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy far from
   1, now scales its argument by a power of four.
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
-  accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved, not yet refereed); cₙ grows like
-  n⁹u⁹, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal `f64`, so
-  octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow an absolute 16×2⁻¹⁰⁷⁴.
+  accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
+  like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
+  `f64`, so octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow an absolute 16×2⁻¹⁰⁷⁴.
 - `ODLu` solves to about 10⁻¹³³ cond(A) for condition numbers up to 10³⁰, 2⁻²²⁰ times the quad-double LU's error. `OJet`
   coefficients are within 10⁻¹²³ of the sum of their terms' magnitudes, where the quad-double jet errs by 2×10⁻⁶⁴, and
   its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps. `Ou` gives derivatives
