@@ -511,7 +511,7 @@ impl<S: Simd> ODotAcc<S> {
         S::vectorize(
             #[inline(always)]
             || {
-                let t = alg::expand(&a.c, &b.c);
+                let t = alg::expand_sloppy(&a.c, &b.c); // trial
                 let mut s = self.s;
                 alg::acc_levels(&mut s, &t);
                 ODotAcc { s }
@@ -526,7 +526,7 @@ impl<S: Simd> ODotAcc<S> {
         S::vectorize(
             #[inline(always)]
             || {
-                let t = alg::expand(&a.c, &b.c);
+                let t = alg::expand_sloppy(&a.c, &b.c); // trial
                 alg::acc_levels(&mut self.s, &t);
             },
         )

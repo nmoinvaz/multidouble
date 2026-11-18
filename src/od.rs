@@ -459,7 +459,8 @@ pub(crate) mod alg {
     /// a b (the default `*`): the nine levels of `expand`, renormalized
     #[inline(always)]
     pub fn mul<L: Limb>(a: &[L; 8], b: &[L; 8]) -> [L; 8] {
-        L::renorm(expand(a, b))
+        // trial: every octo-double product by the sloppy multiply
+        L::renorm(expand_sloppy(a, b))
     }
 
     /// `dep` on the sloppy product's eight levels: two-sums at levels l..6, a plain add at level 7 (with
@@ -1004,7 +1005,8 @@ impl OdAcc {
     /// self + a b
     #[inline]
     pub fn add_prod(self, a: OD, b: OD) -> OdAcc {
-        let t = alg::expand(&a.x, &b.x);
+        // trial: the sloppy product's levels
+        let t = alg::expand_sloppy(&a.x, &b.x);
         let mut s = self.s;
         alg::acc_levels(&mut s, &t);
         OdAcc { s }
