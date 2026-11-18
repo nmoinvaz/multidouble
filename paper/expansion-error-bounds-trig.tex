@@ -26,23 +26,28 @@ their greedy $n$-part roundings. For $|r_0| < T_n$, $\textrm{SINR}(r) = r$ and $
 with $z = \mathrm{MUL}(r, r)$, $K = K_{\rm s}(j)$ for SINR and $K_{\rm c}(j)$ for COSR,
 \begin{gather*}
 p_{K-1} = \hat s_{K-1}, \quad p_k = \mathrm{ADD}(\mathrm{MUL}(z, p_{k+1}), \hat s_k), \\
-\textrm{SINR}(r) = \mathrm{ADD}\bigl(r, \mathrm{MUL}(r, \mathrm{MUL}(z, p_1))\bigr),
+\textrm{SINR}(r) = 2^{-\sigma}\mathrm{ADD}\bigl(r', \mathrm{MUL}(r', \mathrm{MUL}(z, p_1))\bigr),
 \end{gather*}
-for $k = K-2, \dots, 1$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z, p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$.
+for $k = K-2, \dots, 1$, with $\sigma = j + 1$ and $r' = 2^\sigma r$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z,
+p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$. A power of two multiplies every part.
 
 \paragraph{The functions} For $|x_0| < T_n$, SIN$_n(x) = x$, COS$_n(x) = 1$ and TAN$_n(x) = x$. Otherwise, with $(q, r)
 = \mathrm{RED}(x)$, $Y_{\rm s} = \mathrm{SINR}(r)$ and $Y_{\rm c} = \mathrm{COSR}(r)$, SIN$_n$ returns $Y_{\rm s}$,
 $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$ for $q = 0, 1, 2, 3$, COS$_n$ returns $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$,
-$Y_{\rm s}$, and TAN$_n$ returns DIV$(Y_{\rm s}, Y_{\rm c})$ for even $q$ and $-$DIV$(Y_{\rm c}, Y_{\rm s})$ for odd
-$q$. At $n = 8$ these are multidouble's \texttt{OD::sin}, \texttt{cos} and \texttt{tan}. Its \texttt{DD} versions run the
-same steps with DWTimesDW3 for MUL, AccurateDWPlusDW for ADD, DWPlusFP for ADDF and DWDivDW2 for DIV~\cite{JMP17}.
+$Y_{\rm s}$, and TAN$_n$ returns $2^{-3\sigma}\mathrm{DIV}(2^{3\sigma}Y_{\rm s}, Y_{\rm c})$ for even $q$ ($\sigma = 0$ for
+$|r_0| < T_n$) and $-$DIV$(Y_{\rm c}, Y_{\rm s})$ for odd $q$. Unscaled, $r\,\mathrm{MUL}(z, p_1)$ has products below
+$2^{-1022}$ for $|r|$ under about $2^{-189}$ at $n = 8$, and so have the products of $Y_{\rm c}$'s last parts, near
+$2^{-2\sigma-318}$, with the last quotient terms for $|r|$ under about $2^{-81}$. At $n = 8$ these are multidouble's
+\texttt{OD::sin}, \texttt{cos} and \texttt{tan}. Its \texttt{DD} versions run the same steps with DWTimesDW3 for MUL,
+AccurateDWPlusDW for ADD, DWPlusFP for ADDF and DWDivDW2 for DIV~\cite{JMP17}, after a $\FastTwoSum$ of $r_0$ and $r_1$,
+which makes $r$ a double-word number: the greedy $r$ can end in a tie, $|r_1| = \frac12\ulp(r_0)$ with $r_0$ odd.
 The emulator of the earlier sections, running these steps, returns the bits of both on 600 inputs each, with ladders
 at their top, results next to multiples of $\pi/2$ and arguments up to $2^{52}$. Controls that halve the sine series or
 skip the correction of $k$ mismatch (\texttt{trig\_bits.py}).
 
 \begin{lemma}\label{lem:red}
 Assume~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$, and let $(q, r) = \mathrm{RED}(x)$.
-Then $|k| < 2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\pi/2$ and $A = |k|\,2^{-1217}$:
+Then $|k| < 0.64\cdot2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\pi/2$ and $A = |k|\,2^{-1217}$:
 \begin{enumerate}
 \item[(a)] if $k = 0$, $r = x$ and $|r| \le 0.785399$;
 \item[(b)] otherwise $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2A$, $|r| \le R_0$, and $|r_{i+1}| \le \frac12\ulp(r_i)$,
@@ -57,10 +62,13 @@ Each $x_i$ is a multiple of $2^{-1074}$, so $2^F\sum_i x_i$ is an integer, and $
 below $2^{F+54}$. Write $v = 2^{-F}N$, so $v = r_{\rm e} + k(\pi/2 - 2^{-F}P)$ and $|v - r_{\rm e}| \le A$. By $H(2)$,
 $|x - x_0| \le 2u|x_0|/(1-2u)$, so with $|c - 2/\pi| \le 2^{-54}$, \eqref{eq:rn} and $|x_0| \le 2^{52}$,
 $|2x/\pi - \RN(x_0c)| \le 0.32 + 0.25 + 0.64 < 1.21$. So $|v| < 1.71\cdot\pi/2 + A < 2.7$ before the
-correction, and $|k| < 2^{52}$. If $|\RN(v)| \le \tau$, then $|v| \le \tau(1+u)$. Otherwise the same estimate with
-$|v| < 2.7$ gives $|2v/\pi - k_2| \le \frac12 + 2^{-51}$, so the new $|v| \le \pi/4 + 2^{-50} < \tau$. In both
-cases $|v| \le \tau(1+u) < R_0$. (a) $\lfloor\RN(x_0c)\rceil = 0$ means $|\RN(x_0c)| < \frac12$, so $|x_0| < \frac\pi4(1+u)/(1-u) < 0.7853982$, and
-$|x| \le |x_0|/(1-2u)$. (b) By \eqref{eq:rn}, each
+correction, and $|k| \le (1+u)2^{52}c + \frac52 < 0.64\cdot2^{52}$ after it. If $|\RN(v)| \le \tau$, then $|v| \le
+\tau(1+u)$. Otherwise the three terms of the same estimate with $|v| < 2.7$ total at most $5u$, so $|2v/\pi - k_2| \le
+\frac12 + 5u$ and the new $|v| \le \pi/4 + 2^{-50} < \tau$. In both cases $|v| \le \tau(1+u) < R_0$. The correction
+needs $|x_0| > 2^{31}$, as below it the first estimate is below $2^{-20}$ and $|v| < \pi/4 + 1.5\cdot10^{-6} < \tau$.
+Then the first $k$ exceeds $2^{30}$ and $|k_2| \le 2$, so the final $k$ is 0 only when the first one is. (a)
+$\lfloor\RN(x_0c)\rceil = 0$ means $|\RN(x_0c)| < \frac12$, so $|x_0| < \frac\pi4(1+u)/(1-u) < 0.7853982$, and $|x| \le
+|x_0|/(1-2u)$. (b) By \eqref{eq:rn}, each
 remainder of the greedy rounding is at most $u_*$ times the one before, so $|r - v| \le u_*^n|v|$, and $|r_{i+1}| \le
 \frac12\ulp(r_i)$; then $|r - r_{\rm e}| \le u_*^n(|r_{\rm e}| + A) + A$. The bucket bounds follow from $|r| \le
 |r_0|/(1-2u)$, and the part bounds from \eqref{eq:a0} with $\rho = 2u$, since $H(1)$ implies $H(2)$.
@@ -120,7 +128,9 @@ R^2(E_t + \epsilon_w)\rho$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\ome
 The series' remainder after $K$ terms is at most its first omitted term, so $|r + rz_{\rm e}p^{\rm e}_1 - \sin r| \le
 \rho R^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D\rho$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
 w|$ plus a term that does not depend on its third argument, which is $\epsilon_y - u^n(1+D)$ in units of $\rho$, so
-$|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. COSR is the same
+$|\textrm{SINR}(r) - \sin r| \le u^n|\sin r| + E_{\rm S}\rho$; and $\rho \le |\sin r|/(1 - R^2/6)$. SINR's last two steps run on $r' = 2^\sigma r$ and its result is scaled back: under
+(A2) both scalings are exact, and Lemma~\ref{lem:g}'s bounds scale with its operands, so in units of $2^\sigma\rho$
+they are those above. COSR is the same
 with $|c_1| = \frac12$ and the absolute units of ADDF, and $\cos r \ge \cos_- R$. For $|r_0| < T_n$, $|\sin r - r| \le
 \rho^3/6$ and $|1 - \cos r| \le \rho^2/2$.
 \end{proof}
@@ -151,12 +161,12 @@ $T^2/(2\cos_-T)$ and $\tan_+(T)/T - 1$, the errors of the returns for $|x_0| < T
 At $n = 8$, $C \le 3.163167\,u^8$ and $C^{\rm T} \le 6.418351\,u^8$. With the double-word bounds of DWTimesDW3,
 $(4u^2 + u^3/2)/(1+u)^2$ \cite{MR22}, AccurateDWPlusDW, $3u^2/(1-4u)$, DWPlusFP, $2u^2$, and DWDivDW2, $15u^2 +
 56u^3$ \cite{JMP17}, in place of Lemma~\ref{lem:g} and Theorem~\ref{thm:t6}, the bounds hold for multidouble's
-double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.841411\,u^2$ and $C^{\rm T} \le 28.414065\,u^2$. Since $|k| < 2^{52}$, $5A <
-2^{-1163}$.
+double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.841411\,u^2$ and $C^{\rm T} \le
+28.414065\,u^2$. Since $|k| < 0.64\cdot2^{52}$, $5A < 0.8\cdot2^{-1163}$.
 \end{theorem}
 
 \begin{proof}
-If $|x_0| < T_n$, $|x| < T(1-2u)^{-1}$, and the returned $x$, $1$ and $x$ err by at most $|x|^3/6$, $x^2/2$ and $\tan|x|
+If $|x_0| < T_n$, $|x| < T_n(1-2u)^{-1} \le T$, and the returned $x$, $1$ and $x$ err by at most $|x|^3/6$, $x^2/2$ and $\tan|x|
 - |x|$, within the stated $C$ and $C^{\rm T}$. Otherwise Lemma~\ref{lem:red} gives $r$ in bucket $j$ with the
 hypotheses of Lemma~\ref{lem:sincosr}, and $f(x) = \pm\sin r_{\rm e}$ or $\pm\cos r_{\rm e}$ by the quadrant, as SIN$_n$
 and COS$_n$ return. Let $\eta = |r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2A$ (zero for $k = 0$). For the sine,
@@ -171,10 +181,18 @@ $\epsilon u^n\,2|r_{\rm e}|/\sin 2|r_{\rm e}| + 3A/|\sin r_{\rm e}\cos r_{\rm e}
 $Y_{\rm s} = \sin r\,(1 + \hat\sigma)$, $Y_{\rm c} = \cos r\,(1 + \hat\gamma)$, $|\hat\sigma| \le \delta_{\rm S}$ and
 $|\hat\gamma| \le \delta_{\rm C}$, the parts of $Y_{\rm s}$ and $Y_{\rm c}$ satisfy $H(\theta_j)$, so
 Theorem~\ref{thm:t6} gives DIV$(Y_{\rm s}, Y_{\rm c}) = (Y_{\rm s}/Y_{\rm c})(1 + \hat d)$ with $|\hat d| \le
-\delta_{\rm D}$, and $\tan r\,(1+\hat\sigma)(1+\hat d)/(1+\hat\gamma)$ is within the first term of $C^{\rm T}_j$;
-likewise for $-$DIV$(Y_{\rm c}, Y_{\rm s})$ and $-\cot r$. For the double-double functions
+\delta_{\rm D}$, and $\tan r\,(1+\hat\sigma)(1+\hat d)/(1+\hat\gamma)$ is within the first term of $C^{\rm T}_j$.
+The numerator's $2^{3\sigma}$ and the quotient's $2^{-3\sigma}$ are exact under (A2), and Theorem~\ref{thm:t6}'s bound
+is relative, so the scaled quotient has it. For odd $q$ the quotient is $-$DIV$(Y_{\rm c}, Y_{\rm s})$, and $|\cot r -
+\cot r_{\rm e}|/|\cot r_{\rm e}| = |\sin(r - r_{\rm e})|/(|\sin r|\cos r_{\rm e})$, with $|\sin r|$ where the even case
+has $\cos r$. By (A2), $\RN(v)$, which is not zero as $P$ is odd and $|k| < 2^{142}$, is at least $2^{-1074} >
+2^{90}A$, so $|\sin r| \ge (1 - \eta/|\sin r_{\rm e}|)|\sin r_{\rm e}|$ with $\eta/|\sin r_{\rm e}| \le 1.2u^n +
+2^{-89}$. If $2A \le u^n|\sin r_{\rm e}|$ the factor is within $\epsilon$. Otherwise its excess over $\epsilon$, at
+most $2^{-88}$, multiplies a term below $2A/|\sin r_{\rm e}|$, which the absolute term absorbs. The rest is as for even
+$q$. For the double-double functions
 the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, whose operands are
-double-word numbers, since every algorithm ends with a $\FastTwoSum$ and $r$ and the constants are greedy.
+double-word numbers, since every algorithm ends with a $\FastTwoSum$, $r$ passes through one, and the constants are
+greedy.
 
 The values are those of \texttt{trig\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers. It
 evaluates one bucket per pair $(K_{\rm s}(j), K_{\rm c}(j))$, the one with the largest $R_j$: every bound above holds
@@ -189,7 +207,22 @@ with a weight near $R_0^2/2$, divided by $\cos R_0$. For $|r_0| < \frac12$ the b
 $4.800526\,u^8$, and for $|r_0| < 2^{-5}$ to $2.000705\,u^8$ and $4.002771\,u^8$. Evaluated at other $n$, the bounds
 are $3.168700\,u^2$ and $6.452138\,u^2$ at $n = 2$, $3.164154\,u^4$ and $6.426154\,u^4$ at $n = 4$, and
 $3582.787311\,u^{12}$ and $4929.367335\,u^{12}$ at $n = 12$, where the second term of the multiplication's bound
-dominates (Table~\ref{tab:main}). In multidouble's tests, random arguments, arguments near multiples of $\pi/2$ with
-results down to $2^{-443}$, and arguments near $2^{52}$ give at most $0.09\,u^8$ for the octo-double functions and
-$1.9\,u^2$ and $4.1\,u^2$ for the double-double ones. Whether the bounds are approached is not known.
+dominates (Table~\ref{tab:main}). In the default run of multidouble's tests, random arguments, arguments near multiples
+of $\pi/2$ with results down to $2^{-443}$, and arguments near $2^{52}$ give at most $0.48\,u^8$ for the octo-double
+functions, the error $x^2/2$ of the early return of the cosine just below $T_8$, and below $0.01\,u^8$ for every other
+kind of argument. The double-double ones give at most $1.82\,u^2$ for the sine and cosine and $4.07\,u^2$ for the
+tangent. Whether the bounds are approached is not known.
+\end{remark}
+
+\begin{remark}\label{rem:a2}
+The theorem assumes (A2) for the whole run. With the scalings, the operands of every operation have leading parts
+between $2^{-427}$ and $2^{425}$: $r$ itself at least $T_8 = 2^{-212}$ in $z = \mathrm{MUL}(r, r)$, $r'$ and the sums
+in SINR near 1, $z$ and $t$ at least $2^{-2\sigma-3}$, and the quotient near $2^{2\sigma}$, whose divisor $Y_{\rm c}$
+has its last parts near $2^{-2\sigma-318}$. At $n = 8$ their products of order at most 8 then lie above $2^{-850}$,
+and the two-products' exponents sum to more than $-800$, against the $-970$ that (A2) needs, so for parts as dense as
+those of a greedy rounding no result of the run leaves the normal range, whatever $|r|$ is from $T_8$ to $R_0$. On the emulator, 32 random $r$ in each bucket from
+$[2^{-212}, 2^{-211})$ to $[\frac12, \tau]$, greedy roundings and ladders at their top, give no result outside binary64
+and no subnormal one in $z$, SINR, COSR or either quotient, where the unscaled SINR has such results from $|r| <
+2^{-189}$ and the unscaled quotient from $|r| < 2^{-81}$ (\texttt{trig\_bits.py a2}). As for the other operations of
+this paper, an input with a part far below the ladder can still make a product of two small parts underflow.
 \end{remark}
