@@ -103,7 +103,7 @@ fn ov_lane_methods_are_the_scalar_operations() {
             assert_eq!(v.lane(j), xs[j].to_dd(), "val lane {j}");
             assert_eq!(x.coef(0).lane(j), xs[j].to_dd(), "coef(0) lane {j}");
             assert_eq!(q.lane(j).x, xs[j].to_qd().x, "coef_qd(0) lane {j}");
-            assert_eq!(x.tan().lane(j), DD::ZERO);
+            assert_eq!(Lane::tan(x).lane(j), DD::ZERO);
             assert_eq!(x.coef_qd(1).lane(j).x, [0.0; 4]);
         }
         let cx = Counted(x) * Counted(y) + Counted(x);
