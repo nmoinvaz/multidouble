@@ -279,10 +279,10 @@ are the thresholds the tests check.
   ARITH-15, 2001) with three repairs: the accurate add lost a term when all parts are read with three emitted, and its
   accumulator when four parts are emitted before every part is read, and the square root, which lost accuracy far from
   1, now scales its argument by a power of four.
-- The sloppy multiply has no level below the eighth part. Its 64 roundings at that level are its whole error, at most
-  2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (computed by applying the paper's Lemma 11 and Theorem 9(a),
-  `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random operands give at most 98
-  u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
+- The sloppy multiply has no level below the eighth part. Its error is the 64 roundings at that level and the dropped
+  products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30, with
+  the constant from `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random
+  operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal

@@ -1,0 +1,111 @@
+% The sloppy multiply (multidouble's OD::sloppy_mul, generalized to n parts): its error bound, and that of sums of its
+% products. \input after the accumulator section of expansion-error-bounds.tex, whose macros and labels it uses.
+% Constants: sloppy_consts.py.
+
+\section{The sloppy multiply}\label{sec:sloppy}
+
+SLOPPY-MUL keeps $n$ levels $s_0, \dots, s_{n-1}$, and on them $\dep(s, l, t)$ is that of MUL with $n-1$ in place of
+$n$: $\TwoSum$s at levels $l, \dots, n-2$, then $s_{n-1} \gets \RN(s_{n-1} + e)$. For $n$-part $a$ and $b$:
+\begin{enumerate}
+\item[(1)] $(s_j, e_{0j}) \gets \TwoProd(a_0, b_j)$ for $j \le n-2$.
+\item[(2)] $f \gets \RN(a_1b_{n-1})$, then $f \gets \RN(a_ib_{n-i} + f)$ for $i = 2, \dots, n-1$, then $f \gets
+  \RN(a_ib_{n-1-i} + f)$ for $i = 0, \dots, n-1$, each by one FMA; $s_{n-1} \gets f$.
+\item[(3)] $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n-1$.
+\item[(4)] For $i = 1, \dots, n-2$ and $j = 0, \dots, n-2-i$: $(p_{ij}, e_{ij}) \gets \TwoProd(a_i, b_j)$, $\dep(s, i+j,
+  p_{ij})$, $\dep(s, i+j+1, e_{ij})$.
+\item[(5)] Return $R_n(s)$.
+\end{enumerate}
+Level $n-1$ is summed in plain arithmetic, as QD's sloppy multiplication sums its terms of order 3~\cite{HLB01}, and
+there is no level $n$. It holds the products of orders $n-1$ and $n$, taken exactly into the FMAs of step (2), the
+errors of the products of order $n-2$, deposited there by steps (3) and (4), and the carries out of level $n-2$, which
+end every other dep. The products of order above $n$ are dropped, as in MUL. ADDPROD-SLOPPY$(a, b)$ deposits the $n$
+levels of steps (1)--(4) into the accumulator of Appendix~\ref{sec:acc}, with $N = n-1$. At $n = 8$ and $p = 53$
+these are \texttt{OD::sloppy\_mul} and \texttt{OdAcc::add\_prod\_sloppy} of multidouble; the emulator
+\texttt{sloppy\_emu.py}, written from the description of \texttt{OD::sloppy\_mul}, returns its eight parts on the
+worst pair of its tests.
+
+\begin{theorem}\label{thm:sloppy}
+Assume~\ref{as:fp}, $\theta \ge 1$, $\rho = \theta u \le 1/4$ and $n^2u < 1$, let the $n$-part operands satisfy
+$H(\theta)$, and let $M = |a_0b_0|$. Let
+\begin{gather*}
+\alpha_0 = 1+u, \quad \alpha_{n-1} = n + \frac{n-1}{\theta} + (n-1)\rho, \\
+\alpha_m = (1+u)(m+1) + m/\theta \ (0 < m < n-1),
+\end{gather*}
+let $T_m = m(m+1)$ for $0 \le m \le n-2$ and $Q = n^2$, let $d_0 = \alpha_0$ and, for $0 \le m \le
+n-2$, $\gamma_m$, $\ell_m$ and $d_{m+1}$ be those of Theorem~\ref{thm:t2} with these $\alpha_m$ and $T_m$, and let
+\begin{gather*}
+\ell_{n-1} = \frac{d_{n-1}}{1 - Qu}, \qquad L_m = \theta^m\ell_m, \\
+R_{\rm s} = \frac{Q\theta^{n-1}d_{n-1}}{1 - Qu} = QL_{n-1},
+\end{gather*}
+with $\Delta_n$ that of Theorem~\ref{thm:t2}.
+\begin{enumerate}
+\item[(a)] The levels of SLOPPY-MUL have exactly $T_m$ $\TwoSum$s at level $m \le n-2$ and $Q$ roundings at level
+  $n-1$, the inputs of level $m$ total $A_m \le \alpha_m\rho^mM$ in the sense of Lemma~\ref{lem:l}, and $|s_m| \le
+  L_mu^mM$ at every moment, for $0 \le m \le n-1$.
+\item[(b)] The result $x$ of SLOPPY-MUL satisfies
+  \[
+  \Bigl|ab - \sum_k x_k\Bigr| \le (R_{\rm s} + \Delta_nu)\,u^nM,
+  \]
+  and so $|ab - x| \le (R_{\rm s} + \Delta_nu)\,u^n(\frac{1-\rho}{1-2\rho})^2|ab|$.
+\item[(c)] If moreover $(n^2+n)u < 1$ and $(n+1)Ku < 1$, FINISH after $K$ terms, each ADDPROD-SLOPPY$(a,
+  b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$, satisfies the bound of
+  Theorem~\ref{thm:acc} with $\tau_l = \max(L_lu^l, \rho^l)$ for $l < n$, $\tau_n = 0$, and $E_{\rm prod} =
+  (R_{\rm s} + \Delta_nu)u^nW$.
+\end{enumerate}
+At $n = 8$ and $p = 53$, $Q = 64$, and $R_{\rm s} + \Delta_8u = 2^{30.4116}$ for $\theta = 1$ and $2^{31.9242}$ for
+$\theta = 2$, of which $\Delta_8u$ is $2^{-50.42}$ and $2^{-41.42}$.
+\end{theorem}
+
+\begin{proof}
+\emph{The program.} Lemma~\ref{lem:l} and its proof use $n$ only as the index of the level that rounds, so they hold
+for levels $s_0, \dots, s_{n-1}$ with $n-1$ in place of $n$. Step (1) assigns to zero levels. Level $n-1$ is zero
+until step (2) stores $f$, and no other operation touches it while the chain runs, so the chain gives the same
+$s_{n-1}$ as the roundings $s_{n-1} \gets \RN(s_{n-1} + y)$ of kind (iii) with the exact products $y = a_ib_j$, the
+first of them $\RN(0 + a_1b_{n-1})$. Steps (3) and (4) are deps.
+
+\emph{Inputs.} By $H(\theta)$, $|a_ib_j| \le \rho^{i+j}M$. For $m \le n-2$, level $m$ receives what it receives in MUL:
+the $m+1$ products $p_{ij}$ with $i+j = m$, by assignment for $i = 0$ and by dep otherwise, and the $m$ errors $e_{ij}$
+with $i+j = m-1$; so $A_m \le \alpha_m\rho^mM$, as in the proof of Theorem~\ref{thm:t2}. Level $n-1$ receives in the
+chain the $n$ products of order $n-1$, at most $\rho^{n-1}M$ each, and the $n-1$ products of order $n$, at most
+$\rho^nM$ each, and by the deps started there the $n-1$ errors $e_{ij}$ with $i+j = n-2$, one of step (3) and $n-2$ of
+step (4), each at most $u\rho^{n-2}M = \rho^{n-1}M/\theta$ by Lemma~\ref{lem:facts}(c). So $A_{n-1} \le
+\alpha_{n-1}\rho^{n-1}M$.
+
+\emph{Counts.} A dep started at level $l \le n-2$ performs one $\TwoSum$ at each level $l, \dots, n-2$ and then rounds
+the carry out of level $n-2$ into level $n-1$. A dep started at level $n-1$ is one rounding there. The deps started at
+a level $l \le m \le n-2$ are $m$ of step (3), and in step (4) the $m(m+1)/2$ products of orders $1, \dots, m$ and the
+$m(m-1)/2$ errors of orders $1, \dots, m-1$, so $T_m = m(m+1)$. Level $n-1$ rounds $T_{n-2} = (n-2)(n-1)$ times for the
+carries out of level $n-2$, $n-1$ times for the deps started there, and $2n-1$ times in the chain: the $n-1$ products
+of order $n$, the first by a product and the rest by FMAs, and the $n$ FMAs of order $n-1$. So $Q = (n-1)^2 + 2n-1 =
+n^2$; at $n = 8$, $Q = 42 + 7 + 15 = 64$.
+
+\emph{Bounds.} With these $A_m$, $T_m$ and $Q$, the induction of the proof of Theorem~\ref{thm:t2} gives $D_m \le
+d_m\rho^mM$ for $m \le n-1$ and $C_m \le \gamma_m\rho^{m+1}M$ for $m \le n-2$ in Lemma~\ref{lem:l}. Lemma~\ref{lem:l}(a)
+then gives (a), and Lemma~\ref{lem:l}(c) gives rounding errors at level $n-1$ of total at most
+$Qu\,d_{n-1}\rho^{n-1}M/(1-Qu) = R_{\rm s}u^nM$.
+
+(b) By Lemma~\ref{lem:l}(c) and the exactness of $\TwoProd$, $\sum_m s_m = \sum_{i+j \le n}a_ib_j - \sum r$, since
+steps (1), (3) and (4) put in $p_{ij} + e_{ij} = a_ib_j$ for every $i+j \le n-2$ and step (2) the products of orders
+$n-1$ and $n$. The dropped products, of order $n+1$ and above, total at most $\Delta_nu^{n+1}M$, as for MUL. The
+renormalization of $n$ terms is exact (Theorem~\ref{thm:t1}(a)), so $\sum_k x_k = \sum_m s_m$, which gives the bound.
+The relative form follows from \eqref{eq:a0}.
+
+(c) The proof of Theorem~\ref{thm:acc} applies with (a) and (b) in place of Theorem~\ref{thm:t2}(a) and (b): the levels
+of a product satisfy $|t_l| \le L_lu^l\mu_k \le \tau_l\mu_k$ for $l < n$, there is no $t_n$, and they sum to $ab$ up to
+$(R_{\rm s} + \Delta_nu)u^n\mu_k$.
+
+The values at $n = 8$ are those of \texttt{sloppy\_consts.py}, in exact rational arithmetic. It also walks steps
+(1)--(4) and checks $T_m$ and the three sources of $Q$.
+\end{proof}
+
+At $n = 8$, $p = 53$ and $\theta = 2$ the second term of (c), in units of $u^8W$, is $2^{31.9242}$ for $K = 1$,
+4, 16 and 64 products, to the digits shown. It is the products' $E_{\rm prod}$; the levels' $E_{\rm lev}$ is
+$2^{2.6832}$ at $K = 64$ (\texttt{sloppy\_consts.py}).
+
+\begin{remark}
+The term $R_{\rm s} = QL_{n-1}$ charges each of the $Q$ roundings $u$ times the bound of level $n-1$, $L_7u^7M =
+2^{25.92}u^7M$ at $n = 8$ and $\theta = 2$. MUL's bound there is $u^8|ab| + 2^{-15.08}u^8M$ (Theorem~\ref{thm:t3}), at
+the cost of $168$ $\TwoSum$s against SLOPPY-MUL's $112$. The bound is a triangle inequality over the $64$ roundings
+and is not claimed to be tight: the worst pair found by a hill climb in multidouble's tests errs by $581.97\,u^8M$
+(measured; \texttt{sloppy\_emu.py} recomputes it).
+\end{remark}
