@@ -1,10 +1,11 @@
-//! 8 lanes of double-double: (hi, lo) as two `V8`. The algorithms are the QD library's accurate ("IEEE") add,
-//! the FMA two-product multiply and the three-quotient divide, so every operation is accurate to a few units of
-//! 2^-104 relative.
+//! 8 lanes of double-double, (hi, lo) as two `V8`. The algorithms are the QD library's accurate ("IEEE") add, the FMA
+//! two-product multiply and the three-quotient divide, so every operation is accurate to a few units of 2^-104
+//! relative.
 //!
-//! `DotAcc` accumulates a sum of double-double products as (s, err): each product is formed exactly to ~2^-104,
-//! its leading part is added to s with an error-free two-sum and all error terms go into err (Ogita-Rump-Oishi
-//! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
+//! `DotAcc` accumulates a sum of double-double products as (s, e). Each product is formed to about 2^-104, its leading
+//! part is added to s by an error-free two-sum, and every error term goes into e, in the style of Ogita, Rump and
+//! Oishi's Sum2. The result is accurate to about 2^-104 relative to the sum of |terms|, at half the cost of chained DD
+//! adds.
 use crate::dd::DD;
 use crate::simd::Simd;
 use crate::v8::{Divisor, V8};
@@ -83,7 +84,7 @@ impl<S: Simd> DV<S> {
             lo: self.lo.bcast(j),
         }
     }
-    /// times an exact f64 vector
+    /// Multiplies by an exact f64 vector.
     #[inline(always)]
     pub fn mul_v(self, b: V8<S>) -> Self {
         let (p, e) = two_prod(self.hi, b);
@@ -95,7 +96,8 @@ impl<S: Simd> DV<S> {
     pub fn mul_f(self, b: f64) -> Self {
         self.mul_v(V8::splat(b))
     }
-    /// times a power of two b, as `DD::mul_pwr2`: both parts scaled, exact barring overflow and underflow
+    /// Multiplies by a power of two b as `DD::mul_pwr2` does, scaling both parts exactly barring overflow and
+    /// underflow.
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> Self {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
@@ -116,7 +118,7 @@ impl<S: Simd> DV<S> {
     pub fn abs_hi(self) -> V8<S> {
         self.hi.abs()
     }
-    /// `DD::fast_div` on all lanes (two divisions, within 15 u^2 + 56 u^3), bitwise the same per lane
+    /// Applies `DD::fast_div` to all lanes with its bits per lane, by two divisions and within 15 u^2 + 56 u^3.
     #[inline(always)]
     pub fn fast_div(self, b: Self) -> Self {
         let th = self.hi.div(b.hi);
@@ -130,8 +132,8 @@ impl<S: Simd> DV<S> {
             lo: l.add(V8::zero()),
         }
     }
-    /// self / b for r = b.hi.divisor(), bitwise the same as `/`. Its three quotients by b.hi go through r, so
-    /// several divisions by one b share it (on AVX-512 its reciprocal).
+    /// Divides self by b, given r = b.hi.divisor(), with the bits of `/`. Its three quotients by b.hi go through r, so
+    /// several divisions by one b share it. On AVX-512 r holds the reciprocal of b.hi.
     #[inline(always)]
     pub fn div_by(self, b: Self, r: Divisor<S>) -> Self {
         let q1 = self.hi.div_by(r);
@@ -161,7 +163,7 @@ impl<S: Simd> Add for DV<S> {
 impl<S: Simd> Neg for DV<S> {
     type Output = Self;
     #[inline(always)]
-    /// as DD's: the sign bit of hi flipped, lo as -lo + 0 (a zero lo is +0)
+    /// Negates as `DD` does, flipping the sign bit of hi and taking lo to -lo + 0, so a zero lo is +0.
     fn neg(self) -> Self {
         DV {
             hi: self.hi.neg(),
@@ -204,7 +206,7 @@ impl<S: Simd> Div for DV<S> {
     }
 }
 
-/// Accumulator for sums of double-double products (see the module doc).
+/// Accumulates sums of double-double products, as the module doc describes.
 #[derive(Clone, Copy, Debug)]
 pub struct DotAcc<S: Simd> {
     pub s: V8<S>,
@@ -219,7 +221,7 @@ impl<S: Simd> DotAcc<S> {
             e: V8::zero(),
         }
     }
-    /// self + a * b
+    /// Returns self + a * b.
     #[inline(always)]
     pub fn add_prod(self, a: DV<S>, b: DV<S>) -> Self {
         let (p, pe) = two_prod(a.hi, b.hi);
@@ -231,7 +233,7 @@ impl<S: Simd> DotAcc<S> {
             e: self.e.add(t.add(pe)),
         }
     }
-    /// self + a
+    /// Returns self + a.
     #[inline(always)]
     pub fn add(self, a: DV<S>) -> Self {
         let (s, t) = two_sum(self.s, a.hi);
@@ -242,7 +244,7 @@ impl<S: Simd> DotAcc<S> {
     }
     #[inline(always)]
     pub fn finish(self) -> DV<S> {
-        // s and e may be of comparable size after cancellation: a full two-sum, not the quick one
+        // After cancellation s and e may be of comparable size, so this takes the full two-sum, not the quick one.
         let (h, l) = two_sum(self.s, self.e);
         DV { hi: h, lo: l }
     }
