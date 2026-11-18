@@ -17,6 +17,9 @@
 //! 3.0000319 u^8 (`SQRT_PROVEN_THR`). Every input within those hypotheses is checked against its bound too
 //! (`PROVEN_THR`), and `od_worst_case_inputs` reaches the first. Random inputs stay
 //! near 10^-4 units, the ladder category's inputs included, because the error is set by the result's parts.
+//!
+//! The opt-in sloppy multiply (`OD::sloppy_mul`) and its dot products are checked against 4 units (`SLOPPY_THR`, fixed
+//! before the first run) and their proven bounds, 2^31.93 u^8 |a_0 b_0| per product (`SLOPPY_C`, `SLOPPY_DOT_C`).
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::{ODotAcc, OV, V8};
@@ -788,13 +791,15 @@ fn acc_thr(len: usize) -> f64 {
     (1.0 + c) / 64.0
 }
 
-/// accuracy of ODotAcc / OdAcc on dot products of length len (8 per sample, one per lane): |error| / sum |a_i b_i|
-fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
+/// accuracy of ODotAcc / OdAcc on dot products of length len (8 per sample, one per lane): |error| / sum |a_i b_i|;
+/// with sloppy, of their sloppy products (`add_prod_sloppy`), against `SLOPPY_THR` and their proven bound
+fn run_acc(n: usize, seed: u64, id: u32, sloppy: bool) -> Vec<Res> {
     let mut out = Vec::new();
     for len in [1usize, 4, 16, 64] {
         for (ci, cat) in ACC_CATS.iter().enumerate() {
             let mut r = Rng::new(seed ^ ((len as u64) << 20) ^ ((ci as u64) << 30) ^ 0x0acc);
-            let thr = acc_thr(len);
+            let thr = if sloppy { SLOPPY_THR } else { acc_thr(len) };
+            let mut pr = Proven::default();
             let (mut ms, mut fails, mut mism, mut rel_max) = (Vec::new(), 0, 0, 0f64);
             let mut digest = 0xcbf29ce484222325u64;
             let nsamp = ((n / len.clamp(1, 16)).max(8)) / 8 * 8;
@@ -824,6 +829,17 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 for i in 0..len {
                     acc = if plain(i) {
                         acc.add(OV::from_lanes(&a[i]))
+                    } else if sloppy {
+                        let (x, y) = (OV::from_lanes(&a[i]), OV::from_lanes(&b[i]));
+                        let mut m = acc;
+                        m.add_prod_sloppy_mut(&x, &y);
+                        let v = acc.add_prod_sloppy(x, y);
+                        // the by-value and in-place forms are one operation
+                        assert!(
+                            (0..9).all(|l| v.s[l].to_array().map(f64::to_bits) == m.s[l].to_array().map(f64::to_bits)),
+                            "add_prod_sloppy_mut vs add_prod_sloppy"
+                        );
+                        v
                     } else {
                         acc.add_prod(OV::from_lanes(&a[i]), OV::from_lanes(&b[i]))
                     };
@@ -835,6 +851,8 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                         for i in 0..len {
                             s = if plain(i) {
                                 s.add(a[i][lane])
+                            } else if sloppy {
+                                s.add_prod_sloppy(a[i][lane], b[i][lane])
                             } else {
                                 s.add_prod(a[i][lane], b[i][lane])
                             };
@@ -862,6 +880,19 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                     if !within(&err, &s, thr, &Dy::zero()) {
                         fails += 1;
                     }
+                    if sloppy {
+                        // (|Z| + c_K W) u^8, W = sum |a_i b_i| here (the bound's W, sum |a_i0 b_i0|, is within 2^-50 of
+                        // it on these greedy operands, which the constant's last digits cover)
+                        let lim = x
+                            .abs()
+                            .add(&s.mul(&Dy::from_f64(SLOPPY_DOT_C)))
+                            .mul(&Dy::from_f64(u8()));
+                        pr.n += 1;
+                        pr.max = pr.max.max(err.ratio(&s) / unit());
+                        if err.cmp_abs(&lim) == Ordering::Greater {
+                            pr.fails += 1;
+                        }
+                    }
                     ms.push(err.ratio(&s) / unit());
                     rel_max = rel_max.max(err.ratio(&x) / unit());
                 }
@@ -869,7 +900,7 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
             let max = ms.iter().cloned().fold(0.0, f64::max);
             let p999 = pct(&mut ms, 0.999);
             out.push(Res {
-                what: format!("dot n={len}"),
+                what: format!("{}dot n={len}", if sloppy { "sloppy " } else { "" }),
                 cat,
                 n: ms.len(),
                 max,
@@ -879,7 +910,7 @@ fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
                 fails,
                 mism,
                 digest,
-                proven: Proven::default(),
+                proven: pr,
             });
         }
     }
@@ -1006,6 +1037,87 @@ fn run_dd(n: usize, seed: u64, id: u32) -> Vec<Res> {
             }
             out.push(row(name, cat_name(cat), n, fails, mism));
         }
+    }
+    out
+}
+
+// -------------------------------------------------------------------------------------------------------------
+// the sloppy multiply
+// -------------------------------------------------------------------------------------------------------------
+
+/// u^8 = 2^-424
+fn u8() -> f64 {
+    2f64.powi(-424)
+}
+
+/// The sloppy multiply's proven bound for operands within `proven`'s hypotheses for the multiply: |ab - x| <= C u^8
+/// |a_0 b_0|, C = R_s + Delta u = 2^31.9242 = 4.075102e9 (`paper/sloppy_consts.py`, theta = 2), rounded up.
+const SLOPPY_C: f64 = 4.0752e9;
+
+/// The sloppy dot's proven bound for up to 64 terms: |Z - x| <= (|Z| + c W) u^8, W = sum |a_i0 b_i0|, c the largest
+/// of `paper/sloppy_consts.py`'s c_K for K = 1, 4, 16 and 64 (4.075102e9 + 6.4), rounded up.
+const SLOPPY_DOT_C: f64 = 4.0752e9;
+
+/// Pass threshold of the sloppy multiply's and the sloppy dot's measured error, in units of 2^-418 relative to |ab|
+/// (to W for the dot), fixed before the first run: 4 units, 256 u^8. Expected from the level-7 content of the ladder
+/// category, whose parts sit at the top of the ladder: 64 roundings of a level of about 10 u^7 |ab|.
+const SLOPPY_THR: f64 = 4.0;
+
+/// accuracy of the sloppy multiply (scalar and lanes) on the multiply's inputs of every category, against
+/// `SLOPPY_THR` and, within `proven`'s hypotheses, the proven bound; with mutation id active
+fn run_sloppy(n: usize, seed: u64, id: u32) -> Vec<Res> {
+    let mut out = Vec::new();
+    for cat in ALL_CATS {
+        let inp = inputs(Op::Mul, cat, n, seed);
+        set_mutation(id);
+        let rs: Vec<OD> = inp.iter().map(|&(a, b)| a.sloppy_mul(b)).collect();
+        let rv = sloppy_lanes(&inp);
+        set_mutation(0);
+        let under = cat == Cat::Underflow;
+        let (mut ms, mut fails, mut mism, mut rel_max) = (Vec::with_capacity(n), 0, 0, 0f64);
+        let mut digest = 0xcbf29ce484222325u64;
+        let mut pr = Proven::default();
+        for (k, &(a, b)) in inp.iter().enumerate() {
+            let r = rs[k];
+            fnv(&mut digest, r);
+            if !same(r, rv[k]) {
+                mism += 1;
+            }
+            if !r.x.iter().all(|v| v.is_finite()) {
+                fails += 1;
+                ms.push(f64::INFINITY);
+                continue;
+            }
+            let (err, scale, rel, allow) = exact_err(Op::Mul, a, b, r, under);
+            if !within(&err, &scale, SLOPPY_THR, &allow) {
+                fails += 1;
+            }
+            if proven(Op::Mul, a, b) {
+                let m = Dy::from_f64(a.x[0]).mul(&Dy::from_f64(b.x[0])).abs();
+                pr.n += 1;
+                pr.max = pr.max.max(err.ratio(&m) / u8());
+                if !within(&err, &m, SLOPPY_C / 64.0, &Dy::zero()) {
+                    pr.fails += 1;
+                }
+            }
+            ms.push(err.ratio(&scale) / unit());
+            rel_max = rel_max.max(rel / unit());
+        }
+        let max = ms.iter().cloned().fold(0.0, f64::max);
+        let p999 = pct(&mut ms, 0.999);
+        out.push(Res {
+            what: "sloppy mul".into(),
+            cat: cat_name(cat),
+            n,
+            max,
+            p999,
+            rel_max,
+            thr: SLOPPY_THR,
+            fails,
+            mism,
+            digest,
+            proven: pr,
+        });
     }
     out
 }
@@ -1204,6 +1316,83 @@ fn dd_edge_mismatches() -> (Vec<String>, usize) {
         }
     }
     (bad, n)
+}
+
+/// the sloppy multiply of the pairs on the lanes, 8 at a time
+fn sloppy_lanes(inp: &[(OD, OD)]) -> Vec<OD> {
+    let mut rv = Vec::with_capacity(inp.len());
+    for c in inp.chunks(8) {
+        let mut la = [OD::ZERO; 8];
+        let mut lb = [OD::ONE; 8];
+        for (j, &(a, b)) in c.iter().enumerate() {
+            la[j] = a;
+            lb[j] = b;
+        }
+        let out = OV::from_lanes(&la).sloppy_mul(OV::from_lanes(&lb)).lanes();
+        rv.extend_from_slice(&out[..c.len()]);
+    }
+    rv
+}
+
+/// |ab - x| / (u^8 |a_0 b_0|) of the sloppy multiply (scalar), exactly, for the hill climb
+fn sloppy_err(a: OD, b: OD) -> f64 {
+    let x = a.exact().mul(&b.exact());
+    let m = Dy::from_f64(a.x[0]).mul(&Dy::from_f64(b.x[0])).abs();
+    a.sloppy_mul(b).exact().sub(&x).abs().ratio(&m) / u8()
+}
+
+/// one part of a value at the top of the ladder: s m ulp(prev), m in [1/2, 1] with 53 bits
+fn top_part(r: &mut Rng, prev: f64) -> f64 {
+    let m = if r.int(0, 7) == 0 {
+        1.0
+    } else {
+        0.5 + (r.next() >> 12) as f64 * 2f64.powi(-53)
+    };
+    let s = if coin(r) { -1.0 } else { 1.0 };
+    s * m * ulp(prev).to_f64()
+}
+
+/// A hill climb on the sloppy multiply's error relative to u^8 |a_0 b_0|: from `topped` pairs, change one part at a
+/// time (a new mantissa and sign at the top of the ladder, its sign alone, or a zero), and keep the change when the
+/// error grows. Returns the worst pair and its error.
+fn sloppy_climb(seed: u64, starts: usize, steps: usize) -> (OD, OD, f64) {
+    let mut r = Rng::new(seed);
+    let mut best = (OD::ONE, OD::ONE, 0.0);
+    for _ in 0..starts {
+        let (mut a, mut b) = (topped(&mut r), topped(&mut r));
+        let mut e = sloppy_err(a, b);
+        for _ in 0..steps {
+            let (mut a2, mut b2) = (a, b);
+            let w = if coin(&mut r) { &mut a2 } else { &mut b2 };
+            let i = r.int(1, 7) as usize;
+            match r.int(0, 5) {
+                0 => w.x[i] = -w.x[i],
+                1 => w.x[i] = 0.0,
+                _ => {
+                    w.x[i] = top_part(
+                        &mut r,
+                        if w.x[i - 1] != 0.0 {
+                            w.x[i - 1]
+                        } else {
+                            w.x[0] * 2f64.powi(-52 * (i as i32 - 1))
+                        },
+                    )
+                }
+            }
+            // the parts below a changed one stay on the ladder only if the ladder holds: keep the pair if it does
+            if !ladder(&a2) || !ladder(&b2) {
+                continue;
+            }
+            let e2 = sloppy_err(a2, b2);
+            if e2 > e {
+                (a, b, e) = (a2, b2, e2);
+            }
+        }
+        if e > best.2 {
+            best = (a, b, e);
+        }
+    }
+    best
 }
 
 // -------------------------------------------------------------------------------------------------------------
@@ -1562,7 +1751,7 @@ fn od_digest_control() {
 fn od_accumulator() {
     let n = env_usize("OD_N", 2000) / 8 * 8;
     let seed = env_usize("OD_SEED", 1) as u64;
-    let rs = run_acc(n / 4, seed, 0);
+    let rs = run_acc(n / 4, seed, 0, false);
     if report() {
         print_table(
             "dot accumulator: |error| / sum |a_i b_i| (units of 2^-418); threshold the proven bound (acc_thr)",
@@ -1621,6 +1810,257 @@ fn od_dd_control() {
     set_mutation(0);
     println!("edge pairs under the control: {} of {count} differ", bad.len());
     assert!(!bad.is_empty());
+}
+
+/// The sloppy multiply (`OD::sloppy_mul`, `OV::sloppy_mul`) on the multiply's inputs of every category, scalar and
+/// lanes: pass when every result is within `SLOPPY_THR` (4 units, fixed before the first run), every input within
+/// `proven`'s hypotheses within the proven bound `SLOPPY_C` u^8 |a_0 b_0|, the bound checked on most inputs, and the
+/// lanes bitwise the scalar results. OD_REPORT=1 prints the table and the default `*`'s worst error beside it.
+#[test]
+fn od_sloppy_mul() {
+    let n = env_usize("OD_N", 2000) / 8 * 8;
+    let seed = env_usize("OD_SEED", 1) as u64;
+    let rs = run_sloppy(n, seed, 0);
+    if report() {
+        print_table(
+            &format!(
+                "sloppy multiply (units of 2^-418 relative to |ab|; proven max in u^8 |a_0 b_0|; isa {})",
+                V8::ISA
+            ),
+            &rs,
+        );
+        let def = run_ops(n, seed, 0);
+        for r in &rs {
+            let d = def
+                .iter()
+                .find(|d| d.what == op_name(Op::Mul) && d.cat == r.cat)
+                .unwrap();
+            println!(
+                "  {:<10} sloppy max {:>10} p99.9 {:>10}   default max {:>10} p99.9 {:>10}",
+                r.cat,
+                fmt_u(r.max),
+                fmt_u(r.p999),
+                fmt_u(d.max),
+                fmt_u(d.p999)
+            );
+        }
+    }
+    let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
+    assert!(bad.is_empty(), "{} rows fail: {:?}", bad.len(), bad);
+    let covered: usize = rs.iter().map(|r| r.proven.n).sum();
+    assert!(
+        covered >= 5 * n,
+        "{covered} inputs within the proven bound's hypotheses"
+    );
+}
+
+/// Dot products of sloppy products (`ODotAcc::add_prod_sloppy`, `OdAcc::add_prod_sloppy`), 1 to 64 terms, against
+/// exact sums: pass when every sum is within `SLOPPY_THR` of W = sum |a_i b_i| and within the proven bound (|Z| +
+/// `SLOPPY_DOT_C` W) u^8, and the lanes bitwise the scalar sums.
+#[test]
+fn od_sloppy_dot() {
+    let n = env_usize("OD_N", 2000) / 8 * 8;
+    let seed = env_usize("OD_SEED", 1) as u64;
+    let rs = run_acc(n / 4, seed, 0, true);
+    if report() {
+        print_table(
+            "sloppy dot: |error| / sum |a_i b_i| (units of 2^-418); proven max in units of 2^-418 of W",
+            &rs,
+        );
+        let def = run_acc(n / 4, seed, 0, false);
+        for (r, d) in rs.iter().zip(&def) {
+            println!(
+                "  {:<14} {:<7} sloppy max {:>10}   default max {:>10}",
+                d.what,
+                r.cat,
+                fmt_u(r.max),
+                fmt_u(d.max)
+            );
+        }
+    }
+    let bad: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
+    assert!(bad.is_empty(), "{bad:?}");
+}
+
+/// The sloppy multiply's worst cases: the default's worst-case product (`od_worst_case_inputs`), the product of the
+/// 4.8.1 gap case with its reciprocal (`gap_cases`), the all-positive top of the ladder (every part a whole ulp of the
+/// one above), and a hill climb from the ladder category's inputs (OD_CLIMB starts of 300 steps, default 8). Pass:
+/// every error within the proven bound, scalar and lanes alike. The worst is printed, in u^8 |a_0 b_0|.
+#[test]
+fn od_sloppy_worst_case() {
+    let u = 2f64.powi(-53);
+    let mut cases: Vec<(String, OD, OD)> = Vec::new();
+    let mut a7 = [0.0; 8];
+    for (i, p) in a7.iter_mut().enumerate().take(7) {
+        *p = u.powi(i as i32);
+    }
+    let mut b7 = [0.0; 8];
+    b7[0] = 1.0;
+    b7[7] = u.powi(7);
+    cases.push(("default's worst case".into(), OD { x: a7 }, OD { x: b7 }));
+    let (_, _, g, _) = gap_cases()[1];
+    cases.push(("gap a (1/a)".into(), g, OD::ONE / g));
+    let mut top = [0.0; 8];
+    top[0] = 1.0;
+    for i in 1..8 {
+        top[i] = ulp(top[i - 1]).to_f64();
+    }
+    cases.push(("top of the ladder squared".into(), OD { x: top }, OD { x: top }));
+    let mut top2 = top;
+    top2[0] = 1.0 + 2.0 * f64::EPSILON;
+    cases.push(("top of the ladder, a0 = 1 + 2ulp".into(), OD { x: top2 }, OD { x: top }));
+    let starts = env_usize("OD_CLIMB", 8);
+    let (ca, cb, ce) = sloppy_climb(0x5109, starts, 300);
+    cases.push((format!("hill climb ({starts} x 300 steps)"), ca, cb));
+    let mut worst = 0.0f64;
+    for (name, a, b) in &cases {
+        assert!(proven(Op::Mul, *a, *b), "{name}: operands outside the hypotheses");
+        let rv = sloppy_lanes(&[(*a, *b)]);
+        assert!(
+            same(a.sloppy_mul(*b), rv[0]),
+            "{name}: lanes differ from the scalar result"
+        );
+        let e = sloppy_err(*a, *b);
+        let d = {
+            let x = a.exact().mul(&b.exact());
+            let m = Dy::from_f64(a.x[0]).mul(&Dy::from_f64(b.x[0])).abs();
+            (*a * *b).exact().sub(&x).abs().ratio(&m) / u8()
+        };
+        println!("{name:<34} sloppy {e:>12.4} u^8 |a0 b0|   default {d:.4}");
+        worst = worst.max(e);
+        assert!(
+            e <= SLOPPY_C,
+            "{name}: {e} u^8 |a0 b0|, past the proven bound {SLOPPY_C}"
+        );
+    }
+    println!(
+        "worst {worst:.4} u^8 |a0 b0| = 2^{:.2}, bound {SLOPPY_C:.4e} = 2^{:.2}; climb's {ce:.4}",
+        worst.log2(),
+        SLOPPY_C.log2()
+    );
+    println!(
+        "climb's pair: a {:?}\n              b {:?}\n  sloppy_mul    {:?}",
+        ca.x.map(f64::to_bits),
+        cb.x.map(f64::to_bits),
+        ca.sloppy_mul(cb).x.map(f64::to_bits)
+    );
+}
+
+/// Control for the sloppy multiply's checks: with the carries out of level 6 dropped (`mutate::SLOPPY_C6`, the
+/// truncation one level too high, an error of about u^7 |ab| whenever one of them is nonzero), the proven bound and
+/// the threshold each fail more than half of the ladder row's samples and of the sloppy dot's random row of length 4,
+/// and the hill climb's worst exceeds the bound. A single carry out of level 6 is zero on most ladder inputs (their
+/// parts lie on one grid of bits, so most additions at level 6 are exact), so one carry dropped is not a reliable
+/// control: in the paper's emulator the carry of a1 b5's deposit fired on 18 of 60 such inputs, all of them on 51.
+#[cfg(feature = "mutate")]
+#[test]
+fn od_sloppy_control() {
+    let n = env_usize("OD_N", 400) / 8 * 8;
+    let rs = run_sloppy(n, 7, mutate::SLOPPY_C6);
+    let row = rs.iter().find(|r| r.cat == "ladder").unwrap();
+    println!(
+        "sloppy mul with the carries out of level 6 dropped, ladder inputs: {} of {n} past {SLOPPY_THR} units, \
+         {} of {} past the proven bound, worst {:.3e} u^8 |a0 b0|",
+        row.fails, row.proven.fails, row.proven.n, row.proven.max
+    );
+    assert!(row.fails * 2 > n && row.proven.fails * 2 > row.proven.n, "{row:?}");
+    let ds = run_acc(n / 4, 7, mutate::SLOPPY_C6, true);
+    let d = ds
+        .iter()
+        .find(|r| r.what == "sloppy dot n=4" && r.cat == "random")
+        .unwrap();
+    println!(
+        "sloppy dot n=4 with those carries dropped: {} of {} past the threshold, {} past the bound",
+        d.fails, d.n, d.proven.fails
+    );
+    assert!(d.fails * 2 > d.n && d.proven.fails * 2 > d.proven.n, "{d:?}");
+    set_mutation(mutate::SLOPPY_C6);
+    let (_, _, e) = sloppy_climb(0x5109, 1, 50);
+    set_mutation(0);
+    println!("hill climb with those carries dropped: {e:.3e} u^8 |a0 b0|");
+    assert!(e > SLOPPY_C, "{e}");
+}
+
+/// Timing of the sloppy multiply and dot term against the default ones on the native lanes, alternating in one run:
+/// OD_REPS repetitions (default 15) of 4096 dependent products and of a 4096-term dot product each, with eight-part
+/// operands. Prints the time per lane operation (8 products) of each, min, median and max, and the ratio's.
+/// `cargo test --release --lib od_sloppy_timing -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn od_sloppy_timing() {
+    use std::hint::black_box;
+    use std::time::Instant;
+    let reps = env_usize("OD_REPS", 15);
+    let mut r = Rng::new(0x71e);
+    let len = 4096;
+    let v: Vec<OV> = (0..len)
+        .map(|_| OV::from_lanes(&std::array::from_fn(|_| od_of(&rde(&mut r, -2, 2)))))
+        .collect();
+    let w: Vec<OV> = (0..len)
+        .map(|_| {
+            OV::from_lanes(&std::array::from_fn(|_| {
+                od_of(&Dy::from_f64(1.0).add(&rand_dy(&mut r, -20)))
+            }))
+        })
+        .collect();
+    let time = |f: &dyn Fn() -> OV| {
+        let t = Instant::now();
+        black_box(f());
+        t.elapsed().as_secs_f64() * 1e9 / len as f64
+    };
+    let mul_d = || {
+        let mut x = v[0];
+        for y in &w {
+            x = black_box(x * *y);
+        }
+        x
+    };
+    let mul_s = || {
+        let mut x = v[0];
+        for y in &w {
+            x = black_box(x.sloppy_mul(*y));
+        }
+        x
+    };
+    let dot_d = || {
+        let mut a = ODotAcc::zero();
+        for (x, y) in v.iter().zip(&w) {
+            a.add_prod_mut(x, y);
+        }
+        a.finish()
+    };
+    let dot_s = || {
+        let mut a = ODotAcc::zero();
+        for (x, y) in v.iter().zip(&w) {
+            a.add_prod_sloppy_mut(x, y);
+        }
+        a.finish()
+    };
+    let mut t = vec![Vec::new(); 4];
+    for _ in 0..reps {
+        t[0].push(time(&mul_d));
+        t[1].push(time(&mul_s));
+        t[2].push(time(&dot_d));
+        t[3].push(time(&dot_s));
+    }
+    let stats = |x: &[f64]| {
+        let mut y = x.to_vec();
+        y.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        (y[0], y[y.len() / 2], y[y.len() - 1])
+    };
+    println!(
+        "ns per lane operation (8 products), {reps} repetitions, isa {}: min / median / max",
+        V8::ISA
+    );
+    for (k, name) in ["mul", "sloppy mul", "dot term", "sloppy dot term"].iter().enumerate() {
+        let (a, m, b) = stats(&t[k]);
+        println!("  {name:<16} {a:8.1} {m:8.1} {b:8.1}");
+    }
+    for (k, name) in [(0, "mul"), (2, "dot term")] {
+        let q: Vec<f64> = t[k].iter().zip(&t[k + 1]).map(|(d, s)| d / s).collect();
+        let (a, m, b) = stats(&q);
+        println!("  speedup {name:<8} {a:.3} {m:.3} {b:.3} (per repetition, default / sloppy)");
+    }
 }
 
 /// the largest |x_(i+1)| / ulp(x_i) over x's nonzero parts and their successors, infinite when a nonzero part follows a
@@ -2031,7 +2471,9 @@ fn od_controls() {
     let mut silent = Vec::new();
     for id in 1..=mutate::N {
         let mut rs = run_ops(n, 7, id);
-        rs.extend(run_acc(n / 4, 7, id));
+        rs.extend(run_acc(n / 4, 7, id, false));
+        rs.extend(run_sloppy(n, 7, id));
+        rs.extend(run_acc(n / 4, 7, id, true));
         rs.extend(run_io(n / 2, 7, id));
         rs.extend(run_dd(n / 4, 7, id));
         let failed: Vec<&Res> = rs.iter().filter(|r| !r.ok()).collect();
