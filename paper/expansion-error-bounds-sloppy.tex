@@ -26,18 +26,12 @@ worst pair of its tests.
 
 \begin{theorem}\label{thm:sloppy}
 Assume~\ref{as:fp}, $\theta \ge 1$, $\rho = \theta u \le 1/4$ and $n^2u < 1$, let the $n$-part operands satisfy
-$H(\theta)$, and let $M = |a_0b_0|$. Let
+$H(\theta)$, and let $M = |a_0b_0|$. For $0 \le m \le n-2$ let $\alpha_m$, $T_m$, $d_m$, $\gamma_m$ and $L_m$ be those
+of Theorem~\ref{thm:t2} for MUL, with its $\Delta_n$, and let $Q = n^2$,
 \begin{gather*}
-\alpha_0 = 1+u, \quad \alpha_{n-1} = n + \frac{n-1}{\theta} + (n-1)\rho, \\
-\alpha_m = (1+u)(m+1) + m/\theta \ (0 < m < n-1),
+\alpha_{n-1} = n + \frac{n-1}{\theta} + (n-1)\rho, \quad d_{n-1} = \alpha_{n-1} + \gamma_{n-2}, \\
+L_{n-1} = \frac{\theta^{n-1}d_{n-1}}{1 - Qu}, \qquad R_{\rm s} = QL_{n-1}.
 \end{gather*}
-let $T_m = m(m+1)$ for $0 \le m \le n-2$ and $Q = n^2$, let $d_0 = \alpha_0$ and, for $0 \le m \le
-n-2$, $\gamma_m$, $\ell_m$ and $d_{m+1}$ be those of Theorem~\ref{thm:t2} with these $\alpha_m$ and $T_m$, and let
-\begin{gather*}
-\ell_{n-1} = \frac{d_{n-1}}{1 - Qu}, \qquad L_m = \theta^m\ell_m, \\
-R_{\rm s} = \frac{Q\theta^{n-1}d_{n-1}}{1 - Qu} = QL_{n-1},
-\end{gather*}
-with $\Delta_n$ that of Theorem~\ref{thm:t2}.
 \begin{enumerate}
 \item[(a)] The levels of SLOPPY-MUL have exactly $T_m$ $\TwoSum$s at level $m \le n-2$ and $Q$ roundings at level
   $n-1$, the inputs of level $m$ total $A_m \le \alpha_m\rho^mM$ in the sense of Lemma~\ref{lem:l}, and $|s_m| \le
