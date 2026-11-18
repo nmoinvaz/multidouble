@@ -6,8 +6,8 @@
 \section{Sine, cosine and tangent}\label{sec:trig}
 
 The functions reduce $x$ by $\pi/2$ exactly, evaluate the Taylor series of $\sin r$ and $\cos r$ with the operations
-of the earlier sections, and recombine. Throughout, $p = 53$, $n$ is even, and $T_n = 2^{-53n/2}$, so that $T_n^2 =
-u^n$.
+of the earlier sections, and recombine. Throughout, $p = 53$, $n$ is even, $T_n = 2^{-53n/2}$, so that $T_n^2 =
+u^n$, and $\bar a_i$ is that of \eqref{eq:abar} for $\theta = 2$.
 
 \paragraph{Reduction} Let $F = 1216$, $P = \lfloor 2^F\pi/2 \rceil$ (an integer), $c = \RN(2/\pi)$ and $\tau =
 \RN(0.7854)$, with $\lfloor\cdot\rceil$ the nearest integer, halves away from zero. RED takes a finite $n$-part $x$ with
@@ -53,8 +53,7 @@ Then $|k| < 0.64\cdot2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\
 \item[(b)] otherwise $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2A$, $|r| \le R_0$, and $|r_{i+1}| \le \frac12\ulp(r_i)$,
   so $r$ satisfies $H(1)$.
 \end{enumerate}
-In both cases $r$ in bucket $j$ has $|r| \le R_j$, and its parts satisfy $|r_i| \le \bar\alpha_i|r|$ with
-$\bar\alpha_i = (2u)^i(1-2u)/(1-4u)$.
+In both cases $r$ in bucket $j$ has $|r| \le R_j$, and its parts satisfy $|r_i| \le \bar a_i|r|$.
 \end{lemma}
 
 \begin{proof}
@@ -71,13 +70,13 @@ $\lfloor\RN(x_0c)\rceil = 0$ means $|\RN(x_0c)| < \frac12$, so $|x_0| < \frac\pi
 |x_0|/(1-2u)$. (b) By \eqref{eq:rn}, each
 remainder of the greedy rounding is at most $u_*$ times the one before, so $|r - v| \le u_*^n|v|$, and $|r_{i+1}| \le
 \frac12\ulp(r_i)$; then $|r - r_{\rm e}| \le u_*^n(|r_{\rm e}| + A) + A$. The bucket bounds follow from $|r| \le
-|r_0|/(1-2u)$, and the part bounds from \eqref{eq:a0} with $\rho = 2u$, since $H(1)$ implies $H(2)$.
+|r_0|/(1-2u)$, and the part bounds are \eqref{eq:abar}, since $H(1)$ implies $H(2)$.
 \end{proof}
 
 The evaluation is a program of the operations of Lemma~\ref{lem:g}, and its bounds are the $G_{\rm OP}$ of that lemma
 applied in turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket
 $j$ with $R = R_j$ and $K = K_{\rm s}(j)$, let $\delta_k = |\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm
-MUL}(\bar\alpha, \bar\alpha;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} = |\hat s_{K-1}|$, and for $k = K-2,
+MUL}(\bar a, \bar a;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} = |\hat s_{K-1}|$, and for $k = K-2,
 \dots, 1$
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(R^2\zeta, \pi^{(k+1)};\ R^2(1+\epsilon_z)(|s_{k+1}| + E_{k+1})\bigr), \\
@@ -88,9 +87,9 @@ Then let
 \begin{align*}
 (\epsilon_t, \tau') &= G_{\rm MUL}\bigl(\zeta, \pi^{(1)};\ (1+\epsilon_z)(|s_1| + E_1)\bigr), \\
 E_t &= (1+\epsilon_z)E_1 + \epsilon_z|s_1| + \epsilon_t, \\
-(\epsilon_w, \omega) &= G_{\rm MUL}\bigl(\bar\alpha, \tau';\ |s_1| + E_t\bigr), \\
+(\epsilon_w, \omega) &= G_{\rm MUL}\bigl(\bar a, \tau';\ |s_1| + E_t\bigr), \\
 D &= R^2(E_t + \epsilon_w) + R^{2K}/(2K+1)!, \\
-(\epsilon_y, \psi_{\rm s}) &= G_{\rm ADD}\bigl(\bar\alpha, R^2\omega;\ 1 + D\bigr), \\
+(\epsilon_y, \psi_{\rm s}) &= G_{\rm ADD}\bigl(\bar a, R^2\omega;\ 1 + D\bigr), \\
 E_{\rm S} &= (1+u^n)D + \epsilon_y - u^n(1+D),
 \end{align*}
 and $\delta_{\rm S} = u^n + E_{\rm S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same recursion with the
@@ -107,7 +106,7 @@ bucket $|r_0| < T_n$, $\delta_{\rm S} = T^2/(6 - T^2)$ and $\delta_{\rm C} = T^2
 
 \begin{lemma}\label{lem:sincosr}
 Assume~\ref{as:fp} and $(n^2+n)u < 1$, and let $r$ be in bucket $j$ with $|r| \le R_j$ and $|r_i| \le
-\bar\alpha_i|r|$. Then $|\textrm{SINR}(r) - \sin r| \le \delta_{\rm S}|\sin r|$ and $|\textrm{COSR}(r) - \cos r| \le
+\bar a_i|r|$. Then $|\textrm{SINR}(r) - \sin r| \le \delta_{\rm S}|\sin r|$ and $|\textrm{COSR}(r) - \cos r| \le
 \delta_{\rm C}\cos r$, and the parts of SINR$(r)$ and COSR$(r)$ are at most $\psi_{\rm s}|r|$ and $\psi_{\rm c}$.
 \end{lemma}
 
