@@ -1,8 +1,9 @@
-// The NEON backend's body, included twice: on aarch64 with `core::arch::aarch64::*` in scope, and in the x86 test
-// build with the pure-Rust model of the same intrinsics in `v8::neon_model`, so its logic is checked bit for bit
+// The NEON backend's body is included twice, on aarch64 with `core::arch::aarch64::*` in scope and in the x86 test
+// build with the pure-Rust model of the same intrinsics in `v8::neon_model`. So its logic is checked bit for bit
 // against the scalar operations on every CI runner, not only on ARM.
 //
-// Four 128-bit registers of two f64 each. NEON's FMLA is fused (one rounding), as the double-double algorithms need.
+// It holds four 128-bit registers of two f64 each. NEON's FMLA is fused (one rounding), as the double-double algorithms
+// need.
 
 /// 8 f64 lanes in four NEON registers.
 #[derive(Clone, Copy, Debug)]
@@ -70,7 +71,7 @@ impl V8 {
     pub fn div(self, o: Self) -> Self {
         four!(vdivq_f64, self, o)
     }
-    /// self * b + c with one rounding (vfmaq_f64(c, a, b) = c + a b)
+    /// Returns self * b + c with one rounding, as vfmaq_f64(c, a, b) = c + a b.
     #[inline(always)]
     pub fn fma(self, b: Self, c: Self) -> Self {
         unsafe {
@@ -82,7 +83,7 @@ impl V8 {
             ])
         }
     }
-    /// self * b - c with one rounding: -c + a b, the negation being exact
+    /// Returns self * b - c with one rounding, as -c + a b, since the negation is exact.
     #[inline(always)]
     pub fn fms(self, b: Self, c: Self) -> Self {
         unsafe {
@@ -106,7 +107,7 @@ impl V8 {
     pub fn max(self, o: Self) -> Self {
         four!(vmaxq_f64, self, o)
     }
-    /// all lanes = lane j
+    /// Sets all lanes to lane j.
     #[inline(always)]
     pub fn bcast(self, j: usize) -> Self {
         let mut a = [0.0; 8];
@@ -117,7 +118,7 @@ impl V8 {
     pub fn sqrt(self) -> Self {
         four!(vsqrtq_f64, self)
     }
-    /// the exponent bits only: 2^floor(log2 |x|) for normal x
+    /// Keeps the exponent bits only, which gives 2^floor(log2 |x|) for normal x.
     #[inline(always)]
     pub fn pow2_floor(self) -> Self {
         unsafe {
@@ -126,35 +127,35 @@ impl V8 {
             V8([f(self.0[0]), f(self.0[1]), f(self.0[2]), f(self.0[3])])
         }
     }
-    /// self != o (true when either is NaN, as C's !=): the complement of the ordered equality
+    /// Tests self != o, true when either is NaN as C's != is, as the complement of the ordered equality.
     #[inline(always)]
     pub fn ne(self, o: Self) -> M8 {
         self.eq(o).not()
     }
-    /// self == o (false when either is NaN)
+    /// Tests self == o, false when either is NaN.
     #[inline(always)]
     pub fn eq(self, o: Self) -> M8 {
         four_mask!(vceqq_f64, self, o)
     }
-    /// self > o (false when either is NaN)
+    /// Tests self > o, false when either is NaN.
     #[inline(always)]
     pub fn gt(self, o: Self) -> M8 {
         four_mask!(vcgtq_f64, self, o)
     }
-    /// self >= o (false when either is NaN)
+    /// Tests self >= o, false when either is NaN.
     #[inline(always)]
     pub fn ge(self, o: Self) -> M8 {
         four_mask!(vcgeq_f64, self, o)
     }
 }
 
-/// 8-lane mask (all-ones / all-zeros 64-bit lanes in four NEON registers).
+/// 8-lane mask of all-ones or all-zeros 64-bit lanes in four NEON registers.
 #[derive(Clone, Copy, Debug)]
 pub struct M8(pub [uint64x2_t; 4]);
 
 #[allow(unused_unsafe)]
 impl M8 {
-    /// self, hidden from the optimizer as a comparison's result (`opaque`)
+    /// Returns self, hidden from the optimizer as a comparison's result by `opaque`.
     #[inline(always)]
     pub fn opaque(self) -> Self {
         M8(opaque(self.0))
@@ -179,7 +180,7 @@ impl M8 {
             ])
         }
     }
-    /// per lane: t where set, f elsewhere
+    /// Selects t where the mask is set and f elsewhere, per lane.
     #[inline(always)]
     pub fn sel(self, t: V8, f: V8) -> V8 {
         unsafe {
@@ -191,7 +192,7 @@ impl M8 {
             ])
         }
     }
-    /// bit j = lane j
+    /// Returns the mask as bits, bit j for lane j.
     #[inline(always)]
     pub fn bits(self) -> u8 {
         let mut b = 0u8;

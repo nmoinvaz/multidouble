@@ -1,9 +1,9 @@
 //! Runtime choice of the 8-lane backend.
 //!
 //! The lane types ([`crate::v8::V8`], [`crate::dv::DV`], [`crate::qv::QV`], the dual lanes) are generic over an
-//! instruction set `S: Simd`. Code written once over `S` runs on the best one the CPU has through [`dispatch`]:
-//! AVX-512F (with AVX2 and FMA), then AVX2 + FMA, then SSE2 on x86-64, NEON on aarch64, a plain array elsewhere.
-//! Every backend gives bitwise the same results, so the choice changes only the speed.
+//! instruction set `S: Simd`. Code written once over `S` runs on the best one the CPU has through [`dispatch`], which
+//! prefers AVX-512F (with AVX2 and FMA), then AVX2 + FMA, then SSE2 on x86 and x86-64, NEON on aarch64, and a plain
+//! array elsewhere. Every backend gives the same bits, so the choice changes only the speed.
 //!
 //! [`Native`] is the backend the build's target features select at compile time, the one the aliases in
 //! [`crate::native`] use. The others can be named only inside [`Kernel::run`], which [`dispatch`] and
@@ -15,14 +15,14 @@ pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// An instruction set for 8 f64 lanes: the register types and their operations, which [`crate::v8::V8`] and
-/// [`crate::v8::M8`] wrap. Sealed.
+/// An instruction set for 8 f64 lanes, with the register types and operations that [`crate::v8::V8`] and
+/// [`crate::v8::M8`] wrap. The trait is sealed.
 pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
-    /// avx512, avx2, sse2, neon or portable
+    /// The name, one of avx512, avx2, sse2, neon or portable.
     const NAME: &'static str;
-    /// 8 f64 lanes
+    /// The register of 8 f64 lanes.
     type R: Copy + Send + Sync + Debug;
-    /// an 8-lane mask
+    /// An 8-lane mask.
     type M: Copy + Send + Sync + Debug;
     fn splat(x: f64) -> Self::R;
     fn zero() -> Self::R;
@@ -32,24 +32,24 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn sub(a: Self::R, b: Self::R) -> Self::R;
     fn mul(a: Self::R, b: Self::R) -> Self::R;
     fn div(a: Self::R, b: Self::R) -> Self::R;
-    /// a divisor prepared for several divisions by it ([`Simd::div_by`])
+    /// A divisor prepared for several divisions by it ([`Simd::div_by`]).
     type D: Copy + Send + Sync + Debug;
-    /// b as a divisor, on AVX-512 with its reciprocal and elsewhere b itself
+    /// Returns b as a divisor, which holds its reciprocal on AVX-512 and is b itself elsewhere.
     fn divisor(b: Self::R) -> Self::D;
-    /// a / b for d = divisor(b), bitwise the same as `div`
+    /// Returns a / b for d = divisor(b), with the bits of `div`.
     fn div_by(a: Self::R, d: Self::D) -> Self::R;
-    /// a b + c with one rounding
+    /// Returns a b + c with one rounding.
     fn fma(a: Self::R, b: Self::R, c: Self::R) -> Self::R;
-    /// a b - c with one rounding
+    /// Returns a b - c with one rounding.
     fn fms(a: Self::R, b: Self::R, c: Self::R) -> Self::R;
-    /// -a: the sign bit flipped, so -(+0) = -0 as for f64 (0 - a would give +0)
+    /// Returns -a by flipping the sign bit, so -(+0) = -0 as for f64, where 0 - a would give +0.
     fn neg(a: Self::R) -> Self::R;
     fn abs(a: Self::R) -> Self::R;
     fn max(a: Self::R, b: Self::R) -> Self::R;
-    /// all lanes = lane j
+    /// Sets all lanes to lane j.
     fn bcast(a: Self::R, j: usize) -> Self::R;
     fn sqrt(a: Self::R) -> Self::R;
-    /// the exponent bits only: 2^floor(log2 |x|) for normal x
+    /// Keeps the exponent bits only, which gives 2^floor(log2 |x|) for normal x.
     fn pow2_floor(a: Self::R) -> Self::R;
     fn ne(a: Self::R, b: Self::R) -> Self::M;
     fn eq(a: Self::R, b: Self::R) -> Self::M;
@@ -58,47 +58,48 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     fn and(m: Self::M, n: Self::M) -> Self::M;
     fn or(m: Self::M, n: Self::M) -> Self::M;
     fn not(m: Self::M) -> Self::M;
-    /// per lane: t where set, f elsewhere
+    /// Selects t where m is set and f elsewhere, per lane.
     fn sel(m: Self::M, t: Self::R, f: Self::R) -> Self::R;
-    /// per lane: a + b where m is set, a elsewhere (one masked add on AVX-512)
+    /// Returns a + b where m is set and a elsewhere, per lane, by one masked add on AVX-512.
     #[inline(always)]
     fn add_where(m: Self::M, a: Self::R, b: Self::R) -> Self::R {
         Self::sel(m, Self::add(a, b), a)
     }
-    /// m and a == b (one masked compare on AVX-512)
+    /// Masks m by a == b, by one masked compare on AVX-512.
     #[inline(always)]
     fn and_eq(m: Self::M, a: Self::R, b: Self::R) -> Self::M {
         Self::and(m, Self::eq(a, b))
     }
-    /// m and a != b
+    /// Masks m by a != b.
     #[inline(always)]
     fn and_ne(m: Self::M, a: Self::R, b: Self::R) -> Self::M {
         Self::and(m, Self::ne(a, b))
     }
-    /// m itself, on NEON hidden from the optimizer as a comparison's result, so that its and and or
-    /// with other masks stay 128-bit operations (the masks of `qv`'s renormalizations)
+    /// Returns m itself. On NEON it hides m from the optimizer as a comparison's result, so that its and and or with
+    /// other masks stay 128-bit operations, as in the masks of `qv`'s renormalizations.
     #[doc(hidden)]
     #[inline(always)]
     fn opaque(m: Self::M) -> Self::M {
         m
     }
-    /// bit j = lane j
+    /// Returns the mask as bits, bit j for lane j.
     fn bits(m: Self::M) -> u8;
-    /// f run with this instruction set enabled. f should be an `#[inline(always)]` closure, so that its body is
+    /// Runs f with this instruction set enabled. f should be an `#[inline(always)]` closure, so that its body is
     /// compiled inside, where the backend's instructions inline.
     fn vectorize<T>(f: impl FnOnce() -> T) -> T;
-    /// f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 and left to the compiler on
-    /// the other backends: for the large hot operations of `qv`. Forced inlining of those on the plain array made the
-    /// test build exceed 3 GB of memory and 17 minutes.
+    /// Runs f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 and left to the compiler on
+    /// the other backends. It serves the large hot operations of `qv`. Forcing those inline on the plain array would
+    /// take the test build past 3 GB of memory and 17 minutes.
     fn hot<T>(f: impl FnOnce() -> T) -> T;
-    /// f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 (whose instructions need the
-    /// caller's target features) and compiled as a function of its own, never inlined, on the other backends: for the
-    /// steps of the octo-double operations (`od`, `ov`), each hundreds to a thousand lane operations, so that each is
-    /// compiled once rather than in every operation that uses it.
+    /// Runs f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512, whose instructions need the
+    /// caller's target features. On the other backends f is compiled as a function of its own and never inlined. It
+    /// serves the steps of the octo-double operations (`od`, `ov`), each hundreds to a thousand lane operations, so
+    /// that each is compiled once rather than in every operation that uses it. It also wraps the kernels of `pack`.
     fn outline<T>(f: impl FnOnce() -> T) -> T;
 }
 
-/// The backends, one zero-sized type each. Not exported, so that outside the crate only [`Native`] can be named.
+/// The backends, one zero-sized type each. They are not exported, so that outside the crate only [`Native`] can be
+/// named.
 pub(crate) mod backend {
     #[cfg(target_arch = "x86_64")]
     #[derive(Clone, Copy, Debug)]
@@ -116,12 +117,10 @@ pub(crate) mod backend {
     pub struct Portable;
 }
 
-/// The backend the build's target features select at compile time (the cargo feature `portable` forces the plain
-/// array).
+/// The backend the build's target features select at compile time. The cargo feature `portable` forces the plain array.
 #[cfg(all(not(feature = "portable"), target_arch = "x86_64", target_feature = "avx512f"))]
 pub type Native = backend::Avx512;
-/// The backend the build's target features select at compile time (the cargo feature `portable` forces the plain
-/// array).
+/// The backend the build's target features select at compile time. The cargo feature `portable` forces the plain array.
 #[cfg(all(
     not(feature = "portable"),
     target_arch = "x86_64",
@@ -130,8 +129,7 @@ pub type Native = backend::Avx512;
     target_feature = "fma"
 ))]
 pub type Native = backend::Avx2;
-/// The backend the build's target features select at compile time (the cargo feature `portable` forces the plain
-/// array).
+/// The backend the build's target features select at compile time. The cargo feature `portable` forces the plain array.
 #[cfg(all(
     not(feature = "portable"),
     any(target_arch = "x86", target_arch = "x86_64"),
@@ -140,12 +138,10 @@ pub type Native = backend::Avx2;
     not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))
 ))]
 pub type Native = backend::Sse2;
-/// The backend the build's target features select at compile time (the cargo feature `portable` forces the plain
-/// array).
+/// The backend the build's target features select at compile time. The cargo feature `portable` forces the plain array.
 #[cfg(all(not(feature = "portable"), target_arch = "aarch64", target_feature = "neon"))]
 pub type Native = backend::Neon;
-/// The backend the build's target features select at compile time (the cargo feature `portable` forces the plain
-/// array).
+/// The backend the build's target features select at compile time. The cargo feature `portable` forces the plain array.
 #[cfg(any(
     feature = "portable",
     not(any(
@@ -157,14 +153,14 @@ pub type Native = backend::Portable;
 
 /// Code generic over the backend, run by [`dispatch`] on the best one the CPU has.
 ///
-/// `run` should be `#[inline(always)]`: it is then compiled inside the backend's [`Simd::vectorize`], where its lane
+/// `run` should be `#[inline(always)]`, so that it is compiled inside the backend's [`Simd::vectorize`], where its lane
 /// operations become the backend's instructions. Closures it hands to other threads (rayon) leave that context and
 /// should enter it again with `S::vectorize(#[inline(always)] || ...)`.
 ///
 /// Loops over lanes in `run` should be plain `for` loops. An iterator adapter that takes the loop body as a closure,
 /// such as `fold` or `for_each`, runs it inside a std function. The compiler may keep that function out of line,
-/// compiled without the backend's target features, and every lane operation in it is then a call (27 times slower
-/// for `QV` addition on AVX2).
+/// compiled without the backend's target features, and every lane operation in it is then a call (27 times slower for
+/// `QV` addition on AVX2).
 pub trait Kernel {
     type Output;
     fn run<S: Simd>(self) -> Self::Output;
@@ -192,7 +188,7 @@ impl Level {
     }
 }
 
-/// the backends this CPU runs, best first
+/// Lists the backends this CPU runs, best first.
 fn levels() -> Vec<Level> {
     [Level::Avx512, Level::Avx2, Level::Sse2, Level::Neon, Level::Portable]
         .into_iter()
@@ -200,14 +196,15 @@ fn levels() -> Vec<Level> {
         .collect()
 }
 
-/// whether the build has backend l and this CPU runs it (the feature `portable` keeps only the plain array)
+/// Tests whether the build has backend l and this CPU runs it. The feature `portable` keeps only the plain array.
 fn runs(l: Level) -> bool {
     if cfg!(feature = "portable") {
         return l == Level::Portable;
     }
     match l {
         #[cfg(target_arch = "x86_64")]
-        // every feature the backend's `vectorize` enables: a hypervisor can mask AVX2 or FMA under AVX-512F
+        // It checks every feature the backend's `vectorize` enables, since a hypervisor can mask AVX2 or FMA under
+        // AVX-512F.
         Level::Avx512 => {
             std::arch::is_x86_feature_detected!("avx512f")
                 && std::arch::is_x86_feature_detected!("avx2")
@@ -226,10 +223,10 @@ fn runs(l: Level) -> bool {
     }
 }
 
-/// 0 until the first dispatch, then the best `Level`
+/// Holds 0 until the first dispatch, then the best `Level`.
 static BEST: AtomicU8 = AtomicU8::new(0);
 
-/// the best backend this CPU has, detected on the first call
+/// Returns the best backend this CPU has, detected on the first call.
 fn best() -> Level {
     let all = [Level::Portable, Level::Sse2, Level::Neon, Level::Avx2, Level::Avx512];
     if let Some(&l) = all.iter().find(|l| **l as u8 == BEST.load(Ordering::Relaxed)) {
@@ -264,23 +261,23 @@ fn run_on<K: Kernel>(l: Level, k: K) -> K::Output {
     }
 }
 
-/// k run on the best backend this CPU has, detected once.
+/// Runs k on the best backend this CPU has, detected once.
 pub fn dispatch<K: Kernel>(k: K) -> K::Output {
     run_on(best(), k)
 }
 
-/// k run on every backend this CPU has, best first, each result with the backend's name: for checks that the
+/// Runs k on every backend this CPU has, best first, and pairs each result with the backend's name, for checks that the
 /// backends agree.
 pub fn for_each_available<K: Kernel + Clone>(k: K) -> Vec<(&'static str, K::Output)> {
     levels().into_iter().map(|l| (l.name(), run_on(l, k.clone()))).collect()
 }
 
-/// the name of the backend [`dispatch`] runs on
+/// Returns the name of the backend [`dispatch`] runs on.
 pub fn isa() -> &'static str {
     best().name()
 }
 
-/// the names of the backends this CPU has, best first
+/// Returns the names of the backends this CPU has, best first.
 pub fn available() -> Vec<&'static str> {
     levels().into_iter().map(Level::name).collect()
 }
