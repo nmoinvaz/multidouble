@@ -56,8 +56,9 @@ themselves, the sum and the product of two $n$-part expansions err by at most $u
 format. This is the bound of rounding to a format with $n$ times the precision. A second, much smaller term is added,
 at most $2^{-15}$ of the first at eight parts in binary64, and measured against the operands' size for sums. Division
 has the same bound, and the square root three times it. Simple
-inputs reach the bound, so it cannot be improved. The proofs rest on an analysis of renormalization that allows its
-input terms in any order.
+inputs reach the bound, so it cannot be improved. For sums of $K$ products accumulated in levels, as dot-product
+kernels do, the second term grows like $(Ku)^{n+1}$ times the products' total size, and constructed inputs show that
+this growth is real. The proofs rest on an analysis of renormalization that allows its input terms in any order.
 \end{abstract}
 
 \section{Introduction}
@@ -93,6 +94,8 @@ We give proven bounds for the QD-style algorithms themselves, for every $n$:
   for the variants;
 \item division is accurate to $u^n$, and the square root to $3u^n$ at $n = 8$ (Theorem~\ref{thm:divsqrt});
 \item simple inputs reach the bound $u^n$, so it cannot be improved (Section~\ref{sec:example});
+\item a sum of $K$ products accumulated in levels is accurate to $u^n$ plus a term that grows like $(Ku)^{n+1}$, which
+  stays below $u^n$ up to about 50 products at $n = 8$, and inputs exist that show the growth (Section~\ref{sec:dot});
 \item the renormalization is exact until its last step, whatever the order of its input terms
   (Theorem~\ref{thm:renorm}), and the other bounds rest on this.
 \end{itemize}
@@ -398,6 +401,45 @@ dropped products of order above $n$ are bounded directly. With level $m$ at most
 Theorem~\ref{thm:renorm} gives Theorem~\ref{thm:main}. The division and the square root follow by carrying a bound on
 each part through every step (Lemma~\ref{lem:g}).
 
+\section{Sums of products}\label{sec:dot}
+
+A dot product need not round every product to $n$ parts. Multidouble's octo-double dot product keeps $n + 1$ running
+levels, adds each product's levels into them with $\TwoSum$s that carry each error to the level below, and turns the
+levels into $n$ parts once, at the end~\cite{md}. The leading term is again that of a single rounding.
+
+\begin{theorem}[Appendix, Theorem~\ref{thm:acc}]\label{thm:dot}
+Let $Z$ be the exact sum of $K$ terms, each a product of two expansions on the ladder or an expansion on the ladder,
+accumulated in levels, and let $x$ be the computed $n$ parts. Then
+\[
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + c_K\,u^nW,
+\]
+where $W$ is the sum of the terms' leading sizes, $|a_0b_0|$ or $|a_0|$, and $c_K$ grows like $K^{n+1}u$.
+\end{theorem}
+
+For a sum without cancellation $W$ is about $|Z|$, and the bound is relative. Table~\ref{tab:dot} gives $c_K$ at
+eight parts in binary64. It stays below 1 up to $K = 50$ products, and the second term then grows like $(Ku)^9W$.
+
+\nopagebreak
+\begin{table}[H]
+\centering
+\begin{tabular}{rccccccc}
+\toprule
+$K$ & 1 & 4 & 16 & 32 & 64 & 128 & 1024 \\
+\midrule
+$c_K$ & $2^{-14.9}$ & $2^{-14.3}$ & $2^{-10.6}$ & $2^{-4.8}$ & $2^{2.7}$ & $2^{10.9}$ & $2^{37.1}$ \\
+\bottomrule
+\end{tabular}
+\caption{The second term of Theorem~\ref{thm:dot} in units of $u^8W$, for products of octo-doubles on the ladder in
+binary64.}
+\label{tab:dot}
+\end{table}
+
+The growth is real. Each $\TwoSum$ into a level can carry up to half an ulp to the level below, and inputs can be
+chosen so that it does at every term. Then level $m$ grows like $(Ku)^m/m!$ times $W$. At eight parts in binary64,
+1 followed by 2047 positive octo-doubles of size about $u$ make multidouble's accumulator err by $2^{23.8}u^8|Z|$, and
+doubling the number of terms from 1024 to 2048 multiplies the error by $2^{10.3}$ (Proposition~\ref{prop:acc-low}).
+Random positive terms of the same sizes err by less than $0.004\,u^8W$.
+
 \section{Consequences and limits}
 
 \begin{itemize}
@@ -407,11 +449,13 @@ each part through every step (Lemma~\ref{lem:g}).
   $|\acc| \ge |v_j|$, which gives the same bits.
 \item \textbf{Many parts.} The multiplication's correction grows like $n(n!)^2$. Beyond ten parts in binary64 the
   bound still holds, but it is no longer close to $u^n$.
+\item \textbf{Dot products.} A level accumulator is accurate to about $u^n$ for up to about 50 products at eight
+  parts. Random terms do not show its growth beyond that.
 \item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
   far below the one above it can make a product of two small parts underflow.
 \item \textbf{Open questions.} The second-order constants come from triangle inequalities and are not claimed to be
-  tight. Whether the square root's constant 3 is reached is open. Sums of products accumulated in levels, as
-  dot-product kernels do, are not covered.
+  tight. Whether the square root's constant 3 is reached is open, and so is how close the accumulator's bound is to its
+  worst case, which the constructed inputs reach to within $2^{22}$.
 \end{itemize}
 
 \section{Computations}
@@ -428,6 +472,14 @@ and at $p = 53$. No statement failed. The bounds of Theorem~\ref{thm:renorm} and
 reached with ratio 1, and each check fired on a halved bound or a deliberately broken algorithm. The example of
 Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}).
 
+The accumulator's bound was evaluated in exact rational arithmetic and tested the same way (\texttt{accumulator/}):
+the constructed inputs of Proposition~\ref{prop:acc-low} at $p = 8$ to $14$ and at $p = 53$, and random sums, all within
+the bound, with controls that fire on a bound with the powers of $K$ lowered by one, on a bound linear in $K$, and on
+an accumulator with one level's error dropped. Multidouble returns the same eight parts as the emulator on the inputs
+of Proposition~\ref{prop:acc-low}. A reviewer who had seen neither these scripts nor their outputs checked the
+section with its own emulator. Its model of the accumulator matches multidouble bit for bit, the bound held on
+random, sharp and hill-climbed inputs at precisions 8 to 53, and its controls fired.
+
 Multidouble's own tests check the bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that
 meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}.
 
@@ -435,11 +487,13 @@ meets the hypotheses, and pin the inputs of Proposition~\ref{prop:worst}.
 
 Nathan Moinvaziri posed the problem and directed the work. Claude, an AI model made by Anthropic, drafted the
 statements and proofs. Two further Claude instances checked them independently: one refereed the proofs and the prior
-work, and the other tested every statement in exact arithmetic without reading the proofs.
+work, and the other tested every statement in exact arithmetic without reading the proofs. A third refereed the
+section on sums of products and tested it with its own code.
 
 \clearpage
 \appendix
 \input{expansion-error-bounds-appendix}
+\input{expansion-error-bounds-accumulator}
 
 \begin{thebibliography}{99}
 \bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
@@ -456,6 +510,8 @@ floating-point expansions. \emph{IEEE Trans. Comput.} 65(4), 1197--1210, 2016. d
 double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), Article 15res, 2017. doi:10.1145/3121432.
 \bibitem{Kouya26} T. Kouya. A branch-free general renormalization scheme for pair arithmetic and its performance
 evaluation. arXiv:2609.35844, 2026.
+\bibitem{Kouya26fma} T. Kouya. Performance evaluation of branch-free fused multiply-add algorithms for multicomponent
+multiple-precision floating-point arithmetic. arXiv:2607.11391, 2026.
 \bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust.
 \url{https://github.com/nmoinvaz/multidouble}.
 \bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using

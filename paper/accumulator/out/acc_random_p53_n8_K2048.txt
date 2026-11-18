@@ -1,0 +1,2 @@
+p=53 n=8 K=2048 C=1 seed=11 score=err front=True: max err/(u^n W) = 0.0040
+p=53 n=8 K=2048 C=1 seed=11 score=err front=False: max err/(u^n W) = 0.0000
