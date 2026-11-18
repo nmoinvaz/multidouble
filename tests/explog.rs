@@ -1,8 +1,10 @@
 //! `exp` and `ln` of the double-double, quad-double and octo-double types against a reference far more accurate than
 //! 2^-424 that shares no code with them (`exp_ref`): e^x for an exact dyadic x, by its Taylor series at x 2^-12 in
 //! fixed point with P = 1700 fractional bits, then twelve squarings in floating point with P + 64-bit significands,
-//! with a rigorous bound on its error, below 2^-1600 relative. ln is measured through it: for the computed y,
-//! |e^y - x| / x = |e^(y - ln x) - 1| is |y - ln x| up to a factor 1 + 2^-400.
+//! with a rigorous bound on its error, below 2^-1600 relative. ln is measured through it: for the computed y and
+//! d = y - ln x, |e^y - x| / x = |e^d - 1| stands for |d|, within a factor in [1 - |d|/2, 1 + |d|] for |d| <= 1. Within
+//! the bounds checked here |d| < 2^-90 (2^-40 for `ln_f64`), so the factor is that close to 1, and a result with a
+//! larger d is far off and fails.
 //!
 //! The reference is checked against planted truth (`reference_is_planted_truth`): e = sum 1/k! in exact integer
 //! arithmetic, within 2^-1550, and e^x to 470 of the 700 digits that Python's decimal module gives
@@ -15,13 +17,13 @@
 //! the theorems also ask that no product inside the run underflow, apart from those that only choose k, m, the degree
 //! or a branch; an emulator scanning every binade of x finds none (the paper's appendix on exp and log). Where
 //! `OD::ln`'s absolute term dominates, near x = 1, it is held to its relative constant as well, a tested threshold. The
-//! quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the first run. The start of ln,
-//! `explog::ln_f64`, is checked against its proven 5.915 u. Inputs, n per category for the double-double, n/2 for the
-//! quad-double and n/4 for the octo-double: random over the range, near 0, near the reduction's boundaries (k + 1/2) ln
-//! 2 and its multiples k ln 2, near overflow (with tails past it) and underflow, near 1 and within 3 ulps of f64::MAX
-//! (with tails near half an ulp) for ln, subnormal, with gaps and zero parts, at the top of the ladder (overlapping by
-//! a bit, not greedy, with random signs; not for the double-double, which must be a double-word), and the special
-//! values.
+//! quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the first run (exp with the
+//! absolute term 4 2^-1074 as well). The start of ln, `explog::ln_f64`, is checked against its proven 5.915 u. Inputs,
+//! n per category for the double-double, n/2 for the quad-double and n/4 for the octo-double: random over the range,
+//! near 0, near the reduction's boundaries (k + 1/2) ln 2 and its multiples k ln 2, near overflow (with tails past it)
+//! and underflow, near 1 and within 3 ulps of f64::MAX (with tails near half an ulp) for ln, subnormal, with gaps and
+//! zero parts, at the top of the ladder (overlapping by a bit, not greedy, with random signs; not for the
+//! double-double, which must be a double-word), and the special values.
 //!
 //! ```text
 //! cargo test --release --test explog                        the checks (EXPLOG_REPORT=1 prints the worst cases)
@@ -241,6 +243,41 @@ fn planted(cut: Option<usize>) -> (bool, Vec<(bool, f64)>) {
     (e_ok, vs)
 }
 
+/// The checks reject malformed results: ln(4) given as (0, 1), a nonzero result with a zero leading part, whose
+/// absolute term's share would otherwise be infinite; exp(710) given as -inf or NaN, where only the canonical +inf is
+/// right; and +inf for exp(709), below the overflow threshold.
+#[test]
+fn checks_reject_malformed_results() {
+    let four = DD::from_f64(4.0);
+    let (e, fl) = ln_err_of(four, DD { hi: 0.0, lo: 1.0 }, DD_LN_FLOOR);
+    assert!(e > DD_LN + fl, "ln(4) = (0, 1) passed");
+    assert!(
+        ln_err_of(four, four.ln(), DD_LN_FLOOR).0 <= DD_LN,
+        "the true ln(4) failed"
+    );
+    let fails = |x: DD, y: DD| exp_fails(x, y, exp_err_of(x, y), DD_EXP);
+    let (over, below) = (DD::from_f64(710.0), DD::from_f64(709.0));
+    let inf = DD {
+        hi: f64::INFINITY,
+        lo: 0.0,
+    };
+    assert!(!fails(over, inf), "+inf for exp(710) failed");
+    assert!(fails(over, -inf), "-inf for exp(710) passed");
+    assert!(fails(over, DD { hi: f64::NAN, lo: 0.0 }), "NaN for exp(710) passed");
+    assert!(
+        fails(
+            over,
+            DD {
+                hi: f64::INFINITY,
+                lo: 1.0
+            }
+        ),
+        "(+inf, 1) for exp(710) passed"
+    );
+    assert!(fails(below, inf), "+inf for exp(709) passed");
+    assert!(!fails(below, below.exp()), "the true exp(709) failed");
+}
+
 /// x on H(2) whose f = x - 1, exact, is led by a part below half its value: e_f of the leading part does not bound |f|,
 /// while `bound_expo`'s U does, sum |f_i| (1 + 2^-48) < 2^(e + 1); and ln x is within its bound
 #[test]
@@ -404,6 +441,18 @@ fn overflows<T: Ty>(x: T) -> bool {
     r.dy().cmp_abs(&lim) != std::cmp::Ordering::Less
 }
 
+/// whether y fails as exp(x), with err = exp_err_of(x, y): a finite y must be within C u^n e^x + n 2^-1074 (`bound`
+/// C), and a non-finite one must be the canonical +inf, (+inf, 0, ...), and only where e^x is at least f64::MAX + ulp/2
+fn exp_fails<T: Ty>(x: T, y: T, err: (f64, f64, bool, bool), bound: f64) -> bool {
+    let (e, fl, finite, _) = err;
+    if finite {
+        return e > bound + fl;
+    }
+    let p = y.parts();
+    let canonical = p[0] == f64::INFINITY && p[1..].iter().all(|v| *v == 0.0);
+    !(canonical && overflows(x))
+}
+
 /// the unit u^n
 fn un<T: Ty>() -> f64 {
     2f64.powi(-53 * T::N as i32)
@@ -495,11 +544,10 @@ struct Row {
     worst: String,
 }
 
-/// |exp(x) - e^x| / e^x in units of u^n, the share of the absolute term n 2^-1074 (the final scaling's loss to the
-/// subnormals) in the same units, whether the result is finite, and whether its leading part leaves room for n normal
-/// parts, |y_0| > 2^(-1022 + 53 (n - 1)), where the worst relative error is recorded
-fn exp_err<T: Ty>(x: T) -> (f64, f64, bool, bool) {
-    let y = x.exp();
+/// for a result y of exp(x), |y - e^x| / e^x in units of u^n, the share of the absolute term n 2^-1074 (the final
+/// scaling's loss to the subnormals) in the same units, whether y is finite, and whether its leading part leaves room
+/// for n normal parts, |y_0| > 2^(-1022 + 53 (n - 1)), where the worst relative error is recorded
+fn exp_err_of<T: Ty>(x: T, y: T) -> (f64, f64, bool, bool) {
     if !y.parts().iter().all(|v| v.is_finite()) {
         return (f64::INFINITY, 0.0, false, false);
     }
@@ -514,7 +562,11 @@ fn exp_err<T: Ty>(x: T) -> (f64, f64, bool, bool) {
 
 /// |ln(x) - ln x| / |ln x| in units of u^n, and the share of an absolute term 2^fl, 2^fl / |ln x| / u^n
 fn ln_err<T: Ty>(x: T, fl: i32) -> (f64, f64) {
-    let y = x.ln();
+    ln_err_of(x, x.ln(), fl)
+}
+
+/// ln_err for a given result y of ln(x)
+fn ln_err_of<T: Ty>(x: T, y: T, fl: i32) -> (f64, f64) {
     if !y.parts().iter().all(|v| v.is_finite()) {
         return (f64::INFINITY, 0.0);
     }
@@ -524,6 +576,10 @@ fn ln_err<T: Ty>(x: T, fl: i32) -> (f64, f64) {
         // only ln 1 may be zero
         let one = xd.sub(&Dy::from_f64(1.0)).is_zero();
         return (if one { 0.0 } else { f64::INFINITY }, 0.0);
+    }
+    // a nonzero result led by a zero part is malformed (and would make the absolute term's share infinite)
+    if y.parts()[0] == 0.0 {
+        return (f64::INFINITY, 0.0);
     }
     // a result outside the reference's domain is far from ln x, |ln x| < 745
     let Some(r) = exp_ref(&yd, None) else {
@@ -598,13 +654,14 @@ fn run_exp<T: Ty>(n: usize, seed: u64, bound: f64, proven: bool) -> Vec<Row> {
                     top_ladder(&mut r, x0)
                 }
             };
-            let (e, fl, finite, room) = exp_err(x);
+            let y = x.exp();
+            let err = exp_err_of(x, y);
+            let (e, _, finite, room) = err;
             row.n += 1;
-            // every finite result is held to C u^n e^x + n 2^-1074, and a result may be infinite only where e^x is
-            // at least f64::MAX + ulp/2; `covered` counts those within the proven bound's hypotheses
+            // `covered` counts the results within the proven bound's hypotheses
             let hyp = finite && (!proven || ladder(x));
             row.covered += hyp as usize;
-            if if finite { e > bound + fl } else { !overflows(x) } {
+            if exp_fails(x, y, err, bound) {
                 row.fails += 1;
             }
             // the worst relative error where the result has room for n normal parts
