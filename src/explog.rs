@@ -44,9 +44,20 @@
 //! result is +inf and an underflowing one loses its lower parts to the subnormals as the other operations do. ln
 //! gives NaN for a negative or NaN leading part, -inf for a zero one and +inf for +inf, and works on every positive
 //! finite value, subnormal leading parts included.
+//!
+//! Lanes: `DV`, `QV` and `OV` have `exp` and `ln` with each lane bitwise the scalar function of its value, on every
+//! backend, so the bounds above hold per lane. The same code runs on them: each lane's choices (the special values, k,
+//! m, the degree, the branches of ln) are made in f64 as the scalar types make them, the steps run as far as the lane
+//! that needs most, and a lane keeps its value through each step it does not take (masked), so that it performs the
+//! scalar type's operations and no others.
 use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
-use crate::od::OD;
+use crate::dv::{self, DV};
+use crate::od::{Limb, OD};
+use crate::ov::OV;
 use crate::qd::QD;
+use crate::qv::{self, QV};
+use crate::simd::Simd;
+use crate::v8::{M8, V8};
 
 /// Deliberate breakage for the controls (feature `mutate`; ids below, 0 = none).
 pub mod mutate {
@@ -60,16 +71,19 @@ pub mod mutate {
     pub const LN_START: u32 = 4;
     /// ln: log(1 + c) cut to c, an error of about c^2 / 2, below `OD::ln`'s absolute term near x = 1
     pub const LN_SERIES: u32 = 5;
-    /// number of ids
+    /// number of the ids that break the scalar functions (and with them the lanes)
     pub const N: u32 = 5;
+    /// the lanes only: each lane skips the first step of its Horner sum (its mask off by one), the scalar types do not
+    pub const LANE_STEP: u32 = 6;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 6] = [
+    pub const NAMES: [&str; 7] = [
         "none",
         "exp: ln 2's tail cut to one part",
         "exp: Taylor polynomial at half its degree",
         "ln: Newton step skipped",
         "ln: start off by 2^-20",
         "ln: log(1 + c) cut to c",
+        "lanes: first Horner step skipped",
     ];
 
     #[cfg(feature = "mutate")]
@@ -576,7 +590,8 @@ const THIRD: [f64; 8] = [
 /// LN2_LO cut to its first part (`mutate::RED_TAIL`)
 const LN2_LO_CUT: [f64; 8] = [LN2_LO[0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
-/// One precision's operations, in the forms the error bounds are proved for.
+/// One precision's operations, in the forms the error bounds are proved for, on one value (`DD`, `QD`, `OD`) or on 8
+/// lanes (`DV`, `QV`, `OV`). A per-lane array holds lane j at index j < L.
 trait Prec: Copy {
     /// m squarings bring a bound of the reduced argument below 2^-S
     const S: i32;
@@ -587,28 +602,58 @@ trait Prec: Copy {
     const Q: usize;
     /// 53 n + 12 for n parts: a term below 2^-B of the result's scale is negligible, 2^-12 of the unit roundoff
     const B: i32;
+    /// the lanes: 1 for a scalar type, 8 for a lane type
+    const L: usize = 1;
+    /// every lane's bit
+    const ALL: u8 = ((1u32 << Self::L) - 1) as u8;
+    /// a condition per lane: bool, `M8` for the lanes
+    type M: Copy;
+    /// a count per lane, for the masks of the loops: i32, `V8` for the lanes
+    type C: Copy;
     fn from_f64(x: f64) -> Self;
-    /// the leading part
-    fn hi(self) -> f64;
-    /// |x_0| + |x_1| + ... in f64, from the leading part down
-    fn abs_sum(self) -> f64;
+    /// lane j (v_j, 0, ...)
+    #[inline(always)]
+    fn from_f64s(v: &[f64; 8]) -> Self {
+        Self::from_f64(v[0])
+    }
+    /// the leading parts
+    fn his(self) -> [f64; 8];
+    /// |x_0| + |x_1| + ... in f64, from the leading part down, per lane
+    fn abs_sums(self) -> [f64; 8];
     /// the first parts of a greedy eight-part constant
     fn konst(c: &[f64; 8]) -> Self;
+    /// lane j the first parts of c_j
+    #[inline(always)]
+    fn konsts(c: &[&[f64; 8]; 8]) -> Self {
+        Self::konst(c[0])
+    }
     fn plus(self, b: Self) -> Self;
     fn times(self, b: Self) -> Self;
     fn plus_one(self) -> Self;
     /// times a normal power of two, exact barring underflow and overflow
     fn times_pwr2(self, b: f64) -> Self;
+    /// lane j times b_j, a normal power of two
+    #[inline(always)]
+    fn times_pwr2s(self, b: &[f64; 8]) -> Self {
+        self.times_pwr2(b[0])
+    }
     fn neg(self) -> Self;
-    /// self - k ln 2 for an integer k, 0 < |k| < 2^11, with ln 2 = LN2_HI + lo: (x_0 - k LN2_HI, x_1, ...), exact,
-    /// plus lo times -k
-    fn reduce(self, k: f64, lo: &[f64; 8]) -> Self;
+    /// self - k ln 2 for an integer k (lane j k_j), 0 < |k| < 2^11, with ln 2 = LN2_HI + lo: (x_0 - k LN2_HI, x_1,
+    /// ...), exact, plus lo times -k
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> Self;
     /// self - 1, exact for a leading part in [1/2, 2]
     fn sub_one(self) -> Self;
     /// ln's start
     fn ln_start(self) -> Self;
     /// ln's result from its start and the correction
     fn ln_finish(y0: Self, corr: Self) -> Self;
+    /// the lanes of m's bits (bit j lane j)
+    fn mask(m: u8) -> Self::M;
+    fn counts(c: &[i32; 8]) -> Self::C;
+    /// the lanes whose count exceeds i
+    fn above(c: Self::C, i: i32) -> Self::M;
+    /// per lane a where m holds, b elsewhere
+    fn sel(m: Self::M, a: Self, b: Self) -> Self;
 }
 
 /// 2^k for -1022 <= k <= 1023
@@ -625,98 +670,183 @@ fn expo(h: f64) -> i32 {
 
 /// the exponent e of U = RN(RN(sum |v_i|) (1 + 2^-48)), 2^e <= U < 2^(e+1), -1023 for a zero or subnormal U: |v| <=
 /// sum |v_i| <= U < 2^(e+1) whatever v's parts, where the leading part's exponent alone bounds nothing (a renormalized
-/// expansion can be led by a part below half its value)
+/// expansion can be led by a part below half its value); per lane
 #[inline(always)]
-fn bound_expo<T: Prec>(v: T) -> i32 {
-    expo(v.abs_sum() * (1.0 + 2f64.powi(-48)))
+fn bound_expos<T: Prec>(v: T) -> [i32; 8] {
+    let s = v.abs_sums();
+    let mut e = [0; 8];
+    for j in 0..T::L {
+        e[j] = expo(s[j] * (1.0 + 2f64.powi(-48)));
+    }
+    e
 }
 
-/// a b for a with sum |a_i| < 2^(e+1) (`bound_expo`), -1022 <= e: formed as 2^e ((a 2^-e) b), so that the product's
+/// a b for a with sum |a_i| < 2^(e+1) (`bound_expos`), -1022 <= e: formed as 2^e ((a 2^-e) b), so that the product's
 /// parts are formed near b's scale and only the last power-of-two scaling, exact while the parts stay normal, can
-/// leave the normal range
+/// leave the normal range; p = (2^-e, 2^e) per lane
 #[inline(always)]
-fn times_scaled<T: Prec>(a: T, e: i32, b: T) -> T {
-    a.times_pwr2(pow2(-e)).times(b).times_pwr2(pow2(e))
+fn times_scaled<T: Prec>(a: T, p: &([f64; 8], [f64; 8]), b: T) -> T {
+    a.times_pwr2s(&p.0).times(b).times_pwr2s(&p.1)
 }
 
-/// x 2^k in two exact steps, -1076 <= k <= 1076
+/// x 2^k in two exact steps, -1076 <= k <= 1076 (lane j k_j)
 #[inline(always)]
-fn scale<T: Prec>(x: T, k: i32) -> T {
-    let k1 = k / 2;
-    x.times_pwr2(pow2(k1)).times_pwr2(pow2(k - k1))
+fn scale<T: Prec>(x: T, k: &[i32; 8]) -> T {
+    let (mut a, mut b) = ([1.0; 8], [1.0; 8]);
+    for j in 0..T::L {
+        let k1 = k[j] / 2;
+        (a[j], b[j]) = (pow2(k1), pow2(k[j] - k1));
+    }
+    x.times_pwr2s(&a).times_pwr2s(&b)
+}
+
+/// the greatest of the lanes' counts, and at least 0
+#[inline(always)]
+fn most<T: Prec>(c: &[i32; 8]) -> i32 {
+    let mut m = 0;
+    for j in 0..T::L {
+        m = m.max(c[j]);
+    }
+    m
+}
+
+/// a loop's step: new for the lanes whose count c exceeds i, old for the others; a scalar type's loop runs to its own
+/// count, so it takes new without a select on its chain of steps
+#[inline(always)]
+fn step<T: Prec>(c: T::C, i: i32, new: T, old: T) -> T {
+    if T::L == 1 {
+        new
+    } else {
+        T::sel(T::above(c, i), new, old)
+    }
 }
 
 /// (k, t) with e^x ~ 2^k (1 + t), for |x_0| <= 745.2: the reduction, the Taylor polynomial and the squarings
 #[inline(always)]
-fn expm1_red<T: Prec>(x: T) -> (i32, T) {
-    let k = (x.hi() * std::f64::consts::LOG2_E).round();
-    let r = if k == 0.0 {
+fn expm1_red<T: Prec>(x: T) -> ([i32; 8], T) {
+    let h = x.his();
+    let (mut k, mut red) = ([0.0; 8], 0u8);
+    for j in 0..T::L {
+        k[j] = (h[j] * std::f64::consts::LOG2_E).round();
+        red |= ((k[j] != 0.0) as u8) << j;
+    }
+    // the lanes with k = 0 keep x
+    let r = if red == 0 {
         x
     } else {
-        x.reduce(
-            k,
-            if mutate::on(mutate::RED_TAIL) {
-                &LN2_LO_CUT
-            } else {
-                &LN2_LO
-            },
-        )
+        let lo = if mutate::on(mutate::RED_TAIL) {
+            &LN2_LO_CUT
+        } else {
+            &LN2_LO
+        };
+        T::sel(T::mask(red), x.reduce(&k, lo), x)
     };
     // m = max(0, e + S + 1) with 2^e <= RN(RN(sum |r_i|) (1 + 2^-48)) < 2^(e+1), so that |r| < 2^(e+1) and |r| 2^-m <
     // 2^-S whatever r's parts (a zero or subnormal sum gives e = -1023)
-    let e = bound_expo(r);
-    let m = (e + T::S + 1).max(0);
-    let r = if m > 0 { r.times_pwr2(pow2(-m)) } else { r };
-    // the degree d = min(DEG, ceil(B / (-er - 1))), |r'| < 2^(er+1) <= 2^-S: the terms of degree above d sum to below
-    // 2^-B |r'|, and none is formed, so a small r' forms no product of negligible size (d = 1 for |r'| < 2^-B: t = r')
-    let er = e - m;
-    let d = if er >= -1 - T::B {
-        T::DEG.min((T::B / (-er - 1) + (T::B % (-er - 1) != 0) as i32) as usize)
-    } else {
-        1
-    };
-    let d = if mutate::on(mutate::TAYLOR_HALF) {
-        (d / 2).max(1)
-    } else {
-        d
-    };
-    let mut t = if d == 1 {
+    let e = bound_expos(r);
+    let (mut m, mut er, mut d) = ([0; 8], [0; 8], [1; 8]);
+    let (mut sc, mut pm) = (0u8, [1.0; 8]);
+    for j in 0..T::L {
+        m[j] = (e[j] + T::S + 1).max(0);
+        if m[j] > 0 {
+            (sc, pm[j]) = (sc | 1 << j, pow2(-m[j]));
+        }
+        // the degree d = min(DEG, ceil(B / (-er - 1))), |r'| < 2^(er+1) <= 2^-S: the terms of degree above d sum to
+        // below 2^-B |r'|, and none is formed, so a small r' forms no product of negligible size (d = 1 for |r'| <
+        // 2^-B: t = r')
+        er[j] = e[j] - m[j];
+        let dj = if er[j] >= -1 - T::B {
+            T::DEG.min((T::B / (-er[j] - 1) + (T::B % (-er[j] - 1) != 0) as i32) as usize) as i32
+        } else {
+            1
+        };
+        d[j] = if mutate::on(mutate::TAYLOR_HALF) {
+            (dj / 2).max(1)
+        } else {
+            dj
+        };
+    }
+    let r = if sc == 0 {
         r
     } else {
-        // q = sum_(j=2)^d r^(j-2) / j! by Horner's rule, and t = r + r (r q), the outer product and sum in r 2^-er
-        let mut q = T::konst(&INV_FACT[d]);
-        for j in (2..d).rev() {
-            q = T::konst(&INV_FACT[j]).plus(r.times(q));
+        T::sel(T::mask(sc), r.times_pwr2s(&pm), r)
+    };
+    let mut t = r;
+    let dmax = most::<T>(&d);
+    if dmax > 1 {
+        // q = sum_(j=2)^d r^(j-2) / j! by Horner's rule, and t = r + r (r q), the outer product and sum in r 2^-er;
+        // each lane starts at its own degree and keeps q through the steps above it
+        let (mut c, mut poly) = ([&INV_FACT[1]; 8], 0u8);
+        let (mut pa, mut pb) = ([1.0; 8], [1.0; 8]);
+        for j in 0..T::L {
+            c[j] = &INV_FACT[d[j] as usize];
+            if d[j] > 1 {
+                (poly, pa[j], pb[j]) = (poly | 1 << j, pow2(-er[j]), pow2(er[j]));
+            }
+        }
+        let skip = (T::L > 1 && mutate::on(mutate::LANE_STEP)) as i32;
+        let dc = T::counts(&d);
+        let mut q = T::konsts(&c);
+        for i in (2..dmax).rev() {
+            let s = T::konst(&INV_FACT[i as usize]).plus(r.times(q));
+            q = step(dc, i + skip, s, q);
         }
         let w = r.times(q);
-        let rs = r.times_pwr2(pow2(-er));
-        rs.plus(rs.times(w)).times_pwr2(pow2(er))
-    };
-    for _ in 0..m {
-        t = t.times_pwr2(2.0).plus(t.times(t));
+        let rs = r.times_pwr2s(&pa);
+        t = T::sel(T::mask(poly), rs.plus(rs.times(w)).times_pwr2s(&pb), r);
     }
-    (k as i32, t)
+    // each lane squares m times
+    let mc = T::counts(&m);
+    for i in 0..most::<T>(&m) {
+        t = step(mc, i, t.times_pwr2(2.0).plus(t.times(t)), t);
+    }
+    let mut ki = [0; 8];
+    for j in 0..T::L {
+        ki[j] = k[j] as i32;
+    }
+    (ki, t)
 }
 
 /// e^x (see the module doc)
 #[inline(always)]
 fn exp_of<T: Prec>(x: T) -> T {
-    let h = x.hi();
-    if h.is_nan() {
-        return T::from_f64(h);
+    // the special values: x_0 itself for a NaN, +inf above EXP_MAX, +0 below EXP_MIN; their lanes run e^0
+    let h = x.his();
+    let (mut sp, mut v) = (0u8, [0.0; 8]);
+    for j in 0..T::L {
+        let s = if h[j].is_nan() {
+            h[j]
+        } else if h[j] > EXP_MAX {
+            f64::INFINITY
+        } else if h[j] < EXP_MIN {
+            0.0
+        } else {
+            continue;
+        };
+        (sp, v[j]) = (sp | 1 << j, s);
     }
-    if h > EXP_MAX {
-        return T::from_f64(f64::INFINITY);
+    if sp == T::ALL {
+        return T::from_f64s(&v);
     }
-    if h < EXP_MIN {
-        return T::from_f64(0.0);
-    }
-    let (k, t) = expm1_red(x);
-    let y = scale(t.plus_one(), k);
-    if y.hi() == f64::INFINITY {
-        T::from_f64(f64::INFINITY)
+    let x = if sp == 0 {
+        x
     } else {
+        T::sel(T::mask(sp), T::from_f64(0.0), x)
+    };
+    let (k, t) = expm1_red(x);
+    let y = scale(t.plus_one(), &k);
+    // an overflowing result is +inf
+    let yh = y.his();
+    let mut out = sp;
+    for j in 0..T::L {
+        if yh[j] == f64::INFINITY && sp >> j & 1 == 0 {
+            (out, v[j]) = (out | 1 << j, f64::INFINITY);
+        }
+    }
+    if out == 0 {
         y
+    } else {
+        T::sel(T::mask(out), T::from_f64s(&v), y)
     }
 }
 
@@ -733,45 +863,84 @@ fn series<T: Prec>(i: usize) -> T {
 /// ln x (see the module doc)
 #[inline(always)]
 fn ln_of<T: Prec>(x: T) -> T {
-    let h = x.hi();
-    if h.is_nan() || h < 0.0 {
-        return T::from_f64(f64::NAN);
+    // the special values: NaN for a negative or NaN x_0, -inf for a zero one, +inf for +inf; their lanes run ln 1
+    let h = x.his();
+    let (mut sp, mut v) = (0u8, [0.0; 8]);
+    for j in 0..T::L {
+        let s = if h[j].is_nan() || h[j] < 0.0 {
+            f64::NAN
+        } else if h[j] == 0.0 {
+            f64::NEG_INFINITY
+        } else if h[j] == f64::INFINITY {
+            f64::INFINITY
+        } else {
+            continue;
+        };
+        (sp, v[j]) = (sp | 1 << j, s);
     }
-    if h == 0.0 {
-        return T::from_f64(f64::NEG_INFINITY);
+    if sp == T::ALL {
+        return T::from_f64s(&v);
     }
-    if h == f64::INFINITY {
-        return T::from_f64(f64::INFINITY);
-    }
+    let x = if sp == 0 {
+        x
+    } else {
+        T::sel(T::mask(sp), T::from_f64(1.0), x)
+    };
+    let special = |y: T| {
+        if sp == 0 {
+            y
+        } else {
+            T::sel(T::mask(sp), T::from_f64s(&v), y)
+        }
+    };
     let y0 = x.ln_start();
     if mutate::on(mutate::LN_STEP) {
-        return y0;
+        return special(y0);
     }
     // e^-y0 ~ 2^k (1 + t); f = x 2^k - 1 exactly; c = x e^-y0 - 1 = (f + t) + f t, f t formed from f 2^-ef and t 2^-et,
     // both near 1, and dropped when |f| or |t| is below 2^-(B + 12), with ef and et the exponents of bounds of the
-    // whole values (`bound_expo`), as the leading parts' do not bound them
+    // whole values (`bound_expos`), as the leading parts' do not bound them
     let (k, t) = expm1_red(y0.neg());
-    let f = scale(x, k).sub_one();
-    let (ef, et) = (bound_expo(f), bound_expo(t));
-    let c = if ef.min(et) < -T::B - 13 {
-        f.plus(t)
+    let f = scale(x, &k).sub_one();
+    let (ef, et) = (bound_expos(f), bound_expos(t));
+    let (mut ft, mut pf, mut pt) = (0u8, ([1.0; 8], [1.0; 8]), ([1.0; 8], [1.0; 8]));
+    for j in 0..T::L {
+        if ef[j].min(et[j]) >= -T::B - 13 {
+            ft |= 1 << j;
+            (pf.0[j], pf.1[j]) = (pow2(-ef[j]), pow2(ef[j]));
+            (pt.0[j], pt.1[j]) = (pow2(-et[j]), pow2(et[j]));
+        }
+    }
+    let s = f.plus(t);
+    let c = if ft == 0 {
+        s
     } else {
-        let p = f.times_pwr2(pow2(-ef)).times(t.times_pwr2(pow2(-et)));
-        f.plus(t).plus(p.times_pwr2(pow2(ef)).times_pwr2(pow2(et)))
+        let p = f.times_pwr2s(&pf.0).times(t.times_pwr2s(&pt.0));
+        T::sel(T::mask(ft), s.plus(p.times_pwr2s(&pf.1).times_pwr2s(&pt.1)), s)
     };
     // log(1 + c) = c (1 + c h), h = -1/2 + c (1/3 - c / 4 ...) to order Q, each product with c at the other factor's
     // scale; for |c| below 2^-(B + 12), c alone
-    let ec = bound_expo(c);
-    let corr = if ec < -T::B - 13 || mutate::on(mutate::LN_SERIES) {
+    let ec = bound_expos(c);
+    let (mut ser, mut pc) = (0u8, ([1.0; 8], [1.0; 8]));
+    for j in 0..T::L {
+        if !(ec[j] < -T::B - 13 || mutate::on(mutate::LN_SERIES)) {
+            (ser, pc.0[j], pc.1[j]) = (ser | 1 << j, pow2(-ec[j]), pow2(ec[j]));
+        }
+    }
+    let corr = if ser == 0 {
         c
     } else {
         let mut h = series::<T>(T::Q);
         for i in (2..T::Q).rev() {
-            h = series::<T>(i).plus(times_scaled(c, ec, h));
+            h = series::<T>(i).plus(times_scaled(c, &pc, h));
         }
-        times_scaled(c, ec, times_scaled(c, ec, h).plus_one())
+        T::sel(
+            T::mask(ser),
+            times_scaled(c, &pc, times_scaled(c, &pc, h).plus_one()),
+            c,
+        )
     };
-    T::ln_finish(y0, corr)
+    special(T::ln_finish(y0, corr))
 }
 
 /// the start of the quad-double and octo-double ln: the double-double ln of x's double-double, or, for a leading part
@@ -789,6 +958,21 @@ fn start_dd(x0: f64, dd: impl Fn() -> DD, half: impl Fn() -> DD) -> DD {
     }
 }
 
+/// `start_dd` on lanes: x/2's branch for the lanes with x_0 >= 2^1023, if any
+#[inline(always)]
+fn start_dv<S: Simd>(x0: V8<S>, dd: impl Fn() -> DV<S>, half: impl Fn() -> DV<S>) -> DV<S> {
+    let big = x0.ge(V8::splat(pow2(1023)));
+    if big.bits() == 0 {
+        return dd().ln();
+    }
+    let y = <DV<S> as Prec>::sel(big, half(), dd()).ln();
+    let l2 = DV::splat(DD {
+        hi: LN2_DD[0],
+        lo: LN2_DD[1],
+    });
+    <DV<S> as Prec>::sel(big, y + l2, y)
+}
+
 /// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper, Lemma 42), and 0 for h = 1: h = 2^e m
 /// with m in (mu/2, mu], mu = RN(sqrt 2), m - 1 exact, and ln m = 2 atanh(s), s = (m - 1) / (m + 1), |s| <= 0.1716,
 /// by the first ten terms of its series in s^2 (by Horner's rule with fused multiply-adds), whose remainder is below
@@ -797,6 +981,13 @@ fn start_dd(x0: f64, dd: impl Fn() -> DD, half: impl Fn() -> DD) -> DD {
 #[doc(hidden)]
 #[inline(always)]
 pub fn ln_f64(h: f64) -> f64 {
+    let (m, e) = ln_f64_split(h);
+    ln_f64_sum(m, e as f64)
+}
+
+/// (m, e) of `ln_f64`'s h = 2^e m
+#[inline(always)]
+fn ln_f64_split(h: f64) -> (f64, i32) {
     let (h, e0) = if h < f64::MIN_POSITIVE {
         (h * pow2(54), -54)
     } else {
@@ -808,18 +999,37 @@ pub fn ln_f64(h: f64) -> f64 {
         m *= 0.5;
         e += 1;
     }
-    let s = (m - 1.0) / (m + 1.0);
-    let z = s * s;
-    let mut v = LN_SERIES[LN_SERIES.len() - 1];
+    (m, e)
+}
+
+/// `ln_f64` from its m and e, written once for f64 and the lanes
+#[inline(always)]
+fn ln_f64_sum<L: Limb>(m: L, e: L) -> L {
+    let one = L::splat(1.0);
+    let s = m.sub(one).div(m.add(one));
+    let z = s.mul(s);
+    let mut v = L::splat(LN_SERIES[LN_SERIES.len() - 1]);
     for &c in LN_SERIES[..LN_SERIES.len() - 1].iter().rev() {
-        v = z.mul_add(v, c);
+        v = z.fma(v, L::splat(c));
     }
-    let y = (e as f64).mul_add(std::f64::consts::LN_2, (s + s) * v);
+    let y = e.fma(L::splat(std::f64::consts::LN_2), s.add(s).mul(v));
     if mutate::on(mutate::LN_START) {
-        y * (1.0 + 2f64.powi(-20))
+        y.mul(L::splat(1.0 + 2f64.powi(-20)))
     } else {
         y
     }
+}
+
+/// `ln_f64` on lanes: m and e per lane in f64, the rest on the lanes
+#[inline(always)]
+fn ln_f64_lanes<S: Simd>(h: V8<S>) -> V8<S> {
+    let h = h.to_array();
+    let (mut m, mut e) = ([0.0; 8], [0.0; 8]);
+    for j in 0..8 {
+        let (mj, ej) = ln_f64_split(h[j]);
+        (m[j], e[j]) = (mj, ej as f64);
+    }
+    ln_f64_sum(V8::<S>::from_array(m), V8::from_array(e))
 }
 
 /// 1 / (2j + 1) for j = 0..=9, rounded to nearest
@@ -859,6 +1069,53 @@ fn dw_times_dw(a: DD, b: DD) -> DD {
     DD { hi: zh, lo: zl }
 }
 
+/// `dw_plus_fp` on lanes, the same operations in the same order
+#[inline(always)]
+fn dw_plus_fp_lanes<S: Simd>(a: DV<S>, b: V8<S>) -> DV<S> {
+    let (sh, sl) = dv::two_sum(a.hi, b);
+    let v = a.lo.add(sl);
+    let (zh, zl) = dv::quick_two_sum(sh, v);
+    DV { hi: zh, lo: zl }
+}
+
+/// `dw_times_dw` on lanes, the same operations in the same order
+#[inline(always)]
+fn dw_times_dw_lanes<S: Simd>(a: DV<S>, b: DV<S>) -> DV<S> {
+    let (ch, cl1) = dv::two_prod(a.hi, b.hi);
+    let tl = a.hi.mul(b.lo);
+    let cl2 = a.lo.fma(b.hi, tl);
+    let (zh, zl) = dv::quick_two_sum(ch, cl1.add(cl2));
+    DV { hi: zh, lo: zl }
+}
+
+/// The per-lane items of a scalar type: one lane, its conditions bool and its counts i32.
+macro_rules! one_lane {
+    () => {
+        type M = bool;
+        type C = i32;
+        #[inline(always)]
+        fn mask(m: u8) -> bool {
+            m & 1 != 0
+        }
+        #[inline(always)]
+        fn counts(c: &[i32; 8]) -> i32 {
+            c[0]
+        }
+        #[inline(always)]
+        fn above(c: i32, i: i32) -> bool {
+            c > i
+        }
+        #[inline(always)]
+        fn sel(m: bool, a: Self, b: Self) -> Self {
+            if m {
+                a
+            } else {
+                b
+            }
+        }
+    };
+}
+
 /// The double-double: `+` is AccurateDWPlusDW (Joldes, Muller, Popescu 2017, Theorem 3.1: 3u^2 / (1 - 4u)), `mul_f`
 /// DWTimesFP3 (their Algorithm 9: 2u^2), and the products and the f64 sums are `dw_times_dw` and `dw_plus_fp`.
 impl Prec for DD {
@@ -866,17 +1123,18 @@ impl Prec for DD {
     const DEG: usize = 27;
     const Q: usize = 3;
     const B: i32 = 118;
+    one_lane!();
     #[inline(always)]
     fn from_f64(x: f64) -> DD {
         DD::from_f64(x)
     }
     #[inline(always)]
-    fn hi(self) -> f64 {
-        self.hi
+    fn his(self) -> [f64; 8] {
+        [self.hi; 8]
     }
     #[inline(always)]
-    fn abs_sum(self) -> f64 {
-        self.hi.abs() + self.lo.abs()
+    fn abs_sums(self) -> [f64; 8] {
+        [self.hi.abs() + self.lo.abs(); 8]
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> DD {
@@ -903,7 +1161,8 @@ impl Prec for DD {
         -self
     }
     #[inline(always)]
-    fn reduce(self, k: f64, lo: &[f64; 8]) -> DD {
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> DD {
+        let k = k[0];
         let a = self.hi - k * LN2_HI;
         let p = DD { hi: lo[0], lo: lo[1] }.mul_f(-k);
         dw_plus_fp(dw_plus_fp(p, self.lo), a)
@@ -930,17 +1189,18 @@ impl Prec for QD {
     const DEG: usize = 24;
     const Q: usize = 2;
     const B: i32 = 224;
+    one_lane!();
     #[inline(always)]
     fn from_f64(x: f64) -> QD {
         QD::from_f64(x)
     }
     #[inline(always)]
-    fn hi(self) -> f64 {
-        self.x[0]
+    fn his(self) -> [f64; 8] {
+        [self.x[0]; 8]
     }
     #[inline(always)]
-    fn abs_sum(self) -> f64 {
-        self.x.iter().fold(0.0, |a, v| a + v.abs())
+    fn abs_sums(self) -> [f64; 8] {
+        [self.x.iter().fold(0.0, |a, v| a + v.abs()); 8]
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> QD {
@@ -970,8 +1230,8 @@ impl Prec for QD {
     }
     /// the exact x - k LN2_HI renormalized in any order (`QD::from_sum`), as QD's add expects ordered parts
     #[inline(always)]
-    fn reduce(self, k: f64, lo: &[f64; 8]) -> QD {
-        let x = self.x;
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> QD {
+        let (x, k) = (self.x, k[0]);
         QD::from_sum(x[0] - k * LN2_HI, x[1], x[2], x[3]) + QD::konst(lo).mul_f(-k)
     }
     #[inline(always)]
@@ -995,17 +1255,18 @@ impl Prec for OD {
     const DEG: usize = 43;
     const Q: usize = 4;
     const B: i32 = 436;
+    one_lane!();
     #[inline(always)]
     fn from_f64(x: f64) -> OD {
         OD::from_f64(x)
     }
     #[inline(always)]
-    fn hi(self) -> f64 {
-        self.x[0]
+    fn his(self) -> [f64; 8] {
+        [self.x[0]; 8]
     }
     #[inline(always)]
-    fn abs_sum(self) -> f64 {
-        self.x.iter().fold(0.0, |a, v| a + v.abs())
+    fn abs_sums(self) -> [f64; 8] {
+        [self.x.iter().fold(0.0, |a, v| a + v.abs()); 8]
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> OD {
@@ -1033,8 +1294,8 @@ impl Prec for OD {
     }
     /// (x_0 - k LN2_HI, x_1, ..., x_7) as it is, an operand of `+` whatever its parts' order
     #[inline(always)]
-    fn reduce(self, k: f64, lo: &[f64; 8]) -> OD {
-        let mut x = self;
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> OD {
+        let (mut x, k) = (self, k[0]);
         x.x[0] = self.x[0] - k * LN2_HI;
         x + OD { x: *lo }.mul_f(-k)
     }
@@ -1054,6 +1315,359 @@ impl Prec for OD {
             hi: y0.x[0],
             lo: y0.x[1],
         })
+    }
+}
+
+/// the lanes of m's bits (bit j lane j)
+#[inline(always)]
+fn lane_mask<S: Simd>(m: u8) -> M8<S> {
+    let mut a = [0.0; 8];
+    for j in 0..8 {
+        a[j] = (m >> j & 1) as f64;
+    }
+    V8::<S>::from_array(a).gt(V8::zero())
+}
+
+/// lane j (v_j, 0, ...) as parts
+#[inline(always)]
+fn from_f64s_parts<S: Simd, const N: usize>(v: &[f64; 8]) -> [V8<S>; N] {
+    let mut r = [V8::zero(); N];
+    r[0] = V8::from_array(*v);
+    r
+}
+
+/// per lane 0 + |x_0| + |x_1| + ..., the scalar `abs_sum` of `QD` and `OD`
+#[inline(always)]
+fn abs_sums_parts<S: Simd, const N: usize>(x: &[V8<S>; N]) -> [f64; 8] {
+    let mut s = V8::zero();
+    for i in 0..N {
+        s = s.add(x[i].abs());
+    }
+    s.to_array()
+}
+
+/// lane j the first N parts of c_j
+#[inline(always)]
+fn konsts_parts<S: Simd, const N: usize>(c: &[&[f64; 8]; 8]) -> [V8<S>; N] {
+    let mut r = [V8::zero(); N];
+    for i in 0..N {
+        let mut a = [0.0; 8];
+        for j in 0..8 {
+            a[j] = c[j][i];
+        }
+        r[i] = V8::from_array(a);
+    }
+    r
+}
+
+/// lane j of every part times b_j, a normal power of two: `mul_pwr2` per lane
+#[inline(always)]
+fn pwr2_parts<S: Simd, const N: usize>(x: &[V8<S>; N], b: &[f64; 8]) -> [V8<S>; N] {
+    debug_assert!(
+        b.iter().all(|&v| crate::dd::is_pwr2(v)),
+        "mul_pwr2: {b:?} are not all powers of two"
+    );
+    let b = V8::from_array(*b);
+    let mut r = *x;
+    for i in 0..N {
+        r[i] = x[i].mul(b);
+    }
+    r
+}
+
+/// per lane a where m holds, b elsewhere, part by part
+#[inline(always)]
+fn sel_parts<S: Simd, const N: usize>(m: M8<S>, a: &[V8<S>; N], b: &[V8<S>; N]) -> [V8<S>; N] {
+    let mut r = *b;
+    for i in 0..N {
+        r[i] = m.sel(a[i], b[i]);
+    }
+    r
+}
+
+/// The per-lane items of a lane type on backend S: 8 lanes, its conditions `M8` and its counts `V8`.
+macro_rules! eight_lanes {
+    ($s:ident) => {
+        const L: usize = 8;
+        type M = M8<$s>;
+        type C = V8<$s>;
+        #[inline(always)]
+        fn mask(m: u8) -> M8<$s> {
+            lane_mask(m)
+        }
+        #[inline(always)]
+        fn counts(c: &[i32; 8]) -> V8<$s> {
+            let mut a = [0.0; 8];
+            for j in 0..8 {
+                a[j] = c[j] as f64;
+            }
+            V8::from_array(a)
+        }
+        #[inline(always)]
+        fn above(c: V8<$s>, i: i32) -> M8<$s> {
+            c.gt(V8::splat(i as f64))
+        }
+    };
+}
+
+/// `DD`'s operations on 8 lanes, each lane bitwise `DD`'s.
+impl<S: Simd> Prec for DV<S> {
+    const S: i32 = <DD as Prec>::S;
+    const DEG: usize = <DD as Prec>::DEG;
+    const Q: usize = <DD as Prec>::Q;
+    const B: i32 = <DD as Prec>::B;
+    eight_lanes!(S);
+    #[inline(always)]
+    fn from_f64(x: f64) -> Self {
+        DV::splat_f(x)
+    }
+    #[inline(always)]
+    fn from_f64s(v: &[f64; 8]) -> Self {
+        let [hi, lo] = from_f64s_parts(v);
+        DV { hi, lo }
+    }
+    #[inline(always)]
+    fn his(self) -> [f64; 8] {
+        self.hi.to_array()
+    }
+    #[inline(always)]
+    fn abs_sums(self) -> [f64; 8] {
+        self.hi.abs().add(self.lo.abs()).to_array()
+    }
+    #[inline(always)]
+    fn konst(c: &[f64; 8]) -> Self {
+        DV::splat(DD { hi: c[0], lo: c[1] })
+    }
+    #[inline(always)]
+    fn konsts(c: &[&[f64; 8]; 8]) -> Self {
+        let [hi, lo] = konsts_parts(c);
+        DV { hi, lo }
+    }
+    #[inline(always)]
+    fn plus(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn times(self, b: Self) -> Self {
+        dw_times_dw_lanes(self, b)
+    }
+    #[inline(always)]
+    fn plus_one(self) -> Self {
+        dw_plus_fp_lanes(self, V8::splat(1.0))
+    }
+    #[inline(always)]
+    fn times_pwr2(self, b: f64) -> Self {
+        self.mul_pwr2(b)
+    }
+    #[inline(always)]
+    fn times_pwr2s(self, b: &[f64; 8]) -> Self {
+        let [hi, lo] = pwr2_parts(&[self.hi, self.lo], b);
+        DV { hi, lo }
+    }
+    #[inline(always)]
+    fn neg(self) -> Self {
+        -self
+    }
+    #[inline(always)]
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> Self {
+        let k = V8::from_array(*k);
+        let a = self.hi.sub(k.mul(V8::splat(LN2_HI)));
+        let p = DV::splat(DD { hi: lo[0], lo: lo[1] }).mul_v(k.neg());
+        dw_plus_fp_lanes(dw_plus_fp_lanes(p, self.lo), a)
+    }
+    #[inline(always)]
+    fn sub_one(self) -> Self {
+        let (h, l) = dv::two_sum(self.hi.sub(V8::splat(1.0)), self.lo);
+        DV { hi: h, lo: l }
+    }
+    #[inline(always)]
+    fn ln_start(self) -> Self {
+        DV {
+            hi: ln_f64_lanes(self.hi).add(self.lo.div(self.hi)),
+            lo: V8::zero(),
+        }
+    }
+    #[inline(always)]
+    fn ln_finish(y0: Self, corr: Self) -> Self {
+        dw_plus_fp_lanes(corr, y0.hi)
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        let [hi, lo] = sel_parts(m, &[a.hi, a.lo], &[b.hi, b.lo]);
+        DV { hi, lo }
+    }
+}
+
+/// `QD`'s operations on 8 lanes, each lane bitwise `QD`'s.
+impl<S: Simd> Prec for QV<S> {
+    const S: i32 = <QD as Prec>::S;
+    const DEG: usize = <QD as Prec>::DEG;
+    const Q: usize = <QD as Prec>::Q;
+    const B: i32 = <QD as Prec>::B;
+    eight_lanes!(S);
+    #[inline(always)]
+    fn from_f64(x: f64) -> Self {
+        QV::splat_f(x)
+    }
+    #[inline(always)]
+    fn from_f64s(v: &[f64; 8]) -> Self {
+        QV { c: from_f64s_parts(v) }
+    }
+    #[inline(always)]
+    fn his(self) -> [f64; 8] {
+        self.c[0].to_array()
+    }
+    #[inline(always)]
+    fn abs_sums(self) -> [f64; 8] {
+        abs_sums_parts(&self.c)
+    }
+    #[inline(always)]
+    fn konst(c: &[f64; 8]) -> Self {
+        QV::splat(<QD as Prec>::konst(c))
+    }
+    #[inline(always)]
+    fn konsts(c: &[&[f64; 8]; 8]) -> Self {
+        QV { c: konsts_parts(c) }
+    }
+    #[inline(always)]
+    fn plus(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn times(self, b: Self) -> Self {
+        self * b
+    }
+    #[inline(always)]
+    fn plus_one(self) -> Self {
+        self.add_f(1.0)
+    }
+    #[inline(always)]
+    fn times_pwr2(self, b: f64) -> Self {
+        self.mul_pwr2(b)
+    }
+    #[inline(always)]
+    fn times_pwr2s(self, b: &[f64; 8]) -> Self {
+        QV {
+            c: pwr2_parts(&self.c, b),
+        }
+    }
+    #[inline(always)]
+    fn neg(self) -> Self {
+        -self
+    }
+    #[inline(always)]
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> Self {
+        let (x, k) = (self.c, V8::from_array(*k));
+        QV {
+            c: qv::renorm4_any(x[0].sub(k.mul(V8::splat(LN2_HI))), x[1], x[2], x[3]),
+        } + QV::splat(<QD as Prec>::konst(lo)).mul_v(k.neg())
+    }
+    #[inline(always)]
+    fn sub_one(self) -> Self {
+        let x = self.c;
+        QV {
+            c: qv::renorm4_any(x[0].sub(V8::splat(1.0)), x[1], x[2], x[3]),
+        }
+    }
+    #[inline(always)]
+    fn ln_start(self) -> Self {
+        QV::from_dv(start_dv(self.c[0], || self.to_dv(), || self.mul_pwr2(0.5).to_dv()))
+    }
+    #[inline(always)]
+    fn ln_finish(y0: Self, corr: Self) -> Self {
+        y0 + corr
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        QV {
+            c: sel_parts(m, &a.c, &b.c),
+        }
+    }
+}
+
+/// `OD`'s operations on 8 lanes, each lane bitwise `OD`'s.
+impl<S: Simd> Prec for OV<S> {
+    const S: i32 = <OD as Prec>::S;
+    const DEG: usize = <OD as Prec>::DEG;
+    const Q: usize = <OD as Prec>::Q;
+    const B: i32 = <OD as Prec>::B;
+    eight_lanes!(S);
+    #[inline(always)]
+    fn from_f64(x: f64) -> Self {
+        OV::splat_f(x)
+    }
+    #[inline(always)]
+    fn from_f64s(v: &[f64; 8]) -> Self {
+        OV { c: from_f64s_parts(v) }
+    }
+    #[inline(always)]
+    fn his(self) -> [f64; 8] {
+        self.c[0].to_array()
+    }
+    #[inline(always)]
+    fn abs_sums(self) -> [f64; 8] {
+        abs_sums_parts(&self.c)
+    }
+    #[inline(always)]
+    fn konst(c: &[f64; 8]) -> Self {
+        OV::splat(OD { x: *c })
+    }
+    #[inline(always)]
+    fn konsts(c: &[&[f64; 8]; 8]) -> Self {
+        OV { c: konsts_parts(c) }
+    }
+    #[inline(always)]
+    fn plus(self, b: Self) -> Self {
+        self + b
+    }
+    #[inline(always)]
+    fn times(self, b: Self) -> Self {
+        self * b
+    }
+    #[inline(always)]
+    fn plus_one(self) -> Self {
+        self.add_f(1.0)
+    }
+    #[inline(always)]
+    fn times_pwr2(self, b: f64) -> Self {
+        self.mul_pwr2(b)
+    }
+    #[inline(always)]
+    fn times_pwr2s(self, b: &[f64; 8]) -> Self {
+        OV {
+            c: pwr2_parts(&self.c, b),
+        }
+    }
+    #[inline(always)]
+    fn neg(self) -> Self {
+        -self
+    }
+    #[inline(always)]
+    fn reduce(self, k: &[f64; 8], lo: &[f64; 8]) -> Self {
+        let (mut x, k) = (self, V8::from_array(*k));
+        x.c[0] = self.c[0].sub(k.mul(V8::splat(LN2_HI)));
+        x + OV::splat(OD { x: *lo }).mul_v(k.neg())
+    }
+    #[inline(always)]
+    fn sub_one(self) -> Self {
+        self.add_f(-1.0)
+    }
+    #[inline(always)]
+    fn ln_start(self) -> Self {
+        OV::from_dv(start_dv(self.c[0], || self.to_dv(), || self.mul_pwr2(0.5).to_dv()))
+    }
+    #[inline(always)]
+    fn ln_finish(y0: Self, corr: Self) -> Self {
+        corr.add_dv(DV {
+            hi: y0.c[0],
+            lo: y0.c[1],
+        })
+    }
+    #[inline(always)]
+    fn sel(m: M8<S>, a: Self, b: Self) -> Self {
+        OV {
+            c: sel_parts(m, &a.c, &b.c),
+        }
     }
 }
 
@@ -1094,6 +1708,63 @@ impl OD {
     /// for the condition); NaN for a negative argument, -inf for zero
     pub fn ln(self) -> OD {
         ln_of(self)
+    }
+}
+
+impl<S: Simd> DV<S> {
+    /// e^x on every lane, each lane bitwise `DD::exp` of its value
+    #[inline]
+    pub fn exp(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || exp_of(self),
+        )
+    }
+    /// ln x on every lane, each lane bitwise `DD::ln` of its value
+    #[inline]
+    pub fn ln(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || ln_of(self),
+        )
+    }
+}
+
+impl<S: Simd> QV<S> {
+    /// e^x on every lane, each lane bitwise `QD::exp` of its value
+    #[inline]
+    pub fn exp(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || exp_of(self),
+        )
+    }
+    /// ln x on every lane, each lane bitwise `QD::ln` of its value
+    #[inline]
+    pub fn ln(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || ln_of(self),
+        )
+    }
+}
+
+impl<S: Simd> OV<S> {
+    /// e^x on every lane, each lane bitwise `OD::exp` of its value
+    #[inline]
+    pub fn exp(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || exp_of(self),
+        )
+    }
+    /// ln x on every lane, each lane bitwise `OD::ln` of its value
+    #[inline]
+    pub fn ln(self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || ln_of(self),
+        )
     }
 }
 
