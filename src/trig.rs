@@ -322,7 +322,8 @@ pub(crate) trait Ext: Copy + Neg<Output = Self> {
 /// the bucket of |r_0| in [TINY, 0.7854]: j with 2^-(j+1) <= |r_0| < 2^-j (0 for [0.5, 0.7854])
 #[inline(always)]
 fn bucket(r0: f64) -> usize {
-    (1022 - ((r0.to_bits() >> 52) & 0x7ff) as i64) as usize
+    // parts off the ladder can leave |r_0| >= 1: bucket 0 then, never an index past the tables
+    (1022 - ((r0.to_bits() >> 52) & 0x7ff) as i64).max(0) as usize
 }
 
 /// 2^k, for -1022 <= k <= 1023

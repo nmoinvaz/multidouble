@@ -937,6 +937,23 @@ fn trig_special_values() {
     special::<OD>();
 }
 
+/// Parts off the ladder, (1, 2^60, 0, ...), whose reduction leaves |r_0| above 1: a finite value, no panic
+#[test]
+fn trig_off_ladder_inputs() {
+    fn check<T: Ty>() {
+        let mut p = vec![0.0; T::N];
+        p[0] = 1.0;
+        p[1] = 2f64.powi(60);
+        let x = T::from_parts(&p);
+        for y in [x.sin(), x.cos(), x.tan()] {
+            assert!(y.parts().iter().all(|v| v.is_finite()), "{} {x:?}: {y:?}", T::NAME);
+        }
+    }
+    check::<DD>();
+    check::<QD>();
+    check::<OD>();
+}
+
 /// The reduced argument of a double-double is a double-word number (r_0 = RN(r_0 + r_1)), as the double-word bounds
 /// need, on double-word inputs whose greedy reduced argument is a tie, |r_1| = ulp(r_0)/2 with r_0 odd. Control: the
 /// greedy reduction itself (`trig::reduce`) gives a pair that is not a double-word number on each of them.
