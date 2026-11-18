@@ -1,44 +1,46 @@
 //! Double-double, quad-double and octo-double floating-point arithmetic, scalar and on 8-lane SIMD vectors.
 //!
-//! A double-double is an unevaluated sum `hi + lo` of two `f64` (about 32 significant digits); a quad-double is a sum
-//! of four (about 64 digits), an octo-double of eight (about 126 digits). The lane types run the same algorithms on 8
-//! values at once, with **bitwise the same results per lane** as the scalar types, on every backend:
+//! A double-double is an unevaluated sum `hi + lo` of two `f64`, about 32 significant digits. A quad-double is a sum of
+//! four, about 64 digits, and an octo-double of eight, about 126 digits. The lane types run the same algorithms on 8
+//! values at once, with **bitwise the same results per lane** as the scalar types, on every backend.
 //!
-//! * [`v8::V8`]: 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or four NEON registers, or a plain
+//! * [`v8::V8`] holds 8 `f64` in one AVX-512 register, two AVX2 registers, four SSE2 or four NEON registers, or a plain
 //!   array (the cargo feature `portable` forces it), with fused multiply-add throughout.
-//! * [`simd`]: the backends behind `V8`. [`simd::dispatch`] runs code written once over the backend on the best one
-//!   the CPU has, detected at run time; [`native`] has the lane types on the backend the build's target features
-//!   select at compile time.
-//! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DotAcc`] a sum-of-products accumulator.
-//! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with two
-//!   repairs found by this crate's tests), exact decimal parsing and printing;
-//!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
-//! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
-//!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
-//! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
-//! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
-//!   ([`precision::Quad`]) and octo-double ([`precision::Octo`]), naming each kind of type once and delegating to
+//! * [`simd`] has the backends behind `V8`. [`simd::dispatch`] runs code written once over the backend on the best one
+//!   the CPU has, detected at run time. [`native`] has the lane types on the backend the build's target features select
+//!   at compile time.
+//! * [`dd::DD`] is the scalar and [`dv::DV`] the 8-lane double-double, and [`dv::DotAcc`] a sum-of-products
+//!   accumulator.
+//! * [`qd::QD`] is the scalar and [`qv::QV`] the 8-lane quad-double, with exact decimal parsing and printing and the
+//!   accumulators [`qd::QdAcc`] and [`qv::QDotAcc`]. They run the algorithms of Hida, Li and Bailey's QD library with
+//!   three repairs. The accurate add keeps a term when all parts are read with three emitted and its accumulator when
+//!   four parts are emitted before every part is read, and the square root scales its argument by a power of four.
+//! * [`od::OD`] is the scalar and [`ov::OV`] the 8-lane octo-double, QD's algorithms carried to eight parts and written
+//!   once for both, with the accumulators [`od::OdAcc`] and [`ov::ODotAcc`]. `OV` is a [`dual::Lane`].
+//! * [`exact`] has exact dyadic and decimal arithmetic, the reference the tests compare against.
+//! * [`precision`] puts double-double ([`precision::Double`]), quad-double ([`precision::Quad`]) and octo-double
+//!   ([`precision::Octo`]) behind one trait, [`precision::Precision`]. It names each kind of type once and delegates to
 //!   each precision's own methods, so code written once gives bitwise the results of the code written for one
 //!   precision.
-//! * [`dual`]: forward-mode dual numbers over these lanes ([`dual::Du`] double-double value and tangent,
-//!   [`dual::Dtn`] a double-double value with N f64 tangents, [`dual::Qu`] quad-double value and tangent,
-//!   [`dual::Ou`] octo-double value and tangent, [`dual::Dc`] a double-double value with a complex tangent, and f64
-//!   variants), behind the [`dual::Lane`] trait, so one generic code gives values and exact derivatives;
+//! * [`dual`] has forward-mode dual numbers over these lanes behind the [`dual::Lane`] trait, so one generic code gives
+//!   values and exact derivatives. They are [`dual::Du`] (double-double value and tangent), [`dual::Dtn`] (a
+//!   double-double value with N f64 tangents), [`dual::Qu`] (quad-double value and tangent), [`dual::Ou`] (octo-double
+//!   value and tangent), [`dual::Dc`] (a double-double value with a complex tangent) and f64 variants.
 //!   [`dual::Counted`] counts the operations of such code.
-//! * [`jet`]: truncated power series over these lanes, in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
+//! * [`jet`] has truncated power series over these lanes in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
 //!   and octo-double ([`jet::OJet`]), with their scalar parameter arithmetic ([`jet::Series`], [`jet::QSeries`],
-//!   [`jet::OSeries`]): one generic code gives its own Taylor coefficients in a parameter.
-//! * [`field`]: 8 B values of a lane type as B lane vectors ([`field::Fl`]), with Cauchy products, Horner evaluation
-//!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
-//!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
-//!   arithmetic of power-series methods.
-//! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
+//!   [`jet::OSeries`]). One generic code gives its own Taylor coefficients in a parameter.
+//! * [`field`] has 8 B values of a lane type as B lane vectors ([`field::Fl`]) with the arithmetic of power-series
+//!   methods. It has Cauchy products, Horner evaluation, a constant double-double matrix applied to them
+//!   ([`field::DMat`]), solves with a `DDLu` refined in the lane type ([`field::FieldSolve`]), and an early end of a
+//!   series for the tangents ([`field::TangentTail`]).
+//! * [`linalg`] has dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision), in
 //!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double) and in octo-double
-//!   ([`linalg::ODLu`], for those too ill-conditioned for quad-double), solves,
-//!   transpose solves, solves refined to quad-double and Gram matrices, and the determinant of a complex matrix
-//!   ([`linalg::clu_logdet`]); [`linalg::lu_rect_f64`], the f64 LU of the
-//!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
-//!   system with one global parameter (the Newton system of multiple shooting) built from those steps.
+//!   ([`linalg::ODLu`], for those too ill-conditioned for quad-double). It has solves, transpose solves, solves refined
+//!   to quad-double, Gram matrices, and the determinant of a complex matrix ([`linalg::clu_logdet`]).
+//!   [`linalg::lu_rect_f64`] is the f64 LU of the first columns of a rectangular block, the step of a block LU.
+//!   [`linalg::StaircaseLu`] is the LU of a staircase system with one global parameter (the Newton system of multiple
+//!   shooting) built from those steps.
 //!
 //! All operations are IEEE round-to-nearest with no reassociation, which the error-free transformations need.
 //!
@@ -55,8 +57,9 @@
 //! let x: QD = "1.41421356237309504880168872420969807856967187537694807317667973799".parse().unwrap();
 //! assert!((x * x - QD::from_f64(2.0)).to_f64().abs() < 1e-62);
 //! ```
-// Numerical kernels index several arrays with one loop variable, and the lane and accumulator types keep inherent
-// add/sub/mul/div methods (the std::ops traits are implemented where they apply).
+// Numerical kernels index several arrays with one loop variable.
+// The lane and accumulator types keep inherent add/sub/mul/div methods, and implement the std::ops traits where they
+// apply.
 #![allow(clippy::needless_range_loop, clippy::should_implement_trait)]
 #![cfg_attr(feature = "f128", feature(f128))]
 

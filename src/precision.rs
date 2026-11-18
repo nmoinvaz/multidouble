@@ -1,9 +1,9 @@
 //! The types and operations of one multi-double precision behind one trait, so that code is written once over
 //! double-double ([`Double`]), quad-double ([`Quad`]) and octo-double ([`Octo`]).
 //!
-//! The precisions have the same kinds of types (scalar, 8-lane vector, forward-mode dual, power series, dense LU
-//! and sum-of-products accumulator) with methods that differ in name or arity: `QD::new(a, b, c, d)` against
-//! `OD::new([..; 8])`, `Fl::load_parts` against `Fl::load_parts_od`, `coef_qd` against `coef_od`, `QDLu::factor` of
+//! The precisions have the same kinds of types (scalar, 8-lane vector, forward-mode dual, power series, dense LU and
+//! sum-of-products accumulator) with methods that differ in name or arity, such as `QD::new(a, b, c, d)` against
+//! `OD::new([..; 8])`, `Fl::load_parts` against `Fl::load_parts_od`, `coef_qd` against `coef_od`, and `QDLu::factor` of
 //! four parts against `ODLu::factor` of eight. [`Precision`] names each kind once and delegates to those methods, so a
 //! generic function gives bitwise the results of the code written for one precision.
 //!
@@ -33,12 +33,12 @@ use crate::simd::Simd;
 use std::fmt::Debug;
 use std::ops::{Add, Mul, Neg, Sub};
 
-/// One multi-double precision on the backend `S`: its types, and the operations whose names differ between
+/// One multi-double precision on the backend `S`, with its types and the operations whose names differ between
 /// precisions. Every method delegates to the precision's own method and returns its result bit for bit.
 pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
-    /// the number of f64 parts of a scalar: 2 for double-double, 4 for quad-double, 8 for octo-double
+    /// The number of f64 parts of a scalar, 2 for double-double, 4 for quad-double and 8 for octo-double.
     const PARTS: usize;
-    /// the scalar: `DD`, `QD`, `OD`
+    /// The scalar, `DD`, `QD` or `OD`.
     type Scalar: Copy
         + Send
         + Sync
@@ -48,69 +48,70 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
         + Sub<Output = Self::Scalar>
         + Mul<Output = Self::Scalar>
         + Neg<Output = Self::Scalar>;
-    /// 8 scalars in lanes: `DV`, `QV`, `OV`
+    /// 8 scalars in lanes, `DV`, `QV` or `OV`.
     type V: MatLane<S = S>;
-    /// forward-mode dual, value and one tangent in this precision: `Du`, `Qu`, `Ou`
+    /// Forward-mode dual, a value and one tangent in this precision, `Du`, `Qu` or `Ou`.
     type U: MatLane<S = S>;
-    /// truncated power series with N coefficients in this precision: `Jet<N>`, `QJet<N>`, `OJet<N>`
+    /// Truncated power series with N coefficients in this precision, `Jet<N>`, `QJet<N>` or `OJet<N>`.
     type J<const N: usize>: MatLane<S = S>;
-    /// dense LU with partial pivoting in this precision: `DDLu`, `QDLu`, `ODLu`
+    /// Dense LU with partial pivoting in this precision, `DDLu`, `QDLu` or `ODLu`.
     type Lu: Send + Sync;
 
-    /// zero and one
+    /// Zero.
     const ZERO: Self::Scalar;
+    /// One.
     const ONE: Self::Scalar;
 
-    /// a scalar from up to PARTS parts, the missing ones zero, renormalized (`QD::new`, `OD::new`)
+    /// A scalar from up to PARTS parts, the missing ones zero, renormalized (`QD::new`, `OD::new`).
     ///
     /// # Panics
     /// `p` has more than PARTS parts.
     fn new(p: &[f64]) -> Self::Scalar;
-    /// a scalar from exactly PARTS parts as they are, not renormalized (the struct literal `QD { x }`, `OD { x }`)
+    /// A scalar from exactly PARTS parts as they are, not renormalized (the struct literal `QD { x }`, `OD { x }`).
     ///
     /// # Panics
     /// `p` does not have exactly PARTS parts.
     fn from_raw(p: &[f64]) -> Self::Scalar;
-    /// part q of a scalar
+    /// Part q of a scalar.
     ///
     /// # Panics
     /// `q` is not below PARTS.
     fn part(x: Self::Scalar, q: usize) -> f64;
-    /// from double-double, exactly
+    /// From double-double, exactly.
     fn from_dd(d: DD) -> Self::Scalar;
-    /// rounded to double-double
+    /// Rounded to double-double.
     fn to_dd(x: Self::Scalar) -> DD;
-    /// sum of the products a b over the pairs, in this precision's accumulator (`QdAcc`, `OdAcc`): `add_prod` per
-    /// pair, `finish` at the end
+    /// The sum of the products a b over the pairs in this precision's accumulator (`QdAcc`, `OdAcc`), by `add_prod` per
+    /// pair and `finish` at the end.
     fn dot(pairs: impl Iterator<Item = (Self::Scalar, Self::Scalar)>) -> Self::Scalar;
 
-    /// the scalar in every lane (`QV::splat`, `OV::splat`)
+    /// The scalar in every lane (`QV::splat`, `OV::splat`).
     fn splat(x: Self::Scalar) -> Self::V;
-    /// a dual from its value and tangent lanes
+    /// A dual from its value and tangent lanes.
     fn dual(v: Self::V, d: Self::V) -> Self::U;
-    /// coefficient k of a lane in this precision (`Lane::coef_qd`, `Lane::coef_od`)
+    /// Coefficient k of a lane in this precision (`Lane::coef_qd`, `Lane::coef_od`).
     fn coef<L: Lane<S = S>>(l: L, k: usize) -> Self::V;
-    /// set coefficient k of a lane from this precision (`Lane::set_coef_qd`, `Lane::set_coef_od`)
+    /// Sets coefficient k of a lane from this precision (`Lane::set_coef_qd`, `Lane::set_coef_od`).
     fn set_coef<L: Lane<S = S>>(l: &mut L, k: usize, c: Self::V);
 
-    /// a field of 8 B values from PARTS part arrays of at least 8 B values each (`Fl::load_parts`,
-    /// `Fl::load_parts_od`)
+    /// A field of 8 B values from PARTS part arrays of at least 8 B values each
+    /// (`Fl::load_parts`, `Fl::load_parts_od`).
     ///
     /// # Panics
     /// `parts` does not hold exactly PARTS arrays, or one is shorter than 8 B.
     fn load_field<const B: usize>(parts: &[&[f64]]) -> Fl<Self::V, B>;
-    /// value j of a field (`Fl::get`)
+    /// Value j of a field (`Fl::get`).
     fn field_get<const B: usize>(f: &Fl<Self::V, B>, j: usize) -> Self::Scalar;
-    /// coefficient k of a field in this precision (`Fl::coef_qd`, `Fl::coef_od`)
+    /// Coefficient k of a field in this precision (`Fl::coef_qd`, `Fl::coef_od`).
     fn field_coef<L: Lane<S = S>, const B: usize>(f: &Fl<L, B>, k: usize) -> Fl<Self::V, B>;
-    /// set coefficient k of a field from this precision (`Fl::set_coef_qd`, `Fl::set_coef_od`)
+    /// Sets coefficient k of a field from this precision (`Fl::set_coef_qd`, `Fl::set_coef_od`).
     fn field_set_coef<L: Lane<S = S>, const B: usize>(f: &mut Fl<L, B>, k: usize, c: &Fl<Self::V, B>);
-    /// a dual field from its values and tangents, exactly (`Fl::from_vt_qd`, `Fl::from_vt_od`)
+    /// A dual field from its values and tangents, exactly (`Fl::from_vt_qd`, `Fl::from_vt_od`).
     fn field_dual<const B: usize>(v: &Fl<Self::V, B>, t: &Fl<Self::V, B>) -> Fl<Self::U, B>;
 
-    /// factor the n x n matrix of PARTS column-major part arrays with leading dimension ld (`QDLu::factor`,
-    /// `ODLu::factor`). Each entry's parts must be normalized, as `new` returns them: the pivot search reads the
-    /// leading parts only.
+    /// Factors the n x n matrix of PARTS column-major part arrays with leading dimension ld
+    /// (`QDLu::factor`, `ODLu::factor`). Each entry's parts must be normalized, as `new` returns them, since the pivot
+    /// search reads the leading parts only.
     ///
     /// # Errors
     /// `c` does not hold PARTS arrays, or a pivot is zero or not finite.
@@ -118,19 +119,20 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     /// # Panics
     /// `ld` is not a multiple of 8, `ld < n`, or a part array is shorter than `ld * n`.
     fn lu_factor(n: usize, ld: usize, c: Vec<Vec<f64>>, par: bool) -> Result<Self::Lu, String>;
-    /// solve in place with the factored matrix (`QDLu::solve`, `ODLu::solve`)
+    /// Solves in place with the factored matrix (`QDLu::solve`, `ODLu::solve`).
     fn lu_solve(lu: &Self::Lu, b: &mut [Self::Scalar]);
 }
 
-/// Double-double: `DD`, `DV`, `Du`, `Jet<N>`, `DDLu`; its dot product is the plain sum of double-double products
+/// Double-double, with `DD`, `DV`, `Du`, `Jet<N>` and `DDLu`. Its dot product is the plain sum of double-double
+/// products.
 #[derive(Clone, Copy, Debug)]
 pub struct Double;
 
-/// Quad-double: `QD`, `QV`, `Qu`, `QJet<N>`, `QDLu`, `QdAcc`
+/// Quad-double, with `QD`, `QV`, `Qu`, `QJet<N>`, `QDLu` and `QdAcc`.
 #[derive(Clone, Copy, Debug)]
 pub struct Quad;
 
-/// Octo-double: `OD`, `OV`, `Ou`, `OJet<N>`, `ODLu`, `OdAcc`
+/// Octo-double, with `OD`, `OV`, `Ou`, `OJet<N>`, `ODLu` and `OdAcc`.
 #[derive(Clone, Copy, Debug)]
 pub struct Octo;
 
@@ -405,8 +407,8 @@ impl<S: Simd> Precision<S> for Octo {
 
 #[cfg(test)]
 mod tests {
-    //! Each method of `Quad` and `Octo` against the precision's own method on the same inputs, bit for bit. The
-    //! control `mutated` swaps two parts on input and must differ.
+    //! Each method of `Double`, `Quad` and `Octo` against the precision's own method on the same inputs, bit for bit.
+    //! The control, `precision_mutated_differs`, swaps two parts on input and must differ.
     use super::*;
     use crate::simd::Native;
 
@@ -465,7 +467,7 @@ mod tests {
         );
     }
 
-    /// the field loads, reads, coefficient access and dual seeds against the precision's own methods
+    /// The field loads, reads, coefficient access and dual seeds against the precision's own methods.
     #[test]
     fn precision_fields_match_their_types() {
         const B: usize = 2;
@@ -544,8 +546,8 @@ mod tests {
         assert!(<Quad as Precision<N>>::lu_factor(n, ld, mat(8, 1), false).is_err());
     }
 
-    /// Double's methods against the double-double types' own, bit for bit: scalars, the dot product (hp's plain sum of
-    /// products), fields and their dual and jet coefficients, and the LU
+    /// Double's methods against the double-double types' own, bit for bit, for the scalars, the dot product (hp's plain
+    /// sum of products), fields and their dual and jet coefficients, and the LU.
     #[test]
     fn precision_double_matches_its_types() {
         const B: usize = 2;
@@ -601,7 +603,7 @@ mod tests {
         assert!(<D as Precision<N>>::lu_factor(n, ld, vec![vec![0.0; ld * n]; 4], false).is_err());
     }
 
-    /// the control: the same comparison with two parts swapped on input must fail
+    /// The control, the same comparison with two parts swapped on input, which must fail.
     #[test]
     fn precision_mutated_differs() {
         let p = qd_parts(3);
