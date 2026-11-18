@@ -53,8 +53,9 @@
 //! overflows, may differ in sign and payload between a lane and the scalar function: Rust leaves those unspecified, and
 //! the compiler's choice of instructions sets them, for the scalar types too. The special values' results, x_0 itself
 //! for exp of a NaN x_0 included, are made without arithmetic and match bit for bit.
-use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
+use crate::dd::{two_sum, DD};
 use crate::dv::{self, DV};
+use crate::dw;
 use crate::od::{Limb, OD};
 use crate::ov::OV;
 use crate::qd::QD;
@@ -1070,48 +1071,6 @@ const LN_SERIES: [f64; 10] = [
     1.0 / 19.0,
 ];
 
-/// a + b for a double-word a and an f64 b: DWPlusFP, Algorithm 4 of M. Joldes, J.-M. Muller, V. Popescu, "Tight and
-/// rigorous error bounds for basic building blocks of double-word arithmetic", ACM Trans. Math. Softw. 44(2), 2017,
-/// doi:10.1145/3121432, within 2u^2 / (1 - 2u) relative (u = 2^-53)
-#[inline(always)]
-fn dw_plus_fp(a: DD, b: f64) -> DD {
-    let (sh, sl) = two_sum(a.hi, b);
-    let v = a.lo + sl;
-    let (zh, zl) = quick_two_sum(sh, v);
-    DD { hi: zh, lo: zl }
-}
-
-/// a b for double-words: DWTimesDW2, Algorithm 11 of Joldes, Muller and Popescu (2017), within 5u^2 / (1 + u)^2
-/// relative, the bound J.-M. Muller and L. Rideau proved formally (ACM Trans. Math. Softw. 48(1), 2022,
-/// doi:10.1145/3484514). `DD`'s `*` sums its terms in another order, for which no bound is published.
-#[inline(always)]
-fn dw_times_dw(a: DD, b: DD) -> DD {
-    let (ch, cl1) = two_prod(a.hi, b.hi);
-    let tl = a.hi * b.lo;
-    let cl2 = a.lo.mul_add(b.hi, tl);
-    let (zh, zl) = quick_two_sum(ch, cl1 + cl2);
-    DD { hi: zh, lo: zl }
-}
-
-/// `dw_plus_fp` on lanes, the same operations in the same order
-#[inline(always)]
-fn dw_plus_fp_lanes<S: Simd>(a: DV<S>, b: V8<S>) -> DV<S> {
-    let (sh, sl) = dv::two_sum(a.hi, b);
-    let v = a.lo.add(sl);
-    let (zh, zl) = dv::quick_two_sum(sh, v);
-    DV { hi: zh, lo: zl }
-}
-
-/// `dw_times_dw` on lanes, the same operations in the same order
-#[inline(always)]
-fn dw_times_dw_lanes<S: Simd>(a: DV<S>, b: DV<S>) -> DV<S> {
-    let (ch, cl1) = dv::two_prod(a.hi, b.hi);
-    let tl = a.hi.mul(b.lo);
-    let cl2 = a.lo.fma(b.hi, tl);
-    let (zh, zl) = dv::quick_two_sum(ch, cl1.add(cl2));
-    DV { hi: zh, lo: zl }
-}
-
 /// The per-lane items of a scalar type: one lane, its conditions bool and its counts i32.
 macro_rules! one_lane {
     () => {
@@ -1141,7 +1100,8 @@ macro_rules! one_lane {
 }
 
 /// The double-double: `+` is AccurateDWPlusDW (Joldes, Muller, Popescu 2017, Theorem 3.1: 3u^2 / (1 - 4u)), `mul_f`
-/// DWTimesFP3 (their Algorithm 9: 2u^2), and the products and the f64 sums are `dw_times_dw` and `dw_plus_fp`.
+/// DWTimesFP3 (their Algorithm 9: 2u^2), and the products and the f64 sums are `dw::dw_times_dw2` and
+/// `dw::dw_plus_fp`.
 impl Prec for DD {
     const S: i32 = 1;
     const DEG: usize = 27;
@@ -1170,11 +1130,13 @@ impl Prec for DD {
     }
     #[inline(always)]
     fn times(self, b: DD) -> DD {
-        dw_times_dw(self, b)
+        let (hi, lo) = dw::dw_times_dw2((self.hi, self.lo), (b.hi, b.lo));
+        DD { hi, lo }
     }
     #[inline(always)]
     fn plus_one(self) -> DD {
-        dw_plus_fp(self, 1.0)
+        let (hi, lo) = dw::dw_plus_fp((self.hi, self.lo), 1.0);
+        DD { hi, lo }
     }
     #[inline(always)]
     fn times_pwr2(self, b: f64) -> DD {
@@ -1189,7 +1151,8 @@ impl Prec for DD {
         let k = k[0];
         let a = self.hi - k * LN2_HI;
         let p = DD { hi: lo[0], lo: lo[1] }.mul_f(-k);
-        dw_plus_fp(dw_plus_fp(p, self.lo), a)
+        let (hi, lo) = dw::dw_plus_fp(dw::dw_plus_fp((p.hi, p.lo), self.lo), a);
+        DD { hi, lo }
     }
     #[inline(always)]
     fn sub_one(self) -> DD {
@@ -1203,7 +1166,8 @@ impl Prec for DD {
     }
     #[inline(always)]
     fn ln_finish(y0: DD, corr: DD) -> DD {
-        dw_plus_fp(corr, y0.hi)
+        let (hi, lo) = dw::dw_plus_fp((corr.hi, corr.lo), y0.hi);
+        DD { hi, lo }
     }
 }
 
@@ -1473,11 +1437,13 @@ impl<S: Simd> Prec for DV<S> {
     }
     #[inline(always)]
     fn times(self, b: Self) -> Self {
-        dw_times_dw_lanes(self, b)
+        let (hi, lo) = dw::dw_times_dw2((self.hi, self.lo), (b.hi, b.lo));
+        DV { hi, lo }
     }
     #[inline(always)]
     fn plus_one(self) -> Self {
-        dw_plus_fp_lanes(self, V8::splat(1.0))
+        let (hi, lo) = dw::dw_plus_fp((self.hi, self.lo), V8::splat(1.0));
+        DV { hi, lo }
     }
     #[inline(always)]
     fn times_pwr2(self, b: f64) -> Self {
@@ -1497,7 +1463,8 @@ impl<S: Simd> Prec for DV<S> {
         let k = V8::from_array(*k);
         let a = self.hi.sub(k.mul(V8::splat(LN2_HI)));
         let p = DV::splat(DD { hi: lo[0], lo: lo[1] }).mul_v(k.neg());
-        dw_plus_fp_lanes(dw_plus_fp_lanes(p, self.lo), a)
+        let (hi, lo) = dw::dw_plus_fp(dw::dw_plus_fp((p.hi, p.lo), self.lo), a);
+        DV { hi, lo }
     }
     #[inline(always)]
     fn sub_one(self) -> Self {
@@ -1513,7 +1480,8 @@ impl<S: Simd> Prec for DV<S> {
     }
     #[inline(always)]
     fn ln_finish(y0: Self, corr: Self) -> Self {
-        dw_plus_fp_lanes(corr, y0.hi)
+        let (hi, lo) = dw::dw_plus_fp((corr.hi, corr.lo), y0.hi);
+        DV { hi, lo }
     }
     #[inline(always)]
     fn sel(m: M8<S>, a: Self, b: Self) -> Self {

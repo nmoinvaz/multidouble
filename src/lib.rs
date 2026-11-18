@@ -67,6 +67,7 @@
 pub mod dd;
 pub mod dual;
 pub mod dv;
+mod dw;
 pub mod exact;
 pub mod explog;
 pub mod field;
