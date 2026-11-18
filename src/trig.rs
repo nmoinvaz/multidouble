@@ -294,7 +294,7 @@ pub(crate) fn reduce<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
 // ---------------------------------------------------------------------------------------------------------------
 
 /// the arithmetic the functions need, by type
-trait Ext: Copy + Neg<Output = Self> {
+pub(crate) trait Ext: Copy + Neg<Output = Self> {
     /// 2^-(53 n / 2), n the number of parts: below it sin r = r and cos r = 1 to within u^N/6 and u^N/2
     const TINY: f64;
     /// terms of the sin and cos series by bucket of r_0
@@ -526,7 +526,10 @@ impl Ext for DD {
     }
     fn reduce(self) -> (u32, DD) {
         let (q, r) = reduce(&[self.hi, self.lo]);
-        (q, DD { hi: r[0], lo: r[1] })
+        // the greedy r can have |r_1| = ulp(r_0)/2 with r_0 odd, a tie that RN(r_0 + r_1) rounds away from r_0; the
+        // double-word algorithms' bounds need r_0 = RN(r_0 + r_1)
+        let (hi, lo) = quick_two_sum(r[0], r[1]);
+        (q, DD { hi, lo })
     }
     fn drop_last(self) -> DD {
         DD::from_f64(self.hi)
