@@ -366,6 +366,16 @@ impl<S: Simd> OV<S> {
             },
         )
     }
+    /// a b by the sloppy multiply on every lane, as `OD::sloppy_mul` (opt-in; its bits differ from `*`)
+    #[inline]
+    pub fn sloppy_mul(self, b: Self) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || OV {
+                c: alg::sloppy_mul(&self.c, &b.c),
+            },
+        )
+    }
     /// self / b for r = b.c\[0\].divisor(), bitwise the same as `/`. Its nine quotients by b.c\[0\] go through r, so
     /// several divisions by one b share it (on AVX-512 its reciprocal).
     #[inline]
@@ -554,6 +564,20 @@ impl<S: Simd> ODotAcc<S> {
             },
         )
     }
+    /// self + a b by the sloppy multiply's eight levels, as `od::OdAcc::add_prod_sloppy` (opt-in; its bits differ
+    /// from `add_prod`)
+    #[inline]
+    pub fn add_prod_sloppy(self, a: OV<S>, b: OV<S>) -> Self {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let t = alg::expand_sloppy(&a.c, &b.c);
+                let mut s = self.s;
+                alg::acc_levels(&mut s, &t);
+                ODotAcc { s }
+            },
+        )
+    }
     /// `add_prod_dv` into self, with a and b borrowed (as `add_prod_mut`)
     #[inline]
     pub fn add_prod_dv_mut(&mut self, a: &OV<S>, b: &DV<S>) {
@@ -561,6 +585,17 @@ impl<S: Simd> ODotAcc<S> {
             #[inline(always)]
             || {
                 let t = alg::expand_dd(&a.c, b.hi, b.lo);
+                alg::acc_levels(&mut self.s, &t);
+            },
+        )
+    }
+    /// `add_prod_sloppy` into self, with a and b borrowed (as `add_prod_mut`)
+    #[inline]
+    pub fn add_prod_sloppy_mut(&mut self, a: &OV<S>, b: &OV<S>) {
+        S::vectorize(
+            #[inline(always)]
+            || {
+                let t = alg::expand_sloppy(&a.c, &b.c);
                 alg::acc_levels(&mut self.s, &t);
             },
         )
