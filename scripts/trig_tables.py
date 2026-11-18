@@ -13,7 +13,7 @@ src/trig/tables.rs.
   x_1 = RN(c - x_0), ...). The first two and four parts are the greedy double-double and quad-double roundings.
 * KS{n}[j] and KC{n}[j]: for n = 2, 4, 8 parts and |r_0| in bucket j (2^-(j+1) <= |r_0| < 2^-j, j = 0 up to
   |r_0| <= 0.7854), the least number of Taylor terms K >= 2 with truncation error at most 2^-10 u^n relative to
-  sin r or cos r on |r| <= R_j, where R_0 = 0.78541 and R_j = 2^-j (1 + 2^-50).
+  sin r or cos r on |r| <= rbar_j, where rbar_0 = 0.78541 and rbar_j = 2^-j (1 + 2^-50).
 
 usage: python3 scripts/trig_tables.py [out.rs]   (default src/trig/tables.rs; prints a summary)"""
 import os

@@ -195,7 +195,7 @@ def cosr(o, z, j, K, cc):
 
 
 def quot(o, s, c, j, scaled=True):
-    """sin r / cos r, on the numerator times 2^(3(j+1)) and scaled back (j None: |r_0| < T_n, unscaled)"""
+    """sin r / cos r, on the numerator times 2^(3(j+1)) and scaled back (j None: |r_0| < u^(n/2), unscaled)"""
     if j is None or not scaled:
         return o['div'](s, c)
     e = 3 * (j + 1)
