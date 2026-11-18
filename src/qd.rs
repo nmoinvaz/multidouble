@@ -1,66 +1,66 @@
-//! Scalar quad-double: an unevaluated sum x0 + x1 + x2 + x3 of four f64, renormalized so that the parts do not
-//! overlap (|x_{i+1}| <= ulp(x_i)/2), about 64 significant digits (2^-209 relative, the QD library's epsilon).
-//! The 8-lane `qv::QV` runs the same algorithms with bitwise the same results.
+//! Scalar quad-double, an unevaluated sum x0 + x1 + x2 + x3 of four f64 renormalized so that the parts do not overlap
+//! (|x_{i+1}| <= ulp(x_i)/2). It carries about 64 significant digits, 2^-209 relative, the QD library's epsilon. The
+//! 8-lane `qv::QV` runs the same algorithms with the same bits.
 //!
-//! The algorithms are those of the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double
-//! precision floating point arithmetic", ARITH-15, 2001; QD 2.3, qd_inline.h): two-sum, the FMA two-product,
-//! the renormalization with its zero-skipping branches, the "sloppy" add (Cray-style bound) and the accurate merge
-//! add (IEEE-style bound), the sloppy and the accurate multiply (the latter adds the O(eps^4) partial products), the
-//! sloppy and the accurate divide (four or five quotient terms). The square root is not QD's: one Newton step from the
-//! double-double square root. The O(eps^3) partial products that QD sums in plain arithmetic are summed here with FMA,
-//! in QD's order.
-//! The operators use the library's default configuration: `+`, `-` the sloppy add, `*` the sloppy multiply, `/` the
-//! sloppy divide; `ieee_add`, `accurate_mul` and `accurate_div` are the others.
+//! The algorithms are those of the QD library (Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision
+//! floating point arithmetic", ARITH-15, 2001, and QD 2.3, qd_inline.h). They are two-sum, the FMA two-product, the
+//! renormalization with its zero-skipping branches, the "sloppy" add (Cray-style bound) and the accurate merge add
+//! (IEEE-style bound), the sloppy and the accurate multiply (the latter adds the O(eps^4) partial products), and the
+//! sloppy and the accurate divide (four or five quotient terms). The square root is not QD's but one Newton step from
+//! the double-double square root. The O(eps^3) partial products that QD sums in plain arithmetic are summed here with
+//! FMA, in QD's order. The operators use the library's default configuration, the sloppy add for `+` and `-`, the
+//! sloppy multiply for `*` and the sloppy divide for `/`. `ieee_add`, `accurate_mul` and `accurate_div` are the others.
 //!
-//! Two repairs of QD, both found by the tests: the accurate add keeps u + v where
-//! QD keeps u alone (when all parts are read with three emitted), and sqrt scales its argument by an exact power of
-//! four into [1, 4) (QD's iteration lost accuracy above about 2^860 and below about 2^-860).
+//! Three repairs of QD follow. The accurate add keeps u + v where QD keeps u alone (when all parts are read with three
+//! emitted), and it keeps u, v and the parts not read where QD drops u and v (when four parts are emitted first). sqrt
+//! scales its argument by an exact power of four into [1, 4), since QD's iteration lost accuracy above about 2^860 and
+//! below about 2^-860. The tests found the first and the third, and a survey of other libraries the second.
 //!
-//! `QdAcc` is a sum-of-products accumulator (the scalar twin of `qv::QDotAcc`, see there for its error). Decimal
-//! parsing and printing are exact (via `exact`): `parse` rounds the decimal value to four parts by greedy
-//! round-to-nearest (error <= 2^-212 relative), `to_sci` prints the four-part sum correctly rounded.
+//! `QdAcc` is a sum-of-products accumulator, the scalar twin of `qv::QDotAcc`, whose doc gives its error. Decimal
+//! parsing and printing are exact, via `exact`. `parse` rounds the decimal value to four parts by greedy
+//! round-to-nearest (error <= 2^-212 relative), and `to_sci` prints the four-part sum correctly rounded.
 //!
-//! With the cargo feature `mutate`, `mutate::set(id)` breaks one algorithm on purpose in the current thread, for
-//! the controls of the accuracy tests (`qd_tests`); without it the hooks are compile-time `false`.
+//! With the cargo feature `mutate`, `mutate::set(id)` breaks one algorithm on purpose in the current thread, for the
+//! controls of the accuracy tests (`qd_tests`). Without it the hooks are compile-time `false`.
 use crate::dd::{quick_two_sum, two_prod, two_sum, DD};
 use crate::exact::{BigU, DecRat, Dy};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// Deliberate breakage for the controls (feature `mutate`; ids below, 0 = none).
+/// Deliberate breakage for the controls, under the feature `mutate`. The ids follow, and 0 is none.
 pub mod mutate {
-    /// renormalization: the last first-pass quick-two-sum (c0 + s) done in plain f64, its error dropped
+    /// The renormalization does its last first-pass quick-two-sum (c0 + s) in plain f64 and drops its error.
     pub const RENORM_P1: u32 = 1;
-    /// sloppy add: the error of a0 + b0 dropped
+    /// The sloppy add drops the error of a0 + b0.
     pub const SLOPPY_ADD_T0: u32 = 2;
-    /// accurate add: the merge takes the smaller part first
+    /// The accurate add's merge takes the smaller part first.
     pub const IEEE_ADD_ORDER: u32 = 3;
-    /// sloppy mul: the error of a0 b0 dropped
+    /// The sloppy multiply drops the error of a0 b0.
     pub const SLOPPY_MUL_Q0: u32 = 4;
-    /// sloppy mul: the error of a0 b2 (an O(eps^3) term) dropped
+    /// The sloppy multiply drops the error of a0 b2, an O(eps^3) term.
     pub const SLOPPY_MUL_Q3: u32 = 5;
-    /// accurate mul: the error of a0 b1 dropped
+    /// The accurate multiply drops the error of a0 b1.
     pub const ACCURATE_MUL_Q1: u32 = 6;
-    /// qd x f64: the error of a1 b dropped
+    /// The quad-double times f64 product drops the error of a1 b.
     pub const MUL_F_Q1: u32 = 7;
-    /// qd x dd: the error of a0 b.lo dropped
+    /// The quad-double times double-double product drops the error of a0 b.lo.
     pub const MUL_DD_Q1: u32 = 8;
-    /// qd + f64: the error of a0 + b dropped
+    /// The quad-double plus f64 sum drops the error of a0 + b.
     pub const ADD_F_E: u32 = 9;
-    /// qd + dd: the error of a1 + b.lo dropped
+    /// The quad-double plus double-double sum drops the error of a1 + b.lo.
     pub const ADD_DD_T1: u32 = 10;
-    /// divide: the third remainder update skipped (q3 from a stale remainder)
+    /// The divide skips the third remainder update, so q3 comes from a stale remainder.
     pub const DIV_R3: u32 = 11;
-    /// sqrt: the Newton step skipped, the double-double start returned
+    /// sqrt skips the Newton step and returns the double-double start.
     pub const SQRT_ITER: u32 = 12;
-    /// dot accumulator: the level-2 two-sum errors not carried to level 3
+    /// The dot accumulator does not carry the level-2 two-sum errors to level 3.
     pub const ACC_L3: u32 = 13;
-    /// parse: the last component truncated (rounded toward zero) instead of rounded to nearest
+    /// Parsing truncates the last component (rounds it toward zero) instead of rounding it to nearest.
     pub const PARSE_TRUNC: u32 = 14;
-    /// 8-lane only: the renormalization's zero test ignored in the second-pass step for c2
+    /// In the 8-lane code only, the renormalization ignores its zero test in the second-pass step for c2.
     pub const QV_RENORM_MASK: u32 = 15;
-    /// 8-lane only: the accurate add's merge reads the next part of a one position late
+    /// In the 8-lane code only, the accurate add's merge reads the next part of a one position late.
     pub const QV_IEEE_HEAD: u32 = 16;
-    /// number of ids
+    /// The number of ids.
     pub const N: u32 = 16;
     pub const NAMES: [&str; 17] = [
         "none",
@@ -85,7 +85,7 @@ pub mod mutate {
     #[cfg(feature = "mutate")]
     thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
 
-    /// select the mutation for the current thread (0 = none)
+    /// Selects the mutation for the current thread, 0 for none.
     #[cfg(feature = "mutate")]
     pub fn set(id: u32) {
         ID.with(|m| m.set(id));
@@ -104,7 +104,7 @@ pub mod mutate {
     }
 }
 
-/// (a + b + c) as (s, e1, e2), error-free (QD's three_sum)
+/// Returns a + b + c as (s, e1, e2) without error, QD's three_sum.
 #[inline(always)]
 pub fn three_sum(a: f64, b: f64, c: f64) -> (f64, f64, f64) {
     let (t1, t2) = two_sum(a, b);
@@ -113,7 +113,7 @@ pub fn three_sum(a: f64, b: f64, c: f64) -> (f64, f64, f64) {
     (a, b, c)
 }
 
-/// (a + b + c) as (s, e), the last error rounded (QD's three_sum2)
+/// Returns a + b + c as (s, e) with the error e rounded, QD's three_sum2.
 #[inline(always)]
 pub fn three_sum2(a: f64, b: f64, c: f64) -> (f64, f64) {
     let (t1, t2) = two_sum(a, b);
@@ -121,7 +121,7 @@ pub fn three_sum2(a: f64, b: f64, c: f64) -> (f64, f64) {
     (a, t2 + t3)
 }
 
-/// QD's renormalization of four parts (no-op if c0 is infinite)
+/// Renormalizes four parts by QD's algorithm. An infinite c0 returns the parts unchanged.
 #[inline(always)]
 pub fn renorm4(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
     if c0.is_infinite() {
@@ -153,9 +153,9 @@ pub fn renorm4(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
     [s0, s1, s2, s3]
 }
 
-/// Grow-Expansion step (Shewchuk, Discrete Comput. Geom. 18 (1997) 305-363, doi 10.1007/PL00009321): b added to the
-/// expansion e[..m] (nonoverlapping, increasing in magnitude, zeros allowed) by a two-sum through its components,
-/// smallest first, leaving e[..m + 1] with the same properties, exactly
+/// Adds b to the expansion e[..m] exactly by Grow-Expansion (Shewchuk, Discrete Comput. Geom. 18 (1997) 305-363, doi
+/// 10.1007/PL00009321), a two-sum through its components, smallest first. The expansion is nonoverlapping and
+/// increasing in magnitude, with zeros allowed, and e[..m + 1] keeps these properties.
 #[inline(always)]
 pub fn grow_expansion(e: &mut [f64; 8], m: usize, b: f64) {
     let mut q = b;
@@ -167,12 +167,12 @@ pub fn grow_expansion(e: &mut [f64; 8], m: usize, b: f64) {
     e[m] = q;
 }
 
-/// The exact sum of four parts given in any order, renormalized. `renorm4` of the parts as given is kept when it is
-/// exact, which an error-free check decides (the Grow-Expansion of the parts minus its result is all zeros), and
-/// normalized (each part at most 2^-53 of the one before). Both hold for every normalized quad-double, whose bits are
-/// then `QD::new`'s. Otherwise the result is `renorm4` of the
-/// parts' Grow-Expansion, largest component first. `renorm4` assumes ordered parts, and on (1, 1e16, -1, -1e16) it
-/// gives 1. Parts that are not all finite give `renorm4` of the parts as they are.
+/// Renormalizes the exact sum of four parts given in any order. The result is `renorm4` of the parts as given when that
+/// is exact and normalized, each part at most 2^-53 of the one before. An error-free check decides exactness, by
+/// testing that the Grow-Expansion of the parts minus the result is all zeros. Both hold for every normalized
+/// quad-double, whose bits are then `QD::new`'s. Otherwise the result is `renorm4` of the parts' Grow-Expansion,
+/// largest component first. `renorm4` assumes ordered parts, and on (1, 1e16, -1, -1e16) it gives 1. Parts that are not
+/// all finite give `renorm4` of the parts as they are.
 #[inline(always)]
 pub fn renorm4_any(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
     let r = renorm4(c0, c1, c2, c3);
@@ -196,7 +196,7 @@ pub fn renorm4_any(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
     }
 }
 
-/// QD's renormalization of five parts to four (no-op if c0 is infinite)
+/// Renormalizes five parts to four by QD's algorithm. An infinite c0 returns the first four parts unchanged.
 #[inline(always)]
 pub fn renorm5(c0: f64, c1: f64, c2: f64, c3: f64, c4: f64) -> [f64; 4] {
     if c0.is_infinite() {
@@ -249,7 +249,7 @@ pub fn renorm5(c0: f64, c1: f64, c2: f64, c3: f64, c4: f64) -> [f64; 4] {
     [s0, s1, s2, s3]
 }
 
-/// QD's quick_three_accum: adds c to the pair (a, b); returns the part that does not fit (0 if it all fits)
+/// Adds c to the pair (a, b) by QD's quick_three_accum and returns the part that does not fit, or 0 if all of it fits.
 #[inline(always)]
 fn quick_three_accum(a: &mut f64, b: &mut f64, c: f64) -> f64 {
     let (s, bb) = two_sum(*b, c);
@@ -270,10 +270,10 @@ fn quick_three_accum(a: &mut f64, b: &mut f64, c: f64) -> f64 {
     0.0
 }
 
-/// Quad-double `x[0] + x[1] + x[2] + x[3]`. The arithmetic expects parts as its own results, `new` and `from_sum` give
-/// them: decreasing in magnitude, with zeros only at the end. Parts with a zero between nonzero ones, as a `QD { x }`
-/// built by hand can have, can make a sum lose terms of about 2^-160 relative (`qd_tests::qd_noncanonical_add_control`);
-/// `from_sum` renormalizes parts in any order.
+/// Quad-double `x[0] + x[1] + x[2] + x[3]`. The arithmetic expects parts like its own results and those of `new` and
+/// `from_sum`, decreasing in magnitude with zeros only at the end. Parts with a zero between nonzero ones, which a
+/// `QD { x }` built by hand can have, can make a sum lose terms of about 2^-160 relative
+/// (`qd_tests::qd_noncanonical_add_control`). `from_sum` renormalizes parts in any order.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct QD {
     pub x: [f64; 4],
@@ -284,7 +284,7 @@ impl QD {
     pub const ONE: QD = QD {
         x: [1.0, 0.0, 0.0, 0.0],
     };
-    /// pi (greedy round-to-nearest parts)
+    /// The constant pi in greedy round-to-nearest parts.
     pub const PI: QD = QD {
         x: [
             f64::from_bits(0x400921fb54442d18),
@@ -293,7 +293,7 @@ impl QD {
             f64::from_bits(0x35c4cf98e804177d),
         ],
     };
-    /// 2 pi
+    /// The constant 2 pi, `PI` with every part doubled.
     pub const TWO_PI: QD = QD {
         x: [
             f64::from_bits(0x401921fb54442d18),
@@ -302,17 +302,18 @@ impl QD {
             f64::from_bits(0x35d4cf98e804177d),
         ],
     };
-    /// QD's epsilon, 2^-209 (exactly; QD's decimal literal 1.21543267145725e-63 is its 15-digit rounding)
+    /// QD's epsilon, exactly 2^-209. QD's decimal literal 1.21543267145725e-63 is its 15-digit rounding.
     pub const EPS: f64 = f64::from_bits(0x32e0_0000_0000_0000);
 
-    /// renormalized from four parts
+    /// Renormalizes four parts by `renorm4`.
     #[inline(always)]
     pub fn new(x0: f64, x1: f64, x2: f64, x3: f64) -> QD {
         QD {
             x: renorm4(x0, x1, x2, x3),
         }
     }
-    /// the exact sum of four parts in any order, renormalized (`renorm4_any`); bitwise `new` on normalized parts
+    /// Renormalizes the exact sum of four parts in any order by `renorm4_any`. On normalized parts it gives the bits of
+    /// `new`.
     #[inline(always)]
     pub fn from_sum(x0: f64, x1: f64, x2: f64, x3: f64) -> QD {
         QD {
@@ -323,25 +324,25 @@ impl QD {
     pub fn from_f64(x: f64) -> QD {
         QD { x: [x, 0.0, 0.0, 0.0] }
     }
-    /// exact
+    /// Converts exactly.
     #[inline(always)]
     pub fn from_dd(d: DD) -> QD {
         QD {
             x: [d.hi, d.lo, 0.0, 0.0],
         }
     }
-    /// nearest f64 (to within the rounding of the three lower parts' sum)
+    /// Returns the nearest f64, to within the rounding of the three lower parts' sum.
     #[inline(always)]
     pub fn to_f64(self) -> f64 {
         let t = self.x[1] + (self.x[2] + self.x[3]);
-        // a zero tail leaves the leading part as it is, so a zero keeps its sign
+        // A zero tail returns the leading part unchanged, so a zero keeps its sign.
         if t == 0.0 {
             self.x[0]
         } else {
             self.x[0] + t
         }
     }
-    /// double-double, to about 2^-106 relative
+    /// Converts to double-double, to about 2^-106 relative.
     #[inline(always)]
     pub fn to_dd(self) -> DD {
         DD::new(self.x[0], self.x[1] + (self.x[2] + self.x[3]))
@@ -358,7 +359,7 @@ impl QD {
             self
         }
     }
-    /// times a power of two b (`dd::is_pwr2`): every part scaled, exact barring overflow and underflow
+    /// Multiplies by a power of two b (`dd::is_pwr2`), scaling every part exactly barring overflow and underflow.
     #[inline(always)]
     pub fn mul_pwr2(self, b: f64) -> QD {
         debug_assert!(crate::dd::is_pwr2(b), "mul_pwr2: {b} is not a power of two");
@@ -371,7 +372,7 @@ impl QD {
     // additions
     // ---------------------------------------------------------------------------------------------------------
 
-    /// QD's sloppy add (the default `+`): Cray-style error bound
+    /// Adds by QD's sloppy add, the default `+`, with a Cray-style error bound.
     #[inline(always)]
     pub fn sloppy_add(self, b: QD) -> QD {
         let (a, b) = (self.x, b.x);
@@ -389,12 +390,13 @@ impl QD {
         }
     }
 
-    /// QD's accurate add (merge by magnitude, double-length accumulator), IEEE-style error bound, with one change:
-    /// when every part has been read with three already emitted, the last part is u + v where QD keeps u alone
-    /// (QD's version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, this
-    /// one 0.12 u in 200000)
+    /// Adds by QD's accurate add, a merge by magnitude into a double-length accumulator with an IEEE-style error bound,
+    /// with two changes. When every part has been read with three already emitted, the last part is u + v where QD
+    /// keeps u alone. QD's version reached 16.8 u relative error in 2 of 20000 near-cancelling sums, and this one
+    /// 0.12 u in 200000. When four parts are emitted before every part is read, u, v and the parts not read form a
+    /// fifth term where QD drops u and v (`qd_tests::qd_ieee_add_four_parts_emitted`).
     #[inline]
-    // the merge keeps QD's branch order, in which the first and last branches take the same part
+    // The merge keeps QD's branch order, in which the first and last branches take the same part.
     #[allow(clippy::if_same_then_else)]
     pub fn ieee_add(self, b: QD) -> QD {
         let (a, b) = (self.x, b.x);
@@ -431,10 +433,10 @@ impl QD {
                     k += 1;
                     x[k] = v;
                 } else {
-                    // QD stores u alone here and drops v. After cancellation the parts emitted so far can overlap,
-                    // so they hold fewer than 212 bits and v can lie well above the last bit of the result (QD:
-                    // up to 86 u; u + v rounded to one double still left up to 11 u, the first repair here). So v
-                    // is kept as a fifth term and the five are renormalized; all parts are read, nothing is left.
+                    // QD stores u alone here and drops v. After cancellation the parts emitted so far can overlap, so
+                    // they hold fewer than 212 bits and v can lie well above the last bit of the result. QD errs by up
+                    // to 86 u this way, and u + v rounded to one double still leaves up to 11 u. So v is kept as a
+                    // fifth term and the five are renormalized. All parts are read, so nothing else is left.
                     return QD {
                         x: renorm5(x[0], x[1], x[2], u, v),
                     };
@@ -462,10 +464,10 @@ impl QD {
             }
         }
         if k == 4 {
-            // Four parts emitted, but u, v and the parts not read still hold part of the sum. QD adds the parts not
-            // read into x[3] and drops u and v. After cancellation the emitted parts can overlap, so u can lie well
-            // above the last bit of the result (QD: 2^46 units of 2^-210). So u, v and the parts not read are summed
-            // into a fifth term and the five renormalized.
+            // Four parts are emitted, but u, v and the parts not read still hold part of the sum. QD adds the parts not
+            // read into x[3] and drops u and v. The emitted parts can overlap even in a same-sign sum, so u can lie
+            // well above the last bit of the result, 2^46 units of 2^-210 in QD. So u, v and the parts not read are
+            // summed into a fifth term and the five are renormalized.
             let mut e = v;
             for kk in i..4 {
                 e += a[kk];
@@ -487,7 +489,7 @@ impl QD {
         self.ieee_add(-b)
     }
 
-    /// qd + f64
+    /// Adds an f64.
     #[inline(always)]
     pub fn add_f(self, b: f64) -> QD {
         let a = self.x;
@@ -501,7 +503,7 @@ impl QD {
         }
     }
 
-    /// qd + dd
+    /// Adds a double-double.
     #[inline]
     pub fn add_dd(self, b: DD) -> QD {
         let a = self.x;
@@ -521,7 +523,7 @@ impl QD {
     // multiplications
     // ---------------------------------------------------------------------------------------------------------
 
-    /// qd x f64
+    /// Multiplies by an f64.
     #[inline(always)]
     pub fn mul_f(self, b: f64) -> QD {
         let a = self.x;
@@ -541,7 +543,7 @@ impl QD {
         }
     }
 
-    /// qd x dd
+    /// Multiplies by a double-double.
     #[inline]
     pub fn mul_dd(self, b: DD) -> QD {
         let a = self.x;
@@ -568,7 +570,7 @@ impl QD {
         }
     }
 
-    /// QD's sloppy multiply (the default `*`): partial products to O(eps^3)
+    /// Multiplies by QD's sloppy multiply, the default `*`, with partial products to O(eps^3).
     #[inline(always)]
     pub fn sloppy_mul(self, b: QD) -> QD {
         let (a, b) = (self.x, b.x);
@@ -597,7 +599,7 @@ impl QD {
         }
     }
 
-    /// QD's accurate multiply: partial products to O(eps^4)
+    /// Multiplies by QD's accurate multiply, with partial products to O(eps^4).
     #[inline]
     pub fn accurate_mul(self, b: QD) -> QD {
         let (a, b) = (self.x, b.x);
@@ -642,7 +644,7 @@ impl QD {
         }
     }
 
-    /// QD's square
+    /// Squares by QD's algorithm.
     #[inline]
     pub fn sqr(self) -> QD {
         let a = self.x;
@@ -677,7 +679,7 @@ impl QD {
     // division, square root, powers
     // ---------------------------------------------------------------------------------------------------------
 
-    /// QD's sloppy divide (the default `/`): four quotient terms
+    /// Divides by QD's sloppy divide, the default `/`, with four quotient terms.
     #[inline]
     pub fn sloppy_div(self, b: QD) -> QD {
         let q0 = self.x[0] / b.x[0];
@@ -692,7 +694,7 @@ impl QD {
         }
     }
 
-    /// QD's accurate divide: five quotient terms
+    /// Divides by QD's accurate divide, with five quotient terms.
     #[inline]
     pub fn accurate_div(self, b: QD) -> QD {
         let q0 = self.x[0] / b.x[0];
@@ -714,37 +716,37 @@ impl QD {
         QD::ONE / self
     }
 
-    /// Square root: one Newton step, with its second-order term, from the double-double square root of a's two leading
-    /// parts (`DD::sqrt`, within 25/8 u^2). The step's truncation is cubic in the start's error e, and its correction
-    /// is formed in double-double, so the result errs by about |e| times that correction's relative error, a few u^4
-    /// (measured below 5 u^4). It works on a scaled by an exact power of four into [1, 4) and scales the result back,
-    /// which keeps every intermediate far from underflow and overflow.
+    /// Returns the square root by one Newton step, with its second-order term, from the double-double square root of
+    /// a's two leading parts (`DD::sqrt`, within 25/8 u^2). The step's truncation is cubic in the start's error e, and
+    /// its correction is formed in double-double. So the result errs by about |e| times that correction's relative
+    /// error, a few u^4, and measures below 5 u^4. It works on a scaled by an exact power of four into [1, 4) and
+    /// scales the result back, which keeps every intermediate far from underflow and overflow.
     #[inline]
     pub fn sqrt(self) -> QD {
         if self.is_zero() {
             return QD::ZERO;
         }
-        // s = 2^k with 4^k <= a0 < 4^(k+1); 1/s is exact, and a/s^2 is formed in two exact steps
+        // s = 2^k with 4^k <= a0 < 4^(k+1). 1/s is exact, and a/s^2 is formed in two exact steps.
         let s = f64::from_bits(self.x[0].sqrt().to_bits() & 0x7ff0_0000_0000_0000);
         let inv = 1.0 / s;
         let a = self.mul_pwr2(inv).mul_pwr2(inv);
-        // y: the double-double square root of a's two leading parts (`DD::sqrt`, within 25/8 u^2 of sqrt(a0 + a1));
-        // a0 is in [1, 4), so it takes no scaling branch
+        // y is the double-double square root of a's two leading parts by `DD::sqrt`, within 25/8 u^2 of sqrt(a0 + a1).
+        // a0 is in [1, 4), so `DD::sqrt` takes no scaling branch.
         let y = DD { hi: a.x[0], lo: a.x[1] }.sqrt();
         let yq = QD::from_dd(y);
         if mutate::on(mutate::SQRT_ITER) {
             return yq.mul_pwr2(s);
         }
-        // one Newton step with its second-order term: sqrt(y^2 + r) = y + t - t^2 / (2 y) + O(t^3 / y^2) with
-        // t = r / (2 y). The truncation is cubic in y's error e. The result's error is the rounding of t, formed
-        // in double-double: |e| times t's relative error, a few u^4.
+        // One Newton step with its second-order term, sqrt(y^2 + r) = y + t - t^2 / (2 y) + O(t^3 / y^2) with
+        // t = r / (2 y). The truncation is cubic in y's error e. The result's error is the rounding of t, which is
+        // formed in double-double, so it is |e| times t's relative error, a few u^4.
         let r = a + (-yq.sqr());
         let t = r.to_dd() / y.mul_pwr2(2.0);
         let t2 = t.hi * t.hi / (y.hi + y.hi);
         yq.add_dd(t).add_f(-t2).mul_pwr2(s)
     }
 
-    /// integer power (QD's npwr: binary powering by sqr and the sloppy multiply; 1/a^|n| for n < 0)
+    /// Returns self^n by QD's npwr, binary powering by `sqr` and the sloppy multiply, and 1/a^|n| for n < 0.
     pub fn powi(self, n: i32) -> QD {
         if n == 0 {
             return QD::ONE;
@@ -776,26 +778,26 @@ impl QD {
     // exact value, decimal input and output
     // ---------------------------------------------------------------------------------------------------------
 
-    /// the exact value of the four-part sum (finite parts)
+    /// Returns the exact value of the four-part sum, for finite parts.
     pub fn exact(self) -> Dy {
         Dy::sum(&self.x)
     }
 
-    /// Parse a decimal ("-1.234e-5", "3.14159...", "42"): the exact decimal value rounded to four parts by greedy
-    /// round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), so |error| <= ulp(x3)/2 <= 2^-212 |v|.
+    /// Parses a decimal such as "-1.234e-5", "3.14159..." or "42". The exact decimal value v is rounded to four parts
+    /// by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), so |error| <= ulp(x3)/2 <= 2^-212 |v|.
     pub fn parse(s: &str) -> Result<QD, String> {
         parse_parts::<4>(s, mutate::on(mutate::PARSE_TRUNC)).map(|x| QD { x })
     }
 
-    /// Scientific notation with `digits` significant digits, correctly rounded (half to even) from the exact value
-    /// of the four-part sum: "-1.2345e-05" style, at least two exponent digits.
+    /// Formats in scientific notation with `digits` significant digits, correctly rounded (half to even) from the exact
+    /// value of the four-part sum. The style is "-1.2345e-05", with at least two exponent digits.
     pub fn to_sci(self, digits: usize) -> String {
         sci_parts(&self.x, digits)
     }
 }
 
-/// The parts of a decimal string by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), N of them, for
-/// `QD::parse` and `crate::od::OD::parse`. trunc: the last part rounded toward zero (the control `PARSE_TRUNC`).
+/// Rounds a decimal string to N parts by greedy round-to-nearest (x0 = RN(v), x1 = RN(v - x0), ...), for `QD::parse`
+/// and `crate::od::OD::parse`. With trunc the last part is rounded toward zero, the control `PARSE_TRUNC`.
 pub(crate) fn parse_parts<const N: usize>(s: &str, trunc: bool) -> Result<[f64; N], String> {
     let t = s.trim();
     let (neg, body) = match t.as_bytes().first() {
@@ -842,7 +844,7 @@ pub(crate) fn parse_parts<const N: usize>(s: &str, trunc: bool) -> Result<[f64; 
     for i in 0..N {
         let mut c = r.round();
         if i == N - 1 && trunc && c != 0.0 && r.sub_f64(c).neg != r.neg {
-            // rounded away from zero: step one ulp back toward zero
+            // It rounded away from zero, so step one ulp back toward zero.
             c = f64::from_bits(c.to_bits() - 1);
         }
         if !c.is_finite() {
@@ -861,8 +863,8 @@ pub(crate) fn parse_parts<const N: usize>(s: &str, trunc: bool) -> Result<[f64; 
     Ok(x)
 }
 
-/// The exact sum of the parts x in scientific notation with `digits` significant digits, correctly rounded (half to
-/// even), for `QD::to_sci` and `crate::od::OD::to_sci`.
+/// Formats the exact sum of the parts x in scientific notation with `digits` significant digits, correctly rounded
+/// (half to even), for `QD::to_sci` and `crate::od::OD::to_sci`.
 pub(crate) fn sci_parts(x: &[f64], digits: usize) -> String {
     let digits = digits.max(1);
     if !x.iter().all(|v| v.is_finite()) {
@@ -897,7 +899,7 @@ pub(crate) fn sci_parts(x: &[f64], digits: usize) -> String {
         let rest = d.as_bytes()[digits + 1..].iter().any(|&c| c != b'0');
         let odd = (out[digits - 1] - b'0') % 2 == 1;
         if next > b'5' || (next == b'5' && (rest || odd)) {
-            // round up with carry
+            // Round up with carry.
             let mut i = digits;
             loop {
                 if i == 0 {
@@ -927,8 +929,9 @@ pub(crate) fn sci_parts(x: &[f64], digits: usize) -> String {
 
 #[cfg(feature = "f128")]
 impl QD {
-    /// greedy round-to-nearest parts (x0 = RN(x), x1 = RN(x - x0), ...), exact when RN(x) is finite and the last bit
-    /// of x is at least 2^-1074: the 113 bits fill at most three parts, and each remainder is exact in f128
+    /// Splits x into greedy round-to-nearest parts (x0 = RN(x), x1 = RN(x - x0), ...). It is exact when RN(x) is finite
+    /// and the last bit of x is at least 2^-1074, since the 113 bits fill at most three parts and each remainder is
+    /// exact in f128.
     pub fn from_f128(x: f128) -> QD {
         let mut q = QD::ZERO;
         let mut r = x;
@@ -941,21 +944,22 @@ impl QD {
         }
         q
     }
-    /// correctly rounded, for any four parts: their exact sum in a fixed-point accumulator, rounded once
+    /// Converts to f128 correctly rounded, for any four parts, by summing them exactly in a fixed-point accumulator and
+    /// rounding once.
     pub fn to_f128(self) -> f128 {
         sum_to_f128(self.x)
     }
 }
 
-/// Limbs of the fixed-point accumulator, in two's complement: bit p weighs 2^(p - 1074), from the least f64 bit to
-/// beyond 2^1026, which bounds a sum of four f64.
+/// The number of limbs of the fixed-point accumulator, in two's complement. Bit p weighs 2^(p - 1074), and the bits run
+/// from the least f64 bit to beyond 2^1026, which bounds a sum of four f64.
 #[cfg(feature = "f128")]
 const ACC_LIMBS: usize = 33;
 
-/// the exact sum of four f64, rounded to the nearest f128 (ties to even)
+/// Rounds the exact sum of four f64 to the nearest f128, ties to even.
 #[cfg(feature = "f128")]
 fn sum_to_f128(x: [f64; 4]) -> f128 {
-    // infinities and NaN as IEEE addition gives them
+    // Infinities and NaN come out as IEEE addition gives them.
     if x.iter().any(|v| !v.is_finite()) {
         return x[0] as f128 + x[1] as f128 + x[2] as f128 + x[3] as f128;
     }
@@ -978,14 +982,14 @@ fn sum_to_f128(x: [f64; 4]) -> f128 {
         }
     }
     let Some(t) = acc.iter().rposition(|&a| a != 0) else {
-        // an exact zero is -0 only when every part is -0, as in IEEE addition
+        // An exact zero is -0 only when every part is -0, as in IEEE addition.
         return if x.iter().all(|v| v.is_sign_negative()) {
             -0.0
         } else {
             0.0
         };
     };
-    // leading bit l, the 113-bit significand from bit l - 112
+    // l is the leading bit, and the 113-bit significand starts at bit l - 112.
     let mut l = 64 * t + 63 - acc[t].leading_zeros() as usize;
     let m = if l < 113 {
         acc_bits(&acc, 0) << (112 - l)
@@ -1002,12 +1006,12 @@ fn sum_to_f128(x: [f64; 4]) -> f128 {
             m
         }
     };
-    // m·2^(l - 112 - 1074) with m in [2^112, 2^113): always a normal f128
+    // The value is m·2^(l - 112 - 1074) with m in [2^112, 2^113), always a normal f128.
     let biased = (l + 16383 - 1074) as u128;
     f128::from_bits((neg as u128) << 127 | biased << 112 | (m & ((1 << 112) - 1)))
 }
 
-/// acc += w·2^(64k), or acc -= w·2^(64k) when neg, carrying or borrowing up to the top limb
+/// Adds w·2^(64k) to acc, or subtracts it when neg, carrying or borrowing up to the top limb.
 #[cfg(feature = "f128")]
 fn acc_add(acc: &mut [u64; ACC_LIMBS], k: usize, w: u128, neg: bool) {
     let mut c = 0;
@@ -1031,7 +1035,7 @@ fn acc_add(acc: &mut [u64; ACC_LIMBS], k: usize, w: u128, neg: bool) {
     }
 }
 
-/// the 128 bits of acc from bit lo up
+/// Returns the 128 bits of acc from bit lo up.
 #[cfg(feature = "f128")]
 fn acc_bits(acc: &[u64; ACC_LIMBS], lo: usize) -> u128 {
     let limb = |i: usize| acc.get(i).copied().unwrap_or(0) as u128;
@@ -1044,27 +1048,27 @@ fn acc_bits(acc: &[u64; ACC_LIMBS], lo: usize) -> u128 {
     }
 }
 
-/// any bit of acc below bit n
+/// Tests whether any bit of acc below bit n is set.
 #[cfg(feature = "f128")]
 fn acc_any_below(acc: &[u64; ACC_LIMBS], n: usize) -> bool {
     let (i, s) = (n / 64, n % 64);
     acc[..i].iter().any(|&a| a != 0) || (s > 0 && acc[i] & ((1 << s) - 1) != 0)
 }
 
-/// a0 b3 + a1 b2 + a2 b1 + a3 b0 (the O(eps^3) partial products), by FMA in QD's order
+/// Sums the O(eps^3) partial products a0 b3 + a1 b2 + a2 b1 + a3 b0 by FMA in QD's order.
 #[inline(always)]
 fn eps3(a: [f64; 4], b: [f64; 4]) -> f64 {
     a[3].mul_add(b[0], a[2].mul_add(b[1], a[1].mul_add(b[2], a[0] * b[3])))
 }
 
-/// a1 b3 + a2 b2 + a3 b1 (the O(eps^4) partial products), by FMA in QD's order
+/// Sums the O(eps^4) partial products a1 b3 + a2 b2 + a3 b1 by FMA in QD's order.
 #[inline(always)]
 fn eps4(a: [f64; 4], b: [f64; 4]) -> f64 {
     a[3].mul_add(b[1], a[2].mul_add(b[2], a[1] * b[3]))
 }
 
 impl std::fmt::Display for QD {
-    /// 66 significant digits (the four parts carry about 64)
+    /// Prints 66 significant digits, since the four parts carry about 64.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_sci(f.precision().map(|p| p + 1).unwrap_or(66)))
     }
@@ -1080,7 +1084,7 @@ impl std::str::FromStr for QD {
 impl Neg for QD {
     type Output = QD;
     #[inline(always)]
-    /// every part negated, the lower three as -x + 0, so that a zero lower part is +0 (as DD's lo)
+    /// Negates every part, the lower three as -x + 0 so that a zero lower part is +0, as for DD's lo.
     fn neg(self) -> QD {
         let x = self.x;
         QD {
@@ -1121,14 +1125,14 @@ impl Div for QD {
     }
 }
 
-/// the four parts of quad-doubles as four arrays, part k of value i at index i of array k (the layout of
-/// `qv::axpy_parts` and `QV::load`), the inverse of `from_parts`
+/// Splits quad-doubles into four arrays, part k of value i at index i of array k, the layout of `qv::axpy_parts` and
+/// `QV::load`. It is the inverse of `from_parts`.
 pub fn to_parts(v: &[QD]) -> [Vec<f64>; 4] {
     std::array::from_fn(|k| v.iter().map(|q| q.x[k]).collect())
 }
 
-/// quad-doubles from the arrays of their four parts, the parts as they are (`QD { x }` and `QV::load`, not
-/// renormalized as `QD::new`). Arrays of different lengths panic.
+/// Builds quad-doubles from the arrays of their four parts, taking the parts as they are like `QD { x }` and `QV::load`
+/// do, without renormalizing as `QD::new` does. Arrays of different lengths panic.
 pub fn from_parts(c: [&[f64]; 4]) -> Vec<QD> {
     let n = c[0].len();
     assert!(
@@ -1142,7 +1146,7 @@ pub fn from_parts(c: [&[f64]; 4]) -> Vec<QD> {
         .collect()
 }
 
-/// Scalar sum-of-products accumulator, the twin of `qv::QDotAcc` (same algorithm, bitwise the same per lane).
+/// Scalar sum-of-products accumulator, the twin of `qv::QDotAcc` with its algorithm and its bits per lane.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct QdAcc {
     pub s: [f64; 5],
@@ -1152,7 +1156,7 @@ impl QdAcc {
     pub fn zero() -> QdAcc {
         QdAcc::default()
     }
-    /// self + a b
+    /// Returns self + a b.
     #[inline(always)]
     pub fn add_prod(self, a: QD, b: QD) -> QdAcc {
         let (a, b) = (a.x, b.x);
@@ -1165,12 +1169,12 @@ impl QdAcc {
         let r3 = eps3(a, b);
         // level 0
         let (s0, t0) = two_sum(self.s[0], p00);
-        // level 1: t0, e00, p01, p10
+        // Level 1 sums t0, e00, p01 and p10.
         let (x1, y1) = two_sum(p01, p10);
         let (x2, y2) = two_sum(e00, t0);
         let (x3, y3) = two_sum(x1, x2);
         let (s1, y4) = two_sum(self.s[1], x3);
-        // level 2: y1..y4, e01, e10, p02, p11, p20
+        // Level 2 sums y1..y4, e01, e10, p02, p11 and p20.
         let (z1, w1) = two_sum(p02, p20);
         let (z2, w2) = two_sum(p11, e01);
         let (z3, w3) = two_sum(e10, y1);
@@ -1180,8 +1184,8 @@ impl QdAcc {
         let (z7, w7) = two_sum(z5, z6);
         let (z8, w8) = two_sum(z7, y4);
         let (s2, w9) = two_sum(self.s[2], z8);
-        // level 3: w9, the error of the running level-2 sum, is as large as that sum's ulp and goes in by itself;
-        // the per-term errors and O(eps^3) products are summed first
+        // In level 3, w9, the error of the running level-2 sum, is as large as that sum's ulp and goes in by itself.
+        // The per-term errors and O(eps^3) products are summed first.
         let (w, w9) = if mutate::on(mutate::ACC_L3) {
             (0.0, 0.0)
         } else {
@@ -1195,7 +1199,7 @@ impl QdAcc {
             s: [s0, s1, s2, s3, self.s[4] + (x9 + x10)],
         }
     }
-    /// self + a
+    /// Returns self + a.
     #[inline(always)]
     pub fn add(self, a: QD) -> QdAcc {
         let a = a.x;
@@ -1212,7 +1216,7 @@ impl QdAcc {
             s: [s0, s1, s2, s3, self.s[4] + (x3 + x4)],
         }
     }
-    /// the sum as a quad-double: the five levels added in turn with qd + f64
+    /// Returns the sum as a quad-double, adding the five levels in turn with `QD::add_f`.
     #[inline(always)]
     pub fn finish(self) -> QD {
         QD::from_f64(self.s[0])
