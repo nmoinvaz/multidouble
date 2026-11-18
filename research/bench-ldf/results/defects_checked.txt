@@ -1,0 +1,7 @@
+isnan(1.5) 1 isnan(NaN) 0
+dd_add           relative error 5.55e-17 = 4.5e+15 u^2
+qd_add_accurate  relative error 2.18e-63 = 14.3 u^4
+ieee_mode_add    relative error 1.03e-32 = 6.75e+31 u^4
+mul_pwr2(2, 1 + 2^-60) = 0x1p+1 + 0x1p+1
+1.0 == one: 0, one == 1.0: 1
+bitwise_and({1.5, 2^-60}, 0.0) = 0x1.8p+0 0x1p-60

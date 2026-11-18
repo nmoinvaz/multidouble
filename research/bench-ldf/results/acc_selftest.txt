@@ -1,0 +1,4 @@
+control dd_mul           intact 1.93 u^2, last part dropped 8.97e+15 u^2: fires
+control qd_add_ieee      intact 0.124 u^4, last part dropped 2.17e+15 u^4: fires
+control qd_mul_accurate  intact 0.119 u^4, last part dropped 2.22e+15 u^4: fires
+control qd_sqrt          intact 1.87 u^4, last part dropped 2.12e+15 u^4: fires
