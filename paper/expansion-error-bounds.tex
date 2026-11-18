@@ -1,6 +1,11 @@
-\documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsthm}
+\documentclass[conference]{IEEEtran}
+\let\proof\relax
+\let\endproof\relax
+\raggedbottom
+\usepackage{amsmath,amsthm}
+\usepackage{unicode-math}
+\setmainfont{texgyretermes}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\setmathfont{texgyretermes-math.otf}
 \usepackage{booktabs}
 \usepackage{microtype}
 \usepackage{algorithm}
@@ -48,7 +53,7 @@
 \maketitle
 
 \begin{abstract}
-A floating-point expansion stores a number as an unevaluated sum of $n$ machine numbers, which gives about $n$ times
+\mdseries A floating-point expansion stores a number as an unevaluated sum of $n$ machine numbers, which gives about $n$ times
 the precision of the hardware format. The quad-double algorithms of Hida, Li and Bailey are the most widely used way
 to add, multiply, divide and take square roots of such sums, and they extend from four parts to any $n$. Bounds were known for
 variants of them at any $n$, with leading constants that grow like $2^n$. We prove that, for the algorithms
@@ -125,6 +130,7 @@ the one above it, and zero parts between nonzero ones (Figure~\ref{fig:ladder}).
 \nopagebreak
 \begin{figure}[H]
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm]
   \foreach \i in {1,2,3} { \draw[densely dashed, gray] (2.35*\i, -1.75) -- (2.35*\i, 0.55); }
   \node[gray, font=\small, above] at (2.35, 0.55) {$2u|a_0|$};
@@ -139,7 +145,7 @@ the one above it, and zero parts between nonzero ones (Figure~\ref{fig:ladder}).
   \node[font=\small] at (6.5, -1.2) {$a_2 = 0$};
   \draw[fill=blue!12] (8.3, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (9.45, -1.2) {$a_3$};
   \draw[->] (0, -2.0) -- (10.8, -2.0) node[right, font=\small] {smaller};
-\end{tikzpicture}
+\end{tikzpicture}}
 \caption{Two four-part expansions on the ladder. Each box is a part's $p$ significant bits, placed by its exponent.
 (a)~Each part at most one ulp of the part above. (b)~A gap after $a_0$ and a zero part. A part may lie anywhere to the
 right of its dashed line.}
@@ -176,7 +182,7 @@ Algorithm~\ref{alg:mul} gives it in full.
 \nopagebreak
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[x=0.9cm, y=0.9cm]
+\begin{tikzpicture}[x=0.8cm, y=0.8cm]
   \foreach \i in {0,...,3} { \foreach \j in {0,...,3} {
     \pgfmathtruncatemacro{\o}{\i+\j}
     \ifnum\o<4 \fill[blue!12] (\j, -\i) rectangle ++(1, -1);
@@ -187,14 +193,14 @@ Algorithm~\ref{alg:mul} gives it in full.
     \ifnum\o<5 \node[font=\small] at (\j+0.5, -\i-0.5) {$\o$}; \fi } }
   \foreach \j in {0,...,3} { \node[font=\small] at (\j+0.5, 0.3) {$b_\j$}; }
   \foreach \i in {0,...,3} { \node[font=\small, anchor=east] at (-0.1, -\i-0.5) {$a_\i$}; }
-  \begin{scope}[shift={(5, 0)}]
-    \fill[blue!12] (0, -0.3) rectangle ++(0.5, -0.5); \draw (0, -0.3) rectangle ++(0.5, -0.5);
-    \node[font=\small, anchor=west] at (0.7, -0.55) {order $< n$: $\TwoProd$, exact, error to the next level};
-    \fill[orange!25] (0, -1.2) rectangle ++(0.5, -0.5); \draw (0, -1.2) rectangle ++(0.5, -0.5);
-    \node[font=\small, anchor=west] at (0.7, -1.45) {order $n$: summed by fused multiply-adds};
-    \fill[pattern=north east lines, pattern color=gray!50] (0, -2.1) rectangle ++(0.5, -0.5);
-    \draw (0, -2.1) rectangle ++(0.5, -0.5);
-    \node[font=\small, anchor=west] at (0.7, -2.35) {order $> n$: dropped};
+  \begin{scope}[shift={(-1.2, -4.4)}]
+    \fill[blue!12] (0, 0) rectangle ++(0.4, -0.4); \draw (0, 0) rectangle ++(0.4, -0.4);
+    \node[font=\footnotesize, anchor=west] at (0.5, -0.2) {order $< n$: $\TwoProd$, exact, error to the next level};
+    \fill[orange!25] (0, -0.6) rectangle ++(0.4, -0.4); \draw (0, -0.6) rectangle ++(0.4, -0.4);
+    \node[font=\footnotesize, anchor=west] at (0.5, -0.8) {order $n$: summed by fused multiply-adds};
+    \fill[pattern=north east lines, pattern color=gray!50] (0, -1.2) rectangle ++(0.4, -0.4);
+    \draw (0, -1.2) rectangle ++(0.4, -0.4);
+    \node[font=\footnotesize, anchor=west] at (0.5, -1.4) {order $> n$: dropped};
   \end{scope}
 \end{tikzpicture}
 \caption{The partial products $a_ib_j$ of a four-part multiplication. Each cell shows the level its product goes
@@ -204,20 +210,23 @@ to, its order $i + j$. The five levels $0, \dots, 4$ are renormalized into four 
 
 \begin{algorithm}[tp]
 \caption{Multiplication of $n$-part expansions (MUL)}\label{alg:mul}
+\small
 \begin{algorithmic}[1]
 \Require $a = (a_0, \dots, a_{n-1})$, $b = (b_0, \dots, b_{n-1})$
 \Ensure $x = (x_0, \dots, x_{n-1})$ with $\sum x_k \approx ab$
-\For{$j = 0, \dots, n-1$} $(s_j, e_j) \gets \TwoProd(a_0, b_j)$ \Comment{levels $0, \dots, n-1$}
+\For{$j = 0, \dots, n-1$} \Comment{levels $0, \dots, n-1$}
+  \State $(s_j, e_j) \gets \TwoProd(a_0, b_j)$
 \EndFor
-\State $s_n \gets \RN\bigl(\sum_{i=1}^{n-1} a_ib_{n-i}\bigr)$ by a chain of fused multiply-adds \Comment{order $n$}
+\State $s_n \gets \RN\bigl(\sum_{i=1}^{n-1} a_ib_{n-i}\bigr)$ \Comment{fused multiply-adds}
 \For{$j = 0, \dots, n-1$} $\dep(s, j+1, e_j)$
 \EndFor
 \For{$i = 1, \dots, n-1$ \textbf{and} $j = 0, \dots, n-1-i$}
-  \State $(p, e) \gets \TwoProd(a_i, b_j)$; \ $\dep(s, i+j, p)$; \ $\dep(s, i+j+1, e)$
+  \State $(p, e) \gets \TwoProd(a_i, b_j)$
+  \State $\dep(s, i+j, p)$; \ $\dep(s, i+j+1, e)$
 \EndFor
 \State \Return $R_n(s_0, \dots, s_n)$ \Comment{Algorithm~\ref{alg:renorm}}
 \Statex
-\Statex \textbf{procedure} $\dep(s, l, t)$: add $t$ to level $l$ and carry its error down
+\Statex \textbf{procedure} $\dep(s, l, t)$: add $t$ to level $l$, carry down
 \For{$m = l, \dots, n-1$} $(s_m, t) \gets \TwoSum(s_m, t)$
 \EndFor
 \State $s_n \gets \RN(s_n + t)$
@@ -240,17 +249,21 @@ stays in the accumulator.
 \nopagebreak
 \begin{algorithm}[H]
 \caption{Renormalization $R_n$}\label{alg:renorm}
+\small
 \begin{algorithmic}[1]
-\Require terms $c_0, \dots, c_N$ with $N \le n$, in any order of magnitude
+\Require terms $c_0, \dots, c_N$, $N \le n$, in any order
 \Ensure $x = (x_0, \dots, x_{n-1})$
 \State $s \gets c_N$
-\For{$i = N-1, \dots, 0$} $(s, v_{i+1}) \gets \TwoSum(c_i, s)$ \Comment{VecSum}
+\For{$i = N-1, \dots, 0$} \Comment{VecSum}
+  \State $(s, v_{i+1}) \gets \TwoSum(c_i, s)$
 \EndFor
 \State $\acc \gets s$; \ $k \gets 0$; \ $x \gets (0, \dots, 0)$
 \For{$j = 1, \dots, N$}
   \State $(t, e) \gets \TwoSum(\acc, v_j)$
-  \If{$e \ne 0$ \textbf{and} $k < n-1$} $x_k \gets t$; \ $k \gets k + 1$; \ $\acc \gets e$ \Comment{emit}
-  \Else{} $\acc \gets t$
+  \If{$e \ne 0$ \textbf{and} $k < n-1$} \Comment{emit}
+    \State $x_k \gets t$; \ $k \gets k + 1$; \ $\acc \gets e$
+  \Else
+    \State $\acc \gets t$
   \EndIf
 \EndFor
 \State $x_k \gets \acc$
@@ -284,26 +297,36 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 \nopagebreak
 \begin{table}[H]
 \centering
-\begin{tabular}{lll}
-\toprule
-operation & error bound & input that reaches $u^8|Z|$ \\
-\midrule
-$a + b$ & $u^8|Z| + 2^{-33.0}u^8(|a_0| + |b_0|)$ & $(1, u, \dots, u^7) + (u^8, 0, \dots, 0)$ \\
-$a + f$ & $u^8|Z| + 2^{-42.4}u^8(|a_0| + |f|)$ & $(1, u, \dots, u^7) + u^8$ \\
-$a \times f$ & $u^8|Z| + 2^{-33.0}u^8|a_0f|$ & $f = 3$, Proposition~\ref{prop:sharp}(c) \\
-$a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ & $(1, u, \dots, u^6, 0) \times (1, 0, \dots, 0, u^7)$ \\
-$a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\
-$\sqrt a$ & $3.00004\,u^8|Z|$ & not known \\
-\bottomrule
-\end{tabular}
 \caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
 ladder and a floating-point number $f$. $Z$ is the exact result.}
 \label{tab:summary}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+operation & bound, and an input that reaches $u^8|Z|$ \\
+\midrule
+$a + b$ & $u^8|Z| + 2^{-33.0}u^8(|a_0| + |b_0|)$ \\
+& $(1, u, \dots, u^7) + (u^8, 0, \dots, 0)$ \\ \addlinespace
+$a + f$ & $u^8|Z| + 2^{-42.4}u^8(|a_0| + |f|)$ \\
+& $(1, u, \dots, u^7) + u^8$ \\ \addlinespace
+$a \times f$ & $u^8|Z| + 2^{-33.0}u^8|a_0f|$ \\
+& $f = 3$, Proposition~\ref{prop:sharp}(c) \\ \addlinespace
+$a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ \\
+& $(1, u, \dots, u^6, 0) \times (1, 0, \dots, 0, u^7)$ \\ \addlinespace
+$a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ \\
+& $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\ \addlinespace
+$\sqrt a$ & $3.00004\,u^8|Z|$ \\
+& not known \\
+\bottomrule
+\end{tabular}
 \end{table}
 
 \nopagebreak
 \begin{table}[H]
 \centering
+\caption{The second term of Theorem~\ref{thm:main} relative to the first, $\kappa_nu$, in binary64. The
+multiplication's constant grows like $n(n!)^2$, and from eleven parts its second term is the larger one.}
+\label{tab:main}
 \begin{tabular}{rccccc}
 \toprule
 $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
@@ -314,9 +337,6 @@ $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
 12 & $2^{-636}$ & $2^{-19.6}$ & $2^{-19.6}$ & $2^{-38.4}$ & $2^{12.5}$ \\
 \bottomrule
 \end{tabular}
-\caption{The second term of Theorem~\ref{thm:main} relative to the first, $\kappa_nu$, in binary64. The
-multiplication's constant grows like $n(n!)^2$, and from eleven parts its second term is the larger one.}
-\label{tab:main}
 \end{table}
 
 \begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t7}]\label{thm:divsqrt}
@@ -343,11 +363,11 @@ follows.
 \begin{center}
 \begin{tabular}{clll}
 \toprule
-step & $\TwoSum(\acc, v_j)$ & rounded sum and error & action \\
+step & sum & rounded, error & action \\
 \midrule
-1 & $1 + u$ & $1$, error $u$ & emit $x_0 = 1$ \\
-2 & $u + u^2$ & $u$, error $u^2$ & emit $x_1 = u$ \\
-3 & $u^2 + u^3$ & $u^2$, error $u^3$ & last part, keep $x_2 = u^2$ \\
+1 & $1 + u$ & $1$, \ $u$ & emit $x_0 = 1$ \\
+2 & $u + u^2$ & $u$, \ $u^2$ & emit $x_1 = u$ \\
+3 & $u^2 + u^3$ & $u^2$, \ $u^3$ & keep $x_2 = u^2$ \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -375,7 +395,7 @@ on the product, sum and quotient inputs.
 
 \section{Why the bounds hold}
 
-\paragraph{The renormalization loses only at its last step.} Each step of the second pass either keeps the sum exactly
+\subsection{The renormalization loses only at its last step} Each step of the second pass either keeps the sum exactly
 in the accumulator or emits a part and carries the exact error. So nothing is lost until all $n$ parts are filled. Only
 the last step can lose its error, and only when every step before it emitted a part, as in the example above. That
 error is the last of a chain of $n$ rounding errors, each at most $u$ times the one before, which gives the factor
@@ -393,7 +413,7 @@ relative size $2^{-325}$. The same failure has been seen elsewhere. Kouya~\cite{
 output is out of order, so that a following $\FastTwoSum$ chain drops a term. The Universal library found its
 quad-double addition losing accuracy when QD's renormalization received overlapping terms~\cite{universal}.
 
-\paragraph{The levels stay small.} The second term of Theorem~\ref{thm:main} comes from bounding each level. Every
+\subsection{The levels stay small} The second term of Theorem~\ref{thm:main} comes from bounding each level. Every
 carry out of a level is at most $u$ times what the level holds, so level $m$ stays of size about $u^m|a_0b_0|$, up to
 a factor that counts the $\TwoSum$s it went through, $m(m+1)$ at level $m$ of the multiplication. The carries feed back
 into the levels' sizes, which gives a recursion for the bounds (Lemma~\ref{lem:l} and Theorem~\ref{thm:t2}). The
@@ -422,6 +442,9 @@ eight parts in binary64. It stays below 1 up to $K = 50$ products, and the secon
 \nopagebreak
 \begin{table}[H]
 \centering
+\caption{The second term of Theorem~\ref{thm:dot} in units of $u^8W$, for products of octo-doubles on the ladder in
+binary64.}
+\label{tab:dot}
 \begin{tabular}{rccccccc}
 \toprule
 $K$ & 1 & 4 & 16 & 32 & 64 & 128 & 1024 \\
@@ -429,9 +452,6 @@ $K$ & 1 & 4 & 16 & 32 & 64 & 128 & 1024 \\
 $c_K$ & $2^{-14.9}$ & $2^{-14.3}$ & $2^{-10.6}$ & $2^{-4.8}$ & $2^{2.7}$ & $2^{10.9}$ & $2^{37.1}$ \\
 \bottomrule
 \end{tabular}
-\caption{The second term of Theorem~\ref{thm:dot} in units of $u^8W$, for products of octo-doubles on the ladder in
-binary64.}
-\label{tab:dot}
 \end{table}
 
 The growth is real. Each $\TwoSum$ into a level can carry up to half an ulp to the level below, and inputs can be
@@ -490,8 +510,7 @@ statements and proofs. Two further Claude instances checked them independently: 
 work, and the other tested every statement in exact arithmetic without reading the proofs. A third refereed the
 section on sums of products and tested it with its own code.
 
-\clearpage
-\appendix
+\appendices
 \input{expansion-error-bounds-appendix}
 \input{expansion-error-bounds-accumulator}
 
