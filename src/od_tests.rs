@@ -1047,7 +1047,16 @@ fn od_edges() -> Vec<OD> {
         },
     ];
     // a non-finite value or a -0 in each part: the skipped products are then not all zeros
-    let full = [-1.25, u, -u * u, u.powi(3), -u.powi(4), u.powi(5), -u.powi(6), u.powi(7)];
+    let full = [
+        -1.25,
+        u,
+        -u * u,
+        u.powi(3),
+        -u.powi(4),
+        u.powi(5),
+        -u.powi(6),
+        u.powi(7),
+    ];
     for i in 0..8 {
         for s in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN, -0.0] {
             let mut x = full;
