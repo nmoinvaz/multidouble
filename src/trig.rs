@@ -13,8 +13,11 @@
 //! * Evaluation: Taylor series of sin r and cos r in z = r^2 by Horner's scheme, with the type's own products and
 //!   sums, as sin r = r + r (z P(z)) and cos r = 1 + z Q(z). The number of terms depends on the binary exponent of
 //!   r_0 (the tables in `tables`, from `scripts/trig_tables.py`), so that the series' truncation is at most
-//!   2^-10 u^n relative. Below 2^-(53n/2), r and 1 are returned, within u^n/6 and u^n/2.
-//! * Recombination by k mod 4, and tan r = sin r / cos r, or -cos r / sin r for odd k.
+//!   2^-10 u^n relative. Below 2^-(53n/2), r and 1 are returned, within u^n/6 and u^n/2. The last two steps of the
+//!   sine run on r times 2^(j+1), for r_0 in bucket j (2^-(j+1) <= |r_0| < 2^-j), and are scaled back.
+//! * Recombination by k mod 4, and tan r = sin r / cos r, the numerator times 2^(3(j+1)) and the quotient scaled back,
+//!   or -cos r / sin r for odd k. The scalings are exact, and keep the products of the run in the normal range for
+//!   every reduced argument from 2^-(53n/2) up.
 //!
 //! The double-double functions use only double-word algorithms with published error bounds: the product DWTimesDW3,
 //! Algorithm 12 of J. Joldes, J.-M. Muller, V. Popescu, "Tight and rigorous error bounds for basic building blocks of
@@ -25,10 +28,13 @@
 //! (Algorithm 17, 15u^2 + 56u^3). The quad-double functions use QD's operators, and the octo-double ones the
 //! octo-double operators, whose bounds the paper proves.
 //!
-//! Relative errors, for |x_0| <= 2^52 and barring underflow, with an absolute 2^-1163 aside (relative to
-//! |sin x cos x| for tan) from pi/2's fraction bits:
+//! For x on the ladder (a double-word number for `DD`) with |x_0| <= 2^52, and a run without underflow, the error is
+//! at most C |f(x)| + 5 |k| 2^-1217 for sin and cos, and (C_T + 5 |k| 2^-1217 / |sin x cos x|) |tan x| for tan, with
+//! k the multiple of pi/2 removed (|k| < 0.64 2^52, so 5 |k| 2^-1217 < 2^-1163) and C, C_T below. With the
+//! scalings, the run is without underflow for every reduced argument from 2^-(53n/2) up, checked at eight parts in
+//! every binade (the paper's remark on (A2)), unless a part of x lies far below the ladder.
 //!
-//! | | `DD` | `QD` | `OD` |
+//! | C, C_T | `DD` | `QD` | `OD` |
 //! |---|---|---|---|
 //! | sin, cos | 7.85 u^2, proven | 32 u^4, tested | 3.17 u^8, proven |
 //! | tan | 28.5 u^2, proven | 64 u^4, tested | 6.42 u^8, proven |
@@ -635,9 +641,10 @@ impl Ext for OD {
 macro_rules! trig_methods {
     ($t:ty, $sc:literal, $tan:literal) => {
         impl $t {
-            #[doc = concat!("sin x, within ", $sc, " relative for |x_0| <= 2^52 barring underflow: a reduction ",
-                "by pi/2 to 1216 fraction bits in exact integer arithmetic, and a Taylor series (see `trig`). NaN ",
-                "for NaN, the infinities and |x_0| > 2^52; a zero gives itself.")]
+            #[doc = concat!("sin x, within ", $sc, " relative and an absolute 5 |k| 2^-1217 < 2^-1163 for x on the ",
+                "ladder with |x_0| <= 2^52 (see `trig` for the hypotheses): a reduction by pi/2 to 1216 fraction bits ",
+                "in exact integer arithmetic, and a Taylor series. NaN for NaN, the infinities and |x_0| > 2^52; a ",
+                "zero gives itself.")]
             pub fn sin(self) -> $t {
                 sin(self)
             }
@@ -645,8 +652,8 @@ macro_rules! trig_methods {
             pub fn cos(self) -> $t {
                 cos(self)
             }
-            #[doc = concat!("tan x = sin x / cos x from one reduction, within ", $tan, " relative, as `sin`; a zero ",
-                "gives itself.")]
+            #[doc = concat!("tan x = sin x / cos x from one reduction, within ", $tan, " and 5 |k| 2^-1217 / ",
+                "|sin x cos x| relative, as `sin`; a zero gives itself.")]
             pub fn tan(self) -> $t {
                 tan(self)
             }
