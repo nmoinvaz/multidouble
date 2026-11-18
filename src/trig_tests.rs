@@ -13,9 +13,9 @@
 //! ```
 //! TRIG_N scales the samples per category (default 1), TRIG_REPORT=1 prints the tables. The error is relative to the
 //! exact function value, in units of u^n (u = 2^-53, n the parts), with an absolute 2^-1163 allowed for the
-//! reduction's pi/2 (5 |k| 2^-1217 with |k| < 2^52, relative to sin x cos x for tan). The bounds of `DD` and `OD` are
-//! the paper's (`paper/trig_consts.py`); those of `QD` were fixed before the first run: 32 u^4 for sin and cos, 64 u^4
-//! for tan.
+//! reduction's pi/2 (5 |k| 2^-1217 with |k| < 0.64 2^52, relative to sin x cos x for tan). The bounds of `DD` and `OD`
+//! are the paper's (`paper/trig_consts.py`); those of `QD` were fixed before the first run: 32 u^4 for sin and cos,
+//! 64 u^4 for tan.
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::od::OD;
@@ -603,7 +603,7 @@ fn inputs<T: Ty>(cat: Cat, n: usize, seed: u64) -> Vec<T> {
     let mut r = Rng::new(seed ^ (cat as u64) << 32 ^ (T::N as u64) << 40);
     let tiny = -(53 * T::N as i64) / 2;
     (0..n)
-        .map(|_| match cat {
+        .map(|i| match cat {
             Cat::Random => greedy(&rand_r(&mut r, -8, 19)),
             Cat::Ops => {
                 let a: T = greedy(&rand_r(&mut r, -2, 1));
@@ -611,6 +611,8 @@ fn inputs<T: Ty>(cat: Cat, n: usize, seed: u64) -> Vec<T> {
                 let c: T = greedy(&rand_r(&mut r, -30, 0));
                 a.mul_add(b, c)
             }
+            // every eighth sample in the binade just below the early return, where its error is largest
+            Cat::Small if i % 8 == 0 => greedy(&rand_at(&mut r, tiny - 1)),
             Cat::Small => greedy(&rand_r(&mut r, tiny - 4, -9)),
             Cat::NearPi2 => {
                 let (a, b) = (r.int(0, 19), r.int(0, 1 << 10));
