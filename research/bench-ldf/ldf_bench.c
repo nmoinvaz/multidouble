@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "Float64x4/Float64x4.h"
 
@@ -19,8 +20,11 @@
 #endif
 
 #define N_T 512
-#define SAMPLES 31
-#define TARGET_NS 300000.0
+#define SAMPLES 41
+#define TARGET_NS 1000000.0
+// CPUs 0-5 and 6-9 of this machine run at two speeds (cluster "a" and "b"); each sample is tagged by the CPU it
+// started and ended on, and a sample that moved is in neither cluster
+#define CLUSTER_SPLIT 6
 #define BLOCK 32
 
 #define BARRIER() __asm__ volatile("" ::: "memory")
@@ -172,11 +176,20 @@ static double sum4(const D4* v, int n) {
     return s;
 }
 
-static void report(const char* op, const char* mode, long reps, double* t, double chk) {
+static void report(const char* op, const char* mode, long reps, double* t, const int* cpu, double chk) {
+    double amin = 1e300, bmin = 1e300;
+    int na = 0, nb = 0;
+    for (int s = 0; s < SAMPLES; s++) {
+        if (cpu[s] < 0) continue;
+        if (cpu[s] < CLUSTER_SPLIT) { na++; if (t[s] < amin) amin = t[s]; }
+        else { nb++; if (t[s] < bmin) bmin = t[s]; }
+    }
     qsort(t, SAMPLES, sizeof(double), cmp_double);
     printf("{\"lib\":\"" PREFIX "\",\"op\":\"%s\",\"mode\":\"%s\",\"n\":%d,\"reps\":%ld,\"samples\":%d,"
-           "\"min_ns\":%.4f,\"med_ns\":%.4f,\"max_ns\":%.4f,\"chk\":%.17g}\n",
-           op, mode, N_T, reps, SAMPLES, t[0], t[SAMPLES / 2], t[SAMPLES - 1], chk);
+           "\"min_ns\":%.4f,\"med_ns\":%.4f,\"max_ns\":%.4f,\"a_n\":%d,\"a_min_ns\":%.4f,\"b_n\":%d,"
+           "\"b_min_ns\":%.4f,\"chk\":%.17g}\n",
+           op, mode, N_T, reps, SAMPLES, t[0], t[SAMPLES / 2], t[SAMPLES - 1], na, na ? amin : -1.0, nb,
+           nb ? bmin : -1.0, chk);
     fflush(stdout);
 }
 
@@ -191,12 +204,17 @@ static void report(const char* op, const char* mode, long reps, double* t, doubl
         if (reps < 1) reps = 1;                                                                                    \
         CALL;                                                                                                      \
         double t[SAMPLES];                                                                                         \
+        int cpu[SAMPLES];                                                                                          \
         for (int s = 0; s < SAMPLES; s++) {                                                                        \
+            size_t c0 = 0, c1 = 1;                                                                                 \
+            pthread_cpu_number_np(&c0);                                                                            \
             uint64_t a0 = now_ns();                                                                                \
             CALL;                                                                                                  \
             t[s] = (double)(now_ns() - a0) / ((double)reps * N_T);                                                 \
+            pthread_cpu_number_np(&c1);                                                                            \
+            cpu[s] = c0 == c1 ? (int)c0 : -1;                                                                      \
         }                                                                                                          \
-        report(op, mode, reps, t, CHK);                                                                            \
+        report(op, mode, reps, t, cpu, CHK);                                                                       \
     } while (0)
 
 int main(int argc, char** argv) {

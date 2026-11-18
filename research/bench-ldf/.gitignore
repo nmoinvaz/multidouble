@@ -1,2 +1,4 @@
 md/target/
 out/
+md/target-def/
+data/*.bin

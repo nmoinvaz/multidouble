@@ -18,8 +18,21 @@ use multidouble::native::{DV, QV, V8};
 use multidouble::qd::QD;
 
 const N_T: usize = 512;
-const SAMPLES: usize = 31;
-const TARGET_NS: f64 = 300_000.0;
+const SAMPLES: usize = 41;
+const TARGET_NS: f64 = 1_000_000.0;
+/// CPUs 0-5 and 6-9 of this machine run at two speeds (cluster "a" and "b"); each sample is tagged by the CPU it
+/// started and ended on, and a sample that moved is in neither cluster
+const CLUSTER_SPLIT: i64 = 6;
+
+extern "C" {
+    fn pthread_cpu_number_np(cpu: *mut usize) -> i32;
+}
+
+fn cpu_now() -> usize {
+    let mut c = 0usize;
+    unsafe { pthread_cpu_number_np(&mut c) };
+    c
+}
 const BLOCK: usize = 32;
 
 fn load(dir: &str, name: &str) -> Vec<f64> {
@@ -219,18 +232,38 @@ fn time<F: FnMut(usize)>(op: &str, mode: &str, per_rep: usize, mut call: F, chk:
     let reps = ((TARGET_NS / dt.max(1.0)) as usize).max(1);
     call(reps);
     let mut t = [0.0f64; SAMPLES];
-    for s in t.iter_mut() {
+    let mut cpu = [0i64; SAMPLES];
+    for (s, c) in t.iter_mut().zip(cpu.iter_mut()) {
+        let c0 = cpu_now();
         let a0 = Instant::now();
         call(reps);
         *s = a0.elapsed().as_nanos() as f64 / (reps * per_rep) as f64;
+        let c1 = cpu_now();
+        *c = if c0 == c1 { c0 as i64 } else { -1 };
+    }
+    let (mut amin, mut bmin, mut na, mut nb) = (f64::INFINITY, f64::INFINITY, 0, 0);
+    for (&s, &c) in t.iter().zip(&cpu) {
+        if c < 0 {
+            continue;
+        }
+        if c < CLUSTER_SPLIT {
+            na += 1;
+            amin = amin.min(s);
+        } else {
+            nb += 1;
+            bmin = bmin.min(s);
+        }
     }
     t.sort_by(|a, b| a.partial_cmp(b).unwrap());
     println!(
         "{{\"lib\":\"md\",\"op\":\"{op}\",\"mode\":\"{mode}\",\"n\":{per_rep},\"reps\":{reps},\"samples\":{SAMPLES},\
-         \"min_ns\":{:.4},\"med_ns\":{:.4},\"max_ns\":{:.4},\"chk\":{:e}}}",
+         \"min_ns\":{:.4},\"med_ns\":{:.4},\"max_ns\":{:.4},\"a_n\":{na},\"a_min_ns\":{:.4},\"b_n\":{nb},\
+         \"b_min_ns\":{:.4},\"chk\":{:e}}}",
         t[0],
         t[SAMPLES / 2],
         t[SAMPLES - 1],
+        if na > 0 { amin } else { -1.0 },
+        if nb > 0 { bmin } else { -1.0 },
         chk()
     );
 }
