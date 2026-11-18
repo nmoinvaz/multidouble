@@ -10,6 +10,7 @@
 //! cargo test --release --lib trig_                                 tables, reference, accuracy, special values
 //! cargo test --release --lib --features mutate trig_controls       every deliberate breakage must fail a check
 //! cargo test --release --lib trig_timing -- --ignored --nocapture  ns per call
+//! cargo test --release --lib trig_lanes_timing -- --ignored --nocapture  the lanes' ns per value against the scalar
 //! ```
 //! TRIG_N scales the samples per category (default 1), TRIG_REPORT=1 prints the tables. The error is relative to the
 //! exact function value, in units of u^n (u = 2^-53, n the parts), with an absolute 2^-1163 allowed for the
@@ -1097,4 +1098,85 @@ fn trig_timing() {
     rows::<DD>(20000);
     rows::<QD>(4000);
     rows::<OD>(1000);
+}
+
+/// ns per value of the lane functions (`DV`, `QV`, `OV` on the compile-time backend) against the scalar ones, and of
+/// the reduction: the scalar one, and the lanes' (each lane taken apart, reduced by `reduce` and packed) with its share
+/// of the lanes' sin
+#[test]
+#[ignore]
+fn trig_lanes_timing() {
+    use crate::dv::DV;
+    use crate::ov::OV;
+    use crate::qv::QV;
+    use crate::simd::Native;
+    use crate::trig::Ext;
+    use std::hint::black_box;
+    /// the best of five runs over xs, ns per value with `per` values an item
+    fn time<X: Copy, R>(xs: &[X], per: usize, f: impl Fn(X) -> R) -> f64 {
+        let mut best = f64::INFINITY;
+        for _ in 0..5 {
+            let t = std::time::Instant::now();
+            for &x in xs {
+                black_box(f(black_box(x)));
+            }
+            best = best.min(t.elapsed().as_secs_f64() / (xs.len() * per) as f64);
+        }
+        best * 1e9
+    }
+    fn rows<T: Ty + Ext, V: Ext + Copy>(
+        n: usize,
+        lanes: impl Fn(&[T]) -> V,
+        scalar: [fn(T) -> T; 4],
+        vector: [fn(V) -> V; 4],
+    ) {
+        let mut r = Rng::new(9);
+        for (what, lo, hi) in [("[1/4, 1)", -2, -1), ("[1, 1024)", 0, 9), ("[2^40, 2^52)", 40, 51)] {
+            let xs: Vec<T> = (0..n).map(|_| greedy(&rand_r(&mut r, lo, hi))).collect();
+            let vs: Vec<V> = xs.as_chunks::<8>().0.iter().map(|c| lanes(c)).collect();
+            let mut cells = Vec::new();
+            for k in 0..4 {
+                let (s, v) = (time(&xs, 1, scalar[k]), time(&vs, 8, vector[k]));
+                cells.push(format!("{s:.0} | {v:.0} | {:.2}", s / v));
+            }
+            let one = time(&xs, 1, |x: T| x.reduce());
+            let red = time(&vs, 8, |v: V| v.reduce());
+            let sin = time(&vs, 8, vector[0]);
+            println!(
+                "| {} | {what} | {} | {one:.1} | {red:.1} | {:.0}% |",
+                T::NAME,
+                cells.join(" | "),
+                100.0 * red / sin
+            );
+        }
+    }
+    println!(
+        "{} lanes: ns per value, scalar | lanes | ratio for sin, cos, tan, sin_cos; the reduction, ns per value, \
+         scalar | lanes | the lanes' share of their sin",
+        <Native as crate::simd::Simd>::NAME
+    );
+    println!("| type | \\|x\\| | sin | | | cos | | | tan | | | sin_cos | | | reduction | | share |");
+    rows::<DD, DV<Native>>(
+        16000,
+        |x| {
+            DV::load(
+                &x.iter().map(|d| d.hi).collect::<Vec<_>>(),
+                &x.iter().map(|d| d.lo).collect::<Vec<_>>(),
+            )
+        },
+        [DD::sin, DD::cos, DD::tan, |x| DD::sin_cos(x).0],
+        [DV::sin, DV::cos, DV::tan, |x| DV::sin_cos(x).0],
+    );
+    rows::<QD, QV<Native>>(
+        4000,
+        |x| QV::from_lanes(&std::array::from_fn(|i| x[i])),
+        [QD::sin, QD::cos, QD::tan, |x| QD::sin_cos(x).0],
+        [QV::sin, QV::cos, QV::tan, |x| QV::sin_cos(x).0],
+    );
+    rows::<OD, OV<Native>>(
+        800,
+        |x| OV::from_lanes(&std::array::from_fn(|i| x[i])),
+        [OD::sin, OD::cos, OD::tan, |x| OD::sin_cos(x).0],
+        [OV::sin, OV::cos, OV::tan, |x| OV::sin_cos(x).0],
+    );
 }
