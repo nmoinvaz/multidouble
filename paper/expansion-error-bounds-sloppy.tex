@@ -25,7 +25,7 @@ these are \texttt{OD::sloppy\_mul} and \texttt{OdAcc::add\_prod\_sloppy} of mult
 worst pair of its tests.
 
 \begin{theorem}\label{thm:sloppy}
-Assume~\ref{as:fp}, $\theta \ge 1$, $\rho = \theta u \le 1/4$ and $n^2u < 1$, let the $n$-part operands satisfy
+Assume~\ref{as:fp} and $n^2u < 1$, let the $n$-part operands satisfy
 $H(\theta)$, and let $M = |a_0b_0|$. For $0 \le m \le n-2$ let $\alpha_m$, $T_m$, $d_m$, $\gamma_m$ and $L_m$ be those
 of Theorem~\ref{thm:t2} for MUL, let $\Delta_n$ be that theorem's, and let $Q = n^2$,
 \begin{gather*}
@@ -41,7 +41,7 @@ L_{n-1} = \frac{\theta^{n-1}d_{n-1}}{1 - Qu}, \qquad R_{\rm s} = QL_{n-1}.
   \Bigl|ab - \sum_k x_k\Bigr| \le (R_{\rm s} + \Delta_nu)\,u^nM,
   \]
   and so $|ab - x| \le (R_{\rm s} + \Delta_nu)\,u^n(\frac{1-\rho}{1-2\rho})^2|ab|$.
-\item[(c)] If moreover $(n^2+n)u < 1$ and $(n+1)Ku < 1$, FINISH after $K$ terms, each ADDPROD-SLOPPY$(a,
+\item[(c)] If moreover (A3) holds and $(n+1)Ku < 1$, FINISH after $K$ terms, each ADDPROD-SLOPPY$(a,
   b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$, satisfies the bound of
   Theorem~\ref{thm:acc} with $\tau_l = \max(L_lu^l, \rho^l)$ for $l < n$, $\tau_n = 0$, and $E_{\rm prod} =
   (R_{\rm s} + \Delta_nu)u^nW$.

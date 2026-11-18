@@ -9,8 +9,8 @@ The algorithm, per bucket j of |r_0| (2^-(j+1) <= |r_0| < 2^-j, j = 0 for [1/2, 
   sin r = ADD(r, MUL(r, MUL(z, p_1))),  p_(K-1) = s_(K-1),  p_k = ADD(MUL(z, p_(k+1)), s_k),  s_k = (-1)^k/(2k+1)!
   cos r = ADDF(MUL(z, q_1), 1),        q_(K-1) = c_(K-1),  q_k = ADD(MUL(z, q_(k+1)), c_k),  c_k = (-1)^k/(2k)!
 the constants rounded greedily to n parts, and r either x itself (k = 0, x on the ladder |x_i| <= (2u)^i |x_0|) or
-the greedy n-part rounding of the exact x - k pi/2 (its parts within the same ladder). Units: r, w and sin r in rho =
-|r|, z and t in rho^2, the Horner sums absolute; rho <= R_j.
+the greedy n-part rounding of the exact x - k pi/2 (its parts within the same ladder). Units: r, w and sin r in |r|,
+z and t in r^2, the Horner sums absolute; |r| <= R_j.
 
 usage: trig_consts.py [check]     (check: the tables of src/trig/tables.rs, and the controls, must pass)"""
 import math
@@ -168,7 +168,7 @@ def rust_tables():
 # ---------------------------------------------------------------------------------------------------------------
 
 def ladder(n, theta):
-    """part bounds of r in units of rho = |r|, for r on |r_i| <= (theta u)^i |r_0|: |r_0| <= rho (1-t)/(1-2t), t = theta u"""
+    """part bounds of r in units of |r|, for r on |r_i| <= (theta u)^i |r_0|: |r_0| <= |r| (1-t)/(1-2t), t = theta u"""
     t = theta * U
     return [up((theta * U) ** i * (1 - t) / (1 - 2 * t)) for i in range(n)]
 
@@ -188,7 +188,7 @@ def horner(M, zabs, zmax, ez, R2, cs, K):
 
 
 def eval_sin(M, n, R, K, alpha, cs):
-    """(lead, E_S, part bounds): |sin_r(r) - sin r| <= lead |sin r| + E_S rho"""
+    """(lead, E_S, part bounds): |sin_r(r) - sin r| <= lead |sin r| + E_S |r|"""
     R2 = R * R
     ez, _, zeta = M.op('mul', alpha, alpha, Fr(1))
     zabs = [up(t * R2) for t in zeta] if zeta else None
@@ -269,6 +269,8 @@ def bucket_bounds(M, n, j, ks, kc, cs_s, cs_c):
         th = max(theta_of(sp, s_lo - sum(sp[1:])), theta_of(cp, c_lo - sum(cp[1:])))
     else:
         th = None
+    # Theorem 18 is stated for a ladder H(theta) with theta u <= 1/4 (Definition 7)
+    require(th is None or th * U <= Fr(1, 4), f'theta_j u > 1/4 in bucket {j}')
     dD = M.div(th)
     dT = max((1 + dS) * (1 + dD) / (1 - dC), (1 + dC) * (1 + dD) / (1 - dS)) - 1
     f = 1 + 2 * un

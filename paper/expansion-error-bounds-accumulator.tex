@@ -51,8 +51,9 @@ S_n(k)$; the same sum identity and $\binom{n}{l}\frac{n+1}{n+1-l} = \binom{n+1}{
 \end{proof}
 
 \begin{theorem}\label{thm:acc}
-Assume~\ref{as:fp}, $(n+1)Ku < 1$, $(n^2+n)u < 1$, and for products the hypotheses of Theorem~\ref{thm:t2} for MUL. Let the accumulator
-receive $K$ terms, each ADDPROD$(a, b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$, and let $x = $ FINISH. Let
+Assume~\ref{as:fp}, (A3) and $(n+1)Ku < 1$. Let the accumulator
+receive $K$ terms, each ADDPROD$(a, b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$ (if all terms are ADDX, $|a_l|
+\le (\theta u)^l|a_0|$ with any $\theta \ge 1$ serves), and let $x = $ FINISH. Let
 $Z$ be the exact sum of the terms, $\mu_k = |a_0b_0|$ or $|a_0|$, $W = \sum_k\mu_k$, $\tau_l = \max(L_lu^l,
 \rho^l)$ with the $L_l$ of Theorem~\ref{thm:t2} for MUL ($\tau_l = \rho^l$, $\tau_n = 0$ if all terms are ADDX), and
 $E_{\rm prod} = (R + \Delta)u^{n+1}W$ with the $R$, $\Delta$ of MUL ($0$ if all terms are ADDX). Then
