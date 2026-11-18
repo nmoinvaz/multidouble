@@ -1,31 +1,33 @@
-//! Lane types for code that is written once and run in several arithmetics, with or without derivatives: the trait
-//! [`Lane`] is 8 values of a computation (8 grid points, 8 independent problems, ...), and its implementations are
+//! Lane types, for code written once and run in several arithmetics, with or without derivatives. The trait [`Lane`] is
+//! 8 values of a computation (8 grid points, 8 independent problems, ...). Its implementations follow.
 //!
-//! * `DV`: values (double-double).
-//! * `Du`: value + one forward-mode tangent (v + d eps, eps^2 = 0), both double-double. One evaluation with a
+//! * `DV` holds values in double-double.
+//! * `Du` holds a value and one forward-mode tangent (v + d eps, eps^2 = 0), both double-double. One evaluation with a
 //!   unit tangent on one unknown gives one exact Jacobian column.
-//! * `F8`, `Fu`: the same in plain f64 (one `V8` per value / tangent), for the mixed-precision Newton's f64 Jacobian.
-//!   Constants and inputs, which the trait passes as double-double, enter as their hi parts.
-//! * `Dtn<N>`: a double-double value with N plain-f64 tangents: N Jacobian columns from one evaluation, the base
-//!   trajectory computed once (and to double-double accuracy) for all of them.
-//! * `Qu`: value + one tangent, both quad-double (`QV`): exact Jacobian columns to quad-double accuracy.
-//! * `Ou`: value + one tangent, both octo-double (`crate::ov::OV`): exact Jacobian columns to octo-double accuracy.
-//! * `crate::ov::OV`: values in octo-double (`VAL_OD`), with double-double constants and inputs, as `QV` is.
-//! * `Dc`: a double-double value with a complex tangent (real and imaginary parts, each double-double): the
-//!   derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
-//! * `jet::Jet<N>`: a truncated power series, N double-double coefficients in one variable: the computation's own
-//!   Taylor coefficients in a parameter entered as `Lane::var` or, for the constants formed from the parameter,
-//!   through [`Param`] (`Lane::P`: `DD` on every other lane, `jet::Series<N>` on a jet).
-//! * `jet::QJet<N>`: the same with N quad-double coefficients (`Lane::P` is `jet::QSeries<N>`), read and set in
+//! * `F8` and `Fu` are the same in plain f64, one `V8` per value or tangent, for the f64 Jacobian of the
+//!   mixed-precision Newton's method. Constants and inputs, which the trait passes as double-double, enter as their hi
+//!   parts. `Fun<N>` is `Fu` with N tangents.
+//! * `Dtn<N>` holds a double-double value with N plain-f64 tangents. One evaluation gives N Jacobian columns, with the
+//!   base trajectory computed once, to double-double accuracy, for all of them.
+//! * `Qu` holds a value and one tangent, both quad-double (`QV`), for exact Jacobian columns to quad-double accuracy.
+//! * `Ou` holds a value and one tangent, both octo-double (`crate::ov::OV`), for exact Jacobian columns to octo-double
+//!   accuracy. `Oun<N>` is `Ou` with N tangents.
+//! * `crate::ov::OV` holds values in octo-double (`VAL_OD`), with double-double constants and inputs, as `QV` does.
+//! * `Dc` holds a double-double value with a complex tangent, its real and imaginary parts each double-double. It gives
+//!   the derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
+//! * `jet::Jet<N>` is a truncated power series in one variable with N double-double coefficients. They are the
+//!   computation's own Taylor coefficients in a parameter, entered as `Lane::var` or, for the constants formed from the
+//!   parameter, through [`Param`] (`Lane::P` is `DD` on every other lane and `jet::Series<N>` on a jet).
+//! * `jet::QJet<N>` is the same with N quad-double coefficients (`Lane::P` is `jet::QSeries<N>`), read and set in
 //!   quad-double through `Lane::coef_qd` and `set_coef_qd`.
-//! * `jet::OJet<N>`: the same with N octo-double coefficients (`Lane::P` is `jet::OSeries<N>`), read and set in
+//! * `jet::OJet<N>` is the same with N octo-double coefficients (`Lane::P` is `jet::OSeries<N>`), read and set in
 //!   octo-double through `Lane::coef_od` and `set_coef_od`.
 //!
-//! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of the
-//! generic code.
+//! `Counted<L>` wraps any of them and counts every operation by kind (`take_counts`), for operation counts of generic
+//! code.
 //!
-//! Each lane type is generic over the backend (`crate::simd`), which `Lane::S` names, so that code generic over
-//! `Lane` runs on the instruction set [`crate::simd::dispatch`] picks.
+//! Each lane type is generic over the backend (`crate::simd`), named by `Lane::S`, so that code generic over `Lane`
+//! runs on the instruction set [`crate::simd::dispatch`] picks.
 use crate::dd::DD;
 use crate::dv::{DotAcc, DV};
 use crate::ov::{ODotAcc, OV};
@@ -34,26 +36,26 @@ use crate::simd::Simd;
 use crate::v8::V8;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// Deliberate breakage of the octo-double jet and dual lanes for the controls of their tests (feature `mutate`; ids below, 0 =
-/// none), as `crate::od::mutate` breaks the octo-double arithmetic: `set(id)` selects one in the current thread, and
-/// without the feature the hooks are compile-time `false`.
+/// Deliberate breakage of the octo-double jet and dual lanes, for the controls of their tests (feature `mutate`), as
+/// `crate::od::mutate` breaks the octo-double arithmetic. `set(id)` selects one of the ids below in the current thread,
+/// and 0 selects none. Without the feature the hooks are compile-time `false`.
 pub mod mutate {
-    /// `crate::jet::OJet`'s product: the last term of each convolution, x_k y_0, dropped (orders k >= 1)
+    /// `crate::jet::OJet`'s product drops the last term of each convolution, x_k y_0, at orders k >= 1.
     pub const OJET_CONV: u32 = 1;
-    /// `crate::field::FieldSolve::solve_lanes_jet_refine_od`: each refinement residual formed at the iterate rounded
-    /// to quad-double
+    /// `crate::field::FieldSolve::solve_lanes_jet_refine_od` forms each refinement residual at the iterate rounded to
+    /// quad-double.
     pub const OJET_REFINE_QD: u32 = 2;
-    /// `crate::dual::Ou`'s product: the tangent's term d o.v dropped
+    /// `crate::dual::Ou`'s product drops the tangent's term d o.v.
     pub const OU_TAN: u32 = 3;
-    /// `crate::field::cs_range_at_par`'s and `cs_w_at_par`'s split sums: the last lane vector's coefficient k moved by
-    /// one ulp of the leading part of its lane 0
+    /// `crate::field::cs_range_at_par`'s and `cs_w_at_par`'s split sums move coefficient k of the last lane vector by
+    /// one ulp of the leading part of its lane 0.
     pub const CS_AT_SPLIT: u32 = 4;
-    /// `crate::dual::Lane::mulf_upto` on the jets: coefficient k left unweighted, so that a weighted order-k sum
-    /// (`crate::field::cs_w_at`) takes the products of order k with x_k unweighted
+    /// `crate::dual::Lane::mulf_upto` on the jets leaves coefficient k unweighted, so a weighted order-k sum
+    /// (`crate::field::cs_w_at`) takes the products of order k with x_k unweighted.
     pub const MULF_UPTO: u32 = 5;
-    /// number of ids
+    /// Number of ids.
     pub const N: u32 = 5;
-    /// the mutations' descriptions, by id
+    /// The mutations' descriptions, by id.
     pub const NAMES: [&str; 6] = [
         "none",
         "octo-double jet product: last convolution term dropped",
@@ -66,20 +68,20 @@ pub mod mutate {
     #[cfg(feature = "mutate")]
     thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
 
-    /// select the mutation for the current thread (0 = none)
+    /// Selects mutation `id` in the current thread, 0 for none.
     #[cfg(feature = "mutate")]
     pub fn set(id: u32) {
         ID.with(|m| m.set(id));
     }
 
-    /// whether mutation id is selected in the current thread
+    /// Whether mutation `id` is selected in the current thread.
     #[cfg(feature = "mutate")]
     #[inline(always)]
     pub fn on(id: u32) -> bool {
         ID.with(|m| m.get() == id)
     }
 
-    /// whether mutation id is selected: never, without the feature `mutate`
+    /// Whether mutation `id` is selected, never without the feature `mutate`.
     #[cfg(not(feature = "mutate"))]
     #[inline(always)]
     pub fn on(_id: u32) -> bool {
@@ -87,11 +89,11 @@ pub mod mutate {
     }
 }
 
-/// The arithmetic of a parameter a computation over [`Lane`] is continued in ([`Lane::P`]): the scalar double-double
-/// on every lane that is not a jet, where a constant formed from the parameter is bit for bit the scalar operations
-/// it was, and a scalar truncated power series (`crate::jet::Series<N>`, `crate::jet::QSeries<N>` in quad-double,
-/// `crate::jet::OSeries<N>` in octo-double) on a jet lane, whose constants then carry their own Taylor coefficients in
-/// the parameter.
+/// The arithmetic of a parameter that a computation over [`Lane`] is continued in ([`Lane::P`]). On a lane that is not
+/// a jet it is the scalar double-double, so a constant formed from the parameter has the bits of the scalar operations
+/// that form it. On a jet lane it is a scalar truncated power series (`crate::jet::Series<N>`, or
+/// `crate::jet::QSeries<N>` in quad-double and `crate::jet::OSeries<N>` in octo-double), whose constants carry their
+/// own Taylor coefficients in the parameter.
 pub trait Param:
     Copy
     + Send
@@ -106,9 +108,9 @@ pub trait Param:
     fn one() -> Self;
     fn from_f64(x: f64) -> Self;
     fn from_dd(x: DD) -> Self;
-    /// times an exact f64
+    /// Times an exact f64.
     fn mul_f(self, s: f64) -> Self;
-    /// the parameter itself: c, and c + h on a series
+    /// The parameter itself, c, which is c + h on a series.
     fn var(c: DD) -> Self;
 }
 
@@ -135,7 +137,8 @@ impl Param for DD {
     }
 }
 
-/// the parameter arithmetic of a lane that is not a jet: double-double scalars, `mulp` the lane's own `muls`
+/// The parameter arithmetic of a lane that is not a jet. Its scalars are double-double, and `mulp` is the lane's own
+/// `muls`.
 macro_rules! dd_param {
     () => {
         type P = DD;
@@ -162,37 +165,38 @@ pub trait Lane:
     + Div<Output = Self>
     + Neg<Output = Self>
 {
-    /// the backend the lanes run on
+    /// The backend the lanes run on.
     type S: Simd;
     type Acc: Copy;
     const TANGENT: bool;
-    /// values in plain f64 (`F8`, `Fu`): double-double constants and inputs enter rounded to their hi parts
+    /// Values in plain f64 (`F8`, `Fu`, `Fun`). Double-double constants and inputs enter rounded to their hi parts.
     const VAL_F64: bool = false;
-    /// tangents in plain f64 (`Fu`, `Dtn`)
+    /// Tangents in plain f64 (`Fu`, `Dtn`, `Fun`).
     const TAN_F64: bool = false;
-    /// number of f64 tangents (`tan64`; 0 unless TAN_F64)
+    /// Number of f64 tangents (`tan64`), 0 unless `TAN_F64`.
     const NT: usize = 0;
-    /// values in quad-double (`QV`, `Qu`, `crate::jet::QJet<N>`): a solve with a double-double LU is refined for such
-    /// a lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`; a jet's
-    /// solve goes order by order, `NJ`)
+    /// Values in quad-double (`QV`, `Qu`, `crate::jet::QJet<N>`). A solve with a double-double LU is refined for such a
+    /// lane with the residual formed in its arithmetic (`crate::field::FieldSolve::solve_lanes_refine`). A jet's solve
+    /// goes order by order (`NJ`).
     const VAL_QD: bool = false;
-    /// values in octo-double (`crate::ov::OV`, `Ou`, `crate::jet::OJet<N>`): as for `VAL_QD`, a solve with a
+    /// Values in octo-double (`crate::ov::OV`, `Ou`, `Oun<N>`, `crate::jet::OJet<N>`). As for `VAL_QD`, a solve with a
     /// double-double LU is refined for such a lane with the residual formed in its arithmetic, with about twice the
-    /// steps, as each gains about cond(A) 2^-104 (a jet's solve goes order by order,
-    /// `crate::field::FieldSolve::solve_lanes_jet_refine_od`). Lanes that set it leave `VAL_QD` unset, so code that
+    /// steps, as each step gains a factor of about cond(A) 2^-104. A jet's solve goes order by order
+    /// (`crate::field::FieldSolve::solve_lanes_jet_refine_od`). Lanes that set it leave `VAL_QD` unset, so code that
     /// refines quad-double lanes a fixed number of steps does not apply that count to them.
     const VAL_OD: bool = false;
-    /// number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`, `crate::jet::OJet<N>`), 0 for
-    /// every other lane: code with a branch for jets, such as an order-by-order solve, tests it
+    /// Number of coefficients of a jet (`crate::jet::Jet<N>`, `crate::jet::QJet<N>`, `crate::jet::OJet<N>`), 0 for
+    /// every other lane. Code with a branch for jets, such as an order-by-order solve, tests it.
     const NJ: usize = 0;
-    /// the parameter arithmetic: `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>`,
-    /// `crate::jet::QSeries<N>` on `QJet<N>` and `crate::jet::OSeries<N>` on `OJet<N>`
+    /// The parameter arithmetic. It is `DD` on every lane that is not a jet, `crate::jet::Series<N>` on `Jet<N>`,
+    /// `crate::jet::QSeries<N>` on `QJet<N>` and `crate::jet::OSeries<N>` on `OJet<N>`.
     type P: Param;
-    /// times a parameter constant (`muls` on every lane that is not a jet)
+    /// Times a parameter constant (`muls` on every lane that is not a jet).
     fn mulp(self, p: Self::P) -> Self;
-    /// plus a parameter constant (`addc` of the splat constant on every lane that is not a jet)
+    /// Plus a parameter constant (`addc` of the splat constant on every lane that is not a jet).
     fn addp(self, p: Self::P) -> Self;
-    /// coefficient k of a jet; on every other lane the value (k = 0), the tangent (k = 1, tangent lanes) and zero
+    /// Coefficient k of a jet. On every other lane it is the value for k = 0, the tangent for k = 1 on tangent lanes,
+    /// and zero otherwise.
     #[inline(always)]
     fn coef(self, k: usize) -> DV<Self::S> {
         match k {
@@ -201,156 +205,160 @@ pub trait Lane:
             _ => DV::zero(),
         }
     }
-    /// set coefficient k of a jet
+    /// Sets coefficient k of a jet.
     #[inline(always)]
     fn set_coef(&mut self, _k: usize, _c: DV<Self::S>) {
         unreachable!("no jet coefficients")
     }
-    /// coefficient k in quad-double, for code generic over `Lane` that reads a quad-double jet's coefficients without
-    /// rounding them to double-double (`coef` does): the jet's own on `crate::jet::QJet<N>`, the quad-double value and
-    /// tangent on `QV` and `Qu`, and `coef(k)`, exactly, on every other lane
+    /// Coefficient k in quad-double, for code generic over `Lane` that reads a quad-double jet's coefficients without
+    /// rounding them to double-double, as `coef` does. It is the jet's own on `crate::jet::QJet<N>`, the quad-double
+    /// value and tangent on `QV` and `Qu`, and `coef(k)`, exactly, on every other lane.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<Self::S> {
         QV::from_dv(self.coef(k))
     }
-    /// set coefficient k of a jet from quad-double: exactly on `crate::jet::QJet<N>`, rounded to double-double
-    /// (`QV::to_dv`) on `crate::jet::Jet<N>`
+    /// Sets coefficient k of a jet from quad-double, exactly on `crate::jet::QJet<N>` and rounded to double-double
+    /// (`QV::to_dv`) on `crate::jet::Jet<N>`.
     #[inline(always)]
     fn set_coef_qd(&mut self, k: usize, c: QV<Self::S>) {
         self.set_coef(k, c.to_dv())
     }
-    /// coefficient k in octo-double, for code generic over `Lane` that reads an octo-double jet's coefficients without
-    /// rounding them (`coef` and `coef_qd` do): the jet's own on `crate::jet::OJet<N>`, the octo-double value on `OV`
-    /// and value and tangent on `Ou`, and `coef_qd(k)`, exactly, on every other lane
+    /// Coefficient k in octo-double, for code generic over `Lane` that reads an octo-double jet's coefficients without
+    /// rounding them, as `coef` and `coef_qd` do. It is the jet's own on `crate::jet::OJet<N>`, the octo-double value
+    /// on `OV`, the value and tangents on `Ou` and `Oun<N>`, and `coef_qd(k)`, exactly, on every other lane.
     #[inline(always)]
     fn coef_od(self, k: usize) -> OV<Self::S> {
         OV::from_qv(self.coef_qd(k))
     }
-    /// set coefficient k of a jet from octo-double: exactly on `crate::jet::OJet<N>`, rounded to quad-double
-    /// (`OV::to_qv`) on `crate::jet::QJet<N>` and to double-double (`OV::to_dv`) on `crate::jet::Jet<N>`
+    /// Sets coefficient k of a jet from octo-double, exactly on `crate::jet::OJet<N>`, rounded to quad-double
+    /// (`OV::to_qv`) on `crate::jet::QJet<N>` and to double-double (`OV::to_dv`) on `crate::jet::Jet<N>`.
     #[inline(always)]
     fn set_coef_od(&mut self, k: usize, c: OV<Self::S>) {
         self.set_coef_qd(k, c.to_qv())
     }
     fn zero() -> Self;
-    /// a constant (zero tangent)
+    /// A constant, with zero tangent.
     fn cst(c: DV<Self::S>) -> Self;
     #[inline(always)]
     fn splat(x: DD) -> Self {
         Self::cst(DV::splat(x))
     }
-    /// a parameter the computation is continued in: `splat(c)` on every lane, the series variable c + h on a jet
+    /// A parameter the computation is continued in. It is the series variable c + h on a jet and `splat(c)` on every
+    /// other lane.
     #[inline(always)]
     fn var(c: DD) -> Self {
         Self::splat(c)
     }
-    /// times a constant lane vector
+    /// Times a constant lane vector.
     fn mulc(self, c: DV<Self::S>) -> Self;
-    /// times a scalar constant
+    /// Times a scalar constant.
     #[inline(always)]
     fn muls(self, s: DD) -> Self {
         self.mulc(DV::splat(s))
     }
-    /// times an exact f64 (small integers, 1/2)
+    /// Times an exact f64 (small integers, 1/2).
     fn mulf(self, s: f64) -> Self;
-    /// `mulf(s)`'s coefficients 0..=k on a jet, the others left as they are (a weighted order-k sum reads no others,
-    /// `crate::field::cs_w_at`); on every other lane `mulf(s)`
+    /// `mulf(s)` on a jet's coefficients 0..=k, the others left as they are, since a weighted order-k sum
+    /// (`crate::field::cs_w_at`) reads no others. On every other lane it is `mulf(s)`.
     #[inline(always)]
     fn mulf_upto(self, s: f64, k: usize) -> Self {
         let _ = k;
         self.mulf(s)
     }
-    /// times a power of two s (`dd::is_pwr2`): every part, value and tangents, scaled exactly (barring overflow and
-    /// underflow), so bitwise `mulf(s)`; for computing in a variable rescaled by 2^k, e.g. a power series in x / 2^k
-    /// whose coefficients would overflow in x
+    /// Times a power of two s (`dd::is_pwr2`). Every part of the value and tangents is scaled exactly, barring overflow
+    /// and underflow, so the result is bitwise `mulf(s)`. It serves computing in a variable rescaled by 2^k, e.g. a
+    /// power series in x / 2^k whose coefficients would overflow in x.
     fn mul_pwr2(self, s: f64) -> Self;
-    /// plus a constant lane vector
+    /// Plus a constant lane vector.
     fn addc(self, c: DV<Self::S>) -> Self;
-    /// all 8 lanes = lane j
+    /// All 8 lanes set to lane j.
     fn bcast(self, j: usize) -> Self;
     fn val(self) -> DV<Self::S>;
     fn tan(self) -> DV<Self::S>;
     fn from_vt(v: DV<Self::S>, t: DV<Self::S>) -> Self;
     fn acc0() -> Self::Acc;
-    /// a + x y
+    /// The sum a + x y.
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc;
-    /// a + x y into a, with the accumulator and the operands borrowed: bitwise `acc`. Moving them copies the jets'
-    /// accumulators and coefficients, several kilobytes each (`[QDotAcc; N]` and N quad-double coefficients for
-    /// `crate::jet::QJet<N>`), once per term of a sum. The default is `acc`. The jets, `Dtn` and `Fun` add in place,
-    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`, `crate::ov::OV` through `crate::ov::ODotAcc::add_prod_mut`.
+    /// Adds x y into a with the accumulator and the operands borrowed, bitwise as `acc`. Moving them would copy the
+    /// jets' accumulators and coefficients, several kilobytes each (`[QDotAcc; N]` and N quad-double coefficients for
+    /// `crate::jet::QJet<N>`), once per term of a sum. The default calls `acc`. The jets, `Dtn` and `Fun` add in place,
+    /// `QV` and `Qu` through `QDotAcc::add_prod_mut`, and `crate::ov::OV`, `Ou` and `Oun<N>` through
+    /// `crate::ov::ODotAcc::add_prod_mut`.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         *a = Self::acc(*a, *x, *y);
     }
-    /// a + x c, c constant
+    /// The sum a + x c, c constant.
     fn accc(a: Self::Acc, x: Self, c: DV<Self::S>) -> Self::Acc;
-    /// a + x
+    /// The sum a + x.
     fn acc1(a: Self::Acc, x: Self) -> Self::Acc;
     fn fin(a: Self::Acc) -> Self;
-    /// `acc_mut` for the coefficient of order k alone: on a jet the products x_i y_(k-i), i = 0..=k, added into
-    /// accumulator k in `acc`'s order, so that `fin_at` gives coefficient k of `fin` bit for bit; the other
-    /// accumulators are left as they are. On every other lane, `acc_mut`. The order-k operations (`acc_at`, `fin_at`,
+    /// `acc_mut` for the coefficient of order k alone. On a jet it adds the products x_i y_(k-i), i = 0..=k, into
+    /// accumulator k in `acc`'s order, so that `fin_at` gives coefficient k of `fin` bit for bit, and leaves the other
+    /// accumulators as they are. On every other lane it is `acc_mut`. The order-k operations (`acc_at`, `fin_at`,
     /// `mul_at`, `div_at`, `mulp_at`) form a series one order at a time, its lower orders kept from the calls before.
     #[inline(always)]
     fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
         let _ = k;
         Self::acc_mut(a, x, y)
     }
-    /// coefficient k of `fin(a)` into coefficient k of `into`, its other coefficients unchanged (jets); on every other
-    /// lane `fin(a)`
+    /// Coefficient k of `fin(a)` into coefficient k of `into`, its other coefficients unchanged (jets). On every other
+    /// lane it is `fin(a)`.
     #[inline(always)]
     fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
         let _ = k;
         *into = Self::fin(*a)
     }
-    /// coefficient k of x y into coefficient k of `into`, bit for bit that of `x * y`, the other coefficients
-    /// unchanged (jets); on every other lane `x * y`
+    /// Coefficient k of x y into coefficient k of `into`, bit for bit that of `x * y`, the other coefficients unchanged
+    /// (jets). On every other lane it is `x * y`.
     #[inline(always)]
     fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
         let _ = k;
         *into = *x * *y
     }
-    /// coefficient k of x / y into coefficient k of `into`, from the quotient's coefficients 0..k - 1 already in
-    /// `into`: bit for bit that of `x / y` when they are its (jets). On every other lane `x / y`.
+    /// Coefficient k of x / y into coefficient k of `into`, from the quotient's coefficients 0..k - 1 already in
+    /// `into`. On a jet it is bit for bit that of `x / y` when they are its. On every other lane it is `x / y`.
     #[inline(always)]
     fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
         let _ = k;
         *into = *x / *y
     }
-    /// coefficient k of `x.mulp(p)` into coefficient k of `into`, bit for bit, the other coefficients unchanged
-    /// (jets); on every other lane `x.mulp(p)`
+    /// Coefficient k of `x.mulp(p)` into coefficient k of `into`, bit for bit, the other coefficients unchanged (jets).
+    /// On every other lane it is `x.mulp(p)`.
     #[inline(always)]
     fn mulp_at(x: &Self, p: &Self::P, k: usize, into: &mut Self) {
         let _ = k;
         *into = x.mulp(*p)
     }
-    /// coefficient k of `from` into coefficient k of `into`, the others unchanged (jets); on every other lane `from`
+    /// Coefficient k of `from` into coefficient k of `into`, the others unchanged (jets). On every other lane it is
+    /// `from`.
     #[inline(always)]
     fn copy_at(from: &Self, k: usize, into: &mut Self) {
         let _ = k;
         *into = *from
     }
-    /// number of tangents carried in the value's arithmetic (`tan_k`, `from_vt_n`): one on a dual lane with a
-    /// tangent of its value's precision, N on `Oun<N>`, none on every other lane (jets; the f64 tangents of `TAN_F64` lanes
-    /// are `NT`'s)
+    /// Number of tangents carried in the value's arithmetic (`tan_k`, `from_vt_n`). It is one on a dual lane with a
+    /// tangent of its value's precision, N on `Oun<N>`, and none on every other lane, the jets included. `NT` counts
+    /// the f64 tangents of `TAN_F64` lanes.
     const NTD: usize = (Self::TANGENT && !Self::TAN_F64 && Self::NJ == 0) as usize;
-    /// tangent k < NTD rounded to double-double; by default `tan()` for k = 0
+    /// Tangent k < `NTD` rounded to double-double. The default is `tan()` for k = 0.
     #[inline(always)]
     fn tan_k(self, k: usize) -> DV<Self::S> {
         debug_assert!(k < Self::NTD.max(1), "tan_k: tangent {k} of {}", Self::NTD);
         self.tan()
     }
-    /// value v and the tangents t (NTD of them), exactly; by default `from_vt` with t's first (zero when empty)
+    /// Value v and the tangents t (`NTD` of them), exactly. The default is `from_vt` with t's first, zero when t is
+    /// empty.
     #[inline(always)]
     fn from_vt_n(v: DV<Self::S>, t: &[DV<Self::S>]) -> Self {
         Self::from_vt(v, t.first().copied().unwrap_or_else(DV::zero))
     }
-    /// f64 tangent k < NT (TAN_F64 lanes)
+    /// The f64 tangent k < `NT` (`TAN_F64` lanes).
     #[inline(always)]
     fn tan64(self, _k: usize) -> V8<Self::S> {
         unreachable!("no f64 tangents")
     }
-    /// set f64 tangent k < NT (TAN_F64 lanes)
+    /// Sets the f64 tangent k < `NT` (`TAN_F64` lanes).
     #[inline(always)]
     fn set_tan64(&mut self, _k: usize, _t: V8<Self::S>) {
         unreachable!("no f64 tangents")
@@ -567,15 +575,15 @@ impl<S: Simd> Lane for Du<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// double-double value and complex tangent
+// Double-double value and complex tangent
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Forward-mode dual number over double-double lanes with a complex tangent: value `v`, tangent `r + i i`, all
-/// `DV`. A real function linearised about a real value is real-linear in the tangent, so the real and the imaginary
-/// part obey the real dual rule separately: every operation is `Du`'s applied to `r` and to `i`. It gives the
-/// derivative along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate.
-/// `tan` is the real part and `from_vt` sets the imaginary part to zero, so code written for `Du` runs unchanged with
-/// a real tangent; the imaginary part is read and set through the fields (`crate::field::Fl::tan_im`, `from_vri`).
+/// Forward-mode dual number over double-double lanes with a complex tangent, value `v` and tangent `r + i i`, all `DV`.
+/// A real function linearized about a real value is real-linear in the tangent, so the real and the imaginary part obey
+/// the real dual rule separately, and every operation is `Du`'s applied to `r` and to `i`. It gives the derivative
+/// along a complex direction, e.g. the growth-mode matrix of a real background at a complex rate. `tan` is the real
+/// part and `from_vt` sets the imaginary part to zero, so code written for `Du` runs unchanged with a real tangent. The
+/// imaginary part is read and set through the fields (`crate::field::Fl::tan_im`, `from_vri`).
 #[derive(Clone, Copy, Debug)]
 pub struct Dc<S: Simd> {
     pub v: DV<S>,
@@ -703,12 +711,12 @@ impl<S: Simd> Lane for Dc<S> {
     fn val(self) -> DV<S> {
         self.v
     }
-    /// the real part of the tangent
+    /// The real part of the tangent.
     #[inline(always)]
     fn tan(self) -> DV<S> {
         self.r
     }
-    /// a real tangent (imaginary part zero)
+    /// A real tangent, with imaginary part zero.
     #[inline(always)]
     fn from_vt(v: DV<S>, t: DV<S>) -> Self {
         Dc { v, r: t, i: DV::zero() }
@@ -744,13 +752,13 @@ impl<S: Simd> Lane for Dc<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// quad-double value and tangent
+// Quad-double value and tangent
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Forward-mode dual number over quad-double lanes: value `v` and one tangent `d`, both `QV`. The value runs the
-/// operations of `QV` as a `Lane`, bitwise, and the tangent their derivatives in quad-double; one evaluation with a
+/// Forward-mode dual number over quad-double lanes, with value `v` and one tangent `d`, both `QV`. The value runs the
+/// operations of `QV` as a `Lane`, bitwise, and the tangent their derivatives in quad-double. One evaluation with a
 /// unit tangent on one unknown gives one Jacobian column to quad-double accuracy. As for `QV`, the trait passes
-/// constants and inputs as double-double (they enter exactly) and `val`, `tan` round back to double-double; a
+/// constants and inputs as double-double, which enter exactly, and `val` and `tan` round back to double-double. A
 /// quad-double input is built from its parts, `Qu { v, d }`, and read back from `v` and `d`.
 #[derive(Clone, Copy, Debug)]
 pub struct Qu<S: Simd> {
@@ -884,7 +892,7 @@ impl<S: Simd> Lane for Qu<S> {
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
         (a.0.add_prod(x.v, y.v), a.1.add_prod(x.v, y.d).add_prod(x.d, y.v))
     }
-    /// `acc` in place (`QDotAcc::add_prod_mut`)
+    /// `acc` in place (`QDotAcc::add_prod_mut`).
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         a.0.add_prod_mut(&x.v, &y.v);
@@ -907,7 +915,7 @@ impl<S: Simd> Lane for Qu<S> {
             d: a.1.finish(),
         }
     }
-    /// the quad-double value (k = 0) and tangent (k = 1), zero past them
+    /// The quad-double value (k = 0) and tangent (k = 1), zero past them.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<S> {
         match k {
@@ -919,28 +927,28 @@ impl<S: Simd> Lane for Qu<S> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// octo-double value and tangent
+// Octo-double value and tangent
 // ---------------------------------------------------------------------------------------------------------------
 
-/// Forward-mode dual number over octo-double lanes: value `v` and one tangent `d`, both `OV`, as `Qu` is over
+/// Forward-mode dual number over octo-double lanes, with value `v` and one tangent `d`, both `OV`, as `Qu` is over
 /// quad-double. The value runs the operations of `OV` as a `Lane`, bitwise, and the tangent their derivatives in
-/// octo-double; one evaluation with a unit tangent on one unknown gives one Jacobian column to octo-double accuracy.
-/// As for `OV`, the trait passes constants and inputs as double-double (they enter exactly), and `val`, `tan` round
-/// back to double-double, `coef_qd` to quad-double. An octo-double input is built from its parts, `Ou { v, d }`
+/// octo-double. One evaluation with a unit tangent on one unknown gives one Jacobian column to octo-double accuracy. As
+/// for `OV`, the trait passes constants and inputs as double-double, which enter exactly, `val` and `tan` round back to
+/// double-double, and `coef_qd` to quad-double. An octo-double input is built from its parts, `Ou { v, d }`
 /// (`crate::field::Fl::from_vt_od` for a field), and read back from `v` and `d`, or `coef_od(0)` and `coef_od(1)`.
-/// `VAL_OD` is set and `VAL_QD` is not: a solve with a double-double LU is refined for these lanes with the residual
+/// `VAL_OD` is set and `VAL_QD` is not, so a solve with a double-double LU is refined for these lanes with the residual
 /// in octo-double (`crate::field::FieldSolve::solve_lanes_refine_t`), with about twice the steps of `Qu`.
 #[derive(Clone, Copy, Debug)]
 pub struct Ou<S: Simd> {
-    /// the value
+    /// The value.
     pub v: OV<S>,
-    /// the tangent
+    /// The tangent.
     pub d: OV<S>,
 }
 
 impl<S: Simd> Add for Ou<S> {
     type Output = Self;
-    /// value and tangent added
+    /// Value and tangent added.
     #[inline(always)]
     fn add(self, o: Ou<S>) -> Ou<S> {
         Ou {
@@ -951,7 +959,7 @@ impl<S: Simd> Add for Ou<S> {
 }
 impl<S: Simd> Sub for Ou<S> {
     type Output = Self;
-    /// value and tangent subtracted
+    /// Value and tangent subtracted.
     #[inline(always)]
     fn sub(self, o: Ou<S>) -> Ou<S> {
         Ou {
@@ -962,7 +970,7 @@ impl<S: Simd> Sub for Ou<S> {
 }
 impl<S: Simd> Neg for Ou<S> {
     type Output = Self;
-    /// value and tangent negated
+    /// Value and tangent negated.
     #[inline(always)]
     fn neg(self) -> Ou<S> {
         Ou { v: -self.v, d: -self.d }
@@ -970,8 +978,8 @@ impl<S: Simd> Neg for Ou<S> {
 }
 impl<S: Simd> Mul for Ou<S> {
     type Output = Self;
-    /// the product, its tangent v o.d + d o.v through the dot accumulator (feature `mutate`:
-    /// `mutate::OU_TAN` drops the term d o.v)
+    /// The product, its tangent v o.d + d o.v formed through the dot accumulator. Under the feature `mutate`,
+    /// `mutate::OU_TAN` drops the term d o.v.
     #[inline(always)]
     fn mul(self, o: Ou<S>) -> Ou<S> {
         let mut d = ODotAcc::zero();
@@ -987,7 +995,7 @@ impl<S: Simd> Mul for Ou<S> {
 }
 impl<S: Simd> Div for Ou<S> {
     type Output = Self;
-    /// the quotient q = v / o.v, its tangent (d - q o.d) / o.v
+    /// The quotient q = v / o.v, its tangent (d - q o.d) / o.v.
     #[inline(always)]
     fn div(self, o: Ou<S>) -> Ou<S> {
         let q = self.v / o.v;
@@ -1004,7 +1012,7 @@ impl<S: Simd> Lane for Ou<S> {
     dd_param!();
     const TANGENT: bool = true;
     const VAL_OD: bool = true;
-    /// zero value and tangent
+    /// Zero value and tangent.
     #[inline(always)]
     fn zero() -> Self {
         Ou {
@@ -1012,7 +1020,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: OV::zero(),
         }
     }
-    /// the constant c, exactly, with a zero tangent
+    /// The constant c, exactly, with a zero tangent.
     #[inline(always)]
     fn cst(c: DV<S>) -> Self {
         Ou {
@@ -1020,7 +1028,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: OV::zero(),
         }
     }
-    /// value and tangent times the constant c
+    /// Value and tangent times the constant c.
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
         Ou {
@@ -1028,7 +1036,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: self.d.mul_dv(c),
         }
     }
-    /// value and tangent times an exact f64
+    /// Value and tangent times an exact f64.
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
         Ou {
@@ -1036,7 +1044,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: self.d.mul_f(s),
         }
     }
-    /// value and tangent times a power of two, exactly
+    /// Value and tangent times a power of two, exactly.
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
         Ou {
@@ -1044,7 +1052,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: self.d.mul_pwr2(s),
         }
     }
-    /// the value plus the constant c
+    /// The value plus the constant c.
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
         Ou {
@@ -1052,7 +1060,7 @@ impl<S: Simd> Lane for Ou<S> {
             d: self.d,
         }
     }
-    /// all 8 lanes of value and tangent = lane j
+    /// All 8 lanes of value and tangent set to lane j.
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
         Ou {
@@ -1060,17 +1068,17 @@ impl<S: Simd> Lane for Ou<S> {
             d: self.d.bcast(j),
         }
     }
-    /// the value rounded to double-double
+    /// The value rounded to double-double.
     #[inline(always)]
     fn val(self) -> DV<S> {
         self.v.to_dv()
     }
-    /// the tangent rounded to double-double
+    /// The tangent rounded to double-double.
     #[inline(always)]
     fn tan(self) -> DV<S> {
         self.d.to_dv()
     }
-    /// value v and tangent t, exactly
+    /// Value v and tangent t, exactly.
     #[inline(always)]
     fn from_vt(v: DV<S>, t: DV<S>) -> Self {
         Ou {
@@ -1078,26 +1086,26 @@ impl<S: Simd> Lane for Ou<S> {
             d: OV::from_dv(t),
         }
     }
-    /// the empty sums of the value and of the tangent
+    /// The empty sums of the value and of the tangent.
     #[inline(always)]
     fn acc0() -> Self::Acc {
         (ODotAcc::zero(), ODotAcc::zero())
     }
-    /// a + x y: the value's product and the tangent's two
+    /// The sum a + x y, with the value's product and the tangent's two.
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
         let mut a = a;
         Self::acc_mut(&mut a, &x, &y);
         a
     }
-    /// `acc` in place (`ODotAcc::add_prod_mut`)
+    /// `acc` in place (`ODotAcc::add_prod_mut`).
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         a.0.add_prod_mut(&x.v, &y.v);
         a.1.add_prod_mut(&x.v, &y.d);
         a.1.add_prod_mut(&x.d, &y.v);
     }
-    /// a + x c, c a constant lane vector
+    /// The sum a + x c, c a constant lane vector.
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
         let mut a = a;
@@ -1105,12 +1113,12 @@ impl<S: Simd> Lane for Ou<S> {
         a.1.add_prod_dv_mut(&x.d, &c);
         a
     }
-    /// a + x
+    /// The sum a + x.
     #[inline(always)]
     fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
         (a.0.add(x.v), a.1.add(x.d))
     }
-    /// the sums of the value and of the tangent
+    /// The sums of the value and of the tangent.
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
         Ou {
@@ -1118,12 +1126,12 @@ impl<S: Simd> Lane for Ou<S> {
             d: a.1.finish(),
         }
     }
-    /// the value (k = 0) and tangent (k = 1) rounded to quad-double, zero past them
+    /// The value (k = 0) and tangent (k = 1) rounded to quad-double, zero past them.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<S> {
         self.coef_od(k).to_qv()
     }
-    /// the octo-double value (k = 0) and tangent (k = 1), zero past them
+    /// The octo-double value (k = 0) and tangent (k = 1), zero past them.
     #[inline(always)]
     fn coef_od(self, k: usize) -> OV<S> {
         match k {
@@ -1134,23 +1142,23 @@ impl<S: Simd> Lane for Ou<S> {
     }
 }
 
-/// Forward-mode dual number over octo-double lanes with N tangents: value `v` and tangents `d`, all `OV`, so that one
-/// evaluation with a unit tangent on each of N unknowns gives N Jacobian columns, the value's operations done once
-/// for all of them. Each tangent runs `Ou`'s operations on its own (`Ou`'s product, quotient and dot accumulators,
-/// in the same order), so tangent k is bit for bit the tangent of an `Ou` evaluation seeded as tangent k, and the
-/// value bit for bit its value. Constants and inputs enter as double-double as for `Ou`; the octo-double value and
-/// tangents are built and read through `Tangents`.
+/// Forward-mode dual number over octo-double lanes with N tangents, value `v` and tangents `d`, all `OV`. One
+/// evaluation with a unit tangent on each of N unknowns gives N Jacobian columns, with the value's operations done once
+/// for all of them. Each tangent runs `Ou`'s operations on its own (`Ou`'s product, quotient and dot accumulators, in
+/// the same order), so tangent k is bit for bit the tangent of an `Ou` evaluation seeded as tangent k, and the value
+/// bit for bit its value. Constants and inputs enter as double-double, as for `Ou`. The octo-double value and tangents
+/// are built and read through `Tangents`.
 #[derive(Clone, Copy, Debug)]
 pub struct Oun<S: Simd, const N: usize> {
-    /// the value
+    /// The value.
     pub v: OV<S>,
-    /// the tangents
+    /// The tangents.
     pub d: [OV<S>; N],
 }
 
 impl<S: Simd, const N: usize> Add for Oun<S, N> {
     type Output = Self;
-    /// value and tangents added
+    /// Value and tangents added.
     #[inline(always)]
     fn add(self, o: Self) -> Self {
         Oun {
@@ -1161,7 +1169,7 @@ impl<S: Simd, const N: usize> Add for Oun<S, N> {
 }
 impl<S: Simd, const N: usize> Sub for Oun<S, N> {
     type Output = Self;
-    /// value and tangents subtracted
+    /// Value and tangents subtracted.
     #[inline(always)]
     fn sub(self, o: Self) -> Self {
         Oun {
@@ -1172,7 +1180,7 @@ impl<S: Simd, const N: usize> Sub for Oun<S, N> {
 }
 impl<S: Simd, const N: usize> Neg for Oun<S, N> {
     type Output = Self;
-    /// value and tangents negated
+    /// Value and tangents negated.
     #[inline(always)]
     fn neg(self) -> Self {
         Oun {
@@ -1183,8 +1191,8 @@ impl<S: Simd, const N: usize> Neg for Oun<S, N> {
 }
 impl<S: Simd, const N: usize> Mul for Oun<S, N> {
     type Output = Self;
-    /// the product, each tangent v o.d + d o.v through the dot accumulator as `Ou`'s (feature `mutate`:
-    /// `mutate::OU_TAN` drops the term d o.v)
+    /// The product, each tangent v o.d + d o.v formed through the dot accumulator as `Ou`'s. Under the feature
+    /// `mutate`, `mutate::OU_TAN` drops the term d o.v.
     #[inline(always)]
     fn mul(self, o: Self) -> Self {
         let d = std::array::from_fn(|k| {
@@ -1200,7 +1208,7 @@ impl<S: Simd, const N: usize> Mul for Oun<S, N> {
 }
 impl<S: Simd, const N: usize> Div for Oun<S, N> {
     type Output = Self;
-    /// the quotient q = v / o.v, each tangent (d - q o.d) / o.v (the quotient rule, whose - and * the lint flags)
+    /// The quotient q = v / o.v, each tangent (d - q o.d) / o.v. The lint flags the quotient rule's - and *.
     #[inline(always)]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, o: Self) -> Self {
@@ -1219,7 +1227,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
     const TANGENT: bool = true;
     const VAL_OD: bool = true;
     const NTD: usize = N;
-    /// zero value and tangents
+    /// Zero value and tangents.
     #[inline(always)]
     fn zero() -> Self {
         Oun {
@@ -1227,7 +1235,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: [OV::zero(); N],
         }
     }
-    /// the constant c, exactly, with zero tangents
+    /// The constant c, exactly, with zero tangents.
     #[inline(always)]
     fn cst(c: DV<S>) -> Self {
         Oun {
@@ -1235,7 +1243,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: [OV::zero(); N],
         }
     }
-    /// value and tangents times the constant c
+    /// Value and tangents times the constant c.
     #[inline(always)]
     fn mulc(self, c: DV<S>) -> Self {
         Oun {
@@ -1243,7 +1251,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: self.d.map(|x| x.mul_dv(c)),
         }
     }
-    /// value and tangents times an exact f64
+    /// Value and tangents times an exact f64.
     #[inline(always)]
     fn mulf(self, s: f64) -> Self {
         Oun {
@@ -1251,7 +1259,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: self.d.map(|x| x.mul_f(s)),
         }
     }
-    /// value and tangents times a power of two, exactly
+    /// Value and tangents times a power of two, exactly.
     #[inline(always)]
     fn mul_pwr2(self, s: f64) -> Self {
         Oun {
@@ -1259,7 +1267,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: self.d.map(|x| x.mul_pwr2(s)),
         }
     }
-    /// the value plus the constant c
+    /// The value plus the constant c.
     #[inline(always)]
     fn addc(self, c: DV<S>) -> Self {
         Oun {
@@ -1267,7 +1275,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: self.d,
         }
     }
-    /// all 8 lanes of value and tangents = lane j
+    /// All 8 lanes of value and tangents set to lane j.
     #[inline(always)]
     fn bcast(self, j: usize) -> Self {
         Oun {
@@ -1275,17 +1283,17 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: self.d.map(|x| x.bcast(j)),
         }
     }
-    /// the value rounded to double-double
+    /// The value rounded to double-double.
     #[inline(always)]
     fn val(self) -> DV<S> {
         self.v.to_dv()
     }
-    /// the first tangent rounded to double-double
+    /// The first tangent rounded to double-double.
     #[inline(always)]
     fn tan(self) -> DV<S> {
         self.tan_k(0)
     }
-    /// tangent k rounded to double-double
+    /// Tangent k rounded to double-double.
     #[inline(always)]
     fn tan_k(self, k: usize) -> DV<S> {
         if k < N {
@@ -1294,7 +1302,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             DV::zero()
         }
     }
-    /// value v and first tangent t, exactly, the other tangents zero
+    /// Value v and first tangent t, exactly, the other tangents zero.
     #[inline(always)]
     fn from_vt(v: DV<S>, t: DV<S>) -> Self {
         let mut x = Self::cst(v);
@@ -1303,7 +1311,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
         }
         x
     }
-    /// value v and tangents t, exactly (zero past t)
+    /// Value v and tangents t, exactly, zero past t.
     #[inline(always)]
     fn from_vt_n(v: DV<S>, t: &[DV<S>]) -> Self {
         Oun {
@@ -1311,19 +1319,19 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: std::array::from_fn(|k| t.get(k).map_or_else(OV::zero, |&x| OV::from_dv(x))),
         }
     }
-    /// the empty sums of the value and of the tangents
+    /// The empty sums of the value and of the tangents.
     #[inline(always)]
     fn acc0() -> Self::Acc {
         (ODotAcc::zero(), [ODotAcc::zero(); N])
     }
-    /// a + x y: the value's product and each tangent's two, as `Ou`'s
+    /// The sum a + x y, with the value's product and each tangent's two, as `Ou`'s.
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
         let mut a = a;
         Self::acc_mut(&mut a, &x, &y);
         a
     }
-    /// `acc` in place
+    /// `acc` in place.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         a.0.add_prod_mut(&x.v, &y.v);
@@ -1332,7 +1340,7 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             a.1[k].add_prod_mut(&x.d[k], &y.v);
         }
     }
-    /// a + x c, c a constant lane vector
+    /// The sum a + x c, c a constant lane vector.
     #[inline(always)]
     fn accc(a: Self::Acc, x: Self, c: DV<S>) -> Self::Acc {
         let mut a = a;
@@ -1342,12 +1350,12 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
         }
         a
     }
-    /// a + x
+    /// The sum a + x.
     #[inline(always)]
     fn acc1(a: Self::Acc, x: Self) -> Self::Acc {
         (a.0.add(x.v), std::array::from_fn(|k| a.1[k].add(x.d[k])))
     }
-    /// the sums of the value and of the tangents
+    /// The sums of the value and of the tangents.
     #[inline(always)]
     fn fin(a: Self::Acc) -> Self {
         Oun {
@@ -1355,12 +1363,12 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
             d: a.1.map(|x| x.finish()),
         }
     }
-    /// the value (k = 0) and tangent k - 1 (k = 1..=N) rounded to quad-double, zero past them
+    /// The value (k = 0) and tangent k - 1 (k = 1..=N) rounded to quad-double, zero past them.
     #[inline(always)]
     fn coef_qd(self, k: usize) -> QV<S> {
         self.coef_od(k).to_qv()
     }
-    /// the octo-double value (k = 0) and tangent k - 1 (k = 1..=N), zero past them
+    /// The octo-double value (k = 0) and tangent k - 1 (k = 1..=N), zero past them.
     #[inline(always)]
     fn coef_od(self, k: usize) -> OV<S> {
         match k {
@@ -1371,16 +1379,16 @@ impl<S: Simd, const N: usize> Lane for Oun<S, N> {
     }
 }
 
-/// A dual lane whose value and tangents are in one lane type `V` (octo-double for `Ou` and `Oun<N>`): built from them
-/// exactly and read back exactly, for code that seeds several tangents at once (a Jacobian's columns)
+/// A dual lane whose value and tangents are in one lane type `V`, octo-double for `Ou` and `Oun<N>`. It is built from
+/// them exactly and read back exactly, for code that seeds several tangents at once, such as a Jacobian's columns.
 pub trait Tangents: Lane {
-    /// the lane type of the value and of each tangent
+    /// The lane type of the value and of each tangent.
     type V: Lane<S = Self::S>;
-    /// value v and tangents t (`NTD` of them, zero past t), exactly
+    /// Value v and tangents t (`NTD` of them, zero past t), exactly.
     fn from_tangents(v: Self::V, t: &[Self::V]) -> Self;
-    /// the value
+    /// The value.
     fn value(&self) -> Self::V;
-    /// tangent k < `NTD`
+    /// Tangent k < `NTD`.
     fn tangent(&self, k: usize) -> Self::V;
 }
 
@@ -1424,7 +1432,7 @@ impl<S: Simd, const N: usize> Tangents for Oun<S, N> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// plain f64 lanes
+// Plain f64 lanes
 // ---------------------------------------------------------------------------------------------------------------
 
 /// 8 lanes of plain f64 (values).
@@ -1598,8 +1606,8 @@ impl<S: Simd> Div for Fu<S> {
     type Output = Self;
     #[inline(always)]
     fn div(self, o: Fu<S>) -> Fu<S> {
-        // (d - q o.d) / o.v, with d - q o.d as one fused operation (negated q o.d - d)
-        // both divisions by o.v share its divisor (on AVX-512 its reciprocal)
+        // The tangent is (d - q o.d) / o.v, with d - q o.d formed as the fused q o.d - d, negated. Both divisions by
+        // o.v share its divisor, on AVX-512 its reciprocal.
         let r = o.v.divisor();
         let q = self.v.div_by(r);
         Fu {
@@ -1729,7 +1737,7 @@ impl<S: Simd> Lane for Fu<S> {
     }
 }
 
-/// Dual number with a double-double value and N plain-f64 tangents: the base trajectory to double-double accuracy,
+/// Dual number with a double-double value and N plain-f64 tangents. The base trajectory, to double-double accuracy, is
 /// computed once for N Jacobian columns.
 #[derive(Clone, Copy, Debug)]
 pub struct Dtn<S: Simd, const N: usize> {
@@ -1785,7 +1793,7 @@ impl<S: Simd, const N: usize> Div for Dtn<S, N> {
     type Output = Self;
     #[inline(always)]
     fn div(self, o: Self) -> Self {
-        // d_i = (d_i - q o.d_i) / o.v, as in Fu
+        // Each tangent is d_i = (d_i - q o.d_i) / o.v, as in `Fu`.
         let q = self.v / o.v;
         let mut d = self.d;
         for i in 0..N {
@@ -1857,7 +1865,7 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
     fn val(self) -> DV<S> {
         self.v
     }
-    /// the first tangent
+    /// The first tangent.
     #[inline(always)]
     fn tan(self) -> DV<S> {
         DV {
@@ -1865,7 +1873,7 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
             lo: V8::zero(),
         }
     }
-    /// value v, first tangent t, the others zero
+    /// Value v, first tangent t, the others zero.
     #[inline(always)]
     fn from_vt(v: DV<S>, t: DV<S>) -> Self {
         let mut d = [V8::zero(); N];
@@ -1884,7 +1892,7 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
         }
         (a.0.add_prod(x.v, y.v), d)
     }
-    /// `acc` in place: the same operations on each tangent and the value
+    /// `acc` in place, with the same operations on each tangent and the value.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         for i in 0..N {
@@ -1925,7 +1933,7 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
     }
 }
 
-/// Dual number with a plain-f64 value and N plain-f64 tangents (Fu with N columns per evaluation).
+/// Dual number with a plain-f64 value and N plain-f64 tangents, `Fu` with N columns per evaluation.
 #[derive(Clone, Copy, Debug)]
 pub struct Fun<S: Simd, const N: usize> {
     pub v: V8<S>,
@@ -1979,7 +1987,7 @@ impl<S: Simd, const N: usize> Div for Fun<S, N> {
     type Output = Self;
     #[inline(always)]
     fn div(self, o: Self) -> Self {
-        // the N + 1 divisions by o.v share its divisor (on AVX-512 its reciprocal)
+        // The N + 1 divisions by o.v share its divisor, on AVX-512 its reciprocal.
         let r = o.v.divisor();
         let q = self.v.div_by(r);
         let mut d = self.d;
@@ -2072,7 +2080,7 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
             lo: V8::zero(),
         }
     }
-    /// the first tangent
+    /// The first tangent.
     #[inline(always)]
     fn tan(self) -> DV<S> {
         DV {
@@ -2080,7 +2088,7 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
             lo: V8::zero(),
         }
     }
-    /// value v, first tangent t, the others zero
+    /// Value v, first tangent t, the others zero.
     #[inline(always)]
     fn from_vt(v: DV<S>, t: DV<S>) -> Self {
         let mut d = [V8::zero(); N];
@@ -2099,7 +2107,7 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
         }
         (x.v.fma(y.v, a.0), d)
     }
-    /// `acc` in place: the same operations on each tangent and the value
+    /// `acc` in place, with the same operations on each tangent and the value.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         for i in 0..N {
@@ -2138,12 +2146,13 @@ impl<S: Simd, const N: usize> Lane for Fun<S, N> {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// counting lanes
+// Counting lanes
 // ---------------------------------------------------------------------------------------------------------------
 
-/// The kinds of lane operation `Counted` counts; `take_counts()[i]` is the count of `COUNTED_OPS[i]` (`op` names the
-/// indices). "x f64" covers `mulf` and `mul_pwr2`, "x const" `mulc` (and `muls`), "+ const" `addc`; `cst`, `splat`,
-/// `bcast`, `val`, `tan`, `from_vt` and the f64 tangent accessors move data and are not counted.
+/// The kinds of lane operation `Counted` counts. `take_counts()[i]` is the count of `COUNTED_OPS[i]`, and `op` names
+/// the indices. "x f64" covers `mulf`, `mulf_upto` and `mul_pwr2`, "x const" covers `mulc`, `muls` and `mulp`, and
+/// "+ const" covers `addc` and `addp`. `cst`, `splat`, `bcast`, `val`, `tan`, `from_vt` and the f64 tangent accessors
+/// move data and are not counted.
 pub const COUNTED_OPS: [&str; 11] = [
     "add/sub", "mul", "div", "neg", "x const", "x f64", "+ const", "acc a b", "acc a c", "acc a", "finish",
 ];
@@ -2154,9 +2163,9 @@ pub mod op {
     pub const MUL: usize = 1;
     pub const DIV: usize = 2;
     pub const NEG: usize = 3;
-    /// `mulc`, `muls`
+    /// `mulc`, `muls` and `mulp`.
     pub const MULC: usize = 4;
-    /// `mulf`, `mul_pwr2`
+    /// `mulf`, `mulf_upto` and `mul_pwr2`.
     pub const MULF: usize = 5;
     pub const ADDC: usize = 6;
     pub const ACC: usize = 7;
@@ -2172,20 +2181,20 @@ fn count(i: usize) {
     COUNTS.with(|c| c.borrow_mut()[i] += 1);
 }
 
-/// add n to count i (for operations counted as a whole, as `field::MatLane::dmat_apply` on `Counted`)
+/// Adds n to count i, for operations counted as a whole, such as `field::MatLane::dmat_apply` on `Counted`.
 #[inline(always)]
 pub(crate) fn count_n(i: usize, n: u64) {
     COUNTS.with(|c| c.borrow_mut()[i] += n);
 }
 
-/// This thread's operation counts since the last call (in the order of `COUNTED_OPS`), and reset them. The counts
-/// are per thread: run the computation to be counted on one thread.
+/// Returns this thread's operation counts since the last call, in the order of `COUNTED_OPS`, and resets them. The
+/// counts are per thread, so run the computation to be counted on one thread.
 pub fn take_counts() -> [u64; 11] {
     COUNTS.with(|c| std::mem::take(&mut *c.borrow_mut()))
 }
 
-/// A lane type L with every arithmetic operation counted (one count per 8-lane operation, by kind: `COUNTED_OPS`),
-/// for operation counts of code generic over `Lane`: what a computation would cost in another lane type is the
+/// A lane type L with every arithmetic operation counted, one count per 8-lane operation, by kind (`COUNTED_OPS`). It
+/// gives the operation counts of code generic over `Lane`. What a computation would cost in another lane type is the
 /// counts times that type's cost per operation. The results are bitwise L's.
 #[derive(Clone, Copy, Debug)]
 pub struct Counted<L: Lane>(pub L);
@@ -2292,7 +2301,7 @@ impl<L: Lane> Lane for Counted<L> {
         count(op::MULF);
         Counted(self.0.mulf(s))
     }
-    /// counted as `mulf`
+    /// Counted as `mulf`.
     #[inline(always)]
     fn mulf_upto(self, s: f64, k: usize) -> Self {
         count(op::MULF);
@@ -2333,7 +2342,7 @@ impl<L: Lane> Lane for Counted<L> {
         count(op::ACC);
         L::acc(a, x.0, y.0)
     }
-    /// counted as `acc`
+    /// Counted as `acc`.
     #[inline(always)]
     fn acc_mut(a: &mut Self::Acc, x: &Self, y: &Self) {
         count(op::ACC);
@@ -2354,37 +2363,37 @@ impl<L: Lane> Lane for Counted<L> {
         count(op::FIN);
         Counted(L::fin(a))
     }
-    /// counted as `acc`
+    /// Counted as `acc`.
     #[inline(always)]
     fn acc_at(a: &mut Self::Acc, x: &Self, y: &Self, k: usize) {
         count(op::ACC);
         L::acc_at(a, &x.0, &y.0, k)
     }
-    /// counted as `fin`
+    /// Counted as `fin`.
     #[inline(always)]
     fn fin_at(a: &Self::Acc, k: usize, into: &mut Self) {
         count(op::FIN);
         L::fin_at(a, k, &mut into.0)
     }
-    /// counted as `*`
+    /// Counted as `*`.
     #[inline(always)]
     fn mul_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
         count(op::MUL);
         L::mul_at(&x.0, &y.0, k, &mut into.0)
     }
-    /// counted as `/`
+    /// Counted as `/`.
     #[inline(always)]
     fn div_at(x: &Self, y: &Self, k: usize, into: &mut Self) {
         count(op::DIV);
         L::div_at(&x.0, &y.0, k, &mut into.0)
     }
-    /// counted as `mulp`
+    /// Counted as `mulp`.
     #[inline(always)]
     fn mulp_at(x: &Self, p: &L::P, k: usize, into: &mut Self) {
         count(op::MULC);
         L::mulp_at(&x.0, p, k, &mut into.0)
     }
-    /// not counted, as `coef` and `set_coef`
+    /// Not counted, as `coef` and `set_coef` are not.
     #[inline(always)]
     fn copy_at(from: &Self, k: usize, into: &mut Self) {
         L::copy_at(&from.0, k, &mut into.0)
