@@ -590,7 +590,7 @@ formula above is nondecreasing in the quantities so rounded, so the computed val
 
 The square root of multidouble starts closer instead. SQRT$^{\rm DD}_n$ takes $s$, $a$ and $h$ as SQRT$_{n,J}$, then
 $(a_0', a_1') = \FastTwoSum(a_0, a_1)$, $v$ the double-word square root of $a_0' + a_1'$ by Algorithm~8
-of~\cite{LLMPR23}, and $r = 1/y$ by DWDivDW2~\cite{JMP17}, so that $r = (r_0, r_1, 0, \dots, 0)$. One step keeps the
+of~\cite{LLMPR23}, and $r = 1/v$ by DWDivDW2~\cite{JMP17}, so that $r = (r_0, r_1, 0, \dots, 0)$. One step keeps the
 second-order term: with $m$, $g$ and $c$ as above, $q = \mathrm{MUL}(c, c)$, $t = \mathrm{ADD}(q, q/2)$, $w =
 \mathrm{ADD}(c, t)$, $d = \mathrm{MUL}(w, r)$ and $r \gets \mathrm{ADD}(r, d)$. One step of SQRT$_{n,J}$ follows,
 then $z = \mathrm{MUL}(r, a)$, and the result is $zs$. At $n = 8$ this is multidouble's square root (identical bits on
