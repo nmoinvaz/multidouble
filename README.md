@@ -209,7 +209,7 @@ gives up in parentheses.
 | divide | 8 u² (3) | 32 u⁴ (5) | u⁸ (0), proven |
 | square root | 25/8 u² (1.6), proven | 32 u⁴ (5) | 3 u⁸ (1.6), proven |
 | exp | 5.465 u² (2.5), proven | 64 u⁴ (6) | 3.661 u⁸ (1.9), proven |
-| ln | 15.351 u² (3.9), proven | 64 u⁴ (6) | 9.926 u⁸ (3.3) + 2⁻⁵⁰⁹, proven |
+| ln | 15.351 u² (3.9), proven | 64 u⁴ (6) | 9.926 u⁸ (3.3), proven |
 | sin, cos | 7.85 u² (3.0), proven | 32 u⁴ (5) | 3.17 u⁸ (1.7), proven |
 | tan | 28.5 u² (4.8), proven | 64 u⁴ (6) | 6.42 u⁸ (2.7), proven |
 
@@ -218,8 +218,10 @@ A proven bound holds for every input that meets its hypotheses: for the octo-dou
 add's is Theorem 3.1 of Joldes, Muller and Popescu (2017), `fast_div`'s is their Theorem 7.1, which Muller and Rideau
 (2022) proved formally, and the double-double square root's
 is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and Rideau (2023), whose Algorithm 8 it is. The octo-double ones are in
-[the paper](paper/expansion-error-bounds.pdf), where each has a second term at most 2⁻¹⁵ of the first. The other bounds
-are the thresholds the tests check.
+[the paper](paper/expansion-error-bounds.pdf), where the add, multiply, divide and square root each have a second term
+at most 2⁻¹⁵ of the first. The exp and ln rows give the relative coefficient alone: their bounds also have an absolute
+term, given below, which is larger only for tiny results and near x = 1. The other bounds are the thresholds the tests
+check.
 
 - The sine, cosine and tangent bounds are those of the paper's Theorem 34. For x on the ladder (a double-word number
   for `DD`) with |x₀| ≤ 2⁵², sin and cos err by at most C|f(x)| + 5|k|·2⁻¹²¹⁷ and tan by at most
@@ -257,14 +259,15 @@ are the thresholds the tests check.
   binary64 logarithm, within a proven 5.915 u. The double-double ones use the double-word operations whose bounds
   are published (Joldes, Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved
   formally, rather than `*`). The octo-double bounds are proved in the paper's appendix on exp and log. Each bound has
-  a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, where the result's parts fall below 2⁻¹⁰²², 2⁻¹⁰⁷¹ for the
-  double-double ln and 2⁻⁵⁰⁹ for the octo-double ln. Small arguments and arguments near 1 keep every product inside
-  the normal range, the products of small factors being formed from the factors scaled to [1, 2), so only a part far
-  below the one above it can make one underflow, as for the other operations. `paper/explog_consts.py` computes every
-  constant. The ln column is relative to |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per
-  category give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.86 u⁴ and 0.41 u⁴ for the
-  quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included
-  (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
+  a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the
+  relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for
+  the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. Small arguments and arguments near 1 keep
+  every product inside the normal range, the products of small factors being formed from the factors scaled to [1, 2),
+  so only a part far below the one above it can make one underflow, as for the other operations.
+  `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|. Against a 1700-bit
+  reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the double-double exp and
+  ln, 0.86 u⁴ and 0.41 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the
+  ladder included (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
