@@ -20,7 +20,7 @@
 //!   [`ov::OV`], each lane bitwise the scalar function of its value.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`explog`]: `exp` and `ln` of [`dd::DD`], [`qd::QD`] and [`od::OD`], and of their lanes [`dv::DV`], [`qv::QV`]
-//!   and [`ov::OV`] with each lane's bits, a computed NaN's sign and payload aside.
+//!   and [`ov::OV`] with each lane's bits.
 //! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
 //!   ([`precision::Quad`]) and octo-double ([`precision::Octo`]), naming each kind of type once and delegating to
 //!   each precision's own methods, so code written once gives bitwise the results of the code written for one

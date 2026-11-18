@@ -49,10 +49,9 @@
 //! backend, so the bounds above hold per lane. The same code runs on them: each lane's choices (the special values, k,
 //! m, the degree, the branches of ln) are made in f64 as the scalar types make them, the steps run as far as the lane
 //! that needs most, and a lane keeps its value through each step it does not take (masked), so that it performs the
-//! scalar type's operations and no others. A NaN that the arithmetic makes, as parts off the ladder can when the run
-//! overflows, may differ in sign and payload between a lane and the scalar function: Rust leaves those unspecified, and
-//! the compiler's choice of instructions sets them, for the scalar types too. The special values' results, x_0 itself
-//! for exp of a NaN x_0 included, are made without arithmetic and match bit for bit.
+//! scalar type's operations and no others. A NaN's sign and payload follow the order of its operands, which the
+//! compiler may change, so a lane whose result has a NaN part, possible only for a special value or for parts off the
+//! ladder, takes the scalar function's result: the bits match, NaNs included.
 use crate::dd::{two_sum, DD};
 use crate::dv::{self, DV};
 use crate::dw;
@@ -85,8 +84,11 @@ pub mod mutate {
     pub const LANE_POW2_FT: u32 = 8;
     /// the lanes only: every lane scales ln's series by lane 0's powers of two
     pub const LANE_POW2_SERIES: u32 = 9;
+    /// the lanes only: the lanes with a NaN part left as the lanes' arithmetic gives them, their NaNs' signs flipped,
+    /// as another order of the operands can give them
+    pub const LANE_NAN: u32 = 10;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 10] = [
+    pub const NAMES: [&str; 11] = [
         "none",
         "exp: ln 2's tail cut to one part",
         "exp: Taylor polynomial at half its degree",
@@ -97,6 +99,7 @@ pub mod mutate {
         "lanes: lane 0's powers of two in the Horner sum",
         "lanes: lane 0's powers of two in ln's f t",
         "lanes: lane 0's powers of two in ln's series",
+        "lanes: NaN lanes from the lanes' arithmetic, NaN signs flipped",
     ];
 
     #[cfg(feature = "mutate")]
@@ -1703,59 +1706,171 @@ impl OD {
     }
 }
 
+/// The lane types' scalar values, for the lanes whose result has a NaN part. Such a result needs a special value or
+/// parts off the ladder. Its NaNs' signs and payloads follow the order of the operands, which the compiler may change,
+/// so they can differ between the lanes' arithmetic and the scalar's, and between backends. Those lanes take the scalar
+/// function's result, and every other lane is the lanes' own.
+trait NanLanes: Copy {
+    type Scalar: Copy;
+    /// the lanes with a NaN part, bit j for lane j
+    fn nan_lanes(self) -> u8;
+    /// every NaN part's sign flipped (`mutate::LANE_NAN`)
+    fn flip_nans(self) -> Self;
+    /// self with each lane of m set to f of x's lane
+    fn set_lanes(self, m: u8, x: Self, f: fn(Self::Scalar) -> Self::Scalar) -> Self;
+}
+
+/// the lanes with a NaN part, bit j for lane j
+#[inline(always)]
+fn nan_parts<S: Simd, const N: usize>(p: &[V8<S>; N]) -> u8 {
+    let mut m = p[0].ne(p[0]);
+    for i in 1..N {
+        m = m.or(p[i].ne(p[i]));
+    }
+    m.bits()
+}
+
+/// every NaN part's sign flipped
+fn flip_parts<S: Simd, const N: usize>(p: &[V8<S>; N]) -> [V8<S>; N] {
+    let mut r = *p;
+    for i in 0..N {
+        r[i] = p[i].ne(p[i]).sel(p[i].neg(), p[i]);
+    }
+    r
+}
+
+impl<S: Simd> NanLanes for DV<S> {
+    type Scalar = DD;
+    #[inline(always)]
+    fn nan_lanes(self) -> u8 {
+        nan_parts(&[self.hi, self.lo])
+    }
+    fn flip_nans(self) -> Self {
+        let [hi, lo] = flip_parts(&[self.hi, self.lo]);
+        DV { hi, lo }
+    }
+    fn set_lanes(self, m: u8, x: Self, f: fn(DD) -> DD) -> Self {
+        let (mut hi, mut lo) = (self.hi.to_array(), self.lo.to_array());
+        for j in 0..8 {
+            if m >> j & 1 == 1 {
+                let y = f(x.lane(j));
+                (hi[j], lo[j]) = (y.hi, y.lo);
+            }
+        }
+        DV {
+            hi: V8::from_array(hi),
+            lo: V8::from_array(lo),
+        }
+    }
+}
+
+impl<S: Simd> NanLanes for QV<S> {
+    type Scalar = QD;
+    #[inline(always)]
+    fn nan_lanes(self) -> u8 {
+        nan_parts(&self.c)
+    }
+    fn flip_nans(self) -> Self {
+        QV { c: flip_parts(&self.c) }
+    }
+    fn set_lanes(self, m: u8, x: Self, f: fn(QD) -> QD) -> Self {
+        let (mut v, x) = (self.lanes(), x.lanes());
+        for j in 0..8 {
+            if m >> j & 1 == 1 {
+                v[j] = f(x[j]);
+            }
+        }
+        QV::from_lanes(&v)
+    }
+}
+
+impl<S: Simd> NanLanes for OV<S> {
+    type Scalar = OD;
+    #[inline(always)]
+    fn nan_lanes(self) -> u8 {
+        nan_parts(&self.c)
+    }
+    fn flip_nans(self) -> Self {
+        OV { c: flip_parts(&self.c) }
+    }
+    fn set_lanes(self, m: u8, x: Self, f: fn(OD) -> OD) -> Self {
+        let (mut v, x) = (self.lanes(), x.lanes());
+        for j in 0..8 {
+            if m >> j & 1 == 1 {
+                v[j] = f(x[j]);
+            }
+        }
+        OV::from_lanes(&v)
+    }
+}
+
+/// v, with the lanes that have a NaN part set to f of x's lane, f called through a pointer the compiler cannot see, so
+/// that it is the scalar function's own code; one compare per part on the lanes without a NaN
+#[inline(always)]
+fn scalar_nans<T: NanLanes>(x: T, v: T, f: fn(T::Scalar) -> T::Scalar) -> T {
+    let m = v.nan_lanes();
+    if m == 0 {
+        return v;
+    }
+    if mutate::on(mutate::LANE_NAN) {
+        return v.flip_nans();
+    }
+    v.set_lanes(m, x, std::hint::black_box(f))
+}
+
 impl<S: Simd> DV<S> {
-    /// e^x on every lane, each lane bitwise `DD::exp` of its value, a computed NaN's sign and payload aside
+    /// e^x on every lane, each lane bitwise `DD::exp` of its value
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || exp_of(self),
+            || scalar_nans(self, exp_of(self), DD::exp),
         )
     }
-    /// ln x on every lane, each lane bitwise `DD::ln` of its value, a computed NaN's sign and payload aside
+    /// ln x on every lane, each lane bitwise `DD::ln` of its value
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || ln_of(self),
+            || scalar_nans(self, ln_of(self), DD::ln),
         )
     }
 }
 
 impl<S: Simd> QV<S> {
-    /// e^x on every lane, each lane bitwise `QD::exp` of its value, a computed NaN's sign and payload aside
+    /// e^x on every lane, each lane bitwise `QD::exp` of its value
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || exp_of(self),
+            || scalar_nans(self, exp_of(self), QD::exp),
         )
     }
-    /// ln x on every lane, each lane bitwise `QD::ln` of its value, a computed NaN's sign and payload aside
+    /// ln x on every lane, each lane bitwise `QD::ln` of its value
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || ln_of(self),
+            || scalar_nans(self, ln_of(self), QD::ln),
         )
     }
 }
 
 impl<S: Simd> OV<S> {
-    /// e^x on every lane, each lane bitwise `OD::exp` of its value, a computed NaN's sign and payload aside
+    /// e^x on every lane, each lane bitwise `OD::exp` of its value
     #[inline]
     pub fn exp(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || exp_of(self),
+            || scalar_nans(self, exp_of(self), OD::exp),
         )
     }
-    /// ln x on every lane, each lane bitwise `OD::ln` of its value, a computed NaN's sign and payload aside
+    /// ln x on every lane, each lane bitwise `OD::ln` of its value
     #[inline]
     pub fn ln(self) -> Self {
         S::vectorize(
             #[inline(always)]
-            || ln_of(self),
+            || scalar_nans(self, ln_of(self), OD::ln),
         )
     }
 }

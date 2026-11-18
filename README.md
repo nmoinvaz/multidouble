@@ -29,7 +29,7 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 | `dv::DotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
 
 The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln` (also
-on the lanes, a computed NaN's sign and payload aside), and `sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵²,
+on the lanes, NaNs included), and `sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵²,
 reduced by π/2 to 1216 bits in exact integer arithmetic. The lanes have `sin`, `cos`, `tan` and `sin_cos` too, with the
 scalar results' bits, NaNs included, and every type has `mul_pwr2`, a scaling by a power of two that is exact barring
 overflow and underflow. Two operations trade accuracy for speed. `DD::fast_div` divides with two divisions instead of
