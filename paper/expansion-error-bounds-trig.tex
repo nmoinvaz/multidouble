@@ -1,5 +1,5 @@
 % The sine, cosine and tangent of multidouble (src/trig.rs), generalized to n parts: an exact reduction by pi/2, Taylor
-% series by Horner's scheme, and the bounds from Lemma 20 at every step, or from the published double-word bounds.
+% series by Horner's scheme, and the bounds from Lemma 13 at every step, or from the published double-word bounds.
 % \input after the sloppy section of expansion-error-bounds.tex, whose macros and labels it uses. Constants:
 % trig_consts.py.
 
@@ -73,17 +73,47 @@ remainder of the greedy rounding is at most $u_*$ times the one before, so $|r -
 |r_0|/(1-2u)$, and the part bounds are \eqref{eq:abar}, since $H(1)$ implies $H(2)$.
 \end{proof}
 
-The evaluation is a program of the operations of Lemma~\ref{lem:g}, and its bounds are the $G_{\rm OP}$ of that lemma
-applied in turn, with $r$ in units of $|r|$, $z$ in units of $r^2$, and the Horner sums absolute. For bucket
-$j$ with $\bar r = \bar r_j$ and $K = K_{\rm s}(j)$, let $\bar s_k$ be the magnitudes of the parts of $\hat s_k$, $\delta_k =
-|\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar a, \bar a;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} =
-\bar s_{K-1}$, and for $k = K-2, \dots, 1$
+\paragraph{Horner's rule} The evaluation, and that of the exponential and the logarithm, sums a series by Horner's
+rule on expansions. Its bounds are the $G_{\rm OP}$ of Lemma~\ref{lem:g} applied in turn.
+
+\begin{lemma}\label{lem:horner}
+Assume~\ref{as:fp} and (A3). Let the $n$-part $z$, with part bounds $\pi^z$, approximate a real $z_{\rm e}$, with
+$|z_{\rm e}| \le \bar z$ and $|z - z_{\rm e}| \le \epsilon_z\bar z$. For $k_0 \le k \le d$ let the $n$-part $F_k$ be
+within $\phi_k$ of a real $f_k$, let $p_d = F_d$ and
+\[
+p_k = \mathrm{ADD}\bigl(F_k, \mathrm{MUL}(z, p_{k+1})\bigr) \qquad (k = d-1, \dots, k_0),
+\]
+with ADD's operands in either order, and let $v_k \ge |p^{\rm e}_k|$ bound the exact sums $p^{\rm e}_k =
+\sum_{l=k}^{d} f_lz_{\rm e}^{\,l-k}$. Let $e_d = \phi_d$ and $\pi^{(d)} = |F_d|$, and for $k = d-1, \dots, k_0$
 \begin{align*}
-(\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\bar r^2\zeta, \pi^{(k+1)};\ \bar r^2(1+\epsilon_z)(|s_{k+1}| + E_{k+1})\bigr), \\
-D_k &= \bar r^2(1+\epsilon_z)E_{k+1} + \bar r^2\epsilon_z|s_{k+1}| + \delta_k + \epsilon_m, \\
-(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, \bar s_k;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
+(\epsilon^p_k, \mu_k) &= G_{\rm MUL}\bigl(\pi^z, \pi^{(k+1)};\ (1+\epsilon_z)\bar z(v_{k+1} + e_{k+1})\bigr), \\
+D_k &= (1+\epsilon_z)\bar ze_{k+1} + \epsilon_z\bar zv_{k+1} + \phi_k + \epsilon^p_k, \\
+(\epsilon^a_k, \pi^{(k)}) &= G_{\rm ADD}\bigl(|F_k|, \mu_k;\ v_k + D_k\bigr), \quad e_k = D_k + \epsilon^a_k.
 \end{align*}
-Then let
+Then $|p_k - p^{\rm e}_k| \le e_k$, and $p_k$ has part bounds $\pi^{(k)}$. If each product is formed on operands scaled
+exactly by powers of two and scaled back with a loss of at most $\eta$ per part, the same holds with $n\eta$ added to
+$\epsilon^p_k$ and $\eta$ to each part of $\mu_k$.
+\end{lemma}
+
+\begin{proof}
+By induction from $k = d$. With $m = \mathrm{MUL}(z, p_{k+1})$,
+\[
+p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (F_k - f_k) + \hat\epsilon_m
++ \hat\epsilon_a,
+\]
+where $\hat\epsilon_m = m - zp_{k+1}$ and $\hat\epsilon_a = p_k - (m + F_k)$. As $|z| \le (1+\epsilon_z)\bar z$, the
+exact product $zp_{k+1}$ has magnitude at most $(1+\epsilon_z)\bar z(v_{k+1} + e_{k+1})$, so Lemma~\ref{lem:g} bounds
+$\hat\epsilon_m$ by $\epsilon^p_k$ and the parts of $m$ by $\mu_k$. The first four terms then total at most $D_k$, so
+the exact sum $m + F_k$ has magnitude at most $v_k + D_k$, and Lemma~\ref{lem:g} bounds $\hat\epsilon_a$ by
+$\epsilon^a_k$ and gives the part bounds $\pi^{(k)}$. A product of exactly scaled operands has the scaled bounds, and
+its scaling back moves the product by at most $n\eta$ and each part by at most $\eta$.
+\end{proof}
+
+In the bounds of SINR and COSR, $r$ is in units of $|r|$, $z$ in units of $r^2$, and the Horner sums are absolute. For
+bucket $j$ with $\bar r = \bar r_j$ and $K = K_{\rm s}(j)$, let $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar a, \bar a;\ 1)$,
+and let $E_1$ and $\pi^{(1)}$ be the $e_1$ and $\pi^{(1)}$ of Lemma~\ref{lem:horner} for $z = \mathrm{MUL}(r, r)$ and
+the coefficients $\hat s_k$ of $s_k$, $1 \le k \le K-1$: there $z_{\rm e} = r^2$, $\bar z = \bar r^2$, $\pi^z = \bar
+r^2\zeta$, $\phi_k = |\hat s_k - s_k|$ and $v_k = |s_k|$. Then let
 \begin{align*}
 (\epsilon_t, \vartheta) &= G_{\rm MUL}\bigl(\zeta, \pi^{(1)};\ (1+\epsilon_z)(|s_1| + E_1)\bigr), \\
 E_t &= (1+\epsilon_z)E_1 + \epsilon_z|s_1| + \epsilon_t, \\
@@ -93,9 +123,8 @@ D &= \bar r^2(E_t + \epsilon_w) + \bar r^{2K}/(2K+1)!, \\
 E_{\rm S} &= D + \epsilon_y - u^n,
 \end{align*}
 where $\epsilon_y - u^n(1 + D)$ is the last ADD's error beyond $u^n|r + w|$, and let $\delta_{\rm S} = u^n + E_{\rm
-S}/(1 - \bar r^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same formulas with
-$\hat c_k$ and $c_k$ in place of $\hat s_k$ and $s_k$, and the magnitudes $\bar c_k$ of the parts of $\hat c_k$ in place of
-$\bar s_k$, give $E_1$, $\pi^{(1)}$, $\vartheta$ and $E_t$, and
+S}/(1 - \bar r^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same with the
+coefficients $\hat c_k$ of $c_k$ gives $E_1$, $\pi^{(1)}$, $\vartheta$ and $E_t$, and
 \begin{align*}
 D_{\rm c} &= \bar r^2E_t + \bar r^{2K}/(2K)!, \\
 (\epsilon_y, \psi_{\rm c}) &= G_{\rm ADDF}\bigl(\bar r^2\vartheta, 1;\ 1 + D_{\rm c}\bigr), \\
@@ -115,15 +144,9 @@ Assume~\ref{as:fp} and (A3), and let $r$ be in bucket $j$ with $|r| \le \bar r_j
 \begin{proof}
 Let $z_{\rm e} = r^2$ and $p^{\rm e}_k = \sum_{l=k}^{K-1}s_lz_{\rm e}^{\,l-k}$. Since $z_{\rm e} \le \bar r^2 < 1$, the terms
 of $p^{\rm e}_k$ alternate in sign and decrease, so $|p^{\rm e}_k| \le |s_k|$. Lemma~\ref{lem:g} gives $|z - z_{\rm
-e}| \le \epsilon_zr^2$, part bounds $\zeta r^2$, and $|z| \le (1+\epsilon_z)\bar r^2$. By induction from $k = K-1$,
-$|p_k - p^{\rm e}_k| \le E_k$ and $p_k$ has part bounds $\pi^{(k)}$: with $m = \mathrm{MUL}(z, p_{k+1})$,
-\[
-p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (\hat s_k - s_k) + \hat\epsilon_m
-+ \hat\epsilon_a,
-\]
-where $\hat\epsilon_m = m - zp_{k+1}$ and $\hat\epsilon_a = p_k - (m + \hat s_k)$ are bounded by Lemma~\ref{lem:g},
-whose third arguments bound $|zp_{k+1}|$ and $|m + \hat s_k|$. The same expansion gives $|t - z_{\rm e}p^{\rm e}_1|
-\le E_tr^2$ for $t = \mathrm{MUL}(z, p_1)$, and $|w - rz_{\rm e}p^{\rm e}_1| \le (E_t + \epsilon_w)|r|^3 \le
+e}| \le \epsilon_zr^2$ and part bounds $\zeta r^2$, so Lemma~\ref{lem:horner} applies: $|p_1 - p^{\rm e}_1| \le E_1$,
+and $p_1$ has part bounds $\pi^{(1)}$. For $t = \mathrm{MUL}(z, p_1)$, $t - z_{\rm e}p^{\rm e}_1 = z(p_1 - p^{\rm
+e}_1) + (z - z_{\rm e})p^{\rm e}_1 + (t - zp_1)$ gives $|t - z_{\rm e}p^{\rm e}_1| \le E_tr^2$, and $|w - rz_{\rm e}p^{\rm e}_1| \le (E_t + \epsilon_w)|r|^3 \le
 \bar r^2(E_t + \epsilon_w)|r|$ for $w = \mathrm{MUL}(r, t)$, whose part bounds $\omega|r|^3$ are at most $\bar r^2\omega|r|$.
 The series' remainder after $K$ terms is at most its first omitted term, so $|r + rz_{\rm e}p^{\rm e}_1 - \sin r| \le
 |r|\bar r^{2K}/(2K+1)!$, and $|r + w - \sin r| \le D|r|$. Lemma~\ref{lem:g} bounds the error of the last ADD by $u^n|r +
