@@ -28,14 +28,14 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 | `od::OD`, `ov::OV` | octo-double, scalar and on 8 lanes, with exact decimal parsing and printing: the quad-double algorithms carried to eight parts and written once for both |
 | `dv::DotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
 
-The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, and `sin`, `cos`,
-`tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216 bits in exact integer arithmetic, and every type
-has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and underflow. Two operations trade accuracy
-for speed. `DD::fast_div` divides with two divisions instead of three, within a proven 15 u² + 56 u³ barring underflow
-and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits. An
-octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip the zero
-parts' products and give the promoted operation's bits, a NaN's sign and payload aside. The API documentation lists the
-rest, such as division by a shared divisor and conversion to arrays of parts.
+The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln`, and
+`sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216 bits in exact integer arithmetic, and
+every type has `mul_pwr2`, a scaling by a power of two that is exact barring overflow and underflow. Two operations
+trade accuracy for speed. `DD::fast_div` divides with two divisions instead of three, within a proven 15 u² + 56 u³
+barring underflow and overflow, and `OD::sloppy_mul` takes about 1/1.35 of the time of `*` and gives up 7 to 9 of the
+424 bits. An octo-double meets a double-double through `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip
+the zero parts' products and give the promoted operation's bits, a NaN's sign and payload aside. The API documentation
+lists the rest, such as division by a shared divisor and conversion to arrays of parts.
 
 ### Packed storage
 
@@ -208,6 +208,8 @@ gives up in parentheses.
 | multiply | 5 u² (2.3) | 16 u⁴ (4) | u⁸ (0), proven |
 | divide | 8 u² (3) | 32 u⁴ (5) | u⁸ (0), proven |
 | square root | 25/8 u² (1.6), proven | 32 u⁴ (5) | 3 u⁸ (1.6), proven |
+| exp | 5.872 u² (2.6), proven | 64 u⁴ (6) | 3.661 u⁸ (1.9), proven |
+| ln | 15.351 u² (3.9), proven | 64 u⁴ (6) | 9.926 u⁸ (3.3), proven |
 | sin, cos | 7.85 u² (3.0), proven | 32 u⁴ (5) | 3.17 u⁸ (1.7), proven |
 | tan | 28.5 u² (4.8), proven | 64 u⁴ (6) | 6.42 u⁸ (2.7), proven |
 
@@ -247,6 +249,15 @@ are the thresholds the tests check.
   products of order above 8, at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (proved in the paper, Theorem 30, with
   the constant from `paper/sloppy_consts.py`), where `*` errs by u⁸. The bound is a triangle inequality: random
   operands give at most 98 u⁸|a₀b₀| (1.5 units of 2⁻⁴¹⁸) and a hill climb 582 u⁸|a₀b₀| (2⁹·² u⁸).
+- `exp` and `ln` are written once for the three scalar types (`explog`): exp reduces by k ln 2, sums a Taylor
+  polynomial and squares in the form t ← 2t + t², and ln takes one Newton step on exp from the double-double logarithm.
+  The double-double ones use the double-word operations whose bounds are published (Joldes, Muller and Popescu, 2017;
+  the product DWTimesDW2, whose bound Muller and Rideau proved formally, rather than `*`), and `ln` takes `f64`'s `ln`
+  to be within 2⁻⁴⁰ relative. The octo-double bounds are proved in the paper's appendix on exp and log, and `ln`'s has a
+  second, absolute term, 2⁻⁵⁰⁹; `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|.
+  Against a 1700-bit reference, 4000 inputs per category give at most 1.03 u² and 1.27 u² for the double-double exp
+  and ln, 0.46 u⁴ and 0.12 u⁴ for the quad-double, and 0.25 u⁸ and 0.0056 u⁸ for the octo-double
+  (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows
   like (nu)⁹ Σ|aᵢbᵢ|, and 2048 constructed terms reach 2²³·⁸ u⁸|Z|. Full precision needs every part to be a normal
@@ -256,9 +267,9 @@ are the thresholds the tests check.
   its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps. `Ou` gives derivatives
   within 10⁻¹²³, and its value is `OV`'s bit for bit.
 
-Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms one at a time, and
-`cargo test --release --features mutate` checks that each breakage fails a test. The integration tests also feed
-deliberately wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a
+Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms, and exp and ln, one at a
+time, and `cargo test --release --features mutate` checks that each breakage fails a test. The integration tests also
+feed deliberately wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a
 perturbed LU factor, and f128 conversions that round twice.
 
 ## Testing, coverage and benchmarks
@@ -275,6 +286,7 @@ cargo bench --bench arith                                       # scalar against
 cargo bench --bench linalg                                      # double-double LU against f64 LU, and the octo-double LU
 cargo bench --bench jet                                         # OJet<24> against QJet<24>: product, sums, the jet solve
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
+cargo test --release --test explog timing -- --ignored --nocapture      # exp and ln, time per call
 ```
 
 Each precision costs more than the one below it:
