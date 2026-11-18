@@ -230,10 +230,10 @@ $\Delta$ & $\Delta_n$ & $0$ & $0$ \\
 with $\Delta_n = \sum_{k=n+1}^{2n-2}(2n-1-k)\theta^k u^{k-n-1}$,
 and let $d_0 = \alpha_0$ and, for $0 \le m \le n-1$,
 \begin{gather*}
-\gamma_m = \frac{T_m d_m}{\theta(1 - T_m u)}, \quad \ell_m = \frac{d_m}{1 - T_m u}, \\
+\gamma_m = \frac{T_m d_m}{\theta(1 - T_m u)}, \quad L_m = \frac{\theta^m d_m}{1 - T_m u}, \\
 d_{m+1} = \alpha_{m+1} + \gamma_m,
 \end{gather*}
-and let $\ell_n = d_n/(1 - Qu)$, $L_m = \theta^m\ell_m$ and $R = Q\theta^n d_n/(1 - Qu)$.
+and let $L_n = \theta^n d_n/(1 - Qu)$ and $R = QL_n$.
 Then the level array of MUL, ADD and MULF has exactly $T_m$ $\TwoSum$s at level $m$ and $Q$ roundings at level $n$,
 (a) $|s_m| \le L_m u^m M$ at every moment, for $0 \le m \le n$, and (b) the final levels $c$ satisfy $|Z - \sum_m c_m|
 \le (R + \Delta)u^{n+1}M$, with $Z$ the exact result. For ADDF, with $M = |a_0| + |b|$, the levels sum exactly to
@@ -262,8 +262,8 @@ $\rho^nM/\theta$. The deps start at $l = 1, \dots, n-1$, so $T_m = m$ and $Q = n
 For these three, induction on $m$ gives $D_m \le d_m\rho^mM$ and $C_m \le \gamma_m\rho^{m+1}M$ in
 Lemma~\ref{lem:l}: $D_0 = A_0 \le d_0M$, $C_m = T_m u D_m/(1-T_m u) \le \gamma_m\rho^{m+1}M$ because $u = \rho/\theta$,
 and $D_{m+1} = A_{m+1} + C_m \le (\alpha_{m+1} + \gamma_m)\rho^{m+1}M$. Lemma~\ref{lem:l}(a) then gives $|s_m| \le
-\ell_m\rho^mM = L_m u^mM$, and Lemma~\ref{lem:l}(c) gives rounding errors of total at most $Qu\,d_n\rho^nM/(1-Qu) =
-Ru^{n+1}M$.
+X_m \le L_m u^mM$, as $\rho = \theta u$, and Lemma~\ref{lem:l}(c) gives rounding errors of total at most
+$Qu\,d_n\rho^nM/(1-Qu) = Ru^{n+1}M$.
 
 For (b), Lemma~\ref{lem:l}(c) with the exactness of $\TwoSum$ and $\TwoProd$ gives $\sum_m c_m = \sum_{i+j \le n} a_i
 b_j - \sum r$ for MUL, since steps (1), (3) and (4) put in $p_{ij} + e_{ij} = a_ib_j$ for every $i + j \le n-1$ and step
