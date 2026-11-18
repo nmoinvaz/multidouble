@@ -315,7 +315,8 @@ class Exp:
         sc = Fr(1, 2 ** m)
         # sum |r_i| < cap selects the case, so |r| and each |r_i| are below it (in convex mode, without the minima)
         bc = b if (convex or cap is None) else min(b, cap)
-        bp = up(bc * sc)
+        # the scaling of r by 2^-m may move each part by ETA0, so |r'| by n ETA0
+        bp = up(bc * sc + (n * ETA0 if m > 0 else 0))
         if rp is not None:
             rp = [up((x if (convex or cap is None) else min(x, cap)) * sc) for x in rp]
         # r' = 2^-m r may lose ETA0 per part to the subnormals: t then approximates e^(r' + lam) - 1, |lam| <= n ETA0,
@@ -549,7 +550,14 @@ class Log:
         eg = up(eft + es)
         Ec = up(xmax * c['E'] + drift + eg + ec)                       # |c - c*|
         Cb = up(cstar + Ec)
+        # where p is dropped, c = ADD(f, t) itself, whose exact value f + t is c's less ft, within Cb: c's part
+        # bounds cover the parts of that ADD too
+        if cp is not None:
+            cp = [max(x, y) for x, y in zip(cp, M.add(fp, c['parts'], Cb)[1])]
         serr, Sb, corrp = self.series(cp, Cb)
+        # where step (5) returns c itself, the last ADD's operand has c's part bounds: cover both
+        if corrp is not None:
+            corrp = [max(x, y) for x, y in zip(cp, corrp)]
         # the series to order q, or c alone when |c| < 2^-(B + 12): c^2 / (2 (1 - |c|)) <= 2^-(B + 13) |c| / (1 - |c|)
         trunc = up(max(Cb ** (self.q + 1) / (self.q + 1), Fr(1, 2 ** (E.B + 13)) * Cb) / (1 - Cb))
         lip = up(Ec / (1 - Cb))                                        # |ln(1 + c) - ln(1 + c*)|
