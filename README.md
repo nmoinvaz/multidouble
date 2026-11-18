@@ -259,16 +259,16 @@ thresholds the tests check.
   takes one Newton step on exp from the double-double logarithm, which starts from `explog`'s own binary64 logarithm,
   within a proven 5.915 u. The double-double ones use the double-word operations whose bounds are published (Joldes,
   Muller and Popescu, 2017; the product DWTimesDW2, whose bound Muller and Rideau proved formally, rather than `*`). The
-  octo-double bounds are proved in the paper's appendix on exp and log. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴
-  for exp, from the result's parts that fall below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹
-  for the double-double); and 2⁻⁵⁰⁹ for the octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only
-  where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products of small factors are formed from the factors scaled below 2, and an
-  emulator with every product hooked finds none below the normal range at any binade of the argument, the closest 48
-  binades above it (the paper's appendix on exp and log); a part far below the one above it can make one underflow, as
-  for the other operations. `paper/explog_consts.py` computes every constant. The ln column is relative to |ln x|.
-  Against a 1700-bit reference, 4000, 2000 and 1000 inputs per category give at most 1.04 u² and 1.27 u² for the
-  double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double, and 0.25 u⁸ and 0.0070 u⁸ for the octo-double,
-  parts at the top of the ladder included
+  octo-double bounds are proved in the paper (Theorems 34 and 36), the double-double ones in its Proposition 38 and the
+  start's in its Lemma 37. Each bound has a second, absolute term: n 2⁻¹⁰⁷⁴ for exp, from the result's parts that fall
+  below 2⁻¹⁰²², which exceeds the relative term only where eˣ < 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double); and 2⁻⁵⁰⁹ for the
+  octo-double ln and 2⁻¹⁰⁷¹ for the double-double ln, which exceed it only where |ln x| < 2⁻⁸⁸ and 2⁻⁹⁶⁸. The products
+  of small factors are formed from the factors scaled below 2, and an emulator with every product hooked finds none
+  below the normal range at any binade of the argument, the closest 48 binades above it (`paper/explog_bits.py scan`); a
+  part far below the one above it can make one underflow, as for the other operations. `paper/explog_consts.py` computes
+  every constant. The ln column is relative to |ln x|. Against a 1700-bit reference, 4000, 2000 and 1000 inputs per
+  category give at most 1.04 u² and 1.27 u² for the double-double exp and ln, 0.55 u⁴ and 0.58 u⁴ for the quad-double,
+  and 0.25 u⁸ and 0.0070 u⁸ for the octo-double, parts at the top of the ladder included
   (`EXPLOG_N=4000 cargo test --release --test explog exp_and_ln -- --nocapture`).
 - Two-sum, quick-two-sum and two-product are exact. Octo-double dot products of n terms are checked against the
   accumulator's bound, (|Z| + cₙ Σ|aᵢbᵢ|) u⁸ with cₙ below 1 up to 50 terms (proved in the paper); the second term grows

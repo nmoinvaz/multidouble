@@ -11,19 +11,19 @@
 //! (scripts/explog_vectors.py, tests/data/explog_vectors.txt); a reference cut to 60 Taylor terms must fail both.
 //!
 //! The bounds, with u = 2^-53, are checked on every input that meets their hypotheses on x (`covered`; for exp, on
-//! every input): the proven ones of the paper's appendix on exp and log (paper/explog_consts.py), `OD::exp` 3.661 u^8
-//! e^x + 8 2^-1074 and `OD::ln` 9.926 u^8 |ln x| + 2^-509, `DD::exp` 5.465 u^2 e^x + 2 2^-1074 and `DD::ln` 15.351 u^2
-//! |ln x| + 2^-1071, for x on the ladder |x_i| <= (2u)^i |x_0| (for the double-double a double-word) with normal parts;
-//! the theorems also ask that no product inside the run underflow, apart from those that only choose k, m, the degree
-//! or a branch; an emulator scanning every binade of x finds none (the paper's appendix on exp and log). Where
-//! `OD::ln`'s absolute term dominates, near x = 1, it is held to its relative constant as well, a tested threshold. The
-//! quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the first run (exp with the
-//! absolute term 4 2^-1074 as well). The start of ln, `explog::ln_f64`, is checked against its proven 5.915 u. Inputs,
-//! n per category for the double-double, n/2 for the quad-double and n/4 for the octo-double: random over the range,
-//! near 0, near the reduction's boundaries (k + 1/2) ln 2 and its multiples k ln 2, near overflow (with tails past it)
-//! and underflow, near 1 and within 3 ulps of f64::MAX (with tails near half an ulp) for ln, subnormal, with gaps and
-//! zero parts, at the top of the ladder (overlapping by a bit, not greedy, with random signs; not for the
-//! double-double, which must be a double-word), and the special values.
+//! every input): the proven ones of the paper's Theorems 34 and 36 and Proposition 38 (paper/explog_consts.py),
+//! `OD::exp` 3.661 u^8 e^x + 8 2^-1074 and `OD::ln` 9.926 u^8 |ln x| + 2^-509, `DD::exp` 5.465 u^2 e^x + 2 2^-1074 and
+//! `DD::ln` 15.351 u^2 |ln x| + 2^-1071, for x on the ladder |x_i| <= (2u)^i |x_0| (for the double-double a
+//! double-word) with normal parts; the theorems also ask that no product inside the run underflow, apart from those
+//! that only choose k, m, the degree or a branch; an emulator scanning every binade of x finds none
+//! (paper/explog_bits.py). Where `OD::ln`'s absolute term dominates, near x = 1, it is held to its relative constant as
+//! well, a tested threshold. The quad-double, which has no proven bounds, is held to 64 u^4 relative, fixed before the
+//! first run (exp with the absolute term 4 2^-1074 as well). The start of ln, `explog::ln_f64`, is checked against its
+//! proven 5.915 u. Inputs, n per category for the double-double, n/2 for the quad-double and n/4 for the octo-double:
+//! random over the range, near 0, near the reduction's boundaries (k + 1/2) ln 2 and its multiples k ln 2, near
+//! overflow (with tails past it) and underflow, near 1 and within 3 ulps of f64::MAX (with tails near half an ulp) for
+//! ln, subnormal, with gaps and zero parts, at the top of the ladder (overlapping by a bit, not greedy, with random
+//! signs; not for the double-double, which must be a double-word), and the special values.
 //!
 //! ```text
 //! cargo test --release --test explog                        the checks (EXPLOG_REPORT=1 prints the worst cases)
@@ -786,7 +786,7 @@ fn run_ln<T: Ty>(n: usize, seed: u64, bound: f64, floor: Option<i32>, proven: bo
     rows
 }
 
-/// the start's bound (paper/explog_consts.py): `ln_f64` within `LN_F64` u of ln h relative (ln_f64(1) = 0 exactly), on
+/// the start's bound (paper, Lemma 37): `ln_f64` within `LN_F64` u of ln h relative (ln_f64(1) = 0 exactly), on
 /// random normal and subnormal arguments, near 1, near the boundaries sqrt(2) 2^k of its reduction, at powers of 2 and
 /// at `START_PINNED`; the count of misses and the worst error in units of u, with its result times 1 + nudge (the
 /// control)

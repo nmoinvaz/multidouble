@@ -1,11 +1,12 @@
-"""The error bounds of exp and ln (src/explog.rs) in exact rationals. For the octo-double algorithms at any number of
-parts n, Lemma 20 of expansion-error-bounds.pdf bounds every operation's error and its result's parts from its
-operands' part bounds, and the bounds are carried through every step; for the double-double ones, the published
-relative bounds of the double-word operations. A scaling by a power of two that leaves the normal range, and the
-start's quotient, add at most ETA0 = 2^-1075 per part; the products obey (A2) but for those that only choose k, m and
-the degree. The start of the logarithm is the crate's own binary64 logarithm, whose error is bounded here too. Every
-bound is computed in rationals rounded up to 200-bit dyadic numbers (sqrt_consts.up); every formula is nondecreasing
-in the quantities so rounded, and nonincreasing in the lower bounds of |r| (a), which are not rounded.
+"""Theorems 34 and 36, Lemma 37 and Proposition 38 of expansion-error-bounds.pdf: the error bounds of exp and ln
+(src/explog.rs) in exact rationals. For the octo-double algorithms at any number of parts n, Lemma 20 bounds every
+operation's error and its result's parts from its operands' part bounds, and the bounds are carried through every step;
+for the double-double ones, the published relative bounds of the double-word operations. A scaling by a power of two
+that leaves the normal range, and the start's quotient, add at most ETA0 = 2^-1075 per part; the products obey (A2) but
+for those that only choose k, m and the degree. The start of the logarithm is the crate's own binary64 logarithm, whose
+error is bounded here too. Every bound is computed in rationals rounded up to 200-bit dyadic numbers (sqrt_consts.up);
+every formula is nondecreasing in the quantities so rounded, and nonincreasing in the lower bounds of |r| (a), which are
+not rounded.
 
 Every printed bound is rounded up: its decimals by up_dec, its base-2 exponents by lg2_up.
 
@@ -196,7 +197,7 @@ class DoubleWord:
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# the start of the logarithm: the crate's binary64 logarithm (ln_f64)
+# the start of the logarithm: the crate's binary64 logarithm (ln_f64), Lemma 37
 # ---------------------------------------------------------------------------------------------------------------
 
 def start_eta(p=53, J=9):
@@ -826,7 +827,7 @@ if __name__ == '__main__':
         sys.exit(0 if check() else 1)
     print('the crate (u = 2^-53; exp relative; log relative to |ln x|, plus an absolute term)')
     eta, se = start_eta()
-    print(f'the start ln_f64: within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
+    print(f'the start ln_f64 (Lemma 37): within {up_dec(eta / u)} u relative (2^{lg2_up(eta)}); for e = 0, '
           f'{up_dec(se["ew"] / u)} u')
     w, info, red = dd_exp()
     rdd, fdd, _ = dd_log()
