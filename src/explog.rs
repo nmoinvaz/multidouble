@@ -5,21 +5,31 @@
 //!   W. Waite (Software Manual for the Elementary Functions, Prentice-Hall, 1980): ln 2 = `LN2_HI` + `LN2_LO`, with
 //!   `LN2_HI` of 42 bits, so that k `LN2_HI` and x_0 - k `LN2_HI` are exact for |k| < 2^11, and r is that difference
 //!   with x's lower parts, plus `LN2_LO` times -k, in one addition of the precision. Then r is scaled by 2^-m, m the
-//!   least count that brings its leading part below 2^-S; t ~ e^(r 2^-m) - 1 is the Taylor polynomial of degree
-//!   `DEG`, by Horner's rule, as r' + r' (r' q); m steps t <- 2t + t^2 take t to e^r - 1, an error that grows by one
-//!   rounding per step where squaring 1 + t would double it (the QD library's exp, Y. Hida, X. S. Li, D. H. Bailey,
-//!   ARITH-15, 2001); and the result is (1 + t) 2^k, scaled exactly in two steps.
+//!   least count that brings a bound of |r| below 2^-S; t ~ e^(r 2^-m) - 1 is the Taylor polynomial, by Horner's rule,
+//!   as r' + r' (r' q), of degree `DEG` or, for a small r', of the least degree whose remainder is below 2^-B |r'|, so
+//!   that no negligible term is formed; m steps t <- 2t + t^2 take t to e^r - 1, an error that grows by one rounding
+//!   per step where squaring 1 + t would double it (the form of `exp` in the QD library of Y. Hida, X. S. Li and
+//!   D. H. Bailey, version 2.3.7, src/dd_real.cpp and src/qd_real.cpp); and the result is (1 + t) 2^k, scaled exactly
+//!   in two steps while its parts stay normal.
 //! * ln: one Newton step on exp from y0, the double-double logarithm (for the double-double, `ln_f64` of the leading
-//!   part, this module's own binary64 logarithm with a proven error, plus lo / hi): with (k, t) the reduction of exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is
-//!   exact (its leading part lies in [1/2, 2], Sterbenz), so c = x e^(-y0) - 1 = (f + t) + f t keeps its relative
-//!   accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c) to order `Q` (QD's log takes y0 + c, the plain
-//!   Newton step on exp, from f64's logarithm).
+//!   part, this module's own binary64 logarithm with a proven error, plus lo / hi): with (k, t) the reduction of
+//!   exp(-y0) above, x 2^k is exact and f = x 2^k - 1 is exact (its leading part lies in [1/2, 2], Sterbenz), so
+//!   c = x e^(-y0) - 1 = (f + t) + f t keeps its relative accuracy near x = 1, and y = y0 + log(1 + c) with log(1 + c)
+//!   = c (1 + c h(c)) to order `Q` (QD's log takes y0 + c, the plain Newton step on exp, from f64's logarithm).
 //!
-//! Error bounds (u = 2^-53), within the normal range of every part: `OD::exp` errs by at most 3.661 u^8 relative and
-//! `OD::ln` by 9.926 u^8 |ln x| + 2^-509, for inputs on the ladder |x_i| <= (2u)^i |x_0|, proved in the paper
-//! (paper/expansion-error-bounds.pdf, its appendix on exp and log) from Lemma 20 at every operation;
-//! `DD::exp` errs by at most 5.872 u^2 and `DD::ln` by 15.351 u^2 relative, from the published bounds of the
-//! double-word operations they use and the proven bound of `ln_f64`. The constants come from
+//! A product of a small factor is formed from the factor scaled by a power of two to [1, 2), and scaled back after, so
+//! that no product's parts leave the normal range because the argument is small; the scalings are exact while the
+//! parts stay normal, and each part that falls below 2^-1022 loses at most 2^-1075.
+//!
+//! Error bounds (u = 2^-53): `OD::exp` errs by at most 3.661 u^8 e^x + 8 2^-1074 and `OD::ln` by 9.926 u^8 |ln x| +
+//! 2^-509, for inputs on the ladder |x_i| <= (2u)^i |x_0| whose run leaves no product, fused multiply-add or quotient
+//! below the normal range (the paper's (A2), apart from the steps above, whose losses the bounds include), proved in
+//! the paper (paper/expansion-error-bounds.pdf, its appendix on exp and log) from Lemma 20 at every operation;
+//! `DD::exp` errs by at most 5.465 u^2 e^x + 2 2^-1074 and `DD::ln` by 15.351 u^2 |ln x| + 2^-1071, for
+//! double-words under the same condition, from the published bounds of the double-word operations they use and the
+//! proven bound of `ln_f64`. The argument's size does not enter the condition: an emulator of these steps with every
+//! product hooked finds none below the normal range at any binade (the paper's appendix on exp and log). A part far
+//! below the one above it can make a product underflow, as for the other operations. The constants come from
 //! `paper/explog_consts.py`. The quad-double functions use QD's own operations, which have no proven bounds, and are
 //! tested to 64 u^4.
 //!
@@ -41,15 +51,18 @@ pub mod mutate {
     pub const LN_STEP: u32 = 3;
     /// ln: the double-double start (`ln_f64`) off by 2^-20 relative, past the error its proof allows
     pub const LN_START: u32 = 4;
+    /// ln: log(1 + c) cut to c, an error of about c^2 / 2, below `OD::ln`'s absolute term near x = 1
+    pub const LN_SERIES: u32 = 5;
     /// number of ids
-    pub const N: u32 = 4;
+    pub const N: u32 = 5;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 5] = [
+    pub const NAMES: [&str; 6] = [
         "none",
         "exp: ln 2's tail cut to one part",
         "exp: Taylor polynomial at half its degree",
         "ln: Newton step skipped",
         "ln: start off by 2^-20",
+        "ln: log(1 + c) cut to c",
     ];
 
     #[cfg(feature = "mutate")]
@@ -556,15 +569,20 @@ const LN2_LO_CUT: [f64; 8] = [LN2_LO[0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
 /// One precision's operations, in the forms the error bounds are proved for.
 trait Prec: Copy {
-    /// m squarings bring the reduced argument's leading part below 2^-S
+    /// m squarings bring a bound of the reduced argument below 2^-S
     const S: i32;
-    /// the Taylor polynomial's degree: |r'|^(DEG + 1) / (DEG + 1)! below 2^-12 of the unit roundoff for |r'| < 2^-S
+    /// the Taylor polynomial's largest degree: |r'|^(DEG + 1) / (DEG + 1)! below 2^-12 of the unit roundoff for |r'| <
+    /// 2^-S
     const DEG: usize;
     /// the order of ln's series of log(1 + c), for the start's error
     const Q: usize;
+    /// 53 n + 12 for n parts: a term below 2^-B of the result's scale is negligible, 2^-12 of the unit roundoff
+    const B: i32;
     fn from_f64(x: f64) -> Self;
     /// the leading part
     fn hi(self) -> f64;
+    /// |x_0| + |x_1| + ... in f64, from the leading part down
+    fn abs_sum(self) -> f64;
     /// the first parts of a greedy eight-part constant
     fn konst(c: &[f64; 8]) -> Self;
     fn plus(self, b: Self) -> Self;
@@ -596,6 +614,14 @@ fn expo(h: f64) -> i32 {
     ((h.to_bits() >> 52) & 0x7ff) as i32 - 1023
 }
 
+/// a b for a with leading part a_0, 2^e <= |a_0| < 2^(e+1), -1022 <= e: formed as 2^e ((a 2^-e) b), so that the
+/// product's parts are formed near b's scale and only the last power-of-two scaling, exact while the parts stay
+/// normal, can leave the normal range
+#[inline(always)]
+fn times_scaled<T: Prec>(a: T, e: i32, b: T) -> T {
+    a.times_pwr2(pow2(-e)).times(b).times_pwr2(pow2(e))
+}
+
 /// x 2^k in two exact steps, -1076 <= k <= 1076
 #[inline(always)]
 fn scale<T: Prec>(x: T, k: i32) -> T {
@@ -619,21 +645,36 @@ fn expm1_red<T: Prec>(x: T) -> (i32, T) {
             },
         )
     };
-    // m = max(0, floor(log2 |r_0|) + S + 1), so that |r_0| 2^-m < 2^-S (a zero or subnormal r_0 gives 0)
-    let e = ((r.hi().to_bits() >> 52) & 0x7ff) as i32 - 1023;
+    // m = max(0, e + S + 1) with 2^e <= RN(RN(sum |r_i|) (1 + 2^-48)) < 2^(e+1), so that |r| < 2^(e+1) and |r| 2^-m <
+    // 2^-S whatever r's parts (a zero or subnormal sum gives e = -1023)
+    let e = expo(r.abs_sum() * (1.0 + 2f64.powi(-48)));
     let m = (e + T::S + 1).max(0);
     let r = if m > 0 { r.times_pwr2(pow2(-m)) } else { r };
-    let deg = if mutate::on(mutate::TAYLOR_HALF) {
-        T::DEG / 2
+    // the degree d = min(DEG, ceil(B / (-er - 1))), |r'| < 2^(er+1) <= 2^-S: the terms of degree above d sum to below
+    // 2^-B |r'|, and none is formed, so a small r' forms no product of negligible size (d = 1 for |r'| < 2^-B: t = r')
+    let er = e - m;
+    let d = if er >= -1 - T::B {
+        T::DEG.min((T::B / (-er - 1) + (T::B % (-er - 1) != 0) as i32) as usize)
     } else {
-        T::DEG
+        1
     };
-    // q = sum_(j=2)^DEG r^(j-2) / j! by Horner's rule, and t = r + r (r q)
-    let mut q = T::konst(&INV_FACT[deg]);
-    for j in (2..deg).rev() {
-        q = T::konst(&INV_FACT[j]).plus(r.times(q));
-    }
-    let mut t = r.plus(r.times(r.times(q)));
+    let d = if mutate::on(mutate::TAYLOR_HALF) {
+        (d / 2).max(1)
+    } else {
+        d
+    };
+    let mut t = if d == 1 {
+        r
+    } else {
+        // q = sum_(j=2)^d r^(j-2) / j! by Horner's rule, and t = r + r (r q), the outer product and sum in r 2^-er
+        let mut q = T::konst(&INV_FACT[d]);
+        for j in (2..d).rev() {
+            q = T::konst(&INV_FACT[j]).plus(r.times(q));
+        }
+        let w = r.times(q);
+        let rs = r.times_pwr2(pow2(-er));
+        rs.plus(rs.times(w)).times_pwr2(pow2(er))
+    };
     for _ in 0..m {
         t = t.times_pwr2(2.0).plus(t.times(t));
     }
@@ -689,16 +730,30 @@ fn ln_of<T: Prec>(x: T) -> T {
     if mutate::on(mutate::LN_STEP) {
         return y0;
     }
-    // e^-y0 ~ 2^k (1 + t); f = x 2^k - 1 exactly; c = x e^-y0 - 1 = (f + t) + f t
+    // e^-y0 ~ 2^k (1 + t); f = x 2^k - 1 exactly; c = x e^-y0 - 1 = (f + t) + f t, f t formed from f 2^-ef and t 2^-et,
+    // both near 1, and dropped when either is below 2^-(B + 13)
     let (k, t) = expm1_red(y0.neg());
     let f = scale(x, k).sub_one();
-    let c = f.plus(t).plus(f.times(t));
-    // log(1 + c) = c + c^2 (-1/2 + c (1/3 - c / 4 ...)) to order Q
-    let mut s = series::<T>(T::Q);
-    for i in (2..T::Q).rev() {
-        s = series::<T>(i).plus(c.times(s));
-    }
-    T::ln_finish(y0, c.plus(c.times(c).times(s)))
+    let (ef, et) = (expo(f.hi()), expo(t.hi()));
+    let c = if f.hi() == 0.0 || t.hi() == 0.0 || ef.min(et) < -T::B - 13 {
+        f.plus(t)
+    } else {
+        let p = f.times_pwr2(pow2(-ef)).times(t.times_pwr2(pow2(-et)));
+        f.plus(t).plus(p.times_pwr2(pow2(ef)).times_pwr2(pow2(et)))
+    };
+    // log(1 + c) = c (1 + c h), h = -1/2 + c (1/3 - c / 4 ...) to order Q, each product with c at the other factor's
+    // scale; below 2^-(B + 13), c alone
+    let ec = expo(c.hi());
+    let corr = if c.hi() == 0.0 || ec < -T::B - 13 || mutate::on(mutate::LN_SERIES) {
+        c
+    } else {
+        let mut h = series::<T>(T::Q);
+        for i in (2..T::Q).rev() {
+            h = series::<T>(i).plus(times_scaled(c, ec, h));
+        }
+        times_scaled(c, ec, times_scaled(c, ec, h).plus_one())
+    };
+    T::ln_finish(y0, corr)
 }
 
 /// ln h for a positive finite h, within 5.915 u |ln h| (u = 2^-53; paper/explog_consts.py), and 0 for h = 1: h = 2^e m
@@ -777,6 +832,7 @@ impl Prec for DD {
     const S: i32 = 1;
     const DEG: usize = 27;
     const Q: usize = 3;
+    const B: i32 = 118;
     #[inline(always)]
     fn from_f64(x: f64) -> DD {
         DD::from_f64(x)
@@ -784,6 +840,10 @@ impl Prec for DD {
     #[inline(always)]
     fn hi(self) -> f64 {
         self.hi
+    }
+    #[inline(always)]
+    fn abs_sum(self) -> f64 {
+        self.hi.abs() + self.lo.abs()
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> DD {
@@ -836,6 +896,7 @@ impl Prec for QD {
     const S: i32 = 6;
     const DEG: usize = 24;
     const Q: usize = 2;
+    const B: i32 = 224;
     #[inline(always)]
     fn from_f64(x: f64) -> QD {
         QD::from_f64(x)
@@ -843,6 +904,10 @@ impl Prec for QD {
     #[inline(always)]
     fn hi(self) -> f64 {
         self.x[0]
+    }
+    #[inline(always)]
+    fn abs_sum(self) -> f64 {
+        self.x.iter().fold(0.0, |a, v| a + v.abs())
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> QD {
@@ -896,6 +961,7 @@ impl Prec for OD {
     const S: i32 = 6;
     const DEG: usize = 43;
     const Q: usize = 4;
+    const B: i32 = 436;
     #[inline(always)]
     fn from_f64(x: f64) -> OD {
         OD::from_f64(x)
@@ -903,6 +969,10 @@ impl Prec for OD {
     #[inline(always)]
     fn hi(self) -> f64 {
         self.x[0]
+    }
+    #[inline(always)]
+    fn abs_sum(self) -> f64 {
+        self.x.iter().fold(0.0, |a, v| a + v.abs())
     }
     #[inline(always)]
     fn konst(c: &[f64; 8]) -> OD {
@@ -955,13 +1025,13 @@ impl Prec for OD {
 }
 
 impl DD {
-    /// e^self, within 5.872 u^2 relative (u = 2^-53) where the result is normal, from the published bounds of the
-    /// double-word operations it uses (see the module doc); +inf above 709.79 and +0 below -745.2
+    /// e^self, within 5.465 u^2 e^x + 2 2^-1074 (u = 2^-53) for a double-word, from the published bounds of the
+    /// double-word operations it uses (see the module doc for the condition); +inf above 709.79 and +0 below -745.2
     pub fn exp(self) -> DD {
         exp_of(self)
     }
-    /// the natural logarithm, within 15.351 u^2 relative, from its own start `ln_f64` (see the module doc); NaN for a
-    /// negative argument, -inf for zero
+    /// the natural logarithm, within 15.351 u^2 |ln x| + 2^-1071 for a double-word, from its own start `ln_f64` (see
+    /// the module doc for the condition); NaN for a negative argument, -inf for zero
     pub fn ln(self) -> DD {
         ln_of(self)
     }
@@ -979,13 +1049,13 @@ impl QD {
 }
 
 impl OD {
-    /// e^self, within 3.661 u^8 relative (u = 2^-53) for an argument on the ladder whose result's parts are normal
-    /// (see the module doc); +inf above 709.79 and +0 below -745.2
+    /// e^self, within 3.661 u^8 e^x + 8 2^-1074 (u = 2^-53) for an argument on the ladder (see the module doc for the
+    /// condition); +inf above 709.79 and +0 below -745.2
     pub fn exp(self) -> OD {
         exp_of(self)
     }
-    /// the natural logarithm, within 9.926 u^8 |ln x| + 2^-509 for an argument on the ladder (see the module doc);
-    /// NaN for a negative argument, -inf for zero
+    /// the natural logarithm, within 9.926 u^8 |ln x| + 2^-509 for an argument on the ladder (see the module doc
+    /// for the condition); NaN for a negative argument, -inf for zero
     pub fn ln(self) -> OD {
         ln_of(self)
     }
