@@ -75,13 +75,13 @@ remainder of the greedy rounding is at most $u_*$ times the one before, so $|r -
 
 The evaluation is a program of the operations of Lemma~\ref{lem:g}, and its bounds are the $G_{\rm OP}$ of that lemma
 applied in turn, with $r$ in units of $\rho = |r|$, $z$ in units of $\rho^2$, and the Horner sums absolute. For bucket
-$j$ with $R = R_j$ and $K = K_{\rm s}(j)$, let $\delta_k = |\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm
-MUL}(\bar a, \bar a;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} = |\hat s_{K-1}|$, and for $k = K-2,
-\dots, 1$
+$j$ with $R = R_j$ and $K = K_{\rm s}(j)$, let $\sigma_k$ be the magnitudes of the parts of $\hat s_k$, $\delta_k =
+|\hat s_k - s_k|$, $(\epsilon_z, \zeta) = G_{\rm MUL}(\bar a, \bar a;\ 1)$, $E_{K-1} = \delta_{K-1}$ and $\pi^{(K-1)} =
+\sigma_{K-1}$, and for $k = K-2, \dots, 1$
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(R^2\zeta, \pi^{(k+1)};\ R^2(1+\epsilon_z)(|s_{k+1}| + E_{k+1})\bigr), \\
 D_k &= R^2(1+\epsilon_z)E_{k+1} + R^2\epsilon_z|s_{k+1}| + \delta_k + \epsilon_m, \\
-(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, |\hat s_k|;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
+(\epsilon_a, \pi^{(k)}) &= G_{\rm ADD}\bigl(\mu, \sigma_k;\ |s_k| + D_k\bigr), \quad E_k = D_k + \epsilon_a.
 \end{align*}
 Then let
 \begin{align*}
@@ -93,7 +93,8 @@ D &= R^2(E_t + \epsilon_w) + R^{2K}/(2K+1)!, \\
 E_{\rm S} &= D + \epsilon_y - u^n,
 \end{align*}
 and $\delta_{\rm S} = u^n + E_{\rm S}/(1 - R^2/6)$. For COSR, with $K = K_{\rm c}(j)$, the same formulas with
-$\hat c_k$ and $c_k$ in place of $\hat s_k$ and $s_k$ give $E_1$, $\pi^{(1)}$, $\tau'$ and $E_t$, and
+$\hat c_k$ and $c_k$ in place of $\hat s_k$ and $s_k$, and the magnitudes of the parts of $\hat c_k$ in place of
+$\sigma_k$, give $E_1$, $\pi^{(1)}$, $\tau'$ and $E_t$, and
 \begin{align*}
 D_{\rm c} &= R^2E_t + R^{2K}/(2K)!, \\
 (\epsilon_y, \psi_{\rm c}) &= G_{\rm ADDF}\bigl(R^2\tau', 1;\ 1 + D_{\rm c}\bigr), \\
