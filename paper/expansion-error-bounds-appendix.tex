@@ -208,6 +208,96 @@ $\TwoSum$ moves its carry from one level to the next without changing the sum; a
 carry $y$ having already been counted where it entered).
 \end{proof}
 
+\section{Operations from part bounds}
+
+\begin{lemma}\label{lem:o}
+Assume~\ref{as:fp}. For $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S = \sum_m c_m$ and $W_k =
+\sum_{j=k+1}^{n}|v_j|$: $(|S| - W_1)/(1+u) \le |x_0| \le (1+u)(|S| + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$
+for $1 \le i \le n-1$.
+\end{lemma}
+
+\begin{proof}
+Let the pass emit $q$ times, at steps $j_0 < \dots < j_{q-1}$, with errors $\varepsilon_0, \dots, \varepsilon_{q-1}$. By
+\eqref{eq:rn}, $|\varepsilon_i| \le u|x_i|$. Each emission happens at a later step than the one before, so $j_{i-1}
+\ge i$. Between two emissions every step has $e = 0$ and adds exactly, except a final lossy step $n$ (Theorem
+\ref{thm:t1}(a)). So for $1 \le i \le q - 1$, $x_i = \RN(\varepsilon_{i-1} + \sum_{j_{i-1} < j \le j_i} v_j)$, and $x_q$
+is $\varepsilon_{q-1} + \sum_{j > j_{q-1}} v_j$, exactly or rounded once; the parts after $x_q$ are zero. With
+\eqref{eq:rn}, $|x_i| \le (1+u)(u|x_{i-1}| + W_{j_{i-1}}) \le (1+u)(u|x_{i-1}| + W_i)$. If $q = 0$, nothing is lost
+($n \ge 2$), and $x_0 = S$. Otherwise $x_0 = \RN(\sum_{j \le j_0} v_j)$ with $\bigl||\sum_{j \le j_0} v_j| - |S|\bigr|
+\le W_{j_0} \le W_1$.
+\end{proof}
+
+\begin{lemma}\label{lem:g}
+Assume~\ref{as:fp} and (A3). Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
+($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$, and let $P_m =
+\sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, $\lambda_m \ge |a_m + b_m|$ for ADD and
+$\lambda_m = \alpha_m\beta_0$ for MULF, with $P_{-1} = \lambda_{-1} = 0$, and $m < n$ in the row of $A_m$:
+\[
+\begin{tabular}{@{}lll@{}}
+\toprule
+& MUL & ADD, MULF \\
+\midrule
+$A_m$ & $(1+u)P_m + uP_{m-1}$ & $(1+u)\lambda_m + u\lambda_{m-1}$ \\
+$A_n$ & $P_n + uP_{n-1}$ & $u\lambda_{n-1}$ \\
+$T_m$ & $m(m+1)$ & $m$ \\
+$Q$ & $n^2 + n - 1$ & $n-1$ \\
+$\Delta$ & $\sum_{m > n}P_m$ & $0$ \\
+\bottomrule
+\end{tabular}
+\]
+Let $X_m$ and $R$ be those of Lemma~\ref{lem:l}. For
+ADDF, with $\lambda_0 \ge |a_0 + b|$, let $\epsilon_0 = u\lambda_0$, $\epsilon_m = u(\alpha_m + \epsilon_{m-1})$, $X_0
+= (1+u)\lambda_0$, $X_m = (1+u)(\alpha_m + \epsilon_{m-1})$ for $1 \le m < n$, $X_n = \epsilon_{n-1}$ and $R = \Delta =
+0$. With $\sigma_l = \sum_{m \ge l}X_m$, $V_j = \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_k = \sum_{j > k}V_j$:
+\begin{enumerate}
+\item[(a)] $|Z - \sum_k x_k| \le u^n\bar Z + (1+u^n)(R+\Delta) + \sum_{j=1}^n (u^n + u^{n+1-j})V_j$;
+\item[(b)] $|x_0| \le (1+u)(\bar Z + R + \Delta + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$ for $1 \le i < n$;
+\item[(c)] the levels satisfy $|s_m| \le X_m$ at every moment, and their final values $c$ satisfy $|Z - \sum_m c_m| \le
+  R + \Delta$; for MUL, ADD and MULF the level array has exactly $T_m$ $\TwoSum$s at level $m < n$ and $Q$ roundings at
+  level $n$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+MUL, ADD and MULF are programs of the form of Lemma~\ref{lem:l}.
+
+\emph{MUL.} Level 0 holds $\RN(a_0b_0)$, at most $(1+u)P_0$. For $1 \le m \le n-1$, level $m$ receives the products
+$p_{ij}$ with $i + j = m$, by assignment for $i = 0$ and by dep otherwise, each at most $(1+u)\alpha_i\beta_j$, and the
+errors $e_{ij}$ with $i + j = m - 1$, each at most $u\alpha_i\beta_j$ by Lemma~\ref{lem:facts}(c). Level $n$ receives
+the exact products $a_ib_{n-i}$ of step (2) and the errors $e_{ij}$ with $i + j = n-1$. So the inputs of level $m$
+total at most $A_m$ for every $m$. A dep started at level $l \le n-1$ performs one $\TwoSum$ at each level $l, \dots,
+n-1$ and one rounding at level $n$. The deps started at a level $l \le m$ are $m$ of step (3), $m(m+1)/2$ products and
+$m(m-1)/2$ errors of step (4), so $T_m = m + m^2$. The roundings at level $n$ are the $n-1$ of step (2) and one per
+dep, $n + n(n-1)$ of them, so $Q = n^2 + n - 1$. Steps (1), (3) and (4) put in $p_{ij} + e_{ij} = a_ib_j$ for every $i
++ j \le n-1$ and step (2) the products of order $n$, so by Lemma~\ref{lem:l}(c) and the exactness of $\TwoSum$ and
+$\TwoProd$ the final levels sum to $\sum_{i+j \le n} a_ib_j - \sum r$, and the dropped products total at most $\Delta$.
+
+\emph{ADD and MULF.} Level $m < n$ holds $\RN(a_m + b_m)$ or $\RN(a_m b)$, at most $(1+u)\lambda_m$, and for $m \ge 1$
+receives $t_{m-1}$ or $e_{m-1}$, at most $u\lambda_{m-1}$; level $n$ holds $t_{n-1}$ or $e_{n-1}$. The deps start at $l
+= 1, \dots, n-1$, so $T_m = m$ and $Q = n-1$, and the final levels sum to $Z - \sum r$.
+
+For these three, Lemma~\ref{lem:l} gives $|s_m| \le X_m$ at every moment and $\sum|r| \le R$, so $S = \sum_m c_m$ has
+$F = |Z - S| \le R + \Delta$.
+
+\emph{ADDF.} Here $s_m = \RN(a_m + e_{m-1})$ with $e_{-1} = b$, $e_m$ its error, and $s_n = e_{n-1}$; every operation
+is exact, so the levels sum to $a + b$ and $F = 0$. By Lemma~\ref{lem:facts}(a), $|e_m| \le u(|a_m| + |e_{m-1}|)$, so
+$|e_m| \le \epsilon_m$ and $|s_m| \le X_m$. This is (c).
+
+Theorem~\ref{thm:t1}(d) gives $|v_j| \le V_j$ for $j \ge 1$, and Theorem~\ref{thm:t1}(b) with $k = 0$ and $|v_0| \le |S|
++ \sum_{j \ge 1}|v_j| \le \bar Z + F + \sum_{j \ge 1}V_j$ gives (a) after adding $F$. Lemma~\ref{lem:o} with $|S| \le
+\bar Z + F$ gives (b).
+\end{proof}
+
+We write $(\epsilon, \pi') = G_{\rm OP}(\alpha, \beta;\ \bar Z)$ for the error bound (a) and the part bounds (b) that
+Lemma~\ref{lem:g} gives for the operation OP, taking $\lambda_m = \alpha_m + \beta_m$ for ADD and $\lambda_0 = \alpha_0
++ \beta_0$ for ADDF, and $G_{\rm OP}(\alpha, \beta;\ \bar Z, \lambda)$ when $\lambda$ is given. A one-part operand $f$
+has part bounds $(|f|, 0, \dots, 0)$, and
+as an operand $|c|$ stands for the magnitudes of the parts of a constant expansion $c$. The bounds are homogeneous of
+degree one in the operands' part bounds, $\lambda$ and $\bar Z$ together, so an operation on operands scaled exactly by
+powers of two has the scaled bounds.
+
+\section{Error bounds for the operations}
+
 \begin{theorem}\label{thm:t2}
 Assume~\ref{as:fp} and (A3), and let the $n$-part operands
 satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and MULF let $M$, $\alpha_m$, $T_m$, $Q$ and
@@ -243,44 +333,24 @@ $a + b$, and $|c_m| \le L_m u^m M$ with $L_m = (1+u)\sum_{k=0}^{m}\theta^k$ for 
 \end{theorem}
 
 \begin{proof}
-By $H(\theta)$, $|a_i b_j| \le \rho^{i+j}M$ for MUL, $|a_i| + |b_i| \le \rho^i M$ for ADD and $|a_i b| \le \rho^i M$ for
-MULF. Each operation is a program of the form of Lemma~\ref{lem:l}.
+Apply Lemma~\ref{lem:g} with the part bounds $\rho^i|a_0|$ and $\rho^j|b_0|$ that $H(\theta)$ gives ($|b|$ alone for
+ADDF and MULF), and with $\lambda_m = \rho^mM$ for ADD, as $|a_m + b_m| \le \rho^m(|a_0| + |b_0|)$.
 
-\emph{MUL.} Level 0 holds $\RN(a_0b_0)$, so $A_0 \le (1+u)M$. For $1 \le m \le n-1$, level $m$ receives the products
-$p_{ij}$ with $i + j = m$ ($m+1$ of them, by assignment for $i = 0$ and by dep otherwise), each at most
-$(1+u)\rho^m M$, and the errors $e_{ij}$ with $i + j = m - 1$ ($m$ of them), each at most $u\rho^{m-1}M =
-\rho^mM/\theta$ by Lemma~\ref{lem:facts}(c). Level $n$ receives the $n - 1$ exact products $a_ib_{n-i}$ of step (2), at
-most $\rho^nM$ each, and the $n$ errors $e_{ij}$ with $i + j = n-1$. So $A_m \le \alpha_m\rho^m M$ for every $m$. A dep
-started at level $l \le n-1$ performs one $\TwoSum$ at each level $l, \dots, n-1$ and one rounding at level $n$. The
-deps started at a level $l \le m$ are $m$ of step (3), $m(m+1)/2$ products and $m(m-1)/2$ errors of step (4), so $T_m =
-m + m^2$. The roundings at level $n$ are the $n-1$ of step (2) and one per dep, $n + n(n-1)$ of them, so $Q = n^2 +
-n - 1$.
+\emph{MUL, ADD and MULF.} For MUL, $2n-1-k$ pairs $(i, j)$ with $0 \le i, j \le n-1$ have $i + j = k \ge n-1$, and
+$m+1$ have $i + j = m < n$, so $P_m = (m+1)\rho^mM$ for $m < n$ and $P_k = (2n-1-k)\rho^kM$ for $k \ge n$. With
+$u\rho^{m-1} = \rho^m/\theta$, the inputs of the lemma are $A_m = \alpha_m\rho^mM$ for the three operations, and its
+dropped products are $M\sum_{k=n+1}^{2n-2}(2n-1-k)\rho^k = \Delta_nu^{n+1}M$. In Lemma~\ref{lem:l}, induction on $m$
+gives $D_m = d_m\rho^mM$ and $C_m = \gamma_m\rho^{m+1}M$: $D_0 = A_0 = d_0M$, $C_m = T_m u D_m/(1-T_m u) =
+\gamma_m\rho^{m+1}M$ because $u = \rho/\theta$, and $D_{m+1} = A_{m+1} + C_m = (\alpha_{m+1} + \gamma_m)\rho^{m+1}M$.
+So $X_m = L_m u^mM$, as $\rho = \theta u$, and the rounding errors total at most $QuX_n = Ru^{n+1}M$.
+Lemma~\ref{lem:g}(c) then gives the counts, (a) and (b).
 
-\emph{ADD and MULF.} Level $m < n$ holds $\RN(a_m + b_m)$ or $\RN(a_m b)$, at most $(1+u)\rho^mM$, and for $m \ge 1$
-receives $t_{m-1}$ or $e_{m-1}$, at most $u\rho^{m-1}M = \rho^mM/\theta$; level $n$ holds $t_{n-1}$ or $e_{n-1}$, at most
-$\rho^nM/\theta$. The deps start at $l = 1, \dots, n-1$, so $T_m = m$ and $Q = n-1$.
-
-For these three, induction on $m$ gives $D_m \le d_m\rho^mM$ and $C_m \le \gamma_m\rho^{m+1}M$ in
-Lemma~\ref{lem:l}: $D_0 = A_0 \le d_0M$, $C_m = T_m u D_m/(1-T_m u) \le \gamma_m\rho^{m+1}M$ because $u = \rho/\theta$,
-and $D_{m+1} = A_{m+1} + C_m \le (\alpha_{m+1} + \gamma_m)\rho^{m+1}M$. Lemma~\ref{lem:l}(a) then gives $|s_m| \le
-X_m \le L_m u^mM$, as $\rho = \theta u$, and Lemma~\ref{lem:l}(c) gives rounding errors of total at most
-$Qu\,d_n\rho^nM/(1-Qu) = Ru^{n+1}M$.
-
-For (b), Lemma~\ref{lem:l}(c) with the exactness of $\TwoSum$ and $\TwoProd$ gives $\sum_m c_m = \sum_{i+j \le n} a_i
-b_j - \sum r$ for MUL, since steps (1), (3) and (4) put in $p_{ij} + e_{ij} = a_ib_j$ for every $i + j \le n-1$ and step
-(2) the products of order $n$; and $\sum_m c_m = Z - \sum r$ for ADD and MULF. The products dropped by MUL satisfy
-$\sum_{i+j \ge n+1}|a_ib_j| \le M\sum_{k=n+1}^{2n-2}(2n-1-k)\rho^k = \Delta u^{n+1}M$, since $2n-1-k$ pairs $(i, j)$
-with $0 \le i, j \le n-1$ have $i + j = k$.
-
-\emph{ADDF.} Here $s_i = \RN(a_i + e_{i-1})$ with $e_{-1} = b$, $e_i$ its error, and $s_n = e_{n-1}$; every operation
-is exact, so the levels sum to $a + b$. By Lemma~\ref{lem:facts}(a), $|e_i| \le u(|a_i| + |e_{i-1}|)$, and induction
-gives $|e_i| \le u^{i+1}M\sum_{k=0}^{i}\theta^k$: for $i = 0$ it reads $u(|a_0| + |b|)$, and $u(\theta^iu^i|a_0| +
-u^iM\sum_{k<i}\theta^k) \le u^{i+1}M\sum_{k \le i}\theta^k$. Then $|s_m| \le (1+u)(|a_m| + |e_{m-1}|) \le
-(1+u)u^mM\sum_{k \le m}\theta^k$, and $|s_n| = |e_{n-1}|$.
+\emph{ADDF.} With $\lambda_0 = M$, induction gives $\epsilon_i \le u^{i+1}M\sum_{k=0}^{i}\theta^k$: $\epsilon_0 = uM$,
+and $u(\theta^iu^i|a_0| + u^iM\sum_{k<i}\theta^k) \le u^{i+1}M\sum_{k \le i}\theta^k$. Then $X_m \le
+(1+u)(\theta^mu^m|a_0| + u^mM\sum_{k<m}\theta^k) \le L_mu^mM$ for $m < n$, and $X_n = \epsilon_{n-1} \le L_nu^nM$, so
+Lemma~\ref{lem:g}(c) gives the claim.
 \end{proof}
 
-
-\section{Error bounds for the operations}
 
 \begin{theorem}\label{thm:t3}
 Under the hypotheses of Theorem~\ref{thm:t2}, let $\Lambda = \sum_{m=0}^n L_m$, $\beta_n = (1+u)^{n-1}/(1-u)$ and
@@ -304,7 +374,7 @@ gives the hypothesis of Theorem~\ref{thm:t1}(e), so $|S - \sum_k x_k| \le u^n|S|
 + u^nF + 2\beta_n\Lambda u^{n+1}M$. Adding $F$ gives the bound. The particular forms follow from \eqref{eq:a0}.
 \end{proof}
 
-\begin{table}[H]
+\begin{table}[tp]
 \centering
 \caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$. In units of $2^{-418}$, the leading term is $1/64$ unit. Below each row, the bound for $\theta = 2$.}
 \label{tab:kappa}
@@ -330,25 +400,6 @@ For MUL, $\kappa$ grows like $n(n!)^2$ ($2^{36.4}$ at $n = 8$ and $2^{64.0}$ at 
 for $\theta = 1$). At $p = 53$ and $\theta = 2$, $\kappa u < 1$ for $n \le 10$; for larger $n$ the bound holds, but its
 second term dominates.
 \end{remark}
-
-\section{The parts of the result}
-
-\begin{lemma}\label{lem:o}
-Assume~\ref{as:fp}. For $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S = \sum_m c_m$ and $W_k =
-\sum_{j=k+1}^{n}|v_j|$: $(|S| - W_1)/(1+u) \le |x_0| \le (1+u)(|S| + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$
-for $1 \le i \le n-1$.
-\end{lemma}
-
-\begin{proof}
-Let the pass emit $q$ times, at steps $j_0 < \dots < j_{q-1}$, with errors $\varepsilon_0, \dots, \varepsilon_{q-1}$. By
-\eqref{eq:rn}, $|\varepsilon_i| \le u|x_i|$. Each emission happens at a later step than the one before, so $j_{i-1}
-\ge i$. Between two emissions every step has $e = 0$ and adds exactly, except a final lossy step $n$ (Theorem
-\ref{thm:t1}(a)). So for $1 \le i \le q - 1$, $x_i = \RN(\varepsilon_{i-1} + \sum_{j_{i-1} < j \le j_i} v_j)$, and $x_q$
-is $\varepsilon_{q-1} + \sum_{j > j_{q-1}} v_j$, exactly or rounded once; the parts after $x_q$ are zero. With
-\eqref{eq:rn}, $|x_i| \le (1+u)(u|x_{i-1}| + W_{j_{i-1}}) \le (1+u)(u|x_{i-1}| + W_i)$. If $q = 0$, nothing is lost
-($n \ge 2$), and $x_0 = S$. Otherwise $x_0 = \RN(\sum_{j \le j_0} v_j)$ with $\bigl||\sum_{j \le j_0} v_j| - |S|\bigr|
-\le W_{j_0} \le W_1$.
-\end{proof}
 
 \begin{theorem}\label{thm:t5}
 Under the hypotheses of Theorem~\ref{thm:t2}, the result $x$ of each operation satisfies, for $1 \le i \le n-1$,
@@ -481,56 +532,7 @@ $\theta$, so the proof carries part bounds $P^{(k)}$ relative to $|a_0|$ through
 Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposition~\ref{prop:sharp}(d)).
 \end{remark}
 
-\section{Operations from part bounds, and the square root}
-
-\begin{lemma}\label{lem:g}
-Assume~\ref{as:fp} and (A3). Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
-($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$, and let $P_m =
-\sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, $\lambda_m \ge |a_m + b_m|$ for ADD and
-$\lambda_m = \alpha_m\beta_0$ for MULF, with $P_{-1} = \lambda_{-1} = 0$, and $m < n$ in the row of $A_m$:
-\[
-\begin{tabular}{@{}lll@{}}
-\toprule
-& MUL & ADD, MULF \\
-\midrule
-$A_m$ & $(1+u)P_m + uP_{m-1}$ & $(1+u)\lambda_m + u\lambda_{m-1}$ \\
-$A_n$ & $P_n + uP_{n-1}$ & $u\lambda_{n-1}$ \\
-$T_m$ & $m(m+1)$ & $m$ \\
-$Q$ & $n^2 + n - 1$ & $n-1$ \\
-$\Delta$ & $\sum_{m > n}P_m$ & $0$ \\
-\bottomrule
-\end{tabular}
-\]
-Let $X_m$ and $R$ be those of Lemma~\ref{lem:l}. For
-ADDF, with $\lambda_0 \ge |a_0 + b|$, let $\epsilon_0 = u\lambda_0$, $\epsilon_m = u(\alpha_m + \epsilon_{m-1})$, $X_0
-= (1+u)\lambda_0$, $X_m = (1+u)(\alpha_m + \epsilon_{m-1})$ for $1 \le m < n$, $X_n = \epsilon_{n-1}$ and $R = \Delta =
-0$. With $\sigma_l = \sum_{m \ge l}X_m$, $V_j = \min(X_{j-1}, \us(1+u)^{n-j}\sigma_{j-1})$ and $W_k = \sum_{j > k}V_j$:
-\begin{enumerate}
-\item[(a)] $|Z - \sum_k x_k| \le u^n\bar Z + (1+u^n)(R+\Delta) + \sum_{j=1}^n (u^n + u^{n+1-j})V_j$;
-\item[(b)] $|x_0| \le (1+u)(\bar Z + R + \Delta + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$ for $1 \le i < n$.
-\end{enumerate}
-\end{lemma}
-
-\begin{proof}
-The level inputs are bounded termwise as in the proof of Theorem~\ref{thm:t2}, with $|a_ib_j| \le \alpha_i\beta_j$,
-$|\RN(a_m + b_m)| \le (1+u)\lambda_m$ and $|t_m| \le u\lambda_m$; for ADDF, $|e_m| \le u(|a_m| + |e_{m-1}|)$ by
-Lemma~\ref{lem:facts}(a) and the levels are $s_m = \RN(a_m + e_{m-1})$. Lemma~\ref{lem:l} bounds the levels and the
-rounding errors, and the products dropped by MUL are at most $\Delta$, so $F = |Z - S| \le R + \Delta$.
-Theorem~\ref{thm:t1}(d) gives $|v_j| \le V_j$ for $j \ge 1$, and Theorem~\ref{thm:t1}(b) with $k = 0$ and $|v_0| \le |S|
-+ \sum_{j \ge 1}|v_j| \le \bar Z + F + \sum_{j \ge 1}V_j$ gives (a) after adding $F$. Lemma~\ref{lem:o} with $|S| \le
-\bar Z + F$ gives (b).
-\end{proof}
-
-Theorems~\ref{thm:t2} and~\ref{thm:t3} are the case $\alpha_i = \rho^i|a_0|$, $\beta_j = \rho^j|b_0|$, with the
-constants gathered into $\kappa$.
-
-We write $(\epsilon, \pi') = G_{\rm OP}(\alpha, \beta;\ \bar Z)$ for the error bound (a) and the part bounds (b) that
-Lemma~\ref{lem:g} gives for the operation OP, taking $\lambda_m = \alpha_m + \beta_m$ for ADD and $\lambda_0 = \alpha_0
-+ \beta_0$ for ADDF, and $G_{\rm OP}(\alpha, \beta;\ \bar Z, \lambda)$ when $\lambda$ is given. A one-part operand $f$
-has part bounds $(|f|, 0, \dots, 0)$, and
-as an operand $|c|$ stands for the magnitudes of the parts of a constant expansion $c$. The bounds are homogeneous of
-degree one in the operands' part bounds, $\lambda$ and $\bar Z$ together, so an operation on operands scaled exactly by
-powers of two has the scaled bounds.
+\section{The square root}
 
 SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
 (exact), $h = a/2$, $r = (\RN(1/\RN(\sqrt{a_0})), 0, \dots, 0)$; $J$ times $m = \mathrm{MUL}(r, r)$, $g =
