@@ -10,6 +10,8 @@ plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth.
 |---|---|
 | `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex` | the source; the appendix holds the proofs, the last file those for sums of products |
 | `constants.py`, `div_consts.py`, `sqrt_consts.py` | the constants of Theorems 12 and 13, 18, and 21 and 22 in exact rational arithmetic; their outputs are the `.txt` files |
+| `sloppy_consts.py` | the bound of the opt-in sloppy multiply (`OD::sloppy_mul`) and of sums of its products, from Lemma 11 and Theorem 9(a) and, for the sums, Lemma 26 and Theorem 27, in exact rational arithmetic; `check` is its control |
+| `sloppy_emu.py` | the sloppy multiply on `fpemu.py`, written from its description: hill climbs against `sloppy_consts.py`'s bound at p = 6 to 53 and n = 3 to 8, the crate's worst found pair bit for bit, and a control that must fire |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
 | `example_n3.py` | the worked example of Section IV on `fpemu.py`, with a control that must fail |
 | `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with controls that skip its last step and its two-sum of the leading parts |
@@ -25,6 +27,9 @@ python3 example_n3.py .  # prints PASS
 python3 sqrt_bits.py 2000          # prints 2000 inputs, 0 mismatches
 python3 sqrt_bits.py 300 1 accumulator/acc_check/Cargo.toml control   # prints 300 inputs, 300 mismatches (control)
 python3 sqrt_bits.py 2000 1 accumulator/acc_check/Cargo.toml control2   # prints 2000 inputs, 30 mismatches (control2)
+python3 sloppy_consts.py # the sloppy multiply's bound, 2^31.92 u^8 |a_0 b_0| at n = 8
+python3 sloppy_consts.py check  # prints PASS
+python3 sloppy_emu.py bound     # prints PASS; also bits and control
 tectonic -X compile expansion-error-bounds.tex
 ```
 
