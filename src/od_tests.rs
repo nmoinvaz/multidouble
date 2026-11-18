@@ -9,8 +9,8 @@
 //! OD_N sets the samples per operation and input category (default 2000), OD_SEED the seed (default 1),
 //! OD_REPORT=1 prints the tables. The thresholds, in units of 2^-418 (`OD::EPS`), were fixed before the first run:
 //! 1 for the adds (relative to |a| + |b|, Cray-style, as QD's `+`), the multiply and od x f64, 2 for the divide and
-//! the square root, and (8 + n)/8 relative to sum |a_i b_i| for dot products of n terms: the quad-double tests'
-//! (`qd_tests`) thresholds of the accurate operations.
+//! the square root: the quad-double tests' (`qd_tests`) thresholds of the accurate operations. Dot products of n
+//! terms are checked against the accumulator's proven bound, (|Z| + c_n W) u^8 with W = sum |a_i b_i| (`acc_thr`).
 //!
 //! The adds, the multiply and od x f64 have a proven bound, u^8 (1 + 2^-14) with u = 2^-53, which is 1/64 unit and
 //! holds for operands on the ladder |a_i| <= 2^(-52 i) |a_0| without underflow (`proven`). Every input within those
@@ -747,13 +747,30 @@ fn run_ops(n: usize, seed: u64, id: u32) -> Vec<Res> {
 
 const ACC_CATS: [&str; 4] = ["random", "cancel", "wide", "mixed"];
 
+/// The accumulator's proven bound for len products of operands on the ladder |a_i| <= 2^(-52 i) |a_0|, in units of
+/// 2^-418 relative to W = sum |a_i b_i|: |Z - x| <= (|Z| + c W) u^8 <= (1 + c) W / 64 units. c is the second term's
+/// constant, rounded up, for len = 1, 4, 16 and 64 at n = 8, p = 53, theta = 2 (2^-14.92, 2^-14.28, 2^-10.55,
+/// 2^2.68). It grows like len^9 u^9, so the bound stays near u^8 W only up to about 50 products, and a sum of 2048
+/// constructed terms reaches 2^23.8 u^8 |Z|. The proof (by hand, checked in exact arithmetic, not yet refereed) is
+/// research/theory/accumulator.tex on branch wip/discover-a.
+fn acc_thr(len: usize) -> f64 {
+    let c = match len {
+        1 => 3.3e-5,
+        4 => 5.1e-5,
+        16 => 6.7e-4,
+        64 => 6.42,
+        _ => panic!("acc_thr: no constant for {len} terms"),
+    };
+    (1.0 + c) / 64.0
+}
+
 /// accuracy of ODotAcc / OdAcc on dot products of length len (8 per sample, one per lane): |error| / sum |a_i b_i|
 fn run_acc(n: usize, seed: u64, id: u32) -> Vec<Res> {
     let mut out = Vec::new();
     for len in [1usize, 4, 16, 64] {
         for (ci, cat) in ACC_CATS.iter().enumerate() {
             let mut r = Rng::new(seed ^ ((len as u64) << 20) ^ ((ci as u64) << 30) ^ 0x0acc);
-            let thr = (8.0 + len as f64) / 8.0;
+            let thr = acc_thr(len);
             let (mut ms, mut fails, mut mism, mut rel_max) = (Vec::new(), 0, 0, 0f64);
             let mut digest = 0xcbf29ce484222325u64;
             let nsamp = ((n / len.clamp(1, 16)).max(8)) / 8 * 8;
@@ -1202,7 +1219,7 @@ fn od_accumulator() {
     let rs = run_acc(n / 4, seed, 0);
     if report() {
         print_table(
-            "dot accumulator: |error| / sum |a_i b_i| (units of 2^-418); threshold (8 + n)/8",
+            "dot accumulator: |error| / sum |a_i b_i| (units of 2^-418); threshold the proven bound (acc_thr)",
             &rs,
         );
     }

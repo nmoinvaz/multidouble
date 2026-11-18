@@ -887,8 +887,10 @@ pub fn from_parts(c: [&[f64]; 8]) -> Vec<OD> {
 
 /// Scalar sum-of-products accumulator, the twin of `ov::ODotAcc` (same algorithm, bitwise the same per lane): nine
 /// running levels, the first eight summed with two-sums and the last in plain f64. Each product's levels (`expand`,
-/// its terms to order 8) are added into them with their errors carried down, so the error of a dot product is mostly
-/// that of `finish`.
+/// its terms to order 8) are added into them with their errors carried down. For K products of operands on the ladder
+/// the error is at most (|Z| + c_K W) u^8, W = sum |a_i b_i| and u = 2^-53, with c_K below 1 up to K = 50 (`od_tests`,
+/// `acc_thr`); c_K grows like K^9 u^9, and 2048 constructed terms reach 2^23.8 u^8 |Z|, while random sums stay near
+/// u^8 W.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OdAcc {
     /// the running levels, the largest first
