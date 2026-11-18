@@ -294,12 +294,19 @@ impl Acc {
 
 /// x = k pi/2 + r for finite parts x with |x_0| <= 2^52: (k mod 4, r), |r| <= 0.7854 (1 + 2^-52); r = x for k = 0,
 /// otherwise N greedy parts
+#[inline(always)]
 pub(crate) fn reduce<const N: usize>(x: &[f64; N]) -> (u32, [f64; N]) {
-    let mut k = (x[0] * tables::TWO_OVER_PI).round();
+    let k = (x[0] * tables::TWO_OVER_PI).round();
     if k == 0.0 {
         // |x_0| < 0.78539817: r = x, exactly
         return (0, *x);
     }
+    reduce_k(x, k)
+}
+
+/// `reduce` for k = round(x_0 RN(2/pi)) != 0, out of line, so that r = x for k = 0 reaches the caller in registers
+#[inline(never)]
+fn reduce_k<const N: usize>(x: &[f64; N], mut k: f64) -> (u32, [f64; N]) {
     let mut acc = Acc([0; L]);
     for &v in x {
         acc.add_f64(v);
@@ -398,7 +405,14 @@ fn pow2(k: i32) -> f64 {
 fn horner<T: Ext>(z: T, k: T::K, lead: T, c: impl Fn(usize) -> T) -> T {
     let mut p = lead;
     for i in (1..T::kmax(k) - 1).rev() {
-        p = T::sel(T::active(k, i), z.mul(p).add(c(i)), p);
+        let m = T::active(k, i);
+        // unmasked where every lane takes the step: a select would keep a scalar type's sum in registers, stored and
+        // reloaded around each out-of-line product and sum
+        if T::all(m) {
+            p = z.mul(p).add(c(i));
+        } else {
+            p = T::sel(m, z.mul(p).add(c(i)), p);
+        }
     }
     p
 }
@@ -833,6 +847,7 @@ impl Ext for DD {
     fn div(self, b: DD) -> DD {
         self.fast_div(b)
     }
+    #[inline(always)]
     fn reduce(self) -> (usize, DD) {
         let (q, r) = reduce(&[self.hi, self.lo]);
         // the greedy r can have |r_1| = ulp(r_0)/2 with r_0 odd, a tie that RN(r_0 + r_1) rounds away from r_0; the
@@ -885,6 +900,7 @@ impl Ext for QD {
     fn div(self, b: QD) -> QD {
         self / b
     }
+    #[inline(always)]
     fn reduce(self) -> (usize, QD) {
         let (q, x) = reduce(&self.x);
         (q as usize, QD { x })
@@ -934,6 +950,7 @@ impl Ext for OD {
     fn div(self, b: OD) -> OD {
         self / b
     }
+    #[inline(always)]
     fn reduce(self) -> (usize, OD) {
         let (q, x) = reduce(&self.x);
         (q as usize, OD { x })
