@@ -1,0 +1,31 @@
+{
+ "commit_id": "cbd703eac67b9dba177321abf02d94aa01297fea",
+ "event": "COMMENT",
+ "body": "Four findings: stale comments, a reference to code that is not on this branch, and a threshold far from the bound the PR cites. The arithmetic holds on everything I ran.\n\n## Checked\n\n- The start against Algorithm 8 of Lef\u00e8vre et al. and DWDivDW2 with DWTimesFP1 of Joldes et al., as I know them (HAL refused the fetch from here). The reciprocal is #74's `DD::sloppy_div` with the dividend (1, 0), step for step.\n- The first step's identity, by hand and in exact rationals: with r = y(1 + e), c = \u2212e \u2212 e\u00b2/2 and (1 + e)(1 + c + 3/2 c\u00b2) = 1 + 5/2 e\u00b3 + 15/8 e\u2074 + 3/8 e\u2075.\n- 160,000 inputs at the top of the ladder H(2), each part from half an ulp to a whole ulp of the one above, a0 anywhere and just above a power of four: the worst error is 0.0093 u\u2078, the same as main's four steps on these inputs. The bits differ from main's on 26% of them.\n- 160,000 lane square roots with zero lanes mixed in: bit for bit with the scalar on NEON and on the portable backend.\n- Zero, negatives, infinities, NaN, subnormals and `f64::MAX`: the same results as main (NaN in every part for negative, infinite and NaN inputs). With a1 a whole ulp of a0 the quick two-sum moves a0 and the result is right.\n- The gap case, with `mutate::RENORM_FAST`: the old case is unmoved by the mutation (3.07\u00b710\u207b\u2077 units with and without), the new one goes from 8.4\u00b710\u207b\u2077 to 2.74\u00b710\u00b9\u2078 units. Both claims of the PR body hold. The new case is on the ladder H(2).\n- #80's emulator against this branch (`paper/sqrt_bits.py` with a driver built here): 2,000 inputs with 0 mismatches, 500 more at another seed with 0, the control 300 of 300, and 2,000 ladder inputs where the quick two-sum moves a0, 0 mismatches.\n\n## Ran\n\n| build | passed | failed |\n|---|---|---|\n| `cargo test --release` | 236 | 0 |\n| `--features portable` | 236 | 0 |\n| `--features mutate` | 250 | 0 |\n\nThe diff touches only `alg::sqrt`, and the one hash re-pinned in `tests/octo.rs` is the square root's group. I did not rerun the benchmark.\n\nThe scripts are on the branch `wip/fable-review`, folder `fable-review/pr79`.",
+ "comments": [
+  {
+   "path": "src/od.rs",
+   "line": 542,
+   "side": "RIGHT",
+   "body": "1. **nit**: Two comments outside the diff still describe the four steps from a double: the function's doc comment (lines 521 to 525) and the module doc (line 32, \"four steps, after scaling by a power of four (QD's, ...)\"). The count \"sixteen times over\" is also the old one. With #78 the reference to `QD::sqrt` points at a different algorithm.\n\n```diff\n-    /// The square root: Newton's iteration on 1/sqrt(a), four steps from the f64 value (each about doubling the\n-    /// correct bits, 53 to 424 in three, the fourth for the rounding), then times a, applied to a scaled by an exact\n-    /// power of four into [1, 4) and the result scaled back (as `QD::sqrt`). A zero gives zero. The products and sums\n-    /// are the caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here sixteen\n-    /// times over).\n+    /// The square root: Newton's iteration on 1/sqrt(a), two steps from the reciprocal of the double-double square\n+    /// root of a's two leading parts, the first with its second-order term, then times a, applied to a scaled by an\n+    /// exact power of four into [1, 4) and the result scaled back. A zero gives zero. The products and sums are the\n+    /// caller's (`mul`, `add`, `add_f`: the type's own operations, so that they are not inlined here at every call).\n```\n\n```diff\n-//!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), four steps, after scaling by a\n-//!   power of four (QD's, with this crate's scaling, `qd::QD::sqrt`).\n+//!   (QD's accurate divide); the square root by Newton's iteration on 1/sqrt(a), two steps from the reciprocal of\n+//!   the double-double square root, after scaling by a power of four.\n```"
+  },
+  {
+   "path": "src/od.rs",
+   "line": 544,
+   "side": "RIGHT",
+   "body": "2. **nit**: `DD::sloppy_div` is not on this branch or on main. It is #74's, still open, and the PR body cites it the same way. The code here does not call it, so nothing breaks, but the comment names a function a reader cannot find until #74 merges. Either say that this PR follows #74, or cite the algorithm alone here."
+  },
+  {
+   "path": "src/od_tests.rs",
+   "line": 1548,
+   "side": "RIGHT",
+   "body": "3. **gap**: No test ties the square root to the bound this PR cites. Its threshold is 2 units of 2^-418 (`op_thr`), which is 128 u\u2078, and `proven` returns false for `Op::Sqrt`, so nothing compares it with 3.0000319 u\u2078. An algorithm that left 50 u\u2078 on ladder inputs would pass every check. Both predate this PR, but the PR replaces the algorithm on the strength of \"the proven bound does not change\".\n\nThe measured error leaves the room: 0.0093 u\u2078 at worst on 160,000 inputs at the top of the ladder (review body), against a bound of 3.0000319 u\u2078 and a threshold of 128 u\u2078. The ladder category meets Theorem 22's hypotheses when the leading part is far from overflow and underflow, so `proven` can admit `Op::Sqrt` there, with 3.0000319/64 units in place of `PROVEN_THR`, and a control that skips the second step (`SQRT_ITER`) must then miss it."
+  },
+  {
+   "path": "src/od_tests.rs",
+   "line": 1385,
+   "side": "RIGHT",
+   "body": "4. **nit**: This line is 148 characters, past the 120 of `rustfmt.toml`, which does not wrap comments."
+  }
+ ]
+}

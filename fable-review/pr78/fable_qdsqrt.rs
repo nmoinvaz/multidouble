@@ -163,3 +163,22 @@ fn new_and_old_bits() {
     }
     println!("{same_bits} of {n} inputs give the same bits from the new and the old square root");
 }
+
+/// a_1 past half an ulp of a_0 (not a double-word pair, as a sum's renormalization can leave): the error of the new
+/// square root
+#[test]
+fn leading_parts_not_double_word() {
+    let mut r = Rng(99);
+    for top in [0.75, 1.0, 4.0, 1024.0] {
+        let (mut wn, mut wo) = (0.0f64, 0.0f64);
+        for i in 0..200_000 {
+            let mut a = input(&mut r, i % 4);
+            let ulp = f64::from_bits(a.x[0].to_bits() + 1) - a.x[0];
+            let s = if r.next_u64() & 1 == 0 { 1.0 } else { -1.0 };
+            a.x[1] = s * (0.5 + (top - 0.5) * r.unit()) * ulp;
+            wn = wn.max(err(a.sqrt(), a));
+            wo = wo.max(err(sqrt_newton3(a), a));
+        }
+        println!("|a_1| up to {top} ulp(a_0): worst new {wn:.3} u^4, worst old {wo:.3} u^4");
+    }
+}

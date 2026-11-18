@@ -140,3 +140,27 @@ fn special_values() {
         println!("  {l}");
     }
 }
+
+/// the PR's test loop, with its generator (`r.dd(20).lo`) and with the low part at the divisor's own scale
+/// (`r.dd(0).lo`), and with the dividend near a power of two as well
+#[test]
+fn pr_test_with_scaled_low_part() {
+    let p2 = |k: i32| 2f64.powi(k);
+    for variant in 0..3 {
+        let mut r = Rng(13);
+        let mut worst: f64 = 0.0;
+        let near = |r: &mut Rng, variant: usize| {
+            let k = r.dd(20).hi.abs().log2().floor() as i32;
+            let j = 1 + (r.dd(0).hi.abs() * 50.0) as i32 % 52;
+            let s = if r.dd(0).hi > 0.0 { 1.0 } else { -1.0 };
+            let lo = if variant == 0 { r.dd(20).lo } else { r.dd(0).lo };
+            DD::new(p2(k) * (1.0 + s * p2(-j)), lo * p2(k))
+        };
+        for i in 0..20_000 {
+            let a = if variant == 2 && i % 2 == 1 { near(&mut r, 1) } else { r.dd(20) };
+            let b = if i % 2 == 0 { r.dd(20) } else { near(&mut r, variant) };
+            worst = worst.max(quotient_err(a.sloppy_div(b), a, b));
+        }
+        println!("variant {variant}: worst {worst:.3} u^2");
+    }
+}
