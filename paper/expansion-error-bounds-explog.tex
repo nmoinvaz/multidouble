@@ -138,8 +138,8 @@ and $e^{-b-\delta}$ for $r \le 0$, and
 \]
 If the cases cover every $|r|$ that can select each $e$, $|y - e^x| \le \varepsilon_{\exp}e^x + n2^{-1074}$, with
 $\varepsilon_{\exp}$ the largest $\varepsilon$; the second term arises only where the result's parts fall below
-$2^{-1022}$. At $n = 8$, $s = 6$, $d = 43$ and $\theta = 2$, $\varepsilon_{\exp} \le 3.661\,u^8$, the largest at $k
-\ne 0$, $m = 5$, $r$ just above $-\frac12\ln 2$.
+$2^{-1022}$. At $n = 8$, $s = 6$, $d = 43$ and $\theta = 2$ (computed, \texttt{explog\_consts.py}), $\varepsilon_{\exp} \le
+3.661\,u^8$, the largest at $k \ne 0$, $m = 5$, $r$ just above $-\frac12\ln 2$.
 \end{theorem}
 
 \begin{proof}
@@ -239,7 +239,8 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
 \end{itemize}
 Then $|y - \ln x| \le \mathcal E(\ell)$ in the case of the run. With $\varepsilon_{\ln}$ and $\Phi$ defined from
 $\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, and at $n = 8$, $s = 6$, $d = 43$, $q
-= 4$ and $\theta = 2$, $\varepsilon_{\ln} \le 9.926\,u^8$ and $\Phi \le 2^{-509}$.
+= 4$ and $\theta = 2$ (computed, \texttt{explog\_consts.py}), $\varepsilon_{\ln} \le 9.926\,u^8$ and $\Phi \le
+2^{-509}$.
 \end{theorem}
 
 \begin{proof}
@@ -330,7 +331,8 @@ Assume~\ref{as:fp} with $p = 53$ and binary64's exponent range. For a positive $
 \mu = \RN(\sqrt 2)$, $m \gets m/2$ and $e \gets e + 1$; $s = \RN((m - 1)/\RN(m + 1))$ and $z = \RN(s^2)$; $v \gets
 c_9$ and $v \gets \RN(zv + c_j)$, a fused multiply-add, for $j = 8, \dots, 0$, with $c_j = \RN(1/(2j+1))$; and return
 $\RN(ec_{\rm L} + \RN(2sv))$, a fused multiply-add, with $c_{\rm L} = \RN(\ln 2)$. Then $\ln_{\rm b}(1) = 0$ and
-$|\ln_{\rm b}(h) - \ln h| \le \eta_{\rm b}|\ln h|$ with $\eta_{\rm b} = 5.915\,u$ ($2^{-50.43}$). This is
+$|\ln_{\rm b}(h) - \ln h| \le \eta_{\rm b}|\ln h|$ with $\eta_{\rm b} = 5.915\,u$ ($2^{-50.43}$; computed,
+\texttt{explog\_consts.py}). This is
 multidouble's \texttt{ln\_f64}.
 \end{lemma}
 
