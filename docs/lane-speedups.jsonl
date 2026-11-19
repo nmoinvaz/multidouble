@@ -1,4 +1,4 @@
-{"isa": "neon", "values": 1024, "runs": 15}
+{"isa": "neon", "values": 1024, "runs": 15, "version": "4.9.0", "date": "2026-11-18"}
 {"type": "double-double", "func": "exp", "range": "", "scalar_ns": 385.38, "lanes_ns": 72.47}
 {"type": "double-double", "func": "ln", "range": "", "scalar_ns": 489.71, "lanes_ns": 100.75}
 {"type": "double-double", "func": "sin", "range": "1/4 <= |x| < 1", "scalar_ns": 174.19, "lanes_ns": 64.49}
