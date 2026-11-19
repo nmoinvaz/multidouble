@@ -270,6 +270,180 @@ fn matrix_products() {
     let _ = <Counted<DV> as MatLane>::dmat_apply::<B>;
 }
 
+/// An entry of the kind `edge` for the chunked products' checks: 0 random double-doubles (exponents to +-30), 1
+/// signed zeros (a third of the entries +0 or -0, low parts too), 2 random (the tangents are then zero), 3 extreme
+/// magnitudes (2^+-500, so products and sums overflow and underflow), 4 NaN and infinities among random entries
+fn edge_dd(r: &mut Rng, edge: usize) -> DD {
+    let x = r.dd(30);
+    match edge {
+        1 if r.unit() < 1.0 / 3.0 => DD::new(
+            if r.unit() < 0.5 { 0.0 } else { -0.0 },
+            if r.unit() < 0.5 { 0.0 } else { -0.0 },
+        ),
+        3 => DD::new(x.hi * 2f64.powi(if r.unit() < 0.5 { 500 } else { -500 }), 0.0),
+        4 => match (r.unit() * 8.0) as usize {
+            0 => DD::new(f64::NAN, 0.0),
+            1 => DD::new(f64::INFINITY, 0.0),
+            2 => DD::new(f64::NEG_INFINITY, 0.0),
+            _ => x,
+        },
+        _ => x,
+    }
+}
+
+/// bitwise equality, a NaN matching any NaN (x86 and ARM give NaNs different bits)
+fn same_bits(a: f64, b: f64) -> bool {
+    a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())
+}
+
+/// D f on the f64 lanes at M = 8 B against the scalar fused multiply-add chains over the columns' hi parts in column
+/// order (and `Dtn`'s value against DV's product, `DMat::apply_dd`), every component of every lane type: the number
+/// of entries that differ, and the number compared
+fn chunked_products<const B: usize>(seed: u64, edge: usize) -> (usize, usize) {
+    let m = 8 * B;
+    let mut r = Rng(seed);
+    let a: Vec<DD> = (0..m * m).map(|_| edge_dd(&mut r, edge)).collect();
+    let (ah, al): (Vec<f64>, Vec<f64>) = a.iter().map(|d| (d.hi, d.lo)).unzip();
+    let d = DMat::<Native, B>::from_rows(&ah, &al);
+    let comp = |r: &mut Rng| -> Vec<DD> { (0..m).map(|_| edge_dd(r, edge)).collect() };
+    let load = |v: &[DD]| -> Fl<DV, B> {
+        let (h, l): (Vec<f64>, Vec<f64>) = v.iter().map(|x| (x.hi, x.lo)).unzip();
+        Fl::load(&h, &l)
+    };
+    // value and eight tangents (zero for edge 2)
+    let fv = comp(&mut r);
+    let tv: Vec<Vec<DD>> = (0..8)
+        .map(|_| {
+            if edge == 2 {
+                vec![DD::new(0.0, 0.0); m]
+            } else {
+                comp(&mut r)
+            }
+        })
+        .collect();
+    let chain = |v: &[DD], i: usize| -> f64 {
+        let mut s = 0.0f64;
+        for j in 0..m {
+            s = v[j].hi.mul_add(ah[i * m + j], s);
+        }
+        s
+    };
+    let want_v: Vec<f64> = (0..m).map(|i| chain(&fv, i)).collect();
+    let want_t: Vec<Vec<f64>> = tv.iter().map(|t| (0..m).map(|i| chain(t, i)).collect()).collect();
+    let dv = d.apply(&load(&fv));
+    let (f, t) = (load(&fv), load(&tv[0]));
+    let mut nd = 0;
+    let mut nt = 0;
+    let mut cmp = |got: f64, want: f64| {
+        nt += 1;
+        nd += !same_bits(got, want) as usize;
+    };
+    let lane = |v: multidouble::native::V8, i: usize| v.to_array()[i % 8];
+    let r8 = d.apply(&Fl::<F8, B>::from_vt(&f, &Fl::zero()));
+    let ru = d.apply(&Fl::<Fu, B>::from_vt(&f, &t));
+    for i in 0..m {
+        cmp(lane(r8.0[i / 8].0, i), want_v[i]);
+        cmp(lane(ru.0[i / 8].v, i), want_v[i]);
+        cmp(lane(ru.0[i / 8].d, i), want_t[0][i]);
+    }
+    fn tangents<T: Lane<S = Native>, const B: usize>(f: &Fl<DV, B>, tv: &[Vec<DD>]) -> Fl<T, B> {
+        let mut x = Fl::<T, B>::from_vt(f, &Fl::zero());
+        for k in 0..T::NT {
+            let (h, l): (Vec<f64>, Vec<f64>) = tv[k].iter().map(|x| (x.hi, x.lo)).unzip();
+            let tk = Fl::<T, B>::from_vt(f, &Fl::<DV, B>::load(&h, &l)).tan64(0);
+            x.set_tan64(k, &tk);
+        }
+        x
+    }
+    macro_rules! check_n {
+        ($t:ty) => {{
+            let x = d.apply(&tangents::<$t, B>(&f, &tv));
+            for i in 0..m {
+                for k in 0..<$t as Lane>::NT {
+                    cmp(lane(x.0[i / 8].tan64(k), i), want_t[k][i]);
+                }
+            }
+            x
+        }};
+    }
+    for x in [check_n!(Fun<1>).0.map(|l| l.v), check_n!(Fun<2>).0.map(|l| l.v)] {
+        for i in 0..m {
+            cmp(lane(x[i / 8], i), want_v[i]);
+        }
+    }
+    let x4 = check_n!(Fun<4>);
+    let x8 = check_n!(Fun<8>);
+    for i in 0..m {
+        cmp(lane(x4.0[i / 8].v, i), want_v[i]);
+        cmp(lane(x8.0[i / 8].v, i), want_v[i]);
+    }
+    let y1 = check_n!(Dtn<1>);
+    let y4 = check_n!(Dtn<4>);
+    for i in 0..m {
+        let w = dv.get(i);
+        for y in [y1.0[i / 8].v.lane(i % 8), y4.0[i / 8].v.lane(i % 8)] {
+            cmp(y.hi, w.hi);
+            cmp(y.lo, w.lo);
+        }
+    }
+    (nd, nt)
+}
+
+/// every edge kind with three seeds at M = 8, 16, 24 and 48
+fn chunked_all() -> (usize, usize) {
+    let (mut nd, mut nt) = (0, 0);
+    for edge in 0..5 {
+        for s in 0..3u64 {
+            let seed = 71 + 10 * edge as u64 + s;
+            for (d, t) in [
+                chunked_products::<1>(seed, edge),
+                chunked_products::<2>(seed, edge),
+                chunked_products::<3>(seed, edge),
+                chunked_products::<6>(seed, edge),
+            ] {
+                nd += d;
+                nt += t;
+            }
+        }
+    }
+    (nd, nt)
+}
+
+/// The f64 lanes' matrix products, formed by chunks of 8 columns, are bit for bit the scalar fused multiply-add chains
+/// over the columns in column order (`Dtn`'s value `DMat::apply_dd`'s on DV), for F8, Fu, Fun<1>, Fun<2>, Fun<4>,
+/// Fun<8>, Dtn<1> and Dtn<4> at M = 8, 16, 24, 48, on random entries, signed zeros, zero tangents, extreme
+/// magnitudes and NaN or infinite entries (a NaN matching any NaN).
+#[test]
+fn f64_matrix_products_are_the_column_chains() {
+    let (nd, nt) = chunked_all();
+    println!("f64 lanes' D f against the column chains: {nd} of {nt} entries differ");
+    assert_eq!(nd, 0);
+}
+
+/// An empty matrix (B = 0) applied to an empty field gives an empty field for every f64 lane type: there is no last
+/// lane vector for the `DMAT_CHUNK` control to move.
+#[test]
+fn f64_matrix_products_of_an_empty_matrix_are_empty() {
+    let d = DMat::<Native, 0>::from_rows(&[], &[]);
+    assert!(d.apply(&Fl::<F8, 0>::zero()).0.is_empty());
+    assert!(d.apply(&Fl::<Fu, 0>::zero()).0.is_empty());
+    assert!(d.apply(&Fl::<Fun<4>, 0>::zero()).0.is_empty());
+    assert!(d.apply(&Fl::<Dtn<4>, 0>::zero()).0.is_empty());
+}
+
+/// Control (feature `mutate`): with the last lane vector's value one ulp off (`dual::mutate::DMAT_CHUNK`) the same
+/// check must find differences.
+#[cfg(feature = "mutate")]
+#[test]
+fn f64_matrix_products_control_one_ulp() {
+    use multidouble::dual::mutate;
+    mutate::set(mutate::DMAT_CHUNK);
+    let (nd, nt) = chunked_all();
+    mutate::set(0);
+    println!("control: {nd} of {nt} entries differ");
+    assert!(nd > 0, "control: one ulp of the product not seen");
+}
+
 /// The field solves are DDLu's solves of the stored vector, bitwise
 #[test]
 fn field_solves_are_the_lu_solves() {

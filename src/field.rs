@@ -1048,7 +1048,8 @@ impl<S: Simd, const B: usize> DMat<S, B> {
 
 /// A lane type with the product of a constant matrix: `DMat::apply_dd` by default (the double-double columns through
 /// the dot accumulator); the f64 lanes multiply by the columns' f64 copy with fused multiply-adds, `Dtn<N>` its value
-/// by the double-double columns and its tangents by the f64 copy.
+/// by the double-double columns and its tangents by the f64 copy, each in chunks of 8 columns with the accumulators
+/// held across a chunk (bitwise a loop over the columns).
 pub trait MatLane: Lane {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<Self::S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
@@ -1068,18 +1069,41 @@ impl<S: Simd, const N: usize> MatLane for Jet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for QJet<S, N> {}
 impl<S: Simd, const N: usize> MatLane for OJet<S, N> {}
 
+// The f64 lanes' products go through D by chunks of 8 columns (one input lane vector jb): each output lane vector's
+// accumulators are held in registers across the chunk, the chunk's input values broadcast from memory, so they are
+// loaded and stored once per chunk rather than once per column. Every accumulator still takes the columns in the order
+// j = 0..8B with the same fused multiply-adds (and `Dtn`'s value the same `DotAcc` steps) as a loop over the columns,
+// so the products are that loop's bit for bit.
+
+/// the control `mutate::DMAT_CHUNK`: lane 0 of v moved to the next f64 up
+#[inline(always)]
+fn dmat_mutated<S: Simd>(v: V8<S>) -> V8<S> {
+    if mutate::on(mutate::DMAT_CHUNK) {
+        let mut a = v.to_array();
+        a[0] = a[0].next_up();
+        V8::from_array(a)
+    } else {
+        v
+    }
+}
+
 impl<S: Simd> MatLane for F8<S> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
         let mut acc = [V8::zero(); B];
         for jb in 0..B {
-            for jl in 0..8 {
-                let s = f.0[jb].0.bcast(jl);
-                let col = &d.cols64[8 * jb + jl];
-                for b in 0..B {
-                    acc[b] = s.fma(col[b], acc[b]);
+            let s = f.0[jb].0.to_array();
+            let cols = &d.cols64[8 * jb..8 * jb + 8];
+            for (b, a) in acc.iter_mut().enumerate() {
+                let mut x = *a;
+                for jl in 0..8 {
+                    x = V8::splat(s[jl]).fma(cols[jl][b], x);
                 }
+                *a = x;
             }
+        }
+        if let Some(a) = acc.last_mut() {
+            *a = dmat_mutated(*a);
         }
         Fl(acc.map(F8))
     }
@@ -1088,22 +1112,22 @@ impl<S: Simd> MatLane for F8<S> {
 impl<S: Simd> MatLane for Fu<S> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(d: &DMat<S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
-        let mut av = [V8::zero(); B];
-        let mut ad = [V8::zero(); B];
+        let mut out = [Fu::zero(); B];
         for jb in 0..B {
-            for jl in 0..8 {
-                let sv = f.0[jb].v.bcast(jl);
-                let sd = f.0[jb].d.bcast(jl);
-                let col = &d.cols64[8 * jb + jl];
-                for b in 0..B {
-                    av[b] = sv.fma(col[b], av[b]);
-                    ad[b] = sd.fma(col[b], ad[b]);
+            let (sv, sd) = (f.0[jb].v.to_array(), f.0[jb].d.to_array());
+            let cols = &d.cols64[8 * jb..8 * jb + 8];
+            for (b, o) in out.iter_mut().enumerate() {
+                let (mut av, mut ad) = (o.v, o.d);
+                for jl in 0..8 {
+                    let c = cols[jl][b];
+                    av = V8::splat(sv[jl]).fma(c, av);
+                    ad = V8::splat(sd[jl]).fma(c, ad);
                 }
+                *o = Fu { v: av, d: ad };
             }
         }
-        let mut out = [Fu::zero(); B];
-        for b in 0..B {
-            out[b] = Fu { v: av[b], d: ad[b] };
+        if let Some(o) = out.last_mut() {
+            o.v = dmat_mutated(o.v);
         }
         Fl(out)
     }
@@ -1115,17 +1139,25 @@ impl<S: Simd, const N: usize> MatLane for Dtn<S, N> {
         let mut av = [DDotAcc::zero(); B];
         let mut ad = [[V8::zero(); N]; B];
         for jb in 0..B {
-            for jl in 0..8 {
-                let sv = f.0[jb].v.bcast(jl);
-                let sd = f.0[jb].d.map(|x| x.bcast(jl));
-                let col = &dm.cols[8 * jb + jl];
-                let col64 = &dm.cols64[8 * jb + jl];
-                for b in 0..B {
-                    av[b] = av[b].add_prod(sv, col.0[b]);
+            let (vh, vl) = (f.0[jb].v.hi.to_array(), f.0[jb].v.lo.to_array());
+            let sd: [[f64; 8]; N] = std::array::from_fn(|i| f.0[jb].d[i].to_array());
+            let cols = &dm.cols[8 * jb..8 * jb + 8];
+            let cols64 = &dm.cols64[8 * jb..8 * jb + 8];
+            for b in 0..B {
+                let (mut v, mut t) = (av[b], ad[b]);
+                for jl in 0..8 {
+                    let s = DV {
+                        hi: V8::splat(vh[jl]),
+                        lo: V8::splat(vl[jl]),
+                    };
+                    v = v.add_prod(s, cols[jl].0[b]);
+                    let c = cols64[jl][b];
                     for i in 0..N {
-                        ad[b][i] = sd[i].fma(col64[b], ad[b][i]);
+                        t[i] = V8::splat(sd[i][jl]).fma(c, t[i]);
                     }
                 }
+                av[b] = v;
+                ad[b] = t;
             }
         }
         let mut out = [Self::zero(); B];
@@ -1135,6 +1167,9 @@ impl<S: Simd, const N: usize> MatLane for Dtn<S, N> {
                 d: ad[b],
             };
         }
+        if let Some(o) = out.last_mut() {
+            o.v.hi = dmat_mutated(o.v.hi);
+        }
         Fl(out)
     }
 }
@@ -1142,24 +1177,25 @@ impl<S: Simd, const N: usize> MatLane for Dtn<S, N> {
 impl<S: Simd, const N: usize> MatLane for Fun<S, N> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(dm: &DMat<S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
-        let mut av = [V8::zero(); B];
-        let mut ad = [[V8::zero(); N]; B];
+        let mut out = [Self::zero(); B];
         for jb in 0..B {
-            for jl in 0..8 {
-                let sv = f.0[jb].v.bcast(jl);
-                let sd = f.0[jb].d.map(|x| x.bcast(jl));
-                let col64 = &dm.cols64[8 * jb + jl];
-                for b in 0..B {
-                    av[b] = sv.fma(col64[b], av[b]);
+            let sv = f.0[jb].v.to_array();
+            let sd: [[f64; 8]; N] = std::array::from_fn(|i| f.0[jb].d[i].to_array());
+            let cols = &dm.cols64[8 * jb..8 * jb + 8];
+            for (b, o) in out.iter_mut().enumerate() {
+                let (mut av, mut ad) = (o.v, o.d);
+                for jl in 0..8 {
+                    let c = cols[jl][b];
+                    av = V8::splat(sv[jl]).fma(c, av);
                     for i in 0..N {
-                        ad[b][i] = sd[i].fma(col64[b], ad[b][i]);
+                        ad[i] = V8::splat(sd[i][jl]).fma(c, ad[i]);
                     }
                 }
+                *o = Fun { v: av, d: ad };
             }
         }
-        let mut out = [Self::zero(); B];
-        for b in 0..B {
-            out[b] = Fun { v: av[b], d: ad[b] };
+        if let Some(o) = out.last_mut() {
+            o.v = dmat_mutated(o.v);
         }
         Fl(out)
     }
