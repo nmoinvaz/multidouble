@@ -187,6 +187,12 @@ impl<S: Simd> OV<S> {
                     let inf = V8::splat(f64::INFINITY);
                     let finite = (0..8).fold(all, |m, k| m.and(inf.gt(c[k].abs())));
                     let keep = inf.gt(r[0].abs()).and(ladder).or(finite.not());
+                    // the control keeps a first part that is not finite, also when every part is finite
+                    let keep = if mutate::on(mutate::LANES_KEEP_OVERFLOW) {
+                        keep.or(inf.gt(r[0].abs()).not())
+                    } else {
+                        keep
+                    };
                     if keep.bits() == all.bits() || mutate::on(mutate::NO_FALLBACK) {
                         return OV { c: r };
                     }

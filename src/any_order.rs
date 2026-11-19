@@ -42,14 +42,17 @@ pub mod mutate {
     pub const NO_FALLBACK: u32 = 2;
     /// `expansion_sum`'s result kept when it overflowed (no second Grow-Expansion with the signs alternating)
     pub const NO_BALANCE: u32 = 3;
+    /// `OV::new` keeps the lanes' renormalization when its first part is not finite, also when every part is finite
+    pub const LANES_KEEP_OVERFLOW: u32 = 4;
     /// number of ids
-    pub const N: u32 = 3;
+    pub const N: u32 = 4;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 4] = [
+    pub const NAMES: [&str; 5] = [
         "none",
         "constructors: parts renormalized as given",
         "constructors: no fallback",
         "constructors: no retry after an overflow",
+        "constructors: lanes keep an overflow",
     ];
 
     #[cfg(feature = "mutate")]
