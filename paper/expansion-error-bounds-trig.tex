@@ -92,12 +92,12 @@ rule on expansions. Its bounds are the $G_{\rm OP}$ of Lemma~\ref{lem:g} applied
 \begin{lemma}\label{lem:horner}
 Under Assumption~\ref{as:fp} and (A3), let the $n$-part $z$, with part bounds $\pi^z$, approximate a real $z_{\rm e}$, with
 $|z_{\rm e}| \le \bar z$ and $|z - z_{\rm e}| \le \epsilon_z\bar z$. For $k_0 \le k \le d$ let the $n$-part $F_k$ be
-within $\phi_k$ of a real $f_k$, let $p_d = F_d$ and
+within $\phi_k$ of a real $F^{\rm e}_k$, let $p_d = F_d$ and
 \[
 p_k = \mathrm{ADD}\bigl(F_k, \mathrm{MUL}(z, p_{k+1})\bigr) \qquad (k = d-1, \dots, k_0),
 \]
 with ADD's operands in either order, and let $v_k \ge |p^{\rm e}_k|$ bound the exact sums $p^{\rm e}_k =
-\sum_{l=k}^{d} f_lz_{\rm e}^{\,l-k}$. Let $e_d = \phi_d$ and $\pi^{(d)} = |F_d|$, and for $k = d-1, \dots, k_0$
+\sum_{l=k}^{d} F^{\rm e}_lz_{\rm e}^{\,l-k}$. Let $e_d = \phi_d$ and $\pi^{(d)} = |F_d|$, and for $k = d-1, \dots, k_0$
 \begin{align*}
 (\epsilon^p_k, \mu_k) &= G_{\rm MUL}\bigl(\pi^z, \pi^{(k+1)};\ (1+\epsilon_z)\bar z(v_{k+1} + e_{k+1})\bigr), \\
 D_k &= (1+\epsilon_z)\bar ze_{k+1} + \epsilon_z\bar zv_{k+1} + \phi_k + \epsilon^p_k, \\
@@ -111,7 +111,7 @@ $\epsilon^p_k$ and $\eta$ to each part of $\mu_k$.
 \begin{proof}
 By induction from $k = d$. With $m = \mathrm{MUL}(z, p_{k+1})$,
 \[
-p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (F_k - f_k) + \hat\epsilon_m
+p_k - p^{\rm e}_k = z(p_{k+1} - p^{\rm e}_{k+1}) + (z - z_{\rm e})p^{\rm e}_{k+1} + (F_k - F^{\rm e}_k) + \hat\epsilon_m
 + \hat\epsilon_a,
 \]
 where $\hat\epsilon_m = m - zp_{k+1}$ and $\hat\epsilon_a = p_k - (m + F_k)$. As $|z| \le (1+\epsilon_z)\bar z$, the
