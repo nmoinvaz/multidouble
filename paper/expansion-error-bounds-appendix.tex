@@ -50,16 +50,16 @@ $\FastTwoSum(a, b)$ returns $s = \RN(a+b)$ and $e = \RN(b - \RN(s - a))$; $\TwoP
 On levels $s_0, \dots, s_n$, $\dep(s, l, t)$ sets $e \gets t$, then for $m = l, \dots, n-1$ performs $(s_m, e) \gets
 \TwoSum(s_m, e)$, and finally $s_n \gets \RN(s_n + e)$. The error moved from level $m$ to level $m+1$ is a \emph{carry}.
 
-\paragraph{VecSum} For $c = (c_0, \dots, c_{N-1})$: $s \gets c_{N-1}$; for $i = N-2, \dots, 0$, $(s, v_{i+1}) \gets
+\parhead{VecSum} For $c = (c_0, \dots, c_{N-1})$: $s \gets c_{N-1}$; for $i = N-2, \dots, 0$, $(s, v_{i+1}) \gets
 \TwoSum(c_i, s)$; then $v_0 \gets s$. We write $s_i$ for the value of $s$ after the step with index $i$, so $s_{N-1} =
 c_{N-1}$, $s_i = \RN(c_i + s_{i+1})$ and $v_0 = s_0$.
 
-\paragraph{Renormalization $\Ren_n$} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
+\parhead{Renormalization $\Ren_n$} For $c \in \F^N$ with $N \le n+1$, let $v = \mathrm{VecSum}(c)$, $k \gets 0$, $\acc
 \gets v_0$ and $x \gets 0 \in \F^n$. Step $j$, for $j = 1, \dots, N-1$, forms $(t, e) \gets \TwoSum(\acc, v_j)$. If $k <
 n-1$ and $e \ne 0$, the step \emph{emits}: $x_k \gets t$, $k \gets k+1$, $\acc \gets e$. Otherwise $\acc \gets t$.
 Finally $x_k \gets \acc$. We write $\acc_j$ for $\acc$ after step $j$, and $\acc_0 = v_0$.
 
-\paragraph{Operations} For $n$-part $a$ and $b$, and $b \in \F$ where noted:
+\parhead{Operations} For $n$-part $a$ and $b$, and $b \in \F$ where noted:
 \begin{itemize}
 \item ADD: $(s_i, t_i) \gets \TwoSum(a_i, b_i)$ for $i < n$; $s_n \gets t_{n-1}$; $\dep(s, l, t_{l-1})$ for $l = 1,
 \dots, n-1$; return $\Ren_n(s)$.
@@ -76,7 +76,7 @@ At $n = 8$ and $p = 53$ these are the octo-double algorithms of multidouble~\cit
 instead of $\TwoSum$ in the second pass when $|\acc| \ge |v_j|$, which by Lemma~\ref{lem:facts}(b) gives the same bits.
 
 \begin{lemma}[standard]\label{lem:facts}
-Assume~\ref{as:fp}. (a) $\TwoSum(a, b) = (s, e)$ satisfies $s + e = a + b$ and $|e| \le \min(|a|, |b|, \us|a+b|)$;
+Under Assumption~\ref{as:fp}: (a) $\TwoSum(a, b) = (s, e)$ satisfies $s + e = a + b$ and $|e| \le \min(|a|, |b|, \us|a+b|)$;
 $e = 0$ if and only if $a + b \in \F$. (b) If $|a| \ge |b|$, $\FastTwoSum(a, b)$ returns the $s$ and $e$ of
 $\TwoSum(a,b)$, up to the sign of a zero $e$. (c) $\TwoProd(a, b) = (p, e)$ satisfies $p + e = ab$, $|e| \le \us|ab|$
 and $|p| \le (1+u)|ab|$.
@@ -92,7 +92,7 @@ equal $a + b - s$. (c) Under (A2), $ab - p \in \F$, so the FMA returns it exactl
 \section{Renormalization in any order}
 
 \begin{theorem}\label{thm:t1}
-Assume~\ref{as:fp}. Let $c \in \F^{n+1}$, in any order of magnitudes, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S =
+Under Assumption~\ref{as:fp}, let $c \in \F^{n+1}$, in any order of magnitudes, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S =
 \sum_m c_m$ and $E = S - \sum_k x_k$.
 \begin{enumerate}
 \item[(a)] $\sum_j v_j = S$. If $\Ren_n$ is given $N \le n$ terms, $E = 0$. With $N = n+1$, $E \ne 0$ only if each of the
@@ -172,7 +172,7 @@ that overlap by at most $p-2$ digits, and \cite{FMP19} (Thm.~3) bounds the error
 \section{The levels}
 
 \begin{lemma}\label{lem:l}
-Assume~\ref{as:fp}. Let levels $s_0, \dots, s_n$ start at zero and be changed only by (i) assignments $s_m \gets y$ to
+Under Assumption~\ref{as:fp}, let levels $s_0, \dots, s_n$ start at zero and be changed only by (i) assignments $s_m \gets y$ to
 a zero level, (ii) calls $\dep(s, l, t)$, and (iii) roundings $s_n \gets \RN(s_n + y)$ for real $y$ that are not the
 last step of a dep. Let $A_m$ be the sum of $|y|$ over (i) at level $m$, of $|t|$ over the calls with $l = m$, and, for
 $m = n$, of $|y|$ over (iii). Let $T_m$ be the number of $\TwoSum$s at level $m < n$, $Q$ the number of roundings at
@@ -211,9 +211,12 @@ carry $y$ having already been counted where it entered).
 \section{Operations from part bounds}
 
 \begin{lemma}\label{lem:o}
-Assume~\ref{as:fp}. For $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S = \sum_m c_m$ and $W_k =
-\sum_{j=k+1}^{n}|v_j|$: $(|S| - W_1)/(1+u) \le |x_0| \le (1+u)(|S| + W_1)$, and $|x_i| \le (1+u)(u|x_{i-1}| + W_i)$
-for $1 \le i \le n-1$.
+Under Assumption~\ref{as:fp}, for $c \in \F^{n+1}$, $v = \mathrm{VecSum}(c)$, $x = \Ren_n(c)$, $S = \sum_m c_m$ and $W_k =
+\sum_{j=k+1}^{n}|v_j|$,
+\begin{gather*}
+\frac{|S| - W_1}{1+u} \le |x_0| \le (1+u)(|S| + W_1), \\
+|x_i| \le (1+u)(u|x_{i-1}| + W_i) \quad (1 \le i \le n-1).
+\end{gather*}
 \end{lemma}
 
 \begin{proof}
@@ -228,7 +231,7 @@ is $\varepsilon_{q-1} + \sum_{j > j_{q-1}} v_j$, exactly or rounded once; the pa
 \end{proof}
 
 \begin{lemma}\label{lem:g}
-Assume~\ref{as:fp} and (A3). Let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
+Under Assumption~\ref{as:fp} and (A3), let the operands' parts satisfy $|a_i| \le \alpha_i$ and $|b_j| \le \beta_j$
 ($\beta_0 \ge |b|$ for ADDF and MULF), let $Z$ be the exact result and $\bar Z \ge |Z|$, and let $P_m =
 \sum_{i+j=m}\alpha_i\beta_j$ over the parts' indices $0 \le i, j < n$, $\lambda_m \ge |a_m + b_m|$ for ADD and
 $\lambda_m = \alpha_m\beta_0$ for MULF, with $P_{-1} = \lambda_{-1} = 0$, and $m < n$ in the row of $A_m$:
@@ -299,7 +302,7 @@ powers of two has the scaled bounds.
 \section{Error bounds for the operations}\label{sec:bounds}
 
 \begin{theorem}\label{thm:t2}
-Assume~\ref{as:fp} and (A3), and let the $n$-part operands
+Under Assumption~\ref{as:fp} and (A3), let the $n$-part operands
 satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and MULF let $M$, $\hat A_m$, $T_m$ and $Q$ be
 \begin{center}
 \setlength{\tabcolsep}{5pt}
@@ -673,7 +676,7 @@ product are $1, u, \dots, u^7$ and a ninth just below $u^8$ that the renormaliza
 \section{Sharpness}
 
 \begin{proposition}\label{prop:sharp}
-Assume~\ref{as:fp}. (a) For $n \ge 3$, MUL of $a = (1, u, \dots, u^{n-2}, 0)$ and $b = (1, 0, \dots, 0, u^{n-1})$, both
+Under Assumption~\ref{as:fp}: (a) For $n \ge 3$, MUL of $a = (1, u, \dots, u^{n-2}, 0)$ and $b = (1, 0, \dots, 0, u^{n-1})$, both
 satisfying $H(1)$, errs by $\sum_{k=n}^{2n-3}u^k = u^n|ab|\,(1 - u^{n-2})/(1 - u^{2n-2})$. (b) For $n \ge 2$, ADD of $a
 = (1, u, \dots, u^{n-1})$ and $b = (u^n, 0, \dots, 0)$, and ADDF of the same $a$ and $b = u^n$, err by $u^n = u^n|a +
 b|\,(1-u)/(1-u^{n+1})$. (c) If $2^p + 1 = m_1m_2$ with integers $m_1, m_2 > 1$ (for $p = 53$,
@@ -725,7 +728,7 @@ so the loss of $u^n$ is the renormalization's: every step of its second pass emi
 as the rounding allows. Dense random operands at $n = 8$ err by at most $0.0064\,u^8|Z|$ (Section~\ref{sec:comp}); the worst case of each of the four operations is $u^8|Z|(1 - O(u))$.
 \end{remark}
 
-\paragraph{The square root and the elementary functions} Their last operations act on computed values, so the simple
+\parhead{The square root and the elementary functions} Their last operations act on computed values, so the simple
 inputs above do not give them a chain of ties. Inputs that do were constructed for multidouble's octo-double
 (Table~\ref{tab:inputs}). The last product of the square root, $r\,a$, has the scaled input $a$ as a factor, so $a$'s
 parts were chosen one at a time, each so that the next level of the product is the next power of $u$, with $a$ near $(1
