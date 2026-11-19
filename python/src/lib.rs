@@ -1,7 +1,7 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
 //! arithmetic, dot products, matrix-vector products and the Horner sum of a power series on them on the best SIMD
 //! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and
-//! dense LU solves in double-double and in quad-double.
+//! dense LU solves in double-double and in quad-double. The octo-double solve and arrays are in `octo`.
 use multidouble::dd::{self, DD};
 use multidouble::dv::{self, DotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu, QDLu};
