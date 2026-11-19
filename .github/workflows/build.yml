@@ -159,9 +159,10 @@ jobs:
           fi
 
       # Release mode: the accuracy tests run tens of thousands of quad-double operations against exact arithmetic.
+      # Under QEMU (the targets with matrix.gnu) they take 27 to 31 minutes, so those get twice the native limit.
       - name: Run tests
         if: ${{ !matrix.msrv && (!matrix.needs-cpu || steps.cpu.outputs.run == 'true') }}
-        timeout-minutes: 30
+        timeout-minutes: ${{ matrix.gnu && 60 || 30 }}
         run: cargo test --release ${{ matrix.cargo-args }}
 
       # Checks that the benchmarks compile and link, with the tests' profile and on their build.
