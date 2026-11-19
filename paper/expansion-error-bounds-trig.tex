@@ -15,7 +15,9 @@ $|x_0| \le 2^{52}$ and sets $k \gets \lfloor\RN(x_0c)\rceil$. If $k = 0$ it retu
 it forms the integer $N = 2^F\sum_i x_i - kP$ exactly. If $|\RN(2^{-F}N)| > r_{\max}$, it sets $k_2 \gets
 \lfloor\RN(\RN(2^{-F}N)\,c)\rceil$, $N \gets N - k_2P$ and $k \gets k + k_2$. It returns $q = k \bmod 4$ and the
 greedy rounding $r$ of $2^{-F}N$ to $n$ parts: $r_0 = \RN(2^{-F}N)$ and $r_i = \RN(2^{-F}N - \sum_{l<i}r_l)$. In
-multidouble $N$ is a two's-complement integer of 1280 bits. $P$ and $c$ come from Machin's formula in exact integer
+multidouble $N$ is a two's-complement integer of 1280 bits. Where a test in binary64 arithmetic decides the rounding of
+every part, multidouble takes the same $k$ and $r$ from a reduction in binary64 limbs instead
+(\texttt{src/trig/fast\_reduce.rs}). $P$ and $c$ come from Machin's formula in exact integer
 arithmetic, checked against Gauss's formula (\texttt{scripts/trig\_tables.py}).
 
 \paragraph{Evaluation} For $j \ge 0$ let $\bar r_0 = 0.78541$ and $\bar r_j = 2^{-j}(1 + 2^{-50})$ for $j \ge 1$. Bucket $j$ holds
