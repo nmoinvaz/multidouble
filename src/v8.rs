@@ -1081,6 +1081,10 @@ simd!(backend::Neon, neon, hint {
     fn opaque(m: neon::M8) -> neon::M8 {
         m.opaque()
     }
+    #[inline(always)]
+    fn hot_renorm<T>(f: impl FnOnce() -> T) -> T {
+        f()
+    }
 });
 simd!(backend::Portable, portable, hint);
 
