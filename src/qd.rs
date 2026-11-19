@@ -125,30 +125,54 @@ pub fn three_sum2(a: f64, b: f64, c: f64) -> (f64, f64) {
 /// QD's renormalization of four parts (no-op if c0 is infinite)
 #[inline(always)]
 pub fn renorm4(c0: f64, c1: f64, c2: f64, c3: f64) -> [f64; 4] {
+    renorm4_by(c0, c1, c2, c3, quick_two_sum)
+}
+
+/// a + b as (s, e), error-free in any order: the quick two-sum where |a| >= |b|, which is then exact and gives the
+/// two-sum's bits (up to the sign of a zero e), and the two-sum elsewhere
+#[inline(always)]
+fn exact_two_sum(a: f64, b: f64) -> (f64, f64) {
+    if a.abs() >= b.abs() {
+        quick_two_sum(a, b)
+    } else {
+        two_sum(a, b)
+    }
+}
+
+/// `renorm4` with every step error-free whatever the order of the parts (`exact_two_sum`), so the four parts' sum is
+/// kept exactly; bitwise `renorm4` wherever each of its quick two-sums is exact
+#[inline(always)]
+fn renorm4_exact(c: [f64; 4]) -> [f64; 4] {
+    renorm4_by(c[0], c[1], c[2], c[3], exact_two_sum)
+}
+
+/// QD's renormalization of four parts with the two-sum `f` at every step
+#[inline(always)]
+fn renorm4_by(c0: f64, c1: f64, c2: f64, c3: f64, f: impl Fn(f64, f64) -> (f64, f64)) -> [f64; 4] {
     if c0.is_infinite() {
         return [c0, c1, c2, c3];
     }
-    let (s, c3) = quick_two_sum(c2, c3);
-    let (s, c2) = quick_two_sum(c1, s);
+    let (s, c3) = f(c2, c3);
+    let (s, c2) = f(c1, s);
     let (c0, c1) = if mutate::on(mutate::RENORM_P1) {
         (c0 + s, 0.0)
     } else {
-        quick_two_sum(c0, s)
+        f(c0, s)
     };
     let (mut s0, mut s1, mut s2, mut s3) = (c0, c1, 0.0, 0.0);
     if s1 != 0.0 {
-        (s1, s2) = quick_two_sum(s1, c2);
+        (s1, s2) = f(s1, c2);
         if s2 != 0.0 {
-            (s2, s3) = quick_two_sum(s2, c3);
+            (s2, s3) = f(s2, c3);
         } else {
-            (s1, s2) = quick_two_sum(s1, c3);
+            (s1, s2) = f(s1, c3);
         }
     } else {
-        (s0, s1) = quick_two_sum(s0, c2);
+        (s0, s1) = f(s0, c2);
         if s1 != 0.0 {
-            (s1, s2) = quick_two_sum(s1, c3);
+            (s1, s2) = f(s1, c3);
         } else {
-            (s0, s1) = quick_two_sum(s0, c3);
+            (s0, s1) = f(s0, c3);
         }
     }
     [s0, s1, s2, s3]
@@ -274,7 +298,7 @@ fn quick_three_accum(a: &mut f64, b: &mut f64, c: f64) -> f64 {
 /// Quad-double `x[0] + x[1] + x[2] + x[3]`. The arithmetic expects parts as its own results, `new` and `from_sum` give
 /// them: decreasing in magnitude, with zeros only at the end. Parts with a zero between nonzero ones, as a `QD { x }`
 /// built by hand can have, can make a sum lose terms of about 2^-160 relative (`qd_tests::qd_noncanonical_add_control`);
-/// `from_sum` renormalizes parts in any order.
+/// `new` and `from_sum` take parts in any order.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct QD {
     pub x: [f64; 4],
@@ -306,11 +330,20 @@ impl QD {
     /// QD's epsilon, 2^-209 (exactly; QD's decimal literal 1.21543267145725e-63 is its 15-digit rounding)
     pub const EPS: f64 = f64::from_bits(0x32e0_0000_0000_0000);
 
-    /// renormalized from four parts
+    /// The exact sum of four finite parts in any order, as four parts largest first: zero parts only after the
+    /// nonzero ones, and each part at most the ulp of the one before (`any_order`). Parts already so, as the arithmetic
+    /// returns them, are renormalized by `renorm4` with its bits. Others are sorted by decreasing magnitude and
+    /// renormalized with error-free steps, and a result off the ladder (parts that overlap in one binade) is replaced
+    /// by the parts' exact expansion, compressed. With an infinite or NaN part the result is not finite.
     #[inline(always)]
     pub fn new(x0: f64, x1: f64, x2: f64, x3: f64) -> QD {
+        if crate::any_order::mutate::on(crate::any_order::mutate::AS_GIVEN) {
+            return QD {
+                x: renorm4(x0, x1, x2, x3),
+            };
+        }
         QD {
-            x: renorm4(x0, x1, x2, x3),
+            x: crate::any_order::exact_sum([x0, x1, x2, x3], |c| renorm4(c[0], c[1], c[2], c[3]), renorm4_exact),
         }
     }
     /// the exact sum of four parts in any order, renormalized (`renorm4_any`); bitwise `new` on normalized parts
