@@ -105,17 +105,19 @@ Then the result $t$ of step (4) satisfies $|t - (e^r - 1)| \le E_m$ and $|t_i| \
 $U$ is the sum of $n$ magnitudes rounded $n - 1$ times, then times $1 + 2^{-48}$ and rounded, and $|\RN(z)| \ge
 |z|/(1+u)$, so $U \ge \sum_i|r_i|(1 + 2^{-48})/(1+u)^n \ge \sum_i|r_i|$ for $n \le 31$ (or the product underflowed, as
 above), and $|r|, |r_i| < \bar c$. The scaling by $2^{-m}$ is exact but for parts that fall below $2^{-1022}$, each
-moved by at most $\eta_0$; so $|r'| \le b'$ and $|r'_i| \le \pi'_i$, and the computed $r'$ is within $n\eta_0$ of
-$2^{-m}r$, which moves $e^{r'} - 1$ by at most $2n\eta_0$. Let $q^*_j = \sum_{i=j}^{d'} r'^{i-j}/i!$, so $|q^*_j| \le v_j$.
+moved by at most $\eta_0$. From here on $r'$ is the computed value and $r^* = 2^{-m}r$ the exact one: $|r' - r^*| \le
+n\eta_0$, so $|r'|, |r^*| \le b'$, $|r'_i| \le \pi'_i$ and $|e^{r'} - e^{r^*}| \le 2n\eta_0$. Let $q^*_j =
+\sum_{i=j}^{d'} r'^{i-j}/i!$, so $|q^*_j| \le v_j$.
 By Lemma~\ref{lem:horner} the $q$ of the last pass satisfies $|q - q^*_2| \le e_2$ and has parts bounded by $\pi^q_2$,
 so $|w - r'q^*_2| \le \epsilon' + b'e_2$. Then $r'w$, formed as $2^{e'}\mathrm{MUL}(\hat r,
 w)$, satisfies $|r'w - r'^2q^*_2| \le \epsilon'' + b'\epsilon' + b'^2e_2$ before the scaling back, the scaled MUL and ADD
 having $2^{-e'}$ times the bounds used here, and $r' + r'^2q^*_2 = \sum_{i=1}^{d'}r'^i/i!$ differs from $e^{r'} - 1$ by at
-most $E^{\rm tr}_{d'}$. The scaling back by $2^{e'}$ moves each part by at most $\eta_0$. So the first $t$
-errs by at most $E_0$ from $t^*_0 = e^{r'} - 1$; for $d' = 1$, $t = r'$ and only $E^{\rm tr}_1$ is left.
+most $E^{\rm tr}_{d'}$. The scaling back by $2^{e'}$ moves each part by at most $\eta_0$. With the $2n\eta_0$ between $e^{r'}$ and
+$e^{r^*}$, which is the term $2n\eta_0[m > 0]$ of $E^-$, the first $t$ errs by at most $E_0$ from $t^*_0 = e^{r^*} -
+1$; for $d' = 1$, $m = 0$, $t = r' = r^*$ and only $E^{\rm tr}_1$ is left.
 
-Let $t^*_j = e^{2^jr'} - 1$, so $|t^*_j| \le \bar t_j$ and $t^*_{j+1} = 2t^*_j + (t^*_j)^2$, and let $t$ before pass $j$ be $t^*_j +
-h$ with $|h| \le E_j$. Then $2t + t^2 = t^*_{j+1} + h(2 + 2t^*_j + h)$, and $|2 + 2t^*_j| = 2e^{2^jr'} \le 2g_j$, using $r'
+Let $t^*_j = e^{2^jr^*} - 1$, so $|t^*_j| \le \bar t_j$ and $t^*_{j+1} = 2t^*_j + (t^*_j)^2$, and let $t$ before pass $j$ be $t^*_j +
+h$ with $|h| \le E_j$. Then $2t + t^2 = t^*_{j+1} + h(2 + 2t^*_j + h)$, and $|2 + 2t^*_j| = 2e^{2^jr^*} \le 2g_j$, using $r^*
 \le -a2^{-m}$ when $r \le 0$. MUL rounds $t^2$, of magnitude at most $(\bar t_j + E_j)^2$, within $\epsilon^m_j$, and
 ADD rounds $2t + \RN(t^2)$, of magnitude at most the stated bound, within $\epsilon^s_j$; $2t$ is exact with parts
 bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $t^*_m = e^r - 1$.
