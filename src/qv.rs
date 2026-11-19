@@ -246,7 +246,8 @@ impl<S: Simd> QV<S> {
         let t = self.c[1].add(self.c[2].add(self.c[3]));
         t.eq(V8::zero()).sel(self.c[0], self.c[0].add(t))
     }
-    /// from the four parts' arrays (8 values each)
+    /// from the four parts' arrays (8 values each), the parts as they are: largest first, as the arithmetic returns
+    /// them (`QD::new` takes them in any order)
     #[inline(always)]
     pub fn load(c0: &[f64], c1: &[f64], c2: &[f64], c3: &[f64]) -> Self {
         QV {

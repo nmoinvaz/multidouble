@@ -36,8 +36,9 @@ that is exact barring overflow and underflow. Two operations trade accuracy for 
 divisions instead of three, within a proven 15 u² + 56 u³ barring underflow and overflow, and `OD::sloppy_mul` takes
 about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits. An octo-double meets a double-double through
 `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip the zero parts' products and give the promoted
-operation's bits, a NaN's sign and payload aside. The API documentation lists the rest, such as division by a shared
-divisor and conversion to arrays of parts.
+operation's bits, a NaN's sign and payload aside. `DD::new`, `QD::new` and `OD::new` (and `OV::new` on each lane) take
+parts in any order and return their exact sum, largest part first, each part at most the ulp of the one before. The API
+documentation lists the rest, such as division by a shared divisor and conversion to arrays of parts.
 
 ### Packed storage
 
@@ -279,10 +280,10 @@ so octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow 
 | `Ou` | derivatives within 10⁻¹²³, and its value is `OV`'s bit for bit |
 
 Every check can fail. The feature `mutate` breaks steps of the quad-double and octo-double algorithms, of exp, ln, sin,
-cos and tan and their lanes, of the jets, dual numbers and field sums, and of the packed storage's decoders, one at a
-time, and the tests run with it check that each breakage fails a test. The integration tests also feed deliberately
-wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor,
-and f128 conversions that round twice.
+cos and tan and their lanes, of the jets, dual numbers and field sums, of the packed storage's decoders, and of the
+constructors, one at a time, and the tests run with it check that each breakage fails a test. The integration tests
+also feed deliberately wrong results to the same checks: a double-double add without its low parts, a wrong derivative,
+a perturbed LU factor, and f128 conversions that round twice.
 
 ## Testing, coverage and benchmarks
 

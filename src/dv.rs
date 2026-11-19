@@ -57,6 +57,8 @@ impl<S: Simd> DV<S> {
             lo: V8::zero(),
         }
     }
+    /// from the hi and lo arrays (8 values each), the parts as they are: |lo| at most ulp(hi)/2, as the arithmetic
+    /// returns them (`DD::new` takes them in either order)
     #[inline(always)]
     pub fn load(hi: &[f64], lo: &[f64]) -> Self {
         DV {
