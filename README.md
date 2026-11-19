@@ -62,8 +62,10 @@ storage, and `from_raw` checks and restores it.
 | `dual::Du`, `dual::Dtn<N>` | a double-double value with a double-double tangent, or with N `f64` tangents |
 | `dual::Fu`, `dual::Fun<N>` | the `f64` versions |
 | `dual::Qu`, `dual::Ou` | a quad-double value with a quad-double tangent, an octo-double value with an octo-double tangent |
+| `dual::Oun<N>` | an octo-double value with N octo-double tangents, each bit for bit the tangent of an `Ou` evaluation |
 | `dual::Dc` | a double-double value with a complex tangent |
 | `jet::Jet<N>`, `jet::QJet<N>`, `jet::OJet<N>` | a truncated power series in one variable, with N coefficients in double-double, quad-double or octo-double |
+| `dual::F8` | 8 lanes of plain `f64` values, the cheapest lane type |
 | `dual::Counted<L>` | any lane type with every operation counted by kind |
 
 All of them, and `OV`, are lanes behind the `dual::Lane` trait. A computation written once over the trait gives values,
@@ -191,11 +193,11 @@ rounded.
 
 ## Python
 
-[`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double
-add, subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double, quad-double
-and octo-double LU solves (`od_solve` takes eight part arrays), octo-double arrays plus a double-double one or a
-multiple of another (`od_add_dd`, `od_axpy`), and numpy versions of the error-free transformations
-(`pip install ./python`, which builds it with maturin).
+[`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double add,
+subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double, quad-double and
+octo-double LU solves (`od_solve` takes eight part arrays), quad-double and octo-double arrays plus a double-double one
+or a multiple of another (`qd_add_dd`, `qd_axpy`, `od_add_dd`, `od_axpy`), and numpy versions of the error-free
+transformations (`pip install ./python`, which builds it with maturin).
 
 ## Accuracy
 
