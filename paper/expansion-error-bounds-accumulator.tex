@@ -125,8 +125,8 @@ $n = 2$, $p = 8$ and $K = 64$, where $\beta^{n+1} = 64$, the construction errs b
 is $0.0009$ of the bound.
 
 Ogita, Rump and Oishi's SumK~\cite{ORO05}, in its vertical form (their Algorithm~4.12), is the same cascade for summands
-that are single floating-point numbers, rounded at the end to one number. Their bound $\gamma_{2N-2}^{J}\sum|p_i|$
-($N$ summands, $J$ levels) has the same growth in $N$, and they note that its factors are conservative. Their DotK
+that are single floating-point numbers, rounded at the end to one number. The second term of their bound, $\gamma_{2N-2}^{J}\sum|p_i|$
+($N$ summands, $J$ levels), has the same growth in $N$, and they note that its factors are conservative. Their DotK
 splits each product of two floating-point numbers into two summands for SumK, with the bound $(\mathrm{eps} +
 2\gamma_{4N-2}^2)|x^\top y| + \gamma_{4N-2}^J|x^\top||y|$ (their Proposition~5.11), the form of Theorem~\ref{thm:acc}. The
 accumulator here deposits a term into every level, which their analysis by repeated VecSum does not cover, and returns
