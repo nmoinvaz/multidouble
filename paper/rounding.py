@@ -3,7 +3,8 @@
 A printed upper bound is rounded up and a printed lower bound down, at the digits shown, so no printed bound is
 below (or above) the rational it stands for. The functions take a fractions.Fraction and return the text to print.
 
-    python3 rounding.py   # checks the functions on values next to their rounding boundaries, prints PASS
+    python3 rounding.py   # checks the functions on values next to their rounding boundaries, with controls that
+                          # round the wrong way and must be rejected, prints PASS
 """
 from fractions import Fraction as Fr
 import math
@@ -105,21 +106,32 @@ def sig_up(x, s=6):
     return f'{digits[0]}.{digits[1:]}e{e:+03d}' if s > 1 else f'{digits}e{e:+03d}'
 
 
-if __name__ == '__main__':
+def _selfcheck(lg_up, lg_down, d_up, d_down, s_up):
+    """True if the functions round as their names say, on values next to their rounding boundaries."""
     ok = True
     for k in (0, 1, 2, 4):
         for c in (-43907, 3792, -5, 0, 7, 100000):
+            if c % 10 ** k:
+                continue
             for off in (-1, 0, 1):
-                x = Fr(2) ** (c // 10 ** k) * (1 + Fr(off, 2 ** 80)) if c % 10 ** k == 0 else None
-                if x is None:
-                    continue
-                want_up = c + (10 ** 0 if off > 0 else 0) * 1
-                up_, dn_ = _lg2(x, k, True), _lg2(x, k, False)
-                ok &= up_ == c + (1 if off > 0 else 0) and dn_ == c - (1 if off < 0 else 0)
-    ok &= lg2_up(Fr(3), 2) == '1.59' and lg2_down(Fr(3), 2) == '1.58' and lg2_up(Fr(1, 3), 1) == '-1.5'
-    ok &= lg2_up(Fr(2) ** -439 * Fr(1001, 1000), 2) == '-438.99'
-    ok &= dec_up(Fr(3163167393, 10 ** 9), 6) == '3.163168' and dec_down(Fr(3163167393, 10 ** 9), 6) == '3.163167'
-    ok &= dec_up(Fr(2), 3) == '2.000' and sig_up(Fr(1119746000014, 10 ** 6), 4) == '1.120e+06'
-    ok &= sig_up(Fr(72), 3) == '72.0' and sig_up(Fr(999999, 10 ** 7), 3) == '0.100' and sig_up(Fr(5, 10 ** 9), 2) == '5.0e-09'
+                x = Fr(2) ** (c // 10 ** k) * (1 + Fr(off, 2 ** 80))
+                ok &= lg_up(x, k) == _text(c + (1 if off > 0 else 0), k)
+                ok &= lg_down(x, k) == _text(c - (1 if off < 0 else 0), k)
+    ok &= lg_up(Fr(3), 2) == '1.59' and lg_down(Fr(3), 2) == '1.58' and lg_up(Fr(1, 3), 1) == '-1.5'
+    ok &= lg_up(Fr(2) ** -439 * Fr(1001, 1000), 2) == '-438.99'
+    ok &= d_up(Fr(3163167393, 10 ** 9), 6) == '3.163168' and d_down(Fr(3163167393, 10 ** 9), 6) == '3.163167'
+    ok &= d_up(Fr(2), 3) == '2.000' and s_up(Fr(1119746000014, 10 ** 6), 4) == '1.120e+06'
+    ok &= s_up(Fr(72), 3) == '72.0' and s_up(Fr(999999, 10 ** 7), 3) == '0.100' and s_up(Fr(5, 10 ** 9), 2) == '5.0e-09'
+    return ok
+
+
+if __name__ == '__main__':
+    good = _selfcheck(lg2_up, lg2_down, dec_up, dec_down, sig_up)
+    # controls: a bound rounded the wrong way must be rejected
+    wrong_lg = not _selfcheck(lg2_down, lg2_down, dec_up, dec_down, sig_up)
+    wrong_dec = not _selfcheck(lg2_up, lg2_down, dec_down, dec_down, sig_up)
+    print(f'controls: log2 rounded down in place of up is rejected: {wrong_lg}; decimals rounded down in place of '
+          f'up are rejected: {wrong_dec}')
+    ok = good and wrong_lg and wrong_dec
     print('PASS' if ok else 'FAIL')
     raise SystemExit(0 if ok else 1)
