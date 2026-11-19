@@ -1,9 +1,11 @@
 """Lemma 13 of expansion-error-bounds.pdf (an operation's error and its result's part bounds from part bounds of its
 operands) and Theorems 21 and 22 (the square root), in exact rationals. Units: r in y = a^(-1/2), the parts of a and h in the
-value a, m in y^2, g and c dimensionless (a y^2 = 1), d in y, z in sqrt(a). usage: sqrt_consts.py [p]"""
+value a, m in y^2, g and c dimensionless (a y^2 = 1), d in y, z in sqrt(a). usage: sqrt_consts.py [p]. Every printed
+value is an upper bound, rounded up at the digits shown (rounding.py)."""
 import sys, math
 from fractions import Fraction as Fr
 from div_consts import vec_bounds
+from rounding import dec_up, lg2_up, sig_up
 
 
 def up(x, bits=200):
@@ -166,17 +168,19 @@ if __name__ == '__main__':
         for n, J in ((4, 3), (8, 4), (12, 5)):
             r = sqrt_consts(n, p, theta, J)
             u = r['u']
-            print(f'theta={theta} n={n} J={J}: |sqrt(x) - result| <= {float(r["rel"] / u ** n):.10g} u^n sqrt(x); '
-                  f'E_k/u^n: {[float(s["E"] / u ** n) for s in r["steps"]] + [float(r["EJ"] / u ** n)]}')
+            print(f'theta={theta} n={n} J={J}: |sqrt(x) - result| <= {dec_up(r["rel"] / u ** n, 9)} u^n sqrt(x); '
+                  f'E_k/u^n: [' + ', '.join(sig_up(e / u ** n, 10) for e in [s["E"] for s in r["steps"]] + [r["EJ"]])
+                  + ']')
     r = sqrt_consts(8, p, 2, 4); u = r['u']
-    print('n=8 theta=2 last step (units u^n): em %.6g eg %.6g ec %.6g ed %.6g er %.6g ez %.6g' % tuple(
-        float(t / u ** 8) for t in (r['steps'][-1]['em'], r['steps'][-1]['eg'], r['steps'][-1]['ec'],
-                                    r['steps'][-1]['ed'], r['steps'][-1]['er'], r['ez'])))
-    print('rel - 3 u^8 = 2^%.2f u^8' % math.log2(r['rel'] / u ** 8 - 3) if r['rel'] > 3 * u ** 8 else 'rel <= 3 u^8')
+    print('n=8 theta=2 last step (units u^n): em %s eg %s ec %s ed %s er %s ez %s' % tuple(
+        sig_up(t / u ** 8, 7) for t in (r['steps'][-1]['em'], r['steps'][-1]['eg'], r['steps'][-1]['ec'],
+                                        r['steps'][-1]['ed'], r['steps'][-1]['er'], r['ez'])))
+    print(f'rel - 3 u^8 = 2^{lg2_up(r["rel"] / u ** 8 - 3, 2)} u^8' if r['rel'] > 3 * u ** 8 else 'rel <= 3 u^8')
     print('from the double-double square root (one step with the second-order term, one Newton step):')
     for theta in (1, 2):
         r = sqrt_dd_consts(8, p, theta); u = r['u']
         c2 = Fr(math.floor(r["E0"] / u ** 2 * 8), 8)  # E_0 = c2 u^2 + c3 u^3, c2 a multiple of 1/8
-        print(f'theta={theta} n=8: E_0 = {float(c2):g} u^2 + {float((r["E0"] - c2 * u ** 2) / u ** 3):.6g} u^3, E_1 = 2^{math.log2(r["E1"] / u ** 8):.2f} u^8, '
-              f'E_2 = {float(r["E2"] / u ** 8):.10g} u^8, |sqrt(x) - result| <= {float(r["rel"] / u ** 8):.10g} u^8 sqrt(x)')
+        print(f'theta={theta} n=8: E_0 = {float(c2):g} u^2 + {dec_up((r["E0"] - c2 * u ** 2) / u ** 3, 3)} u^3, '
+              f'E_1 = 2^{lg2_up(r["E1"] / u ** 8, 2)} u^8, E_2 = {dec_up(r["E2"] / u ** 8, 9)} u^8, '
+              f'|sqrt(x) - result| <= {dec_up(r["rel"] / u ** 8, 9)} u^8 sqrt(x)')
 

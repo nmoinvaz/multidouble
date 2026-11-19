@@ -20,6 +20,7 @@ import sys
 from fractions import Fraction as Fr
 
 from div_consts import div_consts
+from rounding import dec_up
 from sqrt_consts import op_bounds, up
 
 P = 53
@@ -310,7 +311,8 @@ def require(ok, what):
 
 
 def fmt(x, n):
-    return f'{float(x / U ** n):.6f}'
+    """a bound in units of u^n, rounded up to six decimals"""
+    return dec_up(x / U ** n, 6)
 
 
 def main():
@@ -335,7 +337,7 @@ def main():
         top = rows[0]
         print(f'{M.name}: sin, cos <= {fmt(sc, n)} u^{n}, tan <= {fmt(tn, n)} u^{n}; top bucket '
               f'(K = {top["Ks"]}, {top["Kc"]}): sin r {fmt(top["dS"], n)}, cos r {fmt(top["dC"], n)}, '
-              f'quotient {fmt(top["dD"], n)}' + (f' (theta = {float(top["theta"]):.6f})' if top['theta'] else '') + f' u^{n}')
+              f'quotient {fmt(top["dD"], n)}' + (f' (theta = {dec_up(top["theta"], 6)})' if top['theta'] else '') + f' u^{n}')
     rows = out['paper n=8'][0]
     print('paper n=8 by bucket (sin x, cos x, tan x in u^8): ' + ', '.join(
         f'j={b["j"]}: {fmt(b["sin"], 8)}/{fmt(b["cos"], 8)}/{fmt(b["tan"], 8)}' for b in rows[:6]) + ', ...')

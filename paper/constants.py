@@ -1,10 +1,11 @@
 """The constants of Theorems 14 and 15 of expansion-error-bounds.pdf, computed exactly in rationals from their
 recursions.
 usage: constants.py [p]   (default p = 53); prints, per operation, n and theta, the level constants and kappa, and
-the values of Table IV."""
+the values of Table IV. Every printed value is an upper bound, rounded up at the digits shown (rounding.py)."""
 import sys
 from fractions import Fraction as Fr
-import math
+
+from rounding import lg2_up
 
 def level_consts(op, n, theta, u):
     """(alpha, T, Q, Delta_coef): alpha_m (m = 0..n), TwoSums per level T_m (m < n), roundings at level n Q,
@@ -61,35 +62,33 @@ if __name__ == '__main__':
             for n in range(2, 13):
                 try:
                     k = consts(op, n, theta, u)['kappa']
-                    row.append(f'{n}:{math.log2(k):6.1f}/{math.log2(k * u):6.1f}')
+                    row.append(f'{n}:{lg2_up(k, 1):>6s}/{lg2_up(k * u, 1):>6s}')
                 except AssertionError:
                     row.append(f'{n}: n/a')
             print(f'{op:6s} theta={theta}  ' + '  '.join(row))
     for theta in (1, 2):
         k = consts('mul', 8, theta, u)
-        print(f'mul n=8 theta={theta}: L_m (log2) =', [round(math.log2(x), 2) for x in k['L']],
-              ' R/u^(n+1)M = 2^%.2f' % math.log2(k['R']), ' Delta coef = 2^%.2f' % math.log2(k['drop']),
-              ' kappa = 2^%.2f' % math.log2(k['kappa']))
+        print(f'mul n=8 theta={theta}: L_m (log2) = [' + ', '.join(lg2_up(x, 2) for x in k['L']) + ']',
+              f' R/u^(n+1)M = 2^{lg2_up(k["R"], 2)}', f' Delta coef = 2^{lg2_up(k["drop"], 2)}',
+              f' kappa = 2^{lg2_up(k["kappa"], 2)}')
     print('Table IV, n = 8: kappa for theta = 1 and 2, and the second term kappa u^(n+1) M for theta = 2 (log2)')
     for op in ('mul', 'add', 'mul_f', 'add_f'):
         k1, k2 = (consts(op, 8, theta, u)['kappa'] for theta in (1, 2))
-        print(f'{op:6s} kappa = 2^{math.log2(k1):.2f}, 2^{math.log2(k2):.2f};  kappa u^9 = 2^{math.log2(k2 * u ** 9):.2f}')
+        print(f'{op:6s} kappa = 2^{lg2_up(k1, 2)}, 2^{lg2_up(k2, 2)};  kappa u^9 = 2^{lg2_up(k2 * u ** 9, 2)}')
 
 
 def theta_out(op, n, theta, u):
-    """Theorem 17: the theta' with which the result of MUL or MULF satisfies H(theta'), or None if xi <= 0.
-    theta'^i = (1+u)^i + i u (1+u)^(n+i-1) Lambda / xi, xi = (zeta - (R + Delta) u^(n+1) - u^2 (1+u)^(n-1) Lambda)/(1+u)"""
+    """Theorem 17: an upper bound of theta' - 1, where the result of the operation satisfies H(theta'), or None if
+    xi <= 0. theta'^i = 1 + delta_i with delta_i = (1+u)^i - 1 + i u (1+u)^(n+i-1) Lambda / xi and
+    xi = (zeta - (R + Delta) u^(n+1) - u^2 (1+u)^(n-1) Lambda)/(1+u); the i-th root is bounded by
+    (1 + delta_i)^(1/i) <= 1 + delta_i / i, in exact rationals."""
     C = consts(op, n, theta, u)
     rho = Fr(theta) * u
     zeta = ((1 - 2 * rho) / (1 - rho)) ** (2 if op == 'mul' else 1)  # adds: leading parts of one sign
     xi = (zeta - (C['R'] + C['drop']) * u ** (n + 1) - u ** 2 * (1 + u) ** (n - 1) * C['Lam']) / (1 + u)
     if xi <= 0:
         return None
-    best = 0.0
-    for i in range(1, n):
-        t = (1 + u) ** i + i * u * (1 + u) ** (n + i - 1) * C['Lam'] / xi
-        best = max(best, float(t) ** (1.0 / i))
-    return best
+    return max(((1 + u) ** i - 1 + i * u * (1 + u) ** (n + i - 1) * C['Lam'] / xi) / i for i in range(1, n))
 
 
 if __name__ == '__main__':
@@ -101,5 +100,5 @@ if __name__ == '__main__':
             row = []
             for n in range(2, 13):
                 t = theta_out(op, n, theta, u)
-                row.append(f'{n}:{"none" if t is None else "1+2^%.1f" % math.log2(t - 1) if t > 1 else "1"}')
+                row.append(f'{n}:{"none" if t is None else "1+2^" + lg2_up(t, 1)}')
             print(f'{op:6s} theta={theta}  ' + '  '.join(row))

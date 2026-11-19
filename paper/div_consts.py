@@ -2,9 +2,11 @@
 units of |a_0|, and quotient terms are multiplied by |b_0|. Returns per step k the part bounds P^(k), the quotient
 bounds qbar_k (Q_k below), the level bounds X^(k) of each remainder update, the update errors eps_k, and the final
 kappa_DIV (K below) with |a/b - x| <= (u^n + kappa_DIV u^(n+1)) |a/b| for a, b satisfying H(theta).
-usage: div_consts.py [p]"""
-import sys, math
+usage: div_consts.py [p]. Every printed value is an upper bound, rounded up at the digits shown (rounding.py)."""
+import sys
 from fractions import Fraction as Fr
+
+from rounding import dec_up, lg2_up
 
 
 def vec_bounds(X, u, n):
@@ -77,12 +79,12 @@ if __name__ == '__main__':
         row = []
         for n in range(2, 15):
             r = div_consts(n, p, theta)
-            row.append(f'{n}:{math.log2(r["K"]):6.1f}/{math.log2(r["K"] * r["u"]):6.1f}')
+            row.append(f'{n}:{lg2_up(r["K"], 1):>6s}/{lg2_up(r["K"] * r["u"], 1):>6s}')
         print(f'div theta={theta}  log2 kappa_DIV / log2 kappa_DIV u:  ' + '  '.join(row))
     r = div_consts(8, p, 2)
     u = r['u']
-    print('n=8 theta=2: P_0^(k)/u^k:', [round(float(st['Pin'][0] / u ** k), 2) for k, st in enumerate(r['steps'])])
-    print('             eps_k/u^(n+k):', [round(math.log2(st['eps'] / u ** (8 + k + 1)), 2) for k, st in enumerate(r['steps'])],
-          '(log2, units u^(n+k+1))')
-    print('             Theta_0/u^9 = 2^%.2f, Theta/u^9 = 2^%.2f, kappa_DIV = 2^%.2f' % (math.log2(r['tau'] / u ** 9),
-          math.log2(r['Theta'] / u ** 9), math.log2(r['K'])))
+    print('n=8 theta=2: P_0^(k)/u^k: [' + ', '.join(dec_up(st['Pin'][0] / u ** k, 2) for k, st in enumerate(r['steps'])) + ']')
+    print('             eps_k/u^(n+k): [' + ', '.join(lg2_up(st['eps'] / u ** (8 + k + 1), 2) for k, st in enumerate(r['steps']))
+          + '] (log2, units u^(n+k+1))')
+    print(f'             Theta_0/u^9 = 2^{lg2_up(r["tau"] / u ** 9, 2)}, Theta/u^9 = 2^{lg2_up(r["Theta"] / u ** 9, 2)}, '
+          f'kappa_DIV = 2^{lg2_up(r["K"], 2)}')

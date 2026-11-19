@@ -5,6 +5,7 @@ units of u^n W (W = sum of the leading parts) and of u^n |Z|.
 usage: acc_greedy.py p n K C seed score [front]
 score: 'err' (|Z - levels|, the accumulated level-n roundings, then level sizes), 'grow' (the level sizes, in
 units of u^m, then the error). front = 1 puts a leading part of size 1 first and the rest at size ~u."""
+import math
 import random
 import sys
 from fractions import Fraction as Q
@@ -81,4 +82,6 @@ if __name__ == '__main__':
     score = sys.argv[6]
     front = len(sys.argv) > 7 and sys.argv[7] == '1'
     w, _ = run(p, n, K, C, seed, score, front)
-    print(f'p={p} n={n} K={K} C={C} seed={seed} score={score} front={front}: max err/(u^n W) = {w:.4f}')
+    # the largest measured error, rounded up at the digits shown
+    print(f'p={p} n={n} K={K} C={C} seed={seed} score={score} front={front}: max err/(u^n W) = '
+          f'{math.ceil(float(w) * 1e6) / 1e6:.6f}')

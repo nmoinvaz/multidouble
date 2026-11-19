@@ -11,10 +11,10 @@ with W = sum of mu_k (|a_0| for add, |a_0 b_0| for add_prod) and
               S_m(K) = beta sum_{l<=m} C(m, l) tau_l (beta u)^(m-l) K^(m-l rising) W).
 tau_l bounds a deposit's level l in units of mu_k: (theta u)^l for add, L_l u^l (Theorem thm:t2(a)) for add_prod.
 
-usage: acc_bound.py p n theta mode K...   (mode add or prod); prints kappa_acc u, E_lev / (u^n W) and the parts.
+usage: acc_bound.py p n theta mode K...   (mode add or prod); prints kappa_acc u, E_lev / (u^n W) and the parts,
+       each rounded up at the digits shown (rounding.py).
        acc_bound.py p n theta mode cross t...   prints the largest K whose second term is at most t u^n W.
 """
-import math
 import os
 import sys
 from fractions import Fraction as Fr
@@ -22,6 +22,7 @@ from math import comb
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from constants import consts  # noqa: E402
+from rounding import lg2_up  # noqa: E402
 from sqrt_consts import op_bounds  # noqa: E402
 
 
@@ -79,8 +80,8 @@ if __name__ == '__main__':
         b = acc_bound(n, p, theta, K, mode)
         u = b['u']
         un = u ** n
-        print(f'p={p} n={n} theta={theta} {mode} K={K}: second term / (u^n W) = 2^{math.log2(b["total"] / un):.2f}'
-              f'  (E_lev 2^{math.log2(b["elev"] / un):.2f}, E_prod '
-              + (f'2^{math.log2(b["eprod"] / un):.2f}' if b['eprod'] else '0')
-              + f', Phi_fin 2^{math.log2(b["phi"] / un):.2f}); u^(n+1) K^(n+1 rising) / u^n = '
-              f'2^{math.log2(u * rising(K, n + 1)):.2f}')
+        print(f'p={p} n={n} theta={theta} {mode} K={K}: second term / (u^n W) = 2^{lg2_up(b["total"] / un)}'
+              f'  (E_lev 2^{lg2_up(b["elev"] / un)}, E_prod '
+              + (f'2^{lg2_up(b["eprod"] / un)}' if b['eprod'] else '0')
+              + f', Phi_fin 2^{lg2_up(b["phi"] / un)}); u^(n+1) K^(n+1 rising) / u^n = '
+              f'2^{lg2_up(u * rising(K, n + 1))}')

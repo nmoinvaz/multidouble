@@ -194,11 +194,11 @@ u^{n/2}$. Then
 |\mathrm{COS}_n(x) - \cos x| \le C|\cos x| + 5E_\pi, \\
 |\mathrm{TAN}_n(x) - \tan x| \le \Bigl(C^{\rm T} + \frac{5E_\pi}{|\sin x\cos x|}\Bigr)|\tan x|.
 \end{gather*}
-At $n = 8$, $C \le 3.163167\,u^8$ and $C^{\rm T} \le 6.418351\,u^8$. With the double-word bounds of DWTimesDW3,
+At $n = 8$, $C \le 3.163168\,u^8$ and $C^{\rm T} \le 6.418351\,u^8$. With the double-word bounds of DWTimesDW3,
 $(4u^2 + u^3/2)/(1+u)^2$ \cite{MR22}, AccurateDWPlusDW, $3u^2/(1-4u)$, DWPlusFP, $2u^2$, and DWDivDW2, $15u^2 +
 56u^3$ \cite{JMP17}, in place of Lemma~\ref{lem:g} and Theorem~\ref{thm:t6}, the bounds hold for multidouble's
-double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.841411\,u^2$ and $C^{\rm T} \le
-28.414065\,u^2$. Since $|k| < 0.64\cdot2^{52}$, $5E_\pi < 0.8\cdot2^{-1163}$.
+double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.841412\,u^2$ and $C^{\rm T} \le
+28.414066\,u^2$. Since $|k| < 0.64\cdot2^{52}$, $5E_\pi < 0.8\cdot2^{-1163}$.
 \end{theorem}
 
 \begin{proof}
@@ -240,8 +240,8 @@ lengths and constants it derives are those of multidouble's tables.
 The largest $C_j$ is that of the cosine in bucket 0, at $n = 8$: $0.785473\,u^8$ from the reduction, $u^8$ from the
 last ADDF, and $1.377695\,u^8$ from the rest, mostly the product $t$, whose roundings of $z$, $p_1$ and $t$ each enter
 with a weight near $\bar r_0^2/2$, divided by $\cos \bar r_0$. For $|r_0| < \frac12$ the bounds fall to $2.175822\,u^8$ and
-$4.800526\,u^8$, and for $|r_0| < 2^{-5}$ to $2.000705\,u^8$ and $4.002771\,u^8$. Evaluated at other $n$, the bounds
-are $3.168700\,u^2$ and $6.452138\,u^2$ at $n = 2$, $3.164154\,u^4$ and $6.426154\,u^4$ at $n = 4$, and
+$4.800526\,u^8$, and for $|r_0| < 2^{-5}$ to $2.000706\,u^8$ and $4.002771\,u^8$. Evaluated at other $n$, the bounds
+are $3.168701\,u^2$ and $6.452138\,u^2$ at $n = 2$, $3.164155\,u^4$ and $6.426155\,u^4$ at $n = 4$, and
 $3582.787311\,u^{12}$ and $4929.367335\,u^{12}$ at $n = 12$, where the second term of the multiplication's bound
 dominates (Table~\ref{tab:main}). In the default run of multidouble's tests, random arguments, arguments near multiples
 of $\pi/2$ with results down to $2^{-443}$, and arguments near $2^{52}$ give at most $0.48\,u^8$ for the octo-double
