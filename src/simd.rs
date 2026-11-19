@@ -91,6 +91,13 @@ pub trait Simd: Copy + Send + Sync + Debug + 'static + sealed::Sealed {
     /// the other backends: for the large hot operations of `qv`. Forced inlining of those on the plain array made the
     /// test build exceed 3 GB of memory and 17 minutes.
     fn hot<T>(f: impl FnOnce() -> T) -> T;
+    /// f, an `#[inline(always)]` closure, as `hot` runs it, and inlined into the caller on NEON as well: for the
+    /// renormalizations of `qv`, which end most of its operations. Out of line on NEON, their parts, four V8 of four
+    /// registers each, go through memory both ways.
+    #[inline(always)]
+    fn hot_renorm<T>(f: impl FnOnce() -> T) -> T {
+        Self::hot(f)
+    }
     /// f, an `#[inline(always)]` closure, inlined into the caller on AVX2 and AVX-512 (whose instructions need the
     /// caller's target features) and compiled as a function of its own, never inlined, on the other backends: for the
     /// steps of the octo-double operations (`od`, `ov`), each hundreds to a thousand lane operations, and for

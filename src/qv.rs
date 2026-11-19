@@ -30,9 +30,10 @@ use crate::v8::{Divisor, M8, V8};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 // Inlining: the hot operations (renormalizations, sloppy add and multiply, times and plus f64, the accumulator) run
-// through `Simd::hot`, forced inline on AVX2 and AVX-512 and left to the compiler on the other backends. The other
-// large operations are never forced, and run inside `Simd::vectorize`, so that a copy the compiler keeps out of line
-// still runs with the backend's instructions.
+// through `Simd::hot`, forced inline on AVX2 and AVX-512 and left to the compiler on the other backends, and the
+// renormalizations through `Simd::hot_renorm`, forced inline on NEON as well. The other large operations are never
+// forced, and run inside `Simd::vectorize`, so that a copy the compiler keeps out of line still runs with the
+// backend's instructions.
 
 #[derive(Clone, Copy, Debug)]
 pub struct QV<S: Simd> {
@@ -62,7 +63,7 @@ fn is_inf<S: Simd>(x: V8<S>) -> M8<S> {
 /// QD's renormalization of four parts, all lanes (see the module doc)
 #[inline(always)]
 pub fn renorm4<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S>; 4] {
-    S::hot(
+    S::hot_renorm(
         #[inline(always)]
         || {
             let z = V8::zero();
@@ -145,7 +146,7 @@ pub fn renorm4_any<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>) -> [V8<S
 /// QD's renormalization of five parts to four, all lanes (see the module doc)
 #[inline(always)]
 pub fn renorm5<S: Simd>(c0: V8<S>, c1: V8<S>, c2: V8<S>, c3: V8<S>, c4: V8<S>) -> [V8<S>; 4] {
-    S::hot(
+    S::hot_renorm(
         #[inline(always)]
         || {
             let z = V8::zero();
