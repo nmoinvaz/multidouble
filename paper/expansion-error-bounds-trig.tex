@@ -39,8 +39,8 @@ p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$. A power of two multiplies ever
 $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$ for $q = 0, 1, 2, 3$, COS$_n$ returns $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$,
 $Y_{\rm s}$, and TAN$_n$ returns $2^{-3j-3}\mathrm{DIV}(2^{3j+3}Y_{\rm s}, Y_{\rm c})$ for even $q$ (unscaled for
 $|r_0| < u^{n/2}$) and $-$DIV$(Y_{\rm c}, Y_{\rm s})$ for odd $q$. Unscaled, $r\,\mathrm{MUL}(z, p_1)$ has products below
-$2^{-1022}$ for $|r|$ under about $2^{-189}$ at $n = 8$, and so have the products of $Y_{\rm c}$'s last parts, near
-$2^{-2j-320}$, with the last quotient terms for $|r|$ under about $2^{-81}$. At $n = 8$ these are multidouble's
+$2^{-1022}$ for $|r|$ under about $2^{-189}$ at $n = 8$, and so have the products of $Y_{\rm c}$'s last part, about $u^6r^2/2$
+or $2^{-2j-319}$, with the last quotient terms for $|r|$ under about $2^{-81}$. At $n = 8$ these are multidouble's
 \texttt{OD::sin}, \texttt{cos} and \texttt{tan}. Its \texttt{DD} versions run the same steps with DWTimesDW3 for MUL,
 AccurateDWPlusDW for ADD, DWPlusFP for ADDF and DWDivDW2 for DIV~\cite{JMP17}, after a $\FastTwoSum$ of $r_0$ and $r_1$,
 which makes $r$ a double-word number: the greedy $r$ can end in a tie, $|r_1| = \frac12\ulp(r_0)$ with $r_0$ odd.
@@ -261,7 +261,7 @@ Lemma~\ref{lem:red} gives $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_{\cpi} + 2^
 The theorem assumes (A2) for the whole run. With the scalings, the operands of every operation have leading parts
 between $2^{-427}$ and $2^{425}$: $r$ itself at least $u^4 = 2^{-212}$ in $z = \mathrm{MUL}(r, r)$, $r'$ and the sums
 in SINR near 1, $z$ and $t$ at least $2^{-2j-5}$, and the quotient near $2^{2j+2}$, whose divisor $Y_{\rm c}$
-has its last parts near $2^{-2j-320}$. At $n = 8$ their products of order at most 8 then lie above $2^{-850}$,
+has its last part near $2^{-2j-319}$. At $n = 8$ their products of order at most 8 then lie above $2^{-850}$,
 and the two-products' exponents sum to more than $-800$, against the $-970$ that (A2) needs, so for parts as dense as
 those of a greedy rounding no result of the run leaves the normal range, whatever $|r|$ is from $u^4$ to $\bar r_0$. On the emulator, 32 random $r$ in each bucket from
 $[2^{-212}, 2^{-211})$ to $[\frac12, r_{\max}]$, greedy roundings and ladders at their top, give no result outside binary64
