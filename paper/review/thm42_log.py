@@ -15,11 +15,12 @@ four geometric intervals of |r| where |r| exceeds 2^-12.
     python3 thm42_log.py           # prints eps_ln / u^8 and log2 Phi with their cases, then PASS (about 6 minutes)
     python3 thm42_log.py control   # the start's error E(l) left out of c: must print FAIL (exit 0)
 """
+import math
 import sys
 from fractions import Fraction as Fr
 
 import gop
-from gop import abar, g_add, g_addf, g_mul, lg, up
+from gop import abar, dec_up, g_add, g_addf, g_mul, lg, up
 from explog_common import (ETA0, KBAR, Consts, U, degree, exp_up, expm1_up, expm2_up, horner, lemma38_setup,
                            lemma38b, lemma39)
 
@@ -194,8 +195,8 @@ def main():
                     ratio(val, ell, (1, e_lo, e_hi, m, dp, sign, float(ell), float(a), float(b)))
     got = float(eps[0] / un)
     print(f'{count} evaluations')
-    print(f'eps_ln / u^8 = {got:.6f}, at (k != 0, e_low, e_high, m, d\', sign of r, l, a, b) = {eps[1]}')
-    print(f'log2 Phi = {lg(phi[0]):.4f}, at (k != 0, e_low, e_high, m, d\', sign of r) = {phi[1]}')
+    print(f'eps_ln / u^8 = {dec_up(eps[0] / un, 6)} (rounded up), at (k != 0, e_low, e_high, m, d\', sign of r, l, a, b) = {eps[1]}')
+    print(f'log2 Phi = {math.ceil((lg(phi[0]) + 1e-9) * 1e4) / 1e4:.4f} (rounded up), at (k != 0, e_low, e_high, m, d\', sign of r) = {phi[1]}')
     ok = got <= 9.926 and abs(got - 9.925819) <= 1.01e-6 and -509.09 <= lg(phi[0]) <= -509.07
     print(f'the paper has 9.926 and 2^-509 (Theorem 42), 9.925819 and 2^-509.08 (explog_consts.txt): '
           f'{"ok" if ok else "DIFFERS"}')

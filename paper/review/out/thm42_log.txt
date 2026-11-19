@@ -1,0 +1,5 @@
+612 evaluations
+eps_ln / u^8 = 9.925819 (rounded up), at (k != 0, e_low, e_high, m, d', sign of r, l, a, b) = (1, -2, -2, 5, 43, -1, 0.3465735902799726, 0.319397565244033, 0.3465735902802314)
+log2 Phi = -509.0880 (rounded up), at (k != 0, e_low, e_high, m, d', sign of r) = (0, -109, -89, 0, 5, -1)
+the paper has 9.926 and 2^-509 (Theorem 42), 9.925819 and 2^-509.08 (explog_consts.txt): ok
+PASS

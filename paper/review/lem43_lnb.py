@@ -75,8 +75,12 @@ def main():
     dcl = max(abs(cL - ln2_lo), abs(cL - ln2_hi))
     eta_b = US + (1 + US) * (dcl + eps_w * lnmu_hi) / (ln2_lo - lnmu_hi)
     ew, eb = float(eps_w / U), float(eta_b / U)
-    print(f'eps_w / u = {ew:.6f}, the paper has 4.312')
-    print(f'eta_b / u = {eb:.6f}, the paper has 5.915')
+    def dec_up(x, k=6):
+        q = -(-x.numerator * 10 ** k // x.denominator)
+        return f'{q // 10 ** k}.{q % 10 ** k:0{k}d}'
+
+    print(f'eps_w / u = {dec_up(eps_w / U)} (rounded up), the paper has 4.312')
+    print(f'eta_b / u = {dec_up(eta_b / U)} (rounded up), the paper has 5.915')
     ok = 0 <= 4.312 - ew <= 1e-3 and 0 <= 5.915 - eb <= 1e-3
     print('PASS' if ok else 'FAIL')
     return 0 if ok or control else 1

@@ -42,28 +42,28 @@ def main():
 
     def check(name, got, want, tol):
         nonlocal ok
-        good = abs(got - want) <= tol
+        good = 0 <= want - got <= tol
         ok &= good
         print(f'{name}: {got:.6f}, the paper has {want}: {"ok" if good else "DIFFERS"}')
 
-    for theta, want, want_d in ((1, 30.4116, -50.42), (2, 31.9242, -41.42)):
+    for theta, want, want_d in ((1, 30.4117, -50.41), (2, 31.9242, -41.41)):
         Rs, Du, L = sloppy(n, theta, u, 1 if control else 0)
-        check(f'theta={theta}: log2(R_s + Delta_8 u)', lg(Rs + Du), want, 5.1e-5)
-        check(f'theta={theta}: log2(Delta_8 u)', lg(Du), want_d, 5.1e-3)
+        check(f'theta={theta}: log2(R_s + Delta_8 u)', lg(Rs + Du), want, 1.01e-4)
+        check(f'theta={theta}: log2(Delta_8 u)', lg(Du), want_d, 1.01e-2)
         # the levels below n - 1 are MUL's (Theorem 14)
         Lmul = theorem14('mul', n, theta, u)[0]
         assert L[: n - 1] == Lmul[: n - 1]
     Rs, Du, L = sloppy(n, 2, u, 1 if control else 0)
-    check('theta=2: log2 L_7', lg(L[7]), 25.92, 5.1e-3)
+    check('theta=2: log2 L_7', lg(L[7]), 25.93, 1.01e-2)
     rho = 2 * u
     tau = [max(L[l] * u ** l, rho ** l) for l in range(n)] + [Fr(0)]
     eprod = (Rs + Du) * u ** n
     for K in (1, 4, 16, 64):
         elev, phi = acc_bound(n, K, tau, eprod, u)
         second = ((1 + u ** n) * (elev + eprod) + phi) / u ** n
-        check(f'theta=2, K={K}: log2 of the second term of (c) / u^8 W', lg(second), 31.9242, 5.1e-5)
+        check(f'theta=2, K={K}: log2 of the second term of (c) / u^8 W', lg(second), 31.9242, 1.01e-4)
         if K == 64:
-            check('theta=2, K=64: log2 E_lev / u^8 W', lg(elev / u ** n), 2.6832, 5.1e-5)
+            check('theta=2, K=64: log2 E_lev / u^8 W', lg(elev / u ** n), 2.6833, 1.01e-4)
     print('PASS' if ok else 'FAIL')
     return 0 if ok or control else 1
 
