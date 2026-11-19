@@ -192,6 +192,7 @@ def bits(N, seed):
     for op in ('add', 'addf', 'mulf', 'mul', 'div'):
         rng = random.Random(seed * 1000 + len(op) * 7 + ord(op[0]) + ord(op[-1]))
         kappa = kappa_of(op, 8, 53)
+        E.set_p(53)  # before any operand is built: E.rnd rounds to the emulator's precision
         runs = []
         for a, b, dense in make_inputs(op, N, rng):
             x = emu(op, a, b)
@@ -307,7 +308,7 @@ def theorem9(p, n, exps, N=None, mants=None):
 
 
 def family15(p, n, choices):
-    """operands on H(2) with a_0 every mantissa at exponent 0 and each later part one of: zero, the ladder's edge
+    """(call E.set_p(p) first) operands on H(2) with a_0 every mantissa at exponent 0 and each later part one of: zero, the ladder's edge
     T = (2u)^i a_0 ('T'), the largest float below u^i ('D'), a power of two far below the edge ('G'), with signs"""
     out = []
     for m0 in range(2 ** (p - 1), 2 ** p):
@@ -383,7 +384,9 @@ def small():
     print('small: Theorems 15 and 19, operands on H(2): a_0 every mantissa, each later part zero, the ladder\'s '
           'edge, the largest float below u^i or a power of two far below, with both signs')
     for p, n, choices, bchoices in ((5, 3, 'TDG', 'TD'), (7, 4, 'TD', 'T')):
+        E.set_p(p)  # before any operand is built: E.rnd rounds to the emulator's precision
         fam = family15(p, n, choices)
+        assert len({tuple(a) for a in fam}) == len(fam), 'the family has duplicates'
         famb = family15(p, n, bchoices)
         rng = random.Random(p * 100 + n)
         full = len(fam)
