@@ -20,7 +20,11 @@
 //!   exact whatever the order of the first pass's output: a quick-two-sum is exact only when |acc| >= |c_i|, and a
 //!   product of a value with a part far below the one above it (x0 + x1 with |x1| far below ulp(x0), or zero parts
 //!   between nonzero ones) gives the first pass levels out of magnitude order, where a quick-two-sum dropped terms of
-//!   about 2^-325 (`od_tests`, category gap). The parts of such a result can still be out of magnitude order.
+//!   about 2^-325 (`od_tests`, category gap). The renormalization keeps the sum exact but does not sort, so parts out
+//!   of magnitude order can leave it out of order. `OD::new` sorts its parts first and checks its result
+//!   (`any_order`). The arithmetic's results are checked to stay on the ladder for operands on it
+//!   (`od_tests::od_results_do_not_overlap`), not for the gap category's operands (`gapped`), among them values with
+//!   zero parts between nonzero ones, which only a value built from raw parts can have.
 //! * Addition: the parts pairwise by two-sums, then each error carried down the levels below it, every level but
 //!   the last by two-sums (`dep`), and the nine levels renormalized: QD's sloppy add with its error terms kept to
 //!   the eighth level. Its error is relative to |a| + |b| (Cray-style), as QD's `+`.
@@ -800,7 +804,8 @@ pub(crate) mod alg {
 /// Octo-double `x[0] + x[1] + ... + x[7]`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct OD {
-    /// the parts, largest first
+    /// the parts, largest first. `OD::new` puts parts given in any order so, each at most the ulp of the one before
+    /// and zeros only at the end; a value built from its fields must keep that order.
     pub x: [f64; 8],
 }
 
@@ -814,10 +819,19 @@ impl OD {
     /// 2^-418, the unit of the error bounds (twice the exponent of QD's 2^-209; the parts hold 424 bits)
     pub const EPS: f64 = f64::from_bits((1023 - 418) << 52);
 
-    /// renormalized from eight parts
+    /// The exact sum of eight finite parts in any order, as eight parts largest first: zero parts only after the
+    /// nonzero ones, and each part at most the ulp of the one before (`any_order`). Parts already so, as the arithmetic
+    /// returns them, are renormalized as given (`renorm_scalar`, exact for eight parts) with its bits. Others are
+    /// sorted by decreasing magnitude and renormalized, and a result off the ladder (parts that overlap in one binade)
+    /// is replaced by the parts' exact expansion, compressed. With an infinite or NaN part the result is not finite.
     #[inline]
     pub fn new(x: [f64; 8]) -> OD {
-        OD { x: renorm_scalar(x) }
+        if crate::any_order::mutate::on(crate::any_order::mutate::AS_GIVEN) {
+            return OD { x: renorm_scalar(x) };
+        }
+        OD {
+            x: crate::any_order::exact_sum(x, renorm_scalar, renorm_scalar),
+        }
     }
     /// exact
     #[inline(always)]

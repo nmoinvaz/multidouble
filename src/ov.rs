@@ -156,13 +156,40 @@ impl<S: Simd> OV<S> {
     pub fn zero() -> Self {
         OV { c: [V8::zero(); 8] }
     }
-    /// renormalized from eight parts, lane j bitwise `OD::new` of the parts' lane j
+    /// The exact sum of eight finite parts in any order on each lane, lane j bitwise `OD::new` of the parts' lane j.
+    /// When every lane's parts are in decreasing magnitude and every lane's renormalization comes out on the ladder or
+    /// not finite, the lanes renormalize together (`OD::new` returns that renormalization on such parts); otherwise
+    /// each lane is `OD::new`.
     #[inline]
     pub fn new(c: [V8<S>; 8]) -> Self {
         S::vectorize(
             #[inline(always)]
-            || OV {
-                c: <V8<S> as Limb>::renorm(c),
+            || {
+                use crate::any_order::mutate;
+                if mutate::on(mutate::AS_GIVEN) {
+                    return OV {
+                        c: <V8<S> as Limb>::renorm(c),
+                    };
+                }
+                let z = V8::<S>::zero();
+                let all = z.eq(z);
+                // NaN parts fail the comparison, and take OD::new's sort
+                let sorted = (0..7).fold(all, |m, k| m.and(c[k].abs().ge(c[k + 1].abs())));
+                if sorted.bits() == all.bits() {
+                    let r = <V8<S> as Limb>::renorm(c);
+                    // as any_order::on_ladder, with any_order::ulp from the exponent bits
+                    let (tiny, eps) = (V8::splat(f64::MIN_POSITIVE), V8::splat(f64::EPSILON));
+                    let ladder = (0..7).fold(all, |m, k| {
+                        let ulp = r[k].pow2_floor().max(tiny).mul(eps);
+                        m.and(r[k + 1].eq(z).or(r[k].ne(z).and(ulp.ge(r[k + 1].abs()))))
+                    });
+                    let keep = V8::splat(f64::INFINITY).gt(r[0].abs()).not().or(ladder);
+                    if keep.bits() == all.bits() || mutate::on(mutate::NO_FALLBACK) {
+                        return OV { c: r };
+                    }
+                }
+                let parts = c.map(V8::to_array);
+                OV::from_lanes(&std::array::from_fn(|j| OD::new(std::array::from_fn(|k| parts[k][j]))))
             },
         )
     }
@@ -232,7 +259,8 @@ impl<S: Simd> OV<S> {
         let (h, t) = alg::to_f64_parts(&self.c);
         t.eq(V8::zero()).sel(h, h.add(t))
     }
-    /// from the eight parts' arrays (8 values each)
+    /// from the eight parts' arrays (8 values each), the parts as they are: largest first, as the arithmetic returns
+    /// them (`new` takes them in any order)
     #[inline(always)]
     pub fn load(c: [&[f64]; 8]) -> Self {
         let mut v = [V8::zero(); 8];

@@ -19,6 +19,8 @@
 //!   fraction bits with the bits of exact integer arithmetic for |x_0| up to 2^52, and of their lanes [`dv::DV`],
 //!   [`qv::QV`] and [`ov::OV`], each lane bitwise the scalar function of its value.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
+//! * [`any_order`]: how the constructors `QD::new`, `OD::new` and `OV::new` take their parts in any order, and the
+//!   controls' mutations of the constructors.
 //! * [`explog`]: `exp` and `ln` of [`dd::DD`], [`qd::QD`] and [`od::OD`], and of their lanes [`dv::DV`], [`qv::QV`]
 //!   and [`ov::OV`] with each lane's bits.
 //! * [`precision`]: one trait, [`precision::Precision`], over double-double ([`precision::Double`]), quad-double
@@ -66,6 +68,7 @@
 #![allow(clippy::needless_range_loop, clippy::should_implement_trait)]
 #![cfg_attr(feature = "f128", feature(f128))]
 
+pub mod any_order;
 pub mod dd;
 pub mod dual;
 pub mod dv;

@@ -1,12 +1,12 @@
 //! `QD::from_sum` and `qv::renorm4_any`: four parts given in any order, summed exactly and renormalized. Checked
 //! against exact dyadic arithmetic (`exact::Dy`), bitwise `QD::new` on normalized parts, and the 8 lanes bitwise the
-//! scalar on every backend this CPU runs. Control: `QD::new` itself, which assumes ordered parts, must fail the
-//! exactness check on unordered ones.
+//! scalar on every backend this CPU runs. Control: `renorm4`, which assumes ordered parts (and was `QD::new` before it
+//! took parts in any order), must fail the exactness check on unordered ones.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::exact::Dy;
-use multidouble::qd::{renorm4_any, QD};
+use multidouble::qd::{renorm4, renorm4_any, QD};
 use multidouble::qv;
 use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
@@ -139,18 +139,18 @@ fn from_sum_is_new_on_normalized_parts() {
     }
 }
 
-/// the check can fail: `QD::new` gives 1 for CANCEL, and misses on a share of the other unordered parts
+/// the check can fail: `renorm4` gives 1 for CANCEL, and misses on a share of the other unordered parts
 #[test]
-fn new_fails_the_check_on_unordered_parts() {
-    let z = QD::new(CANCEL[0], CANCEL[1], CANCEL[2], CANCEL[3]);
-    assert!(!exact_and_normalized(CANCEL, z.x), "{:?}", z.x);
+fn renorm4_fails_the_check_on_unordered_parts() {
+    let z = renorm4(CANCEL[0], CANCEL[1], CANCEL[2], CANCEL[3]);
+    assert!(!exact_and_normalized(CANCEL, z), "{z:?}");
     let mut r = Rng(17);
     let missed = (0..N)
         .map(|i| unordered(&mut r, i))
-        .filter(|&c| !exact_and_normalized(c, QD::new(c[0], c[1], c[2], c[3]).x))
+        .filter(|&c| !exact_and_normalized(c, renorm4(c[0], c[1], c[2], c[3])))
         .count();
-    println!("QD::new misses {missed} of {N} unordered cases");
-    assert!(missed >= N / 10, "QD::new missed only {missed} of {N}");
+    println!("renorm4 misses {missed} of {N} unordered cases");
+    assert!(missed >= N / 10, "renorm4 missed only {missed} of {N}");
 }
 
 /// `qv::renorm4_any` on 8 lanes of mixed normalized, unordered and non-finite parts against the scalar, bit for bit
