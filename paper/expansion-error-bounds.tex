@@ -219,8 +219,8 @@ to, its order $i + j$. The five levels $0, \dots, 4$ are renormalized into four 
 \For{$j = 0, \dots, n-1$} \Comment{levels $0, \dots, n-1$}
   \State $(s_j, e_j) \gets \TwoProd(a_0, b_j)$
 \EndFor
-\State $s_n \gets \RN(a_1b_{n-1})$
-\For{$i = 2, \dots, n-1$} $s_n \gets \RN(a_ib_{n-i} + s_n)$ \Comment{one fused multiply-add}
+\State $s_n \gets \RN(a_1b_{n-1})$ \Comment{level $n$, by fused multiply-adds}
+\For{$i = 2, \dots, n-1$} $s_n \gets \RN(a_ib_{n-i} + s_n)$
 \EndFor
 \For{$j = 0, \dots, n-1$} $\dep(s, j+1, e_j)$
 \EndFor
