@@ -44,7 +44,7 @@ payloads. In practice it is rare:
 | octo-double Taylor coefficients of a numerical continuation | 6,921 | 20 | 464.8 |
 | an octo-double solution state of the same continuation | 769 | 2 | 468.4 |
 
-The state's 769 values leave 7 places of padding in their last block, which costs 3.9 bits per value.
+The state's 769 values leave 7 places of padding in their last block, which costs 4.2 bits per value.
 
 ## Size against general compressors
 
