@@ -16,8 +16,8 @@
 //! * [`od::OD`] scalar and [`ov::OV`] 8-lane octo-double (QD's algorithms carried to eight parts, written once for
 //!   both), with [`od::OdAcc`] and [`ov::ODotAcc`] accumulators; `OV` is a [`dual::Lane`].
 //! * [`trig`]: `sin`, `cos`, `tan` and `sin_cos` of [`dd::DD`], [`qd::QD`] and [`od::OD`], reducing by pi/2 to 1216
-//!   fraction bits in exact integer arithmetic for |x_0| up to 2^52, and of their lanes [`dv::DV`], [`qv::QV`] and
-//!   [`ov::OV`], each lane bitwise the scalar function of its value.
+//!   fraction bits with the bits of exact integer arithmetic for |x_0| up to 2^52, and of their lanes [`dv::DV`],
+//!   [`qv::QV`] and [`ov::OV`], each lane bitwise the scalar function of its value.
 //! * [`exact`]: exact dyadic and decimal arithmetic, the reference the tests compare against.
 //! * [`explog`]: `exp` and `ln` of [`dd::DD`], [`qd::QD`] and [`od::OD`], and of their lanes [`dv::DV`], [`qv::QV`]
 //!   and [`ov::OV`] with each lane's bits.
