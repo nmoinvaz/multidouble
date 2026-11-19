@@ -376,7 +376,7 @@ gives the hypothesis of Theorem~\ref{thm:t1}(e), so $|S - \sum_k x_k| \le u^n|S|
 
 \begin{table}[tp]
 \centering
-\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$. In units of $2^{-418}$, the leading term is $1/64$ unit. Below each row, the bound for $\theta = 2$.}
+\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$ (computed, \texttt{constants.py}). In units of $2^{-418}$, the leading term is $1/64$ unit. Below each row, the bound for $\theta = 2$.}
 \label{tab:kappa}
 \small
 \begin{tabular}{@{}lcc@{}}
@@ -484,7 +484,7 @@ $V^q_j$ be the bounds $V_j$ above computed from $X_m = \bar q_m$ ($0 \le m \le n
 \Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + \kdiv u^{n+1})\Bigl|\frac ab\Bigr|, \\
 \kdiv = \frac{(1+u^n)\Theta\frac{1-\rho}{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
 \end{gather*}
-At $n = 8$, $p = 53$: $\kdiv \le 2^{26.0}$ for $\theta = 1$ and $\kdiv \le 2^{27.48}$ for $\theta = 2$, so $|a/b - x| \le (1 +
+At $n = 8$, $p = 53$ (computed, \texttt{div\_consts.py}): $\kdiv \le 2^{26.0}$ for $\theta = 1$ and $\kdiv \le 2^{27.48}$ for $\theta = 2$, so $|a/b - x| \le (1 +
 2^{-25.5})\,2^{-424}|a/b|$ for ulp-nonoverlapping $a$ and $b$.
 \end{theorem}
 
@@ -561,7 +561,7 @@ E_{k+1} &= \tfrac32E^2 + \tfrac12E^3 + (1+E)\bigl(\tfrac12\epsilon_m + \epsilon_
 &\quad + \epsilon_d + \epsilon_r, \qquad \pi^{(k+1)} = \pi'.
 \end{align*}
 With $(\epsilon_z, \cdot) = G_{\rm MUL}(\pi^{(J)}, \bar a;\ 1 + E_J)$ and $\delta_J = E_J + \epsilon_z$, the result
-satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8$, $J = 4$, $p = 53$: $\delta_4 \le
+satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8$, $J = 4$, $p = 53$ (computed, \texttt{sqrt\_consts.py}): $\delta_4 \le
 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$.
 \end{theorem}
 
@@ -626,7 +626,7 @@ E_1 &= \tfrac52E^3 + \tfrac{15}8E^4 + \tfrac38E^5 + \epsilon_d + \epsilon_r \\
 \end{align*}
 Let $E_2$ and $\pi^{(2)}$ be one step of Theorem~\ref{thm:t7} from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
 G_{\rm MUL}(\pi^{(2)}, \bar a;\ 1 + E_2)$ and $\delta^{\rm DD} = E_2 + \epsilon_z$. Then $|\sqrt x - \sum_k
-\mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$: $E_0 \le 22.125\,u^2 + 72\,u^3$ for
+\mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$ (computed, \texttt{sqrt\_consts.py}): $E_0 \le 22.125\,u^2 + 72\,u^3$ for
 $\theta = 2$ and $19.125\,u^2 + 58\,u^3$ for $\theta = 1$, $E_1 \le 2^{-303}$, and
 $\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$, the bounds of SQRT$_{8,4}$.
 \end{theorem}
