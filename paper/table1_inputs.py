@@ -1,4 +1,4 @@
-"""The inputs of Table 1 for the octo-double square root, sine, cosine, tangent, exponential and logarithm, checked from
+"""The inputs of Table V for the octo-double square root, sine, cosine, tangent, exponential and logarithm, checked from
 scratch in exact arithmetic: each input's result by the emulator (fpemu.py's square root, trig_bits.py's SIN_8, COS_8
 and TAN_8, explog_bits.py's EXP and LOG), the function's exact value at the input, enclosed by code that shares nothing
 with the algorithms (an integer square root, Taylor series of the sine and cosine in fixed point with a bound on their
@@ -31,7 +31,7 @@ import explog_bits as EB  # noqa: E402
 U = Q(1, 2 ** 53)
 U8 = U ** 8
 
-# (function, the input's parts as binary64 bits, the ratio as Table 1 quotes it, which is a lower bound of the ratio
+# (function, the input's parts as binary64 bits, the ratio as Table V quotes it, which is a lower bound of the ratio
 # and the floor that the check holds it to)
 INPUTS = [
     ('sqrt', '3ff0000000000001 3967fdf3b645a1cb 38b0624dd2f1af00 35f0000000000004 32b0000000000003 2c3bff7ced916873 '

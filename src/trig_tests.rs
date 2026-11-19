@@ -826,7 +826,7 @@ fn trig_od_accuracy() {
     accuracy::<OD>(500);
 }
 
-/// The inputs of the paper's Table 1 for the octo-double sin, cos and tan (paper/table1_inputs.py), with the floors
+/// The inputs of the paper's Table V for the octo-double sin, cos and tan (paper/table1_inputs.py), with the floors
 /// their errors reach in units of u^8: x chosen so that f(x) lies just past 2^E (1 + u + ... + u^7) and the result
 /// is 2^E (1, u, ..., u^7) up to sign, the ninth part that the renormalization drops near u^8 2^E.
 const OD_TABLE1: [(Fun, [u64; 8], f64); 3] = [
@@ -874,7 +874,7 @@ const OD_TABLE1: [(Fun, [u64; 8], f64); 3] = [
     ),
 ];
 
-/// The octo-double sin, cos and tan on the inputs of the paper's Table 1. Pass: each result 2^E (1, u, ..., u^7) up to
+/// The octo-double sin, cos and tan on the inputs of the paper's Table V. Pass: each result 2^E (1, u, ..., u^7) up to
 /// sign, scalar and lanes alike, and the check, the error between its floor and the proven bound. Controls: the check
 /// rejects a wrong result past the bound (the last part 16 2^E u^8 further out) and one far more accurate (the greedy
 /// eight parts of the sum of the result's parts and 2^E u^8), and each input with its leading part one ulp up errs by
