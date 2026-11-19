@@ -16,10 +16,10 @@
 //!   for any finite parts. Grow-Expansion (J. R. Shewchuk, "Adaptive precision floating-point arithmetic and fast
 //!   robust geometric predicates", Discrete Comput. Geom. 18 (1997) 305-363, doi:10.1007/PL00009321) adds the parts
 //!   one by one into an expansion whose nonzero components do not overlap: the msb of each is below the lsb of the next
-//!   larger one. Every step is a two-sum, so the sum is exact in any order. The next part is the largest left of the
-//!   sign opposite to the running sum, if there is one, so the running sum stays within the largest part or the total
-//!   and overflows only if the total does. Then the renormalization's second pass (the first half of Shewchuk's
-//!   Compress) runs from the largest component down.
+//!   larger one. Every step is a two-sum, so the sum is exact in any order. Then the renormalization's second pass (the
+//!   first half of Shewchuk's Compress) runs from the largest component down. If that overflows, the parts are added
+//!   again, each next one the largest left of the sign opposite to the running sum, so that the running sum stays
+//!   within the largest part or the total and overflows only if the total does.
 //!
 //! The second pass adds each component w_j into an accumulator A by two-sum, emits the sum t as a part when the error
 //! is nonzero, and carries the error on. On components that do not overlap it is exact and on the ladder. A is built
@@ -38,15 +38,18 @@ pub mod mutate {
     /// the parts renormalized as given, without the sort and the check: the constructors before they took parts in any
     /// order (`DD::new` by a quick two-sum, `QD::new` by `renorm4`)
     pub const AS_GIVEN: u32 = 1;
-    /// the sorted parts' renormalization kept when it is off the ladder (no `expansion_sum`)
+    /// the sorted parts' renormalization kept when it is off the ladder or overflowed (no `expansion_sum`)
     pub const NO_FALLBACK: u32 = 2;
+    /// `expansion_sum`'s result kept when it overflowed (no second Grow-Expansion with the signs alternating)
+    pub const NO_BALANCE: u32 = 3;
     /// number of ids
-    pub const N: u32 = 2;
+    pub const N: u32 = 3;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 3] = [
+    pub const NAMES: [&str; 4] = [
         "none",
         "constructors: parts renormalized as given",
         "constructors: no fallback",
+        "constructors: no retry after an overflow",
     ];
 
     #[cfg(feature = "mutate")]
@@ -107,20 +110,37 @@ pub(crate) fn on_ladder<const N: usize>(x: &[f64; N]) -> bool {
 }
 
 /// The exact sum of N finite parts, sorted by decreasing magnitude, as N parts on the ladder (see the module doc):
-/// Grow-Expansion, each next part the largest left of the sign opposite to the running sum, then the pass from the
-/// largest component down. Each of the N - 1 steps of the pass emits at most one part, so none is lost.
+/// Grow-Expansion, then the pass from the largest component down. Each of the N - 1 steps of the pass emits at most one
+/// part, so none is lost. A result that overflowed is formed again with each next part the largest left of the sign
+/// opposite to the running sum.
 #[cold]
 #[inline(never)]
 pub(crate) fn expansion_sum<const N: usize>(x: [f64; N]) -> [f64; N] {
+    let r = grow_and_compress(x, false);
+    if r.iter().all(|p| p.is_finite()) || mutate::on(mutate::NO_BALANCE) {
+        r
+    } else {
+        grow_and_compress(x, true)
+    }
+}
+
+/// `expansion_sum`'s steps, the parts added largest first or, `balanced`, each the largest left of the sign opposite
+/// to the running sum
+#[inline(always)]
+fn grow_and_compress<const N: usize>(x: [f64; N], balanced: bool) -> [f64; N] {
     // e[..m] nonoverlapping, increasing in magnitude, zeros allowed; its last component is the running sum
     let mut e = [0.0f64; N];
     let mut used = [false; N];
     for m in 0..N {
-        let s = if m == 0 { 0.0 } else { e[m - 1] };
-        let next = (0..N)
-            .find(|&i| !used[i] && ((s > 0.0 && x[i] < 0.0) || (s < 0.0 && x[i] > 0.0)))
-            .or_else(|| (0..N).find(|&i| !used[i]))
-            .unwrap_or(m);
+        let next = if balanced {
+            let s = if m == 0 { 0.0 } else { e[m - 1] };
+            (0..N)
+                .find(|&i| !used[i] && ((s > 0.0 && x[i] < 0.0) || (s < 0.0 && x[i] > 0.0)))
+                .or_else(|| (0..N).find(|&i| !used[i]))
+                .unwrap_or(m)
+        } else {
+            m
+        };
         used[next] = true;
         let mut q = x[next];
         for c in e.iter_mut().take(m) {

@@ -3,7 +3,8 @@
 //! before, for parts in random order with cancelling pairs, zeros between nonzero parts, huge and tiny parts, signed
 //! zeros, subnormals and parts that overlap in one binade. Parts with a NaN or an infinity give a first part that is
 //! not finite, and the lanes give the scalar bits on every backend. Controls (feature `mutate`): the constructors
-//! as they were (`any_order::mutate::AS_GIVEN`) and without their fallback (`NO_FALLBACK`) fail these checks.
+//! as they were (`any_order::mutate::AS_GIVEN`), without their fallback (`NO_FALLBACK`) and without the fallback's
+//! retry after an overflow (`NO_BALANCE`) fail these checks.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
@@ -400,13 +401,14 @@ fn ov_new_matches_od_new_in_any_order() {
 }
 
 /// The controls: the constructors as they were fail the checks (`DD::new` and `QD::new` on the value, `QD::new` and
-/// `OD::new` on the ladder), and without the fallback `QD::new` and `OD::new` leave parts off the ladder and overflow on
-/// the overflow family. The lanes follow the scalar constructor under both.
+/// `OD::new` on the ladder), without the fallback `QD::new` and `OD::new` leave parts off the ladder and overflow on the
+/// overflow family, and without the fallback's retry after an overflow they overflow there. The lanes follow the
+/// scalar constructor under each.
 #[cfg(feature = "mutate")]
 #[test]
 fn controls_fail_the_checks() {
     use multidouble::any_order::mutate;
-    for id in [mutate::AS_GIVEN, mutate::NO_FALLBACK] {
+    for id in [mutate::AS_GIVEN, mutate::NO_FALLBACK, mutate::NO_BALANCE] {
         mutate::set(id);
         let rows = tallies();
         let lanes = simd::for_each_available(OvNewMatchesOdNew);
@@ -424,8 +426,10 @@ fn controls_fail_the_checks() {
         let [dd, qd, od] = rows.map(|(_, t)| (t.value > 0, t.ladder > 0));
         if id == mutate::AS_GIVEN {
             assert!(dd.0 && qd.0 && qd.1 && od.1, "{dd:?} {qd:?} {od:?}");
-        } else {
+        } else if id == mutate::NO_FALLBACK {
             assert!(qd.0 && qd.1 && od.0 && od.1, "{qd:?} {od:?}");
+        } else {
+            assert!(qd.0 && od.0, "{qd:?} {od:?}");
         }
     }
 }
