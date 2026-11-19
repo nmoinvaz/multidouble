@@ -3,8 +3,8 @@
 //! before, for parts in random order with cancelling pairs, zeros between nonzero parts, huge and tiny parts, signed
 //! zeros, subnormals and parts that overlap in one binade. Parts with a NaN or an infinity give a first part that is
 //! not finite, and the lanes give the scalar bits on every backend. Controls (feature `mutate`): the constructors
-//! as they were (`any_order::mutate::AS_GIVEN`), without their fallback (`NO_FALLBACK`) and without the fallback's
-//! retry after an overflow (`NO_BALANCE`) fail these checks.
+//! as they were (`any_order::mutate::AS_GIVEN`), without their fallback (`NO_FALLBACK`), without the fallback's retry
+//! after an overflow (`NO_BALANCE`), and lanes that keep an overflow (`LANES_KEEP_OVERFLOW`) fail these checks.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
@@ -344,6 +344,12 @@ fn reported_cases() {
     assert_eq!(QD::new(-h, p(1023), -h, p(1023)).x, [-p(1023), 0.0, 0.0, 0.0]);
     let o = OD::new([-h, p(1023), -h, p(1023), 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(o.x, [-p(1023), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    // CodeRabbit's case: sorted, (-M, 2^1023, 2^1023) sums 2^1023 + 2^1023 first, which overflows, where the sum is
+    // 2^971
+    let m = f64::MAX;
+    assert_eq!(QD::new(p(1023), p(1023), -m, 0.0).x, [p(971), 0.0, 0.0, 0.0]);
+    let o = OD::new([p(1023), p(1023), -m, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    assert_eq!(o.x, [p(971), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 /// `OV::new` against `OD::new` lane by lane on one backend: the lanes whose parts differ in any bit (NaNs alike)
@@ -352,8 +358,8 @@ struct OvNewMatchesOdNew;
 
 impl Kernel for OvNewMatchesOdNew {
     type Output = usize;
-    /// rounds of 8 lanes: all normalized (the lanes renormalize together), all in one binade and sorted (some lanes
-    /// take the fallback), every family mixed, and a NaN or an infinity on one lane
+    /// rounds of 8 lanes: all normalized (the lanes renormalize together), all sorted and in one binade or in the
+    /// overflow family (some or all lanes take the fallback), every family mixed, and a NaN or an infinity on one lane
     #[inline(always)]
     fn run<S: Simd>(self) -> usize {
         let mut r = Rng(5);
@@ -362,7 +368,8 @@ impl Kernel for OvNewMatchesOdNew {
             let x: [[f64; 8]; 8] = std::array::from_fn(|j| match round % 4 {
                 0 => normalized(&mut r),
                 1 => {
-                    let mut c: [f64; 8] = inputs(&mut r, 8);
+                    // the overflow family's sorted parts overflow in the lanes' renormalization
+                    let mut c: [f64; 8] = inputs(&mut r, if round % 8 == 1 { 8 } else { 11 });
                     c.sort_by(|a, b| b.abs().total_cmp(&a.abs()));
                     c
                 }
@@ -432,4 +439,20 @@ fn controls_fail_the_checks() {
             assert!(qd.0 && od.0, "{qd:?} {od:?}");
         }
     }
+}
+
+/// The lanes' control: `OV::new` keeping the lanes' renormalization when its first part is not finite differs from
+/// `OD::new` on the sorted lanes of the overflow family, on every backend this CPU runs
+#[cfg(feature = "mutate")]
+#[test]
+fn lanes_control_fails_the_check() {
+    use multidouble::any_order::mutate;
+    mutate::set(mutate::LANES_KEEP_OVERFLOW);
+    let lanes = simd::for_each_available(OvNewMatchesOdNew);
+    mutate::set(0);
+    println!(
+        "'{}': lanes that differ: {lanes:?}",
+        mutate::NAMES[mutate::LANES_KEEP_OVERFLOW as usize]
+    );
+    assert!(lanes.iter().all(|r| r.1 > 0), "lanes that differ: {lanes:?}");
 }
