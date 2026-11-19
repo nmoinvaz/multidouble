@@ -1,12 +1,17 @@
 # Error bounds for quad-double style arithmetic on floating-point expansions of any length
 
-[expansion-error-bounds.pdf](expansion-error-bounds.pdf) proves error bounds for the quad-double style algorithms of
-Hida, Li and Bailey carried to any number of parts, the algorithms `src/od.rs` runs at eight. Sums and products err by
-at most u^n times the exact result plus a second term, at most 2^-15 of the first at eight parts in binary64. Simple
-inputs reach the bound. A sum of K products accumulated in levels, as `OdAcc` does, errs by u^n times the exact sum
-plus a term that grows like (Ku)^(n+1), and constructed inputs show the growth. The exponential and the logarithm, built from these
-operations with part bounds carried through every step, err by at most 3.661 u^8 e^x + 2^-1071 and 9.926 u^8 |ln x| +
-2^-509; the logarithm starts from a binary64 logarithm whose error is proved too.
+[expansion-error-bounds.pdf](expansion-error-bounds.pdf) proves error bounds for a level scheme in the style of Hida, Li
+and Bailey's quad-double algorithms, with TwoSum throughout, at any number of parts: the algorithms `src/od.rs` runs at
+eight. It is not the QD library's own code at four parts, and Section II of the paper lists the differences. Sums and
+products err by at most u^n times the exact result plus a second term of at most 2^-15 u^n times the operands' leading
+parts, |a_0| + |b_0| for a sum and |a_0 b_0| for a product, at eight parts in binary64. Simple inputs reach the bound. A
+sum of K products accumulated in levels, as `OdAcc` does, errs by u^n times the exact sum plus a term that grows like
+(Ku)^(n+1) times the sum of the products' |a_0 b_0|, and constructed inputs show the growth. The sloppy multiply,
+without the last level, errs by at most 2^31.93 u^8 |a_0 b_0|. The sine and cosine err by at most 3.17 u^8 and the
+tangent by 6.42 u^8 relative, each with a term from the reduction's 1216 bits of pi/2. The exponential and the
+logarithm, built from these operations with part bounds carried through every step, err by at most 3.661 u^8 e^x +
+2^-1071 and 9.926 u^8 |ln x| + 2^-509; the logarithm starts from a binary64 logarithm whose error is bounded too. Each
+constant is computed by a script of this folder from a proved recursion and printed rounded up.
 
 | File | Contents |
 |---|---|
