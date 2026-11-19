@@ -1,0 +1,15 @@
+p = 53, n = 8: sloppy multiply |ab - x| <= (R_s + Delta u) u^n |a_0 b_0|
+T_m (m <= 6) = [0, 2, 6, 12, 20, 30, 42], 112 two-sums (MUL: 168); Q = 64 roundings at level 7: 42 carries out of level 6, 7 deps started at level 7, 15 in the chain
+theta 1: L_m (log2) = [0.01, 1.59, 3.46, 6.19, 9.79, 14.12, 19.02, 24.42], Q = 64
+  R_s + Delta u = 2^30.4117 = 1.428251e+09, in units of 2^-418 (u^n/64): 2^24.4117
+  R_s = 2^30.4117, Delta u = 2^-50.41
+  default multiply: u^n |ab| + 2^-16.59 u^n |a_0 b_0|
+theta 2: L_m (log2) = [0.01, 2.33, 4.71, 7.65, 11.30, 15.63, 20.54, 25.93], Q = 64
+  R_s + Delta u = 2^31.9242 = 4.075103e+09, in units of 2^-418 (u^n/64): 2^25.9242
+  R_s = 2^31.9242, Delta u = 2^-41.41
+  default multiply: u^n |ab| + 2^-15.07 u^n |a_0 b_0|
+sloppy dot of K products, theta 2: |Z - x| <= u^n |Z| + c_K u^n W; c_K (log2), of which E_prod, E_lev
+  K   1: c_K = 4.075103e+09 = 2^31.9242  (E_prod 2^31.9242, E_lev 2^-20.6280)
+  K   4: c_K = 4.075103e+09 = 2^31.9242  (E_prod 2^31.9242, E_lev 2^-16.9618)
+  K  16: c_K = 4.075103e+09 = 2^31.9242  (E_prod 2^31.9242, E_lev 2^-10.7437)
+  K  64: c_K = 4.075103e+09 = 2^31.9242  (E_prod 2^31.9242, E_lev 2^2.6833)

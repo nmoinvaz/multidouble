@@ -1,9 +1,15 @@
 construction p= 8 n=2 K=   64: err/(u^n W) = 63.94, max over k <= K of err/bound = 0.417 PASS
+    at k = 64: err / ((k u)^(n+1) W / (n+1)!) = 0.375, err/bound = 0.000921
 construction p=10 n=3 K=  128: err/(u^n W) = 3674, max over k <= K of err/bound = 0.198 PASS
+    at k = 128: err / ((k u)^(n+1) W / (n+1)!) = 0.336, err/bound = 0.000824
 construction p=12 n=3 K=  512: err/(u^n W) = 1.766e+05, max over k <= K of err/bound = 0.235 PASS
+    at k = 512: err / ((k u)^(n+1) W / (n+1)!) = 0.253, err/bound = 0.000648
 construction p=12 n=4 K=  256: err/(u^n W) = 5.569e+05, max over k <= K of err/bound = 0.0891 PASS
+    at k = 256: err / ((k u)^(n+1) W / (n+1)!) = 0.249, err/bound = 0.000302
 construction p=14 n=5 K=  512: err/(u^n W) = 3.245e+08, max over k <= K of err/bound = 0.0363 PASS
+    at k = 512: err / ((k u)^(n+1) W / (n+1)!) = 0.212, err/bound = 8.17e-05
 construction p=53 n=8 K= 2048: err/(u^n W) = 1.468e+07, max over k <= K of err/bound = 0.00781 PASS
+    at k = 2048: err / ((k u)^(n+1) W / (n+1)!) = 0.0757, err/bound = 2.04e-07
 C1 (bound with rising powers lowered by one) fires: True
 C3 (bound linear in K) fires: True
 C2 (mutation ACC_L3 at p=12 n=5 and p=53 n=8, K=8) breaks the bound: [True, True]

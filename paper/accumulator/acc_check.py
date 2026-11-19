@@ -10,6 +10,7 @@ Controls (each must fire):
    C3. a bound linear in K, (n + K) u^n W (the form of the crate's test threshold), fails on the construction.
 usage: acc_check.py [quick]      exits non-zero if a check fails or a control does not fire."""
 import random
+import math
 import sys
 from fractions import Fraction as Q
 
@@ -47,6 +48,10 @@ for p, n, K in cases:
     last = rows[-1]
     print(f'construction p={p:2d} n={n} K={K:5d}: err/(u^n W) = {last[1]:.4g}, max over k <= K of err/bound = {worst:.3g}',
           'PASS' if worst <= 1 else 'FAIL', flush=True)
+    kk, err, Z, W = last[0], last[4], last[5], last[6]
+    lead = Q(kk, 2 ** p) ** (n + 1) * W / math.factorial(n + 1)
+    print(f'    at k = {kk}: err / ((k u)^(n+1) W / (n+1)!) = {float(err / lead):.3g}, err/bound = '
+          f'{float(err / bound(p, n, kk, Z, W)):.3g}', flush=True)
     ok &= worst <= 1
 print('C1 (bound with rising powers lowered by one) fires:', c1_fired)
 print('C3 (bound linear in K) fires:', c3_fired)
