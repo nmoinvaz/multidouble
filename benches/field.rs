@@ -11,6 +11,10 @@
 // The order-k sums of a series formed one coefficient at a time, on Fl<OJet<28>, 4> with 40 terms, time the weighted
 // `cs_w_at` against the unweighted `cs_at` and against each term's whole jet weighted, which `cs_w_at` did before it
 // weighted only the coefficients 0..=k that it reads (`Lane::mulf_upto`), at k = 0, 3, 13 and 27.
+//
+// The f64 lanes' matrix product (`DMat::apply` on Fun<4>, by chunks of 8 columns) against the loop over the columns it
+// replaced, whose accumulators are loaded and stored at every column, at M = 80 and 320 (B = 10, 40), after a check that
+// both give the same bits.
 
 // Frames of jet fields, which nightly clippy's large_unopt_stack_frames flags in the unoptimized build. The
 // benchmarks run optimized, and stable clippy does not know the lint.
@@ -23,7 +27,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use multidouble::dd::DD;
 use multidouble::dual::{Lane, Param};
 use multidouble::field::{cs, cs_at, cs_into, cs_par, cs_range, cs_range_into, cs_w, cs_w_at, cs_w_into, cs_w_par, Fl};
-use multidouble::native::{DMat, Jet, OJet, QJet, QV, V8};
+use multidouble::native::{DMat, Fun, Jet, OJet, QJet, QV, V8};
 
 const K: usize = 146;
 const B: usize = 4;
@@ -382,5 +386,61 @@ fn order_k(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, centre, sums, order_k);
+/// D f on Fun<N> by the loop over the columns, each column's contribution added to every output lane vector's
+/// accumulators in turn (the product before the chunks of 8 columns)
+fn dmat_columns<const N: usize, const B: usize>(dm: &DMat<B>, f: &Fl<Fun<N>, B>) -> Fl<Fun<N>, B> {
+    let mut av = [V8::zero(); B];
+    let mut ad = [[V8::zero(); N]; B];
+    for jb in 0..B {
+        for jl in 0..8 {
+            let sv = f.0[jb].v.bcast(jl);
+            let sd = f.0[jb].d.map(|x| x.bcast(jl));
+            let col64 = &dm.cols64[8 * jb + jl];
+            for b in 0..B {
+                av[b] = sv.fma(col64[b], av[b]);
+                for i in 0..N {
+                    ad[b][i] = sd[i].fma(col64[b], ad[b][i]);
+                }
+            }
+        }
+    }
+    Fl(std::array::from_fn(|b| Fun { v: av[b], d: ad[b] }))
+}
+
+fn dmat_f64_at<const B: usize>(c: &mut Criterion) {
+    let m = 8 * B;
+    let h: Vec<f64> = (0..m * m).map(|i| ((i * 7919) % 1009) as f64 / 1009.0 - 0.5).collect();
+    let dm = DMat::<B>::from_rows(&h, &vec![0.0; m * m]);
+    let mut f = Fl::<Fun<4>, B>::zero();
+    for (b, lane) in f.0.iter_mut().enumerate() {
+        let x = |s: usize| V8::from_array(std::array::from_fn(|l| ((8 * b + l) * s % 97) as f64 / 97.0 - 0.5));
+        *lane = Fun {
+            v: x(13),
+            d: [x(17), x(19), x(23), x(29)],
+        };
+    }
+    let bits = |g: &Fl<Fun<4>, B>| -> Vec<u64> {
+        g.0.iter()
+            .flat_map(|l| std::iter::once(l.v).chain(l.d).flat_map(|v| v.to_array()))
+            .map(f64::to_bits)
+            .collect()
+    };
+    assert_eq!(
+        bits(&dm.apply(&f)),
+        bits(&dmat_columns(&dm, &f)),
+        "the chunked product differs from the column loop"
+    );
+    let mut g = c.benchmark_group(format!("f64 matrix product, Fun<4>, M = {m}"));
+    g.sample_size(20).measurement_time(Duration::from_secs(3));
+    g.bench_function("chunks of 8 columns", |bch| bch.iter(|| dm.apply(black_box(&f))));
+    g.bench_function("column loop", |bch| bch.iter(|| dmat_columns(&dm, black_box(&f))));
+    g.finish();
+}
+
+fn dmat_f64(c: &mut Criterion) {
+    dmat_f64_at::<10>(c);
+    dmat_f64_at::<40>(c);
+}
+
+criterion_group!(benches, centre, sums, order_k, dmat_f64);
 criterion_main!(benches);
