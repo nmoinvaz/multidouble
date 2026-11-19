@@ -30,6 +30,7 @@
 //!   [`dual::Ou`] octo-double value and tangent, [`dual::Dc`] a double-double value with a complex tangent, and f64
 //!   variants), behind the [`dual::Lane`] trait, so one generic code gives values and exact derivatives;
 //!   [`dual::Counted`] counts the operations of such code.
+//! * [`pack`]: packed storage of double-double, quad-double and octo-double values, lossless and in fewer bits.
 //! * [`jet`]: truncated power series over these lanes, in double-double ([`jet::Jet`]), quad-double ([`jet::QJet`])
 //!   and octo-double ([`jet::OJet`]), with their scalar parameter arithmetic ([`jet::Series`], [`jet::QSeries`],
 //!   [`jet::OSeries`]): one generic code gives its own Taylor coefficients in a parameter.

@@ -5,7 +5,7 @@
 //! ```text
 //! cargo test --release --lib qd_                                   accuracy, scalar/8-lane agreement, decimal I/O
 //! cargo test --release --lib --features mutate qd_controls      every deliberate breakage must fail a check
-//! QD_DUMP=DIR cargo test --release --lib qd_dump -- --ignored      inputs and results for hp/qd_check.py (mpmath)
+//! QD_DUMP=DIR cargo test --release --lib qd_dump -- --ignored      inputs for choptuik-large-d's hp/qd_check.py
 //! cargo test --release --lib bench_qd -- --ignored --nocapture     throughput per lane: f64, dd, qd
 //! cargo test --release --lib qd_diag -- --ignored --nocapture      the two exceedances of the first runs:
 //!     QD's accurate add against `QD::ieee_add` by cancellation depth, and the accumulator's error by source
@@ -1495,8 +1495,8 @@ fn qd_controls() {
     assert!(silent.is_empty(), "controls that did not fire: {silent:?}");
 }
 
-/// Inputs and results for hp/qd_check.py: QD_DUMP=DIR writes ops.bin (rows of 12 f64: a, b, scalar result) with
-/// index ops.txt, and io.txt (parse and print cases).
+/// Inputs and results for hp/qd_check.py in github.com/nmoinvaz/choptuik-large-d: QD_DUMP=DIR writes ops.bin (rows of
+/// 12 f64: a, b, scalar result) with index ops.txt, and io.txt (parse and print cases).
 #[test]
 #[ignore]
 fn qd_dump() {
