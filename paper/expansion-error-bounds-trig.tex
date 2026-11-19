@@ -9,7 +9,7 @@ The functions reduce $x$ by $\cpi/2$ exactly, evaluate the Taylor series of $\si
 of the earlier sections, and recombine. Throughout, $p = 53$ and $n$ is even, so that $u^{n/2} =
 2^{-53n/2}$ is a floating-point number, and $\bar a_i$ is that of \eqref{eq:abar} for $\theta = 2$.
 
-\paragraph{Reduction} Let $F = 1216$, $P = \lfloor 2^F\cpi/2 \rceil$ (an integer), $c = \RN(2/\cpi)$ and $r_{\max} =
+\parhead{Reduction} Let $F = 1216$, $P = \lfloor 2^F\cpi/2 \rceil$ (an integer), $c = \RN(2/\cpi)$ and $r_{\max} =
 \RN(0.7854)$, with $\lfloor\cdot\rceil$ the nearest integer, halves away from zero. RED takes a finite $n$-part $x$ with
 $|x_0| \le 2^{52}$ and sets $k \gets \lfloor\RN(x_0c)\rceil$. If $k = 0$ it returns $q = 0$ and $r = x$. Otherwise
 it forms the integer $N = 2^F\sum_i x_i - kP$ exactly. If $|\RN(2^{-F}N)| > r_{\max}$, it sets $k_2 \gets
@@ -21,7 +21,7 @@ every part, multidouble takes the same $k$ and $r$ from a reduction in binary64 
 arithmetic, checked against Gauss's formula (\texttt{scripts/trig\_tables.py}). Arguments beyond $2^{52}$ need the reduction of Payne and
 Hanek~\cite{PH83}, which is not analyzed here.
 
-\paragraph{Evaluation} For $j \ge 0$ let $\bar r_0 = 0.78541$ and $\bar r_j = 2^{-j}(1 + 2^{-50})$ for $j \ge 1$. Bucket $j$ holds
+\parhead{Evaluation} For $j \ge 0$ let $\bar r_0 = 0.78541$ and $\bar r_j = 2^{-j}(1 + 2^{-50})$ for $j \ge 1$. Bucket $j$ holds
 the $r$ with $2^{-j-1} \le |r_0| < 2^{-j}$, and $[\frac12, r_{\max}]$ for $j = 0$. $K_{\rm s}(j)$ is the least $K \ge 2$
 with $\bar r_j^{2K}/(2K+1)! \le 2^{-10}u^n(1 - \bar r_j^2/6)$, and $K_{\rm c}(j)$ the least with $\bar r_j^{2K}/(2K)! \le
 2^{-10}u^n(1 - \bar r_j^2/2)$. Let $s_k = (-1)^k/(2k+1)!$ and $c_k = (-1)^k/(2k)!$, and let $\hat s_k$ and $\hat c_k$ be
@@ -35,7 +35,7 @@ p_k = \mathrm{ADD}(\mathrm{MUL}(z, p_{k+1}), \hat s_k) \quad (k = K-2, \dots, 1)
 with $r' = 2^{j+1}r$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z,
 p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$. A power of two multiplies every part.
 
-\paragraph{The functions} For $|x_0| < u^{n/2}$, SIN$_n(x) = x$, COS$_n(x) = 1$ and TAN$_n(x) = x$. Otherwise, with $(q, r)
+\parhead{The functions} For $|x_0| < u^{n/2}$, SIN$_n(x) = x$, COS$_n(x) = 1$ and TAN$_n(x) = x$. Otherwise, with $(q, r)
 = \mathrm{RED}(x)$, $Y_{\rm s} = \mathrm{SINR}(r)$ and $Y_{\rm c} = \mathrm{COSR}(r)$, SIN$_n$ returns $Y_{\rm s}$,
 $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$ for $q = 0, 1, 2, 3$, COS$_n$ returns $Y_{\rm c}$, $-Y_{\rm s}$, $-Y_{\rm c}$,
 $Y_{\rm s}$, and TAN$_n$ returns $2^{-3j-3}\mathrm{DIV}(2^{3j+3}Y_{\rm s}, Y_{\rm c})$ for even $q$ (unscaled for
@@ -50,7 +50,7 @@ at their top, results next to multiples of $\cpi/2$ and arguments up to $2^{52}$
 skip the correction of $k$ mismatch (\texttt{trig\_bits.py}).
 
 \begin{lemma}\label{lem:red}
-Assume~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$, and let $(q, r) = \mathrm{RED}(x)$.
+Under Assumption~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$, and let $(q, r) = \mathrm{RED}(x)$.
 Then $|k| < 0.64\cdot2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\cpi/2$ and $E_{\cpi} = |k|\,2^{-1217}$:
 \begin{enumerate}
 \item[(a)] if $k = 0$, $r = x$ and $|r| \le 0.785399$;
@@ -86,11 +86,11 @@ and $2^{-1074} \le 2^{-67}u^{n/2}$ for $n \le 38$: in bucket $j \ge 1$, where $|
 2^{-j}(1 + 4u) \le \bar r_j$, and for $|r_0| < u^{n/2}$, $|r_{\rm e}| \le u^{n/2}(1 + 4u) \le \bar r_{\min}$.
 \end{proof}
 
-\paragraph{Horner's rule} The evaluation, and that of the exponential and the logarithm, sums a series by Horner's
+\parhead{Horner's rule} The evaluation, and that of the exponential and the logarithm, sums a series by Horner's
 rule on expansions. Its bounds are the $G_{\rm OP}$ of Lemma~\ref{lem:g} applied in turn.
 
 \begin{lemma}\label{lem:horner}
-Assume~\ref{as:fp} and (A3). Let the $n$-part $z$, with part bounds $\pi^z$, approximate a real $z_{\rm e}$, with
+Under Assumption~\ref{as:fp} and (A3), let the $n$-part $z$, with part bounds $\pi^z$, approximate a real $z_{\rm e}$, with
 $|z_{\rm e}| \le \bar z$ and $|z - z_{\rm e}| \le \epsilon_z\bar z$. For $k_0 \le k \le d$ let the $n$-part $F_k$ be
 within $\phi_k$ of a real $f_k$, let $p_d = F_d$ and
 \[
@@ -149,7 +149,7 @@ bucket $|r_0| < u^{n/2}$, $\delta_{\rm S} = \bar r_{\min}^2/(6 - \bar r_{\min}^2
 r_{\min}^2/(2\cos_- \bar r_{\min})$ with $\bar r_{\min} = u^{n/2}(1 + 2^{-50})$.
 
 \begin{lemma}\label{lem:sincosr}
-Assume~\ref{as:fp} and (A3), and let $r$ be in bucket $j$ with $|r| \le \bar r_j$ and $|r_i| \le
+Under Assumption~\ref{as:fp} and (A3), let $r$ be in bucket $j$ with $|r| \le \bar r_j$ and $|r_i| \le
 \bar a_i|r|$. Then $|\textrm{SINR}(r) - \sin r| \le \delta_{\rm S}|\sin r|$ and $|\textrm{COSR}(r) - \cos r| \le
 \delta_{\rm C}\cos r$, and the parts of SINR$(r)$ and COSR$(r)$ are at most $\psi_{\rm s}|r|$ and $\psi_{\rm c}$.
 \end{lemma}
@@ -177,7 +177,7 @@ and $\psi_{{\rm c},i} \le (\theta_ju)^i\lambda_{\rm c}$ for $i \ge 1$, where $\l
 u^n + \kdiv u^{n+1}$ with $\kdiv$ that of Theorem~\ref{thm:t6} at $\theta = \theta_j$, which needs $\theta_ju \le 1/4$.
 
 \begin{theorem}\label{thm:trig}
-Assume~\ref{as:fp} with $p = 53$ and (A3), $n \le 38$ even, and let $x$ be finite with $|x_0| \le 2^{52}$
+Under Assumption~\ref{as:fp} with $p = 53$ and (A3), $n \le 38$ even, let $x$ be finite with $|x_0| \le 2^{52}$
 satisfying $H(2)$ and, where the $k$ of RED is not zero, $|x - k\cpi/2| \ge 2^{pn-1074}$. Let
 $E_{\cpi} = |k|\,2^{-1217}$ and $\epsilon = 1 + 2u^n$. For each bucket $j$, let
 \begin{align*}
