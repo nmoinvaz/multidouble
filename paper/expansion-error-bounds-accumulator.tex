@@ -14,15 +14,15 @@ $k^{(r)} = k(k+1)\cdots(k+r-1)$, $k^{(0)} = 1$, for the rising factorial.
 
 \begin{lemma}\label{lem:acc}
 Assume~\ref{as:fp}. Let $K$ deposits be made into zero levels, the $k$-th with $|t^{(k)}_l| \le \tau_l\mu_k$ ($0 \le l
-\le n$, $\tau_n = 0$ when $N = n - 1$), let $W = \sum_k \mu_k$, and assume $(n+1)Ku < 1$, $\beta = 1/(1 - (n+1)Ku)$.
+\le n$, $\tau_n = 0$ when $N = n - 1$), let $W = \sum_k \mu_k$, and assume $(n+1)Ku < 1$, $\Gamma = 1/(1 - (n+1)Ku)$.
 \begin{enumerate}
 \item[(a)] At every moment up to the end of the $k$-th deposit, $|s_m| \le S_m(k)$, where
 \[
-S_m(k) = \beta W\sum_{l=0}^{m}\binom{m}{l}\tau_l\,(\beta u)^{m-l}\,k^{(m-l)}.
+S_m(k) = \Gamma W\sum_{l=0}^{m}\binom{m}{l}\tau_l\,(\Gamma u)^{m-l}\,k^{(m-l)}.
 \]
 \item[(b)] At the end, $\sum_m s_m = \sum_{k,l} t^{(k)}_l - E_{\rm lev}$ with
 \[
-|E_{\rm lev}| \le \bar E_{\rm lev} = W\sum_{l=0}^{n}\binom{n+1}{l}\tau_l\,(\beta u)^{n+1-l}\,K^{(n+1-l)}.
+|E_{\rm lev}| \le \bar E_{\rm lev} = W\sum_{l=0}^{n}\binom{n+1}{l}\tau_l\,(\Gamma u)^{n+1-l}\,K^{(n+1-l)}.
 \]
 \end{enumerate}
 \end{lemma}
@@ -38,14 +38,14 @@ into it, deposits and carries from level $m-1$, minus what left it, so
 \hat S_m(k) \le \tau_m W + G_{m-1}(k) + G_m(k), \\
 G_m(k) \le (m+1)u\sum_{j \le k}\hat S_m(j) \le (m+1)uk\,\hat S_m(k).
 \end{gather*}
-Since $(m+1)uk \le (n+1)uK$, $\hat S_m(k) \le \beta(\tau_mW + G_{m-1}(k))$. We show $\hat S_m(j) \le S_m(j)$ for all
-$j$ by induction on $m$. For $m = 0$ it reads $\hat S_0 \le \beta\tau_0W$. For $m \ge 1$, by the hypothesis for
+Since $(m+1)uk \le (n+1)uK$, $\hat S_m(k) \le \Gamma(\tau_mW + G_{m-1}(k))$. We show $\hat S_m(j) \le S_m(j)$ for all
+$j$ by induction on $m$. For $m = 0$ it reads $\hat S_0 \le \Gamma\tau_0W$. For $m \ge 1$, by the hypothesis for
 $m - 1$ and $\sum_{j=1}^{k} j^{(r)} = k^{(r+1)}/(r+1)$,
 \begin{align*}
-G_{m-1}(k) &\le mu\,\beta W\sum_{l=0}^{m-1}\binom{m-1}{l}\tau_l(\beta u)^{m-1-l}\frac{k^{(m-l)}}{m-l} \\
-&= W\sum_{l=0}^{m-1}\binom{m}{l}\tau_l\,\beta^{m-l}u^{m-l}k^{(m-l)},
+G_{m-1}(k) &\le mu\,\Gamma W\sum_{l=0}^{m-1}\binom{m-1}{l}\tau_l(\Gamma u)^{m-1-l}\frac{k^{(m-l)}}{m-l} \\
+&= W\sum_{l=0}^{m-1}\binom{m}{l}\tau_l\,\Gamma^{m-l}u^{m-l}k^{(m-l)},
 \end{align*}
-and $\beta(\tau_mW + G_{m-1}(k)) = S_m(k)$. This is (a). For (b), every operation but the roundings at level $n$ is
+and $\Gamma(\tau_mW + G_{m-1}(k)) = S_m(k)$. This is (a). For (b), every operation but the roundings at level $n$ is
 exact, so $E_{\rm lev}$ is the sum of those rounding errors, and $|E_{\rm lev}| \le G_n(K) \le (n+1)u\sum_{k \le K}
 S_n(k)$; the same sum identity and $\binom{n}{l}\frac{n+1}{n+1-l} = \binom{n+1}{l}$ give (b).
 \end{proof}
@@ -56,7 +56,7 @@ receive $K$ terms, each ADDPROD$(a, b)$ or ADDX$(a)$ with operands satisfying $H
 \le (\theta u)^l|a_0|$ with any $\theta \ge 1$ serves), and let $x = $ FINISH. Let
 $Z$ be the exact sum of the terms, $\mu_k = |a_0b_0|$ or $|a_0|$, $W = \sum_k\mu_k$, $\tau_l = \max(L_lu^l,
 \rho^l)$ with the $L_l$ of Theorem~\ref{thm:t2} for MUL ($\tau_l = \rho^l$, $\tau_n = 0$ if all terms are ADDX), and
-$E_{\rm prod} = (R + \Delta)u^{n+1}W$ with the $R$, $\Delta$ of MUL ($0$ if all terms are ADDX). Then
+$E_{\rm prod} = (R_n + \Delta_n)u^{n+1}W$ with the $R_n$, $\Delta_n$ of MUL ($0$ if all terms are ADDX). Then
 \[
 \Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + (1 + u^n)(\bar E_{\rm lev} + E_{\rm prod}) + \Phi,
 \]
@@ -65,14 +65,14 @@ bound of Lemma~\ref{lem:g}(a) for the last ADDF of FINISH. The part bounds come 
 FINISH: $r^{(0)}$ has part bounds $(S_0(K), 0, \dots, 0)$, and the $l$-th ADDF takes those of $r^{(l-1)}$, the bound
 $S_l(K)$ of $s_l$, $\lambda_0$ the first part bound plus $S_l(K)$, and $\bar Z = \sum_{m \le l}S_m(K)$. In particular, for $Ku$ bounded away from $1/(n+1)$,
 \begin{gather*}
-\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + u\bigl(\tau_0\beta^{n+1}K^{(n+1)} + O(K^n)\bigr)\,u^nW, \\
+\Bigl|Z - \sum_k x_k\Bigr| \le u^n|Z| + u\bigl(\tau_0\Gamma^{n+1}K^{(n+1)} + O(K^n)\bigr)\,u^nW, \\
 \tau_0 \le 1 + u.
 \end{gather*}
 \end{theorem}
 
 \begin{proof}
 By Theorem~\ref{thm:t2}(a) the levels of a product satisfy $|t_l| \le L_lu^l\mu_k$, and by (b) they sum to $a b$
-up to $(R+\Delta)u^{n+1}\mu_k$; the parts of an ADDX term satisfy $|a_l| \le \rho^l\mu_k$ and sum to $a$. So
+up to $(R_n+\Delta_n)u^{n+1}\mu_k$; the parts of an ADDX term satisfy $|a_l| \le \rho^l\mu_k$ and sum to $a$. So
 Lemma~\ref{lem:acc} applies, and $S = \sum_m s_m$ satisfies $|Z - S| \le \bar E_{\rm lev} + E_{\rm prod}$.
 
 FINISH loses only in its last ADDF. By induction $r^{(l)}$ has at most $l+1$ nonzero parts: the $\TwoSum$ chain of
@@ -120,12 +120,12 @@ the last bit of $t_l$ as long as the levels it passes are coarser, so it can rou
 below $\ulp(s_m)$; with the sizes of the construction, for $K$ well below $(m!)^{1/m}u^{-2/m}$ (about $3.7 \cdot 10^4$ at $m = 8$) only the chains with $l \ge m - 2$
 qualify. This suggests at most two
 or three roundings per level and deposit, which would lower the bound by about $(n+1)!/3^{n+1}$; it is not proven. At
-$n = 2$, $p = 8$ and $K = 64$, where $\beta^{n+1} = 64$, the construction errs by $0.375\,(Ku)^{n+1}W/(n+1)!$, which
+$n = 2$, $p = 8$ and $K = 64$, where $\Gamma^{n+1} = 64$, the construction errs by $0.375\,(Ku)^{n+1}W/(n+1)!$, which
 is $0.00092$ of the bound (\texttt{acc\_check.py}).
 
 Ogita, Rump and Oishi's SumK~\cite{ORO05}, in its vertical form (their Algorithm~4.12), is the same cascade for summands
 that are single floating-point numbers, rounded at the end to one number. The second term of their bound, $\gamma_{2N-2}^{J}\sum|p_i|$
-($N$ summands, $J$ levels), has the same growth in $N$, and they note that its factors are conservative. Their DotK
+($N$ summands, $J$ levels, and their $\gamma_k = k\,\mathrm{eps}/(1 - k\,\mathrm{eps})$ with $\mathrm{eps} = u$), has the same growth in $N$, and they note that its factors are conservative. Their DotK
 splits each product of two floating-point numbers into two summands for SumK, with the bound $(\mathrm{eps} +
 2\gamma_{4N-2}^2)|x^\top y| + \gamma_{4N-2}^J|x^\top||y|$ (their Proposition~5.11), the form of Theorem~\ref{thm:acc}. The
 accumulator here deposits a term into every level, which their analysis by repeated VecSum does not cover, and returns

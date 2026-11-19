@@ -8,8 +8,8 @@ SLOPPY-MUL keeps $n$ levels $s_0, \dots, s_{n-1}$, and on them $\dep(s, l, t)$ i
 $n$: $\TwoSum$s at levels $l, \dots, n-2$, then $s_{n-1} \gets \RN(s_{n-1} + e)$. For $n$-part $a$ and $b$:
 \begin{enumerate}
 \item[(1)] $(s_j, e_{0j}) \gets \TwoProd(a_0, b_j)$ for $j \le n-2$.
-\item[(2)] $f \gets \RN(a_1b_{n-1})$, then $f \gets \RN(a_ib_{n-i} + f)$ for $i = 2, \dots, n-1$, then $f \gets
-  \RN(a_ib_{n-1-i} + f)$ for $i = 0, \dots, n-1$, each by one FMA; $s_{n-1} \gets f$.
+\item[(2)] $s_{n-1} \gets \RN(a_1b_{n-1})$, then $s_{n-1} \gets \RN(a_ib_{n-i} + s_{n-1})$ for $i = 2, \dots, n-1$,
+  then $s_{n-1} \gets \RN(a_ib_{n-1-i} + s_{n-1})$ for $i = 0, \dots, n-1$, each by one FMA.
 \item[(3)] $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n-1$.
 \item[(4)] For $i = 1, \dots, n-2$ and $j = 0, \dots, n-2-i$: $(p_{ij}, e_{ij}) \gets \TwoProd(a_i, b_j)$, $\dep(s, i+j,
   p_{ij})$, $\dep(s, i+j+1, e_{ij})$.
@@ -26,15 +26,15 @@ worst pair of its tests.
 
 \begin{theorem}\label{thm:sloppy}
 Assume~\ref{as:fp} and $n^2u < 1$, let the $n$-part operands satisfy
-$H(\theta)$, and let $M = |a_0b_0|$. For $0 \le m \le n-2$ let $\alpha_m$, $T_m$, $d_m$, $\gamma_m$ and $L_m$ be those
+$H(\theta)$, and let $M = |a_0b_0|$. For $0 \le m \le n-2$ let $\hat A_m$, $T_m$, $d_m$, $\gamma_m$ and $L_m$ be those
 of Theorem~\ref{thm:t2} for MUL, let $\Delta_n$ be that theorem's, and let $Q = n^2$,
 \begin{gather*}
-\alpha_{n-1} = n + \frac{n-1}{\theta} + (n-1)\rho, \quad d_{n-1} = \alpha_{n-1} + \gamma_{n-2}, \\
+\hat A_{n-1} = n + \frac{n-1}{\theta} + (n-1)\rho, \quad d_{n-1} = \hat A_{n-1} + \gamma_{n-2}, \\
 L_{n-1} = \frac{\theta^{n-1}d_{n-1}}{1 - Qu}, \qquad R_{\rm s} = QL_{n-1}.
 \end{gather*}
 \begin{enumerate}
 \item[(a)] The levels of SLOPPY-MUL have exactly $T_m$ $\TwoSum$s at level $m \le n-2$ and $Q$ roundings at level
-  $n-1$, the inputs of level $m$ total $A_m \le \alpha_m\rho^mM$ in the sense of Lemma~\ref{lem:l}, and $|s_m| \le
+  $n-1$, the inputs of level $m$ total $A_m \le \hat A_m\rho^mM$ in the sense of Lemma~\ref{lem:l}, and $|s_m| \le
   L_mu^mM$ at every moment, for $0 \le m \le n-1$.
 \item[(b)] The result $x$ of SLOPPY-MUL satisfies
   \[
@@ -53,17 +53,17 @@ $\theta = 2$, of which $\Delta_8u$ is at most $2^{-50.41}$ and $2^{-41.41}$.
 \begin{proof}
 \emph{The program.} Lemma~\ref{lem:l} and its proof use $n$ only as the index of the level that rounds, so they hold
 for levels $s_0, \dots, s_{n-1}$ with $n-1$ in place of $n$. Step (1) assigns to zero levels. Level $n-1$ is zero
-until step (2) stores $f$, and no other operation touches it while the chain runs, so the chain gives the same
+until step (2), and no other operation touches it while the chain of step (2) runs, so the chain gives the same
 $s_{n-1}$ as the roundings $s_{n-1} \gets \RN(s_{n-1} + y)$ of kind (iii) with the exact products $y = a_ib_j$, the
 first of them $\RN(0 + a_1b_{n-1})$. Steps (3) and (4) are deps.
 
 \emph{Inputs.} By $H(\theta)$, $|a_ib_j| \le \rho^{i+j}M$. For $m \le n-2$, level $m$ receives what it receives in MUL:
 the $m+1$ products $p_{ij}$ with $i+j = m$, by assignment for $i = 0$ and by dep otherwise, and the $m$ errors $e_{ij}$
-with $i+j = m-1$; so $A_m \le \alpha_m\rho^mM$, as in the proofs of Lemma~\ref{lem:g} and Theorem~\ref{thm:t2}. Level $n-1$ receives in the
+with $i+j = m-1$; so $A_m \le \hat A_m\rho^mM$, as in the proofs of Lemma~\ref{lem:g} and Theorem~\ref{thm:t2}. Level $n-1$ receives in the
 chain the $n$ products of order $n-1$, at most $\rho^{n-1}M$ each, and the $n-1$ products of order $n$, at most
 $\rho^nM$ each, and by the deps started there the $n-1$ errors $e_{ij}$ with $i+j = n-2$, one of step (3) and $n-2$ of
 step (4), each at most $u\rho^{n-2}M = \rho^{n-1}M/\theta$ by Lemma~\ref{lem:facts}(c). So $A_{n-1} \le
-\alpha_{n-1}\rho^{n-1}M$.
+\hat A_{n-1}\rho^{n-1}M$.
 
 \emph{Counts.} A dep started at level $l \le n-2$ performs one $\TwoSum$ at each level $l, \dots, n-2$ and then rounds
 the carry out of level $n-2$ into level $n-1$. A dep started at level $n-1$ is one rounding there. The deps started at

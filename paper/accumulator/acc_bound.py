@@ -5,10 +5,10 @@ parts) after K deposits, in exact rationals.
 
 with W = sum of mu_k (|a_0| for add, |a_0 b_0| for add_prod) and
     kappa_acc u^(n+1) = (1 + u^n)(E_lev + E_prod) + Phi_fin,
-    E_lev   = sum_{l=0}^{n} C(n+1, l) tau_l (beta u)^(n+1-l) K^(n+1-l rising) W,   beta = 1/(1 - (n+1) K u),
-    E_prod  = (R + Delta) u^(n+1) W for add_prod (Theorem thm:t2(b) of the appendix), 0 for add,
+    E_lev   = sum_{l=0}^{n} C(n+1, l) tau_l (Gamma u)^(n+1-l) K^(n+1-l rising) W,   Gamma = 1/(1 - (n+1) K u) (beta below),
+    E_prod  = (R_n + Delta_n) u^(n+1) W for add_prod (Theorem thm:t2(b) of the appendix), 0 for add,
     Phi_fin = the second-order term of the last od + f64 of finish (Lemma lem:g(a) of the appendix, from the level bounds
-              S_m(K) = beta sum_{l<=m} C(m, l) tau_l (beta u)^(m-l) K^(m-l rising) W).
+              S_m(K) = Gamma sum_{l<=m} C(m, l) tau_l (Gamma u)^(m-l) K^(m-l rising) W).
 tau_l bounds a deposit's level l in units of mu_k: (theta u)^l for add, L_l u^l (Theorem thm:t2(a)) for add_prod.
 
 usage: acc_bound.py p n theta mode K...   (mode add or prod); prints kappa_acc u, E_lev / (u^n W) and the parts,

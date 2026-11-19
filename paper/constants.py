@@ -8,7 +8,7 @@ from fractions import Fraction as Fr
 from rounding import lg2_up
 
 def level_consts(op, n, theta, u):
-    """(alpha, T, Q, Delta_coef): alpha_m (m = 0..n), TwoSums per level T_m (m < n), roundings at level n Q,
+    """(alpha, T, Q, Delta_coef): the paper's A-hat_m (m = 0..n, alpha here), TwoSums per level T_m (m < n), roundings at level n Q,
     and the dropped-products coefficient (Delta <= coef u^(n+1) M)."""
     th = Fr(theta)
     if op == 'mul':
@@ -27,7 +27,8 @@ def level_consts(op, n, theta, u):
     return alpha, T, Q, drop
 
 def consts(op, n, theta, u):
-    """L_m (|c_m| <= L_m u^m M), R (formation roundings <= R u^(n+1) M), Delta, Lambda, beta, kappa"""
+    """L_m (|c_m| <= L_m u^m M), the paper's R_n (formation roundings <= R_n u^(n+1) M) and Delta_n, Lambda, the factor
+    (1+u)^(n-1)/(1-u) (beta here) and kappa"""
     th = Fr(theta)
     if op == 'add_f':
         L = [(1 + u) * sum(th ** k for k in range(m + 1)) for m in range(n)] + [sum(th ** k for k in range(n))]
@@ -80,7 +81,7 @@ if __name__ == '__main__':
 def theta_out(op, n, theta, u):
     """Theorem 17: an upper bound of theta' - 1, where the result of the operation satisfies H(theta'), or None if
     xi <= 0. theta'^i = 1 + delta_i with delta_i = (1+u)^i - 1 + i u (1+u)^(n+i-1) Lambda / xi and
-    xi = (zeta - (R + Delta) u^(n+1) - u^2 (1+u)^(n-1) Lambda)/(1+u); the i-th root is bounded by
+    xi = (zeta - (R_n + Delta_n) u^(n+1) - u^2 (1+u)^(n-1) Lambda)/(1+u); the i-th root is bounded by
     (1 + delta_i)^(1/i) <= 1 + delta_i / i, in exact rationals."""
     C = consts(op, n, theta, u)
     rho = Fr(theta) * u
