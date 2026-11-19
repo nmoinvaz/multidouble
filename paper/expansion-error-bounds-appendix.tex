@@ -296,7 +296,7 @@ as an operand $|c|$ stands for the magnitudes of the parts of a constant expansi
 degree one in the operands' part bounds, $\lambda$ and $\bar Z$ together, so an operation on operands scaled exactly by
 powers of two has the scaled bounds.
 
-\section{Error bounds for the operations}
+\section{Error bounds for the operations}\label{sec:bounds}
 
 \begin{theorem}\label{thm:t2}
 Assume~\ref{as:fp} and (A3), and let the $n$-part operands
@@ -453,7 +453,7 @@ and $q_0 = \RN(r^{(0)}_0/b_0)$, and for $k = 1, \dots, n$ let $r^{(k)} = \mathrm
 \RN(r^{(k)}_0/b_0)$; return $x = \Ren_n(q_0, \dots, q_n)$. Here $\mathrm{SMF}(r, b, q)$ forms $(p_i, \pi_i) \gets
 \TwoProd(b_i, q)$ and $(s_i, t_i) \gets \TwoSum(r_i, -p_i)$ for $i < n$, sets $s_n \gets \RN(t_{n-1} - \pi_{n-1})$,
 performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -\pi_l)$ for $l = 0, \dots, n-2$, and returns $\Ren_n(s)$. At $n = 8$ and $p =
-53$ this is multidouble's division (identical bits on 645 inputs).
+53$ this is multidouble's division (identical bits on the inputs of \texttt{campaign.py}).
 
 \begin{theorem}\label{thm:t6}
 Assume~\ref{as:fp} and $(2n-1)u < 1$, and let $a$ and $b$ satisfy $H(\theta)$
@@ -532,7 +532,7 @@ $\theta$, so the proof carries part bounds $P^{(k)}$ relative to $|a_0|$ through
 Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposition~\ref{prop:sharp}(d)).
 \end{remark}
 
-\section{The square root}
+\section{The square root}\label{sec:sqrt}
 
 SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start: $s = 2^{\lfloor\log_2\RN(\sqrt{x_0})\rfloor}$, $a = x/s^2$
 (exact), $h = a/2$, $r = (\RN(1/\RN(\sqrt{a_0})), 0, \dots, 0)$; $J$ times $m = \mathrm{MUL}(r, r)$, $g =
@@ -713,7 +713,7 @@ error is $\sum_{k \ge n}u^k = u^n/(1-u) = u^n|a/b|$.
 \begin{remark}
 In these examples the exact sum or product has an $n$-part representation with a much smaller error (the greedy one),
 so the loss of $u^n$ is the renormalization's: every step of its second pass emits, and each emitted error is as large
-as the rounding allows. Random inputs at $n = 8$ give errors below $0.01\,u^8$ in multidouble's tests; the worst case of each of the four operations is $u^8|Z|(1 - O(u))$, $1/64$ unit of
+as the rounding allows. Dense random operands at $n = 8$ err by at most $0.0064\,u^8|Z|$ (Section~\ref{sec:comp}); the worst case of each of the four operations is $u^8|Z|(1 - O(u))$, $1/64$ unit of
 $2^{-418}$.
 \end{remark}
 

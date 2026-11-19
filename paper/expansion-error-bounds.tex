@@ -442,8 +442,8 @@ u, \dots, u^{n-1})$, and so err by $u^n|Z|$ up to a factor $1 - O(u)$. The produ
 similar input.
 \end{proposition}
 
-Random inputs never come near this. At $n = 8$ in binary64, random operands give errors below $0.01\,u^8|Z|$ for every
-operation in multidouble's tests. The error is about half an ulp of the result's last part, and a random result's last
+Random inputs never come near this. At $n = 8$ in binary64, operands with dense random parts err by at most
+$0.0064\,u^8|Z|$ in the five operations (Section~\ref{sec:comp}). The error is about half an ulp of the result's last part, and a random result's last
 part is far smaller than the ladder allows. Multidouble's octo-double~\cite{md} returns exactly $\pm(1, u, \dots, u^7)$
 on the product, sum and quotient inputs.
 
@@ -518,8 +518,8 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 \section{Consequences and limits}
 
 \begin{itemize}
-\item \textbf{Testing.} A library tested only on random inputs is not tested against $u^n$. At $n = 8$, random
-  errors stay below $0.01\,u^8|Z|$. The inputs of Proposition~\ref{prop:worst} reach the bound exactly and make sharp
+\item \textbf{Testing.} A library tested only on random inputs is not tested against $u^n$. At $n = 8$, dense random
+  operands err by at most $0.0064\,u^8|Z|$. The inputs of Proposition~\ref{prop:worst} reach the bound exactly and make sharp
   tests, and those of Table~\ref{tab:inputs} reach about $u^8|Z|$ for the square root and the elementary functions.
 \item \textbf{Renormalization.} The second pass should use $\TwoSum$, or $\FastTwoSum$ after a test that
   $|\acc| \ge |v_j|$, which gives the same bits.
@@ -547,28 +547,47 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 
 \section{Computations}\label{sec:comp}
 
-The constants were evaluated in exact rational arithmetic (\texttt{constants.py}, \texttt{div\_consts.py},
-\texttt{sqrt\_consts.py}). A reviewer who had not seen the checks recomputed them from the definitions with separate
-code, and the values agree to the digits given.
+The constants are evaluated in exact rational arithmetic and printed rounded up (\texttt{constants.py},
+\texttt{div\_consts.py}, \texttt{sqrt\_consts.py}, \texttt{acc\_bound.py}, \texttt{sloppy\_consts.py},
+\texttt{trig\_consts.py}, \texttt{explog\_consts.py}); the long recursions round their intermediate values up to
+200-bit dyadic numbers. A second set of programs (\texttt{review/}), written from the text of the appendix before its
+author read those scripts and sharing none of their code, recomputes Table~\ref{tab:kappa}, $\kdiv$, the square root's
+bound, and the constants of Theorems~\ref{thm:sloppy}, \ref{thm:trig}, \ref{thm:exp} and~\ref{thm:log} and of
+Lemma~\ref{lem:lnb}, rounding up at 300 bits. It evaluates every bucket of Theorem~\ref{thm:trig} and the cases of
+Theorems~\ref{thm:exp} and~\ref{thm:log} as their statements define them, and agrees with every digit quoted in this
+paper: its values are $3.163167393\,u^8$ and $6.418350521\,u^8$ for the sine, cosine and tangent,
+$3.660060455\,u^8$ for the exponential, $9.925819\,u^8$ and $2^{-509.0880}$ for the logarithm, and $5.914423\,u$ for
+the binary64 logarithm. Each program has a control that must fail.
 
-Every statement was also tested by an independent emulator, written from multidouble's source without access to the
-proofs. It reproduces multidouble's octo-double bit for bit on 10,000 inputs of each operation but the square root. It ran the algorithms
-in exact arithmetic at precisions 5 to 10 with 5 to 8 parts, over exhaustive families of ladders, gaps, zero parts,
-cancelling pairs and shuffled orders, and at random and by hill climbing, about 37 million renormalizations in all,
-and at $p = 53$. No statement failed. The bounds of Theorem~\ref{thm:renorm} and Proposition~\ref{prop:worst} were
-reached with ratio 1, and each check fired on a halved bound or a deliberately broken algorithm. The example of
-Section~\ref{sec:example} was run on the same emulator (\texttt{example\_n3.py}). The emulator's square root matches
-multidouble's bit for bit on 2000 inputs with gaps, zero parts and parts at the top of the ladder. A control that skips
-its last step mismatches on every one, and another that skips the two-sum of the leading parts mismatches on 30
-(\texttt{sqrt\_bits.py}).
+Theorems~\ref{thm:t1}, \ref{thm:t3} and~\ref{thm:t6}, Corollary~\ref{cor:closure} and Proposition~\ref{prop:sharp} are
+tested on an emulator of the algorithms in exact arithmetic, at any precision and number of parts, written from
+multidouble's source (\texttt{fpemu.py}). The tests are those of \texttt{campaign.py}:
+\begin{itemize}
+\item At $p = 53$ and $n = 8$ the emulator returns multidouble's bits on 10,000 inputs of each of ADD, ADDF, MULF, MUL
+  and DIV: operands with dense parts, parts at the top of the ladder, gaps and zero parts, and cancelling pairs for
+  ADD. Every error is within its bound, at most $0.0073$ of it. Every product, and every sum of operands whose leading
+  parts have one sign, is on the ladder. Operands with dense random parts err by at most $0.0064\,u^8|Z|$. An emulator
+  with one error term dropped mismatches on 182 to 300 of 300 inputs.
+\item At $p = 3$ and $n = 3$ the renormalization of every four terms of a family of 61 values, in every order,
+  7,036,411 tuples, loses at most $\min_k B_k$, only after $n - 1$ emissions, and exactly $\min_k B_k$ on 40,600 of
+  them. Half the bound fails on 281,138. Every three terms of 81 values are renormalized exactly. A second pass with
+  $\FastTwoSum$ throughout loses more on 948,874 of the four-term tuples.
+\item At $(p, n) = (5, 3)$ and $(7, 4)$ the five operations stay within Theorems~\ref{thm:t3} and~\ref{thm:t6} on
+  1,166,592 and 352,000 pairs of operands whose parts are at the edge of the ladder, just below $u^i$, far below, or
+  zero, with both signs. With a $\TwoSum$ whose error has the wrong sign, most pairs break the bound.
+\item The inputs of Proposition~\ref{prop:sharp} give its errors exactly for $n = 2$ to $8$, where half the bound
+  fails, and multidouble returns $\pm(1, u, \dots, u^7)$ on them at $n = 8$.
+\end{itemize}
+The example of Section~\ref{sec:example} runs on the same emulator (\texttt{example\_n3.py}). The emulator's square
+root matches multidouble's bit for bit on 2000 inputs with gaps, zero parts and parts at the top of the ladder. A
+control that skips its last step mismatches on every one, and another that skips the two-sum of the leading parts
+mismatches on 30 (\texttt{sqrt\_bits.py}).
 
 The accumulator's bound was evaluated in exact rational arithmetic and tested the same way (\texttt{accumulator/}):
 the constructed inputs of Proposition~\ref{prop:acc-low} at $p = 8$ to $14$ and at $p = 53$, and random sums, all within
 the bound, with controls that fire on a bound with the powers of $K$ lowered by one, on a bound linear in $K$, and on
 an accumulator with one level's error dropped. Multidouble returns the same eight parts as the emulator on the inputs
-of Proposition~\ref{prop:acc-low}. A reviewer who had seen neither these scripts nor their outputs checked the
-section with its own emulator. Its model of the accumulator matches multidouble bit for bit, the bound held on
-random, sharp and hill-climbed inputs at precisions 8 to 53, and its controls fired.
+of Proposition~\ref{prop:acc-low}.
 
 The constants of the exponential and the logarithm were evaluated in exact rational arithmetic
 (\texttt{explog\_consts.py}), which also samples the convexity that the logarithm's chords use, on every case at $k = 0$
@@ -579,13 +598,7 @@ parts at the top of the ladder, and for the logarithm within 3 ulps of the large
 within the bounds against Python's correctly rounded exp and ln at 1300 digits. Controls that halve the Taylor degree or
 move the logarithm's start by $2^{-20}$ mismatch and break the bounds. The same script hooks every product, fused
 multiply-add and quotient of the steps to find which leave the normal range, and how far the closest clears it
-(Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor degree that must find some. A reviewer's code,
-written from an earlier text of the appendix and sharing no code with \texttt{explog\_consts.py} (\texttt{review/}),
-recomputes the largest cases of Theorems~\ref{thm:exp} and~\ref{thm:log}, $3.66006045\,u^8$ and $9.925819\,u^8$, rounded
-to nearest, which the script's values rounded up, $3.660061\,u^8$ and $9.925819\,u^8$, match; its absolute term,
-$2^{-509.17}$, is that of the earlier start, which the script's $2^{-509.08}$ now exceeds. It models neither the degree
-of step (3), the cases chosen by $U$, the scaled products and their losses, nor step (5) as it now stands, so the
-agreement is of the largest cases' digits, not of every step.
+(Appendix, \emph{Which runs meet} (A2$'$)), with a control at full Taylor degree that must find some.
 
 The inputs of Table~\ref{tab:inputs} were checked from scratch (\texttt{table1\_inputs.py}): the emulator's results
 on them, the exact values enclosed by code that shares nothing with the algorithms (an integer square root, Taylor series
@@ -601,9 +614,10 @@ the logarithm the same way against a reference accurate to $2^{-1600}$, which is
 \section*{How this work was done}
 
 Nathan Moinvaziri posed the problem and directed the work. Claude, an AI model made by Anthropic, drafted the
-statements and proofs. Two further Claude instances checked them independently: one refereed the proofs and the prior
-work, and the other tested every statement in exact arithmetic without reading the proofs. A third refereed the
-section on sums of products and tested it with its own code.
+statements and proofs. Further Claude instances checked them independently: one refereed the proofs and the prior
+work, one tested the statements in exact arithmetic without reading the proofs, one refereed the section on sums of
+products, and one recomputed the constants of Appendices~\ref{sec:bounds} to~\ref{sec:sqrt} and~\ref{sec:sloppy}
+to~\ref{sec:explog} from the text alone with programs of its own (\texttt{review/}).
 
 \appendices
 \input{expansion-error-bounds-appendix}
