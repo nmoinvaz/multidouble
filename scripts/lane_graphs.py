@@ -10,7 +10,6 @@ usage: cargo run --release --example lane_speedups > docs/lane-speedups.jsonl
 import argparse
 import json
 import os
-import subprocess
 
 from data_graphs import (GRID, INK, INK_SOFT, SERIES, SHAPES, Svg, axes, better_hint, callout, caption,
                          dodge_markers, fmt_pct, footnote, host_specs, marker, text_width)
@@ -25,8 +24,8 @@ lines = [json.loads(line) for line in open(os.path.join(DOCS, "lane-speedups.jso
 meta, rows_in = lines[0], lines[1:]
 ISA = {"neon": "NEON", "avx512": "AVX-512", "avx2": "AVX2", "sse2": "SSE2", "portable": "the portable backend"}
 isa = ISA.get(meta["isa"], meta["isa"])
-commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
-                        cwd=DOCS).stdout.strip()
+# the measured code: the crate's version and the date of the run (a commit hash would not survive a rebase merge)
+source = f"multidouble main of {meta.get('date', '?')} (Cargo.toml {meta.get('version', '?')})"
 families = ["double-double", "quad-double", "octo-double"]
 short = {"double-double": "DD → DV", "quad-double": "QD → QV", "octo-double": "OD → OV"}
 groups = [("", ["exp", "ln"]), ("1/4 <= |x| < 1", ["sin", "cos", "tan", "sin_cos"]),
@@ -112,7 +111,7 @@ for key, label, dx, dy in ((best, "largest gain", 36, 22), (worst, "smallest gai
     callout(svg, xx, yy, label, dx=dx, dy=-16 if ys[key[1:]] == first_row else dy)
 
 body_bottom = top + ph + 44
-height = footnote(svg, [f"multidouble {commit}", "examples/lane_speedups.rs"], host_specs(), args.warn,
+height = footnote(svg, [source, "examples/lane_speedups.rs"], host_specs(), args.warn,
                   body_bottom, repo_url=REPO)
 with open(os.path.join(DOCS, "lane-speedups.svg"), "w") as f:
     f.write(svg.finish(height))

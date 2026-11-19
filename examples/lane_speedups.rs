@@ -124,11 +124,31 @@ macro_rules! family {
     }};
 }
 
+/// today's UTC date as yyyy-mm-dd, from the days since 1970-01-01 (Hinnant's civil_from_days)
+fn utc_date() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let z = (secs / 86400) as i64 + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 fn main() {
-    // the run's settings first, for the graph's subtitle
+    // the run's settings first, for the graph's subtitle and footnote: a commit hash would not survive a rebase merge,
+    // so the crate's version and the date name what was measured
     println!(
-        r#"{{"isa": "{}", "values": {N}, "runs": {RUNS}}}"#,
-        multidouble::simd::isa()
+        r#"{{"isa": "{}", "values": {N}, "runs": {RUNS}, "version": "{}", "date": "{}"}}"#,
+        multidouble::simd::isa(),
+        env!("CARGO_PKG_VERSION"),
+        utc_date()
     );
     family!(
         "double-double",
