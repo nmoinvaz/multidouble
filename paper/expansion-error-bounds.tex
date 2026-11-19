@@ -38,6 +38,7 @@
 \newcommand{\dep}{\mathrm{dep}}
 \newcommand{\Ren}{\mathrm{RENORM}}
 \newcommand{\kdiv}{\kappa_{\rm DIV}}
+\newcommand{\cpi}{\symup{\pi}}
 
 \makeatletter
 \let\kept@itemize\itemize \def\itemize{\@beginparpenalty\@M\kept@itemize}
@@ -77,7 +78,7 @@ allows its input terms in any order.
 
 Many computations need more precision than the hardware gives, but far less than arbitrary precision. A common answer
 is to store a number as an \emph{expansion}~\cite{Priest91}, an unevaluated sum of floating-point numbers, each much
-smaller than the one before. In binary64, $\pi$ is stored with two parts as
+smaller than the one before. In binary64, $\cpi$ is stored with two parts as
 \[
 3.141592653589793 + 1.2246467991473532 \times 10^{-16},
 \]
@@ -336,8 +337,8 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 ladder and a floating-point number $f$. $Z$ is the exact result. Each bound is a proved recursion whose constant a
 script evaluates in exact rational arithmetic and prints rounded up (Section~\ref{sec:comp}). Each bound assumes no underflow inside the run; for
 $e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
-(A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\pi/2$ that the reduction removes, and $x$ lies at
-least $2^{-650}$ from every nonzero multiple of $\pi/2$ (Theorem~\ref{thm:trig}). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
+(A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\cpi/2$ that the reduction removes, and $x$ lies at
+least $2^{-650}$ from every nonzero multiple of $\cpi/2$ (Theorem~\ref{thm:trig}). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
 those of the others are in Table~\ref{tab:inputs}, each with its error as a multiple of $u^8|Z|$ (computed).}
 \label{tab:summary}
 \small
@@ -530,10 +531,10 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 \item \textbf{Sloppy multiplication.} Dropping level $n$ and summing level $n - 1$ in plain arithmetic, as QD's
   sloppy multiplication does at four parts, raises the multiplication's bound from about $u^8|Z|$ to
   $2^{31.93}u^8|a_0b_0|$ at eight parts (Theorem~\ref{thm:sloppy}).
-\item \textbf{Elementary functions.} Built on these operations, with a reduction by $\pi/2$ to 1216 bits in exact
-  integer arithmetic and Taylor series, the sine and cosine err by at most $3.17\,u^8|f(x)| + 5|k|2^{-1217}$ and the
+\item \textbf{Elementary functions.} Built on these operations, with a reduction by $\cpi/2$ to 1216 bits in exact
+  integer arithmetic and Taylor series, the sine and cosine err by at most $3.17\,u^8$ times the result plus $5|k|2^{-1217}$, and the
   tangent by $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)|\tan x|$, with $5|k|2^{-1217} < 2^{-1163}$, for $|x_0| \le
-  2^{52}$, $x$ at least $2^{-650}$ from every nonzero multiple of $\pi/2$, and runs without underflow, which scaling
+  2^{52}$, $x$ at least $2^{-650}$ from every nonzero multiple of $\cpi/2$, and runs without underflow, which scaling
   the small reduced arguments gives for every one from $2^{-212}$ up (Theorem~\ref{thm:trig}, Remark~\ref{rem:a2}).
 \item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
   far below the one above it can make a product of two small parts underflow.

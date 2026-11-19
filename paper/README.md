@@ -45,7 +45,7 @@ python3 explog_consts.py check   # prints PASS
 python3 explog_bits.py bits 250   # 998, 1500, 748 and 750 inputs, 0 mismatches, none beyond its bound (about 2 minutes)
 python3 explog_bits.py bits 20 1 exp_half   # exp8 and expdd mismatch and break their bounds (control)
 python3 explog_bits.py bits 20 1 ln_start   # ln8 and lndd mismatch and break their bounds (control)
-python3 explog_bits.py scan 2   # 23870 inputs over every binade, no underflowing product but x_0 Lambda and the U's, the closest clearing the threshold by 48 binades (about 8 minutes)
+python3 explog_bits.py scan 2   # 23870 inputs over every binade, no underflowing product but x_0 c_r and the U's, the closest clearing the threshold by 48 binades (about 8 minutes)
 python3 explog_bits.py scan 1 full_degree   # products underflow at full Taylor degree (control)
 python3 campaign.py sharp   # prints campaign/sharp.txt, ending with PASS
 python3 campaign.py small   # prints campaign/small.txt (about 10 minutes)

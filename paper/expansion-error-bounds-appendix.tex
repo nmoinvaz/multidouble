@@ -67,8 +67,8 @@ Finally $x_k \gets \acc$. We write $\acc_j$ for $\acc$ after step $j$, and $\acc
 $\Ren_n(s)$.
 \item MULF ($b \in \F$): $(s_i, e_i) \gets \TwoProd(a_i, b)$ for $i < n$; $s_n \gets e_{n-1}$; $\dep(s, l, e_{l-1})$ for
 $l = 1, \dots, n-1$; return $\Ren_n(s)$.
-\item MUL: (1) $(s_j, e_{0j}) \gets \TwoProd(a_0, b_j)$ for $j < n$. (2) $f \gets \RN(a_1 b_{n-1})$, then $f \gets
-\RN(a_i b_{n-i} + f)$ for $i = 2, \dots, n-1$; $s_n \gets f$. (3) $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n$. (4) For
+\item MUL: (1) $(s_j, e_{0j}) \gets \TwoProd(a_0, b_j)$ for $j < n$. (2) $s_n \gets \RN(a_1 b_{n-1})$, then $s_n \gets
+\RN(a_i b_{n-i} + s_n)$ for $i = 2, \dots, n-1$. (3) $\dep(s, l, e_{0,l-1})$ for $l = 1, \dots, n$. (4) For
 $i = 1, \dots, n-1$ and $j = 0, \dots, n-1-i$: $(p_{ij}, e_{ij}) \gets \TwoProd(a_i, b_j)$, $\dep(s, i+j, p_{ij})$,
 $\dep(s, i+j+1, e_{ij})$. (5) Return $\Ren_n(s)$.
 \end{itemize}
@@ -107,8 +107,8 @@ B_k = \us^{\,n-k}|v_k| + \sum_{j=k+1}^{n} \us^{\,n+1-j}|v_j|.
 \us(1+u)^{n-j}\sigma_{j-1}\bigr)$ for $1 \le j \le n$.
 \item[(e)] If $|c_m| \le L_m u^m M$ for $0 \le m \le n$, with $M > 0$, then
 \begin{gather*}
-|E| \le u^n|S| + 2\beta_n\Lambda\,u^{n+1}M, \\
-\Lambda = \sum_{m=0}^{n} L_m, \quad \beta_n = \frac{(1+u)^{n-1}}{1-u}.
+|E| \le u^n|S| + \frac{2(1+u)^{n-1}}{1-u}\,\Lambda\,u^{n+1}M, \\
+\Lambda = \sum_{m=0}^{n} L_m.
 \end{gather*}
 \end{enumerate}
 \end{theorem}
@@ -149,7 +149,7 @@ $\TwoSum(c_{j-1}, s_j)$, so $|v_j| \le |c_{j-1}|$ and $|v_j| \le \us(|c_{j-1}| +
 \begin{align*}
 &\sum_{j=1}^n u^{n+1-j}|v_j| \\
 &\quad\le u^{n+1}M\sum_{j=1}^n (1+u)^{n-j}\sum_{m=j-1}^{n} L_m u^{m-j+1} \\
-&\quad\le u^{n+1}M(1+u)^{n-1}\sum_{m=0}^n L_m \sum_{i \ge 0} u^i = \beta_n\Lambda u^{n+1}M,
+&\quad\le u^{n+1}M(1+u)^{n-1}\sum_{m=0}^n L_m \sum_{i \ge 0} u^i = \frac{(1+u)^{n-1}}{1-u}\Lambda u^{n+1}M,
 \end{align*}
 since for fixed $m$ the exponents $m - j + 1$, $1 \le j \le \min(m+1, n)$, are distinct and nonnegative. Likewise,
 using $(m+1)u^m \le 1$ for $u \le 1/2$,
@@ -158,7 +158,7 @@ using $(m+1)u^m \le 1$ for $u \le 1/2$,
 &\le |S| + u(1+u)^{n-1}M\sum_{m=0}^n (m+1)L_m u^m \\
 &\le |S| + u(1+u)^{n-1}\Lambda M,
 \end{align*}
-so $u^n|v_0| \le u^n|S| + \beta_n\Lambda u^{n+1}M$. Adding the two bounds gives (e).
+so $u^n|v_0| \le u^n|S| + (1+u)^{n-1}\Lambda u^{n+1}M$. Adding the two bounds gives (e).
 \end{proof}
 
 \begin{remark}
@@ -300,8 +300,7 @@ powers of two has the scaled bounds.
 
 \begin{theorem}\label{thm:t2}
 Assume~\ref{as:fp} and (A3), and let the $n$-part operands
-satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and MULF let $M$, $\alpha_m$, $T_m$, $Q$ and
-$\Delta$ be
+satisfy $H(\theta)$ ($b \in \F$ arbitrary for ADDF and MULF). For MUL, ADD and MULF let $M$, $\hat A_m$, $T_m$ and $Q$ be
 \begin{center}
 \setlength{\tabcolsep}{5pt}
 {\footnotesize\setlength{\tabcolsep}{2.5pt}\begin{tabular}{lccc}
@@ -309,27 +308,26 @@ $\Delta$ be
 & MUL & ADD & MULF \\
 \midrule
 $M$ & $|a_0 b_0|$ & $|a_0| + |b_0|$ & $|a_0 b|$ \\
-$\alpha_0$ & $1+u$ & $1+u$ & $1+u$ \\
-$\alpha_m$, $0 < m < n$ & $(1+u)(m+1) + m/\theta$ & $1 + u + 1/\theta$ & $1 + u + 1/\theta$ \\
-$\alpha_n$ & $n-1 + n/\theta$ & $1/\theta$ & $1/\theta$ \\
+$\hat A_0$ & $1+u$ & $1+u$ & $1+u$ \\
+$\hat A_m$, $0 < m < n$ & $(1+u)(m+1) + m/\theta$ & $1 + u + 1/\theta$ & $1 + u + 1/\theta$ \\
+$\hat A_n$ & $n-1 + n/\theta$ & $1/\theta$ & $1/\theta$ \\
 $T_m$ & $m(m+1)$ & $m$ & $m$ \\
 $Q$ & $n^2 + n - 1$ & $n-1$ & $n-1$ \\
-$\Delta$ & $\Delta_n$ & $0$ & $0$ \\
 \bottomrule
 \end{tabular}}
 \end{center}
-with $\Delta_n = \sum_{k=n+1}^{2n-2}(2n-1-k)\theta^k u^{k-n-1}$,
-and let $d_0 = \alpha_0$ and, for $0 \le m \le n-1$,
+let $\Delta_n = \sum_{k=n+1}^{2n-2}(2n-1-k)\theta^k u^{k-n-1}$ for MUL and $\Delta_n = 0$ for ADD and MULF,
+and let $d_0 = \hat A_0$ and, for $0 \le m \le n-1$,
 \begin{gather*}
 \gamma_m = \frac{T_m d_m}{\theta(1 - T_m u)}, \quad L_m = \frac{\theta^m d_m}{1 - T_m u}, \\
-d_{m+1} = \alpha_{m+1} + \gamma_m,
+d_{m+1} = \hat A_{m+1} + \gamma_m,
 \end{gather*}
-and let $L_n = \theta^n d_n/(1 - Qu)$ and $R = QL_n$.
+and let $L_n = \theta^n d_n/(1 - Qu)$ and $R_n = QL_n$.
 Then the level array of MUL, ADD and MULF has exactly $T_m$ $\TwoSum$s at level $m$ and $Q$ roundings at level $n$,
 (a) $|s_m| \le L_m u^m M$ at every moment, for $0 \le m \le n$, and (b) the final levels $c$ satisfy $|Z - \sum_m c_m|
-\le (R + \Delta)u^{n+1}M$, with $Z$ the exact result. For ADDF, with $M = |a_0| + |b|$, the levels sum exactly to
+\le (R_n + \Delta_n)u^{n+1}M$, with $Z$ the exact result. For ADDF, with $M = |a_0| + |b|$, the levels sum exactly to
 $a + b$, and $|c_m| \le L_m u^m M$ with $L_m = (1+u)\sum_{k=0}^{m}\theta^k$ for $m < n$ and $L_n =
-\sum_{k=0}^{n-1}\theta^k$; there $R = \Delta = 0$.
+\sum_{k=0}^{n-1}\theta^k$; there $R_n = \Delta_n = 0$.
 \end{theorem}
 
 \begin{proof}
@@ -338,11 +336,11 @@ ADDF and MULF), and with $\lambda_m = \rho^mM$ for ADD, as $|a_m + b_m| \le \rho
 
 \emph{MUL, ADD and MULF.} For MUL, $2n-1-k$ pairs $(i, j)$ with $0 \le i, j \le n-1$ have $i + j = k \ge n-1$, and
 $m+1$ have $i + j = m < n$, so $P_m = (m+1)\rho^mM$ for $m < n$ and $P_k = (2n-1-k)\rho^kM$ for $k \ge n$. With
-$u\rho^{m-1} = \rho^m/\theta$, the inputs of the lemma are $A_m = \alpha_m\rho^mM$ for the three operations, and its
+$u\rho^{m-1} = \rho^m/\theta$, the inputs of the lemma are $A_m = \hat A_m\rho^mM$ for the three operations, and its
 dropped products are $M\sum_{k=n+1}^{2n-2}(2n-1-k)\rho^k = \Delta_nu^{n+1}M$. In Lemma~\ref{lem:l}, induction on $m$
 gives $D_m = d_m\rho^mM$ and $C_m = \gamma_m\rho^{m+1}M$: $D_0 = A_0 = d_0M$, $C_m = T_m u D_m/(1-T_m u) =
-\gamma_m\rho^{m+1}M$ because $u = \rho/\theta$, and $D_{m+1} = A_{m+1} + C_m = (\alpha_{m+1} + \gamma_m)\rho^{m+1}M$.
-So $X_m = L_m u^mM$, as $\rho = \theta u$, and the rounding errors total at most $QuX_n = Ru^{n+1}M$.
+\gamma_m\rho^{m+1}M$ because $u = \rho/\theta$, and $D_{m+1} = A_{m+1} + C_m = (\hat A_{m+1} + \gamma_m)\rho^{m+1}M$.
+So $X_m = L_m u^mM$, as $\rho = \theta u$, and the rounding errors total at most $QuX_n = R_nu^{n+1}M$.
 Lemma~\ref{lem:g}(c) then gives the counts, (a) and (b).
 
 \emph{ADDF.} With $\lambda_0 = M$, induction gives $\epsilon_i \le u^{i+1}M\sum_{k=0}^{i}\theta^k$: $\epsilon_0 = uM$,
@@ -353,9 +351,9 @@ Lemma~\ref{lem:g}(c) gives the claim.
 
 
 \begin{theorem}\label{thm:t3}
-Under the hypotheses of Theorem~\ref{thm:t2}, let $\Lambda = \sum_{m=0}^n L_m$, $\beta_n = (1+u)^{n-1}/(1-u)$ and
+Under the hypotheses of Theorem~\ref{thm:t2}, let $\Lambda = \sum_{m=0}^n L_m$ and
 \[
-\kappa = 2\beta_n\Lambda + (1 + u^n)(R + \Delta).
+\kappa = \frac{2(1+u)^{n-1}}{1-u}\,\Lambda + (1 + u^n)(R_n + \Delta_n).
 \]
 The result $x$ of each of MUL, ADD, MULF and ADDF satisfies
 \[
@@ -369,9 +367,9 @@ $|a + b - x| \le u^n|a+b| + \kappa u^{n+1}(\tfrac{1-\rho}{1-2\rho}|a| + |b|)$ fo
 \end{theorem}
 
 \begin{proof}
-Let $S = \sum_m c_m$ and $F = |Z - S| \le (R + \Delta)u^{n+1}M$ by Theorem~\ref{thm:t2}(b). Theorem~\ref{thm:t2}(a)
-gives the hypothesis of Theorem~\ref{thm:t1}(e), so $|S - \sum_k x_k| \le u^n|S| + 2\beta_n\Lambda u^{n+1}M \le u^n|Z|
-+ u^nF + 2\beta_n\Lambda u^{n+1}M$. Adding $F$ gives the bound. The particular forms follow from \eqref{eq:a0}.
+Let $S = \sum_m c_m$ and $F = |Z - S| \le (R_n + \Delta_n)u^{n+1}M$ by Theorem~\ref{thm:t2}(b). Theorem~\ref{thm:t2}(a)
+gives the hypothesis of Theorem~\ref{thm:t1}(e), so with $\kappa_0 = 2(1+u)^{n-1}\Lambda/(1-u)$, $|S - \sum_k x_k| \le u^n|S| + \kappa_0u^{n+1}M \le u^n|Z|
++ u^nF + \kappa_0u^{n+1}M$. Adding $F$ gives the bound. The particular forms follow from \eqref{eq:a0}.
 \end{proof}
 
 \begin{table}[tp]
@@ -406,7 +404,7 @@ Under the hypotheses of Theorem~\ref{thm:t2}, the result $x$ of each operation s
 \[
 |x_i| \le u^i\Bigl((1+u)^i|x_0| + i\,u(1+u)^{n+i-1}\Lambda M\Bigr).
 \]
-If moreover $|Z| \ge \zeta M$ with $\zeta > 0$, and $\xi = \bigl(\zeta - (R+\Delta)u^{n+1} - u^2(1+u)^{n-1}\Lambda\bigr)
+If moreover $|Z| \ge \zeta M$ with $\zeta > 0$, and $\xi = \bigl(\zeta - (R_n+\Delta_n)u^{n+1} - u^2(1+u)^{n-1}\Lambda\bigr)
 /(1+u) > 0$, then $|x_0| \ge \xi M$ and $|x_i| \le (\theta'u)^i|x_0|$ for $1 \le i \le n-1$, with
 \[
 \theta' = \max_{1 \le i \le n-1}\Bigl((1+u)^i + i\,u(1+u)^{n+i-1}\Lambda/\xi\Bigr)^{1/i},
@@ -423,8 +421,8 @@ By Theorem~\ref{thm:t1}(d) and Theorem~\ref{thm:t2}(a), $W_k \le \sum_{j=k+1}^{n
 |x_i| &\le (1+u)^iu^i|x_0| \\
 &\quad + \sum_{k=1}^{i}\bigl((1+u)u\bigr)^{i-k}(1+u)\,u^{k+1}(1+u)^{n-1}\Lambda M,
 \end{align*}
-and the sum is at most $i\,u^{i+1}(1+u)^{n+i-1}\Lambda M$. For the lower bound, $|S| \ge |Z| - (R+\Delta)u^{n+1}M \ge
-(\zeta - (R+\Delta)u^{n+1})M$ by Theorem~\ref{thm:t2}(b), and $W_1 \le u^2(1+u)^{n-1}\Lambda M$, so Lemma~\ref{lem:o}
+and the sum is at most $i\,u^{i+1}(1+u)^{n+i-1}\Lambda M$. For the lower bound, $|S| \ge |Z| - (R_n+\Delta_n)u^{n+1}M \ge
+(\zeta - (R_n+\Delta_n)u^{n+1})M$ by Theorem~\ref{thm:t2}(b), and $W_1 \le u^2(1+u)^{n-1}\Lambda M$, so Lemma~\ref{lem:o}
 gives $|x_0| \ge \xi M$. Substituting $M \le |x_0|/\xi$ gives $|x_i| \le (\theta'u)^i|x_0|$. For the adds with leading
 parts of one sign, $|a + b| \ge |a_0| + |b_0| - \sum_{i \ge 1}(|a_i| + |b_i|) \ge (1 - \frac{\rho}{1-\rho})M$.
 \end{proof}
@@ -450,9 +448,9 @@ in $H(2)$, and the theorems above do not chain through it.
 
 QD's accurate division, with $n+1$ quotient terms, generalizes as follows. Let $r^{(0)} = a$
 and $q_0 = \RN(r^{(0)}_0/b_0)$, and for $k = 1, \dots, n$ let $r^{(k)} = \mathrm{SMF}(r^{(k-1)}, b, q_{k-1})$ and $q_k =
-\RN(r^{(k)}_0/b_0)$; return $x = \Ren_n(q_0, \dots, q_n)$. Here $\mathrm{SMF}(r, b, q)$ forms $(p_i, \pi_i) \gets
-\TwoProd(b_i, q)$ and $(s_i, t_i) \gets \TwoSum(r_i, -p_i)$ for $i < n$, sets $s_n \gets \RN(t_{n-1} - \pi_{n-1})$,
-performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -\pi_l)$ for $l = 0, \dots, n-2$, and returns $\Ren_n(s)$. At $n = 8$ and $p =
+\RN(r^{(k)}_0/b_0)$; return $x = \Ren_n(q_0, \dots, q_n)$. Here $\mathrm{SMF}(r, b, q)$ forms $(p_i, w_i) \gets
+\TwoProd(b_i, q)$ and $(s_i, t_i) \gets \TwoSum(r_i, -p_i)$ for $i < n$, sets $s_n \gets \RN(t_{n-1} - w_{n-1})$,
+performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -w_l)$ for $l = 0, \dots, n-2$, and returns $\Ren_n(s)$. At $n = 8$ and $p =
 53$ this is multidouble's division (identical bits on the inputs of \texttt{campaign.py}).
 
 \begin{theorem}\label{thm:t6}
@@ -495,10 +493,10 @@ q_kb) - r^{(k+1)}$. For $k = 0$, $H(\theta)$ gives the first claim, and $|q_k| \
 \eqref{eq:rn} gives the second for every $k$.
 
 \emph{The update.} $\mathrm{SMF}$ is a program of Lemma~\ref{lem:l}: assignments $s_i = \RN(r_i - p_i)$ for $i < n$
-and $s_n \gets t_{n-1}$, one rounding of $-\pi_{n-1}$ into level $n$, and deps of $t_l$ and $-\pi_l$ at level $l+1$. So
+and $s_n \gets t_{n-1}$, one rounding of $-w_{n-1}$ into level $n$, and deps of $t_l$ and $-w_l$ at level $l+1$. So
 $T_m = 2m$ and $Q = 1 + 2(n-1)$. Since $q = \RN(r_0/b_0)$, $|r_0 - b_0q| = |b_0|\,|r_0/b_0 - q| \le \us|r_0|$, and
 $|b_0q - p_0| \le \us|b_0q|$; so $|r_0 - p_0| \le G_0|a_0|$. For $i \ge 1$, $|r_i - p_i| \le |r_i| + (1+u)|b_i q| \le
-G_i|a_0|$, using $|b_i| \le \rho^i|b_0|$. With $|t_i| \le \us|r_i - p_i|$ and $|\pi_i| \le \us|b_iq|$
+G_i|a_0|$, using $|b_i| \le \rho^i|b_0|$. With $|t_i| \le \us|r_i - p_i|$ and $|w_i| \le \us|b_iq|$
 (Lemma~\ref{lem:facts}), the inputs of level $m$ total at most $A_m|a_0|$, and Lemma~\ref{lem:l} gives $|s_m| \le
 X_m|a_0|$ and rounding errors at level $n$ of total at most $R|a_0|$. Theorem~\ref{thm:t1}(d) gives $|v_j| \le
 V_j|a_0|$ for VecSum's output, and Theorem~\ref{thm:t1}(b) bounds the renormalization's loss; the update's error is the
@@ -547,13 +545,13 @@ h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1
 (1+E_0, 0, \dots, 0)$. For $k = 0, \dots, J-1$, with $E = E_k$ and $\pi = \pi^{(k)}$, let
 \begin{align*}
 (\epsilon_m, \mu) &= G_{\rm MUL}\bigl(\pi, \pi;\ (1+E)^2\bigr), \\
-(\epsilon_g, \gamma) &= G_{\rm MUL}\bigl(\bar h, \mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
-(\epsilon_c, \chi) &= G_{\rm ADDF}\bigl(\gamma, \tfrac12;\ \zeta,\ \lambda_0\bigr), \\
-\lambda_0 &= \zeta + {\textstyle\sum_{i \ge 1}}\gamma_i, \\
-\zeta &= \tfrac12(2E + E^2) + \tfrac12\epsilon_m + \epsilon_g, \\
-(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\chi, \pi;\ (\zeta + \epsilon_c)(1+E)\bigr), \\
+(\epsilon_g, \pi^g) &= G_{\rm MUL}\bigl(\bar h, \mu;\ ((1+E)^2 + \epsilon_m)/2\bigr), \\
+(\epsilon_c, \chi) &= G_{\rm ADDF}\bigl(\pi^g, \tfrac12;\ \bar Z_c,\ \lambda_0\bigr), \\
+\lambda_0 &= \bar Z_c + {\textstyle\sum_{i \ge 1}}\pi^g_i, \\
+\bar Z_c &= \tfrac12(2E + E^2) + \tfrac12\epsilon_m + \epsilon_g, \\
+(\epsilon_d, \delta) &= G_{\rm MUL}\bigl(\chi, \pi;\ (\bar Z_c + \epsilon_c)(1+E)\bigr), \\
 (\epsilon_r, \pi') &= G_{\rm ADD}\bigl(\pi, \delta;\ (1+E) \\
-&\qquad + (\zeta + \epsilon_c)(1+E) + \epsilon_d\bigr),
+&\qquad + (\bar Z_c + \epsilon_c)(1+E) + \epsilon_d\bigr),
 \end{align*}
 and let
 \begin{align*}
@@ -582,9 +580,9 @@ r' = N(r) + r\bigl(-\tfrac a2\hat\epsilon_m - \hat\epsilon_g + \hat\epsilon_c\bi
 so $|r'/y - 1| \le E_{k+1}$ once the five errors are bounded. Lemma~\ref{lem:g} bounds each, given part bounds of the
 operands and a bound $\bar Z$ on the exact result: $|r^2| \le (1+E)^2y^2$; $|\frac a2 m| \le \frac12((1+E)^2 +
 \epsilon_m)$; the exact value of the ADDF satisfies $|\frac12 - g| \le |\frac12 - \frac a2r^2| + \frac a2|\hat\epsilon_m|
-+ |\hat\epsilon_g| \le \zeta$, and its level 0 adds $\frac12 - g_0$, with $|\frac12 - g_0| \le \zeta + \sum_{i \ge 1}
-|g_i|$; $|cr| \le (\zeta + \epsilon_c)(1+E)y$; and $|r + d| \le ((1+E) + (\zeta + \epsilon_c)(1+E) + \epsilon_d)y$. The
-part bounds $\mu$, $\gamma$, $\chi$, $\delta$ and $\pi'$ of the results are Lemma~\ref{lem:g}(b), so the induction
++ |\hat\epsilon_g| \le \bar Z_c$, and its level 0 adds $\frac12 - g_0$, with $|\frac12 - g_0| \le \bar Z_c + \sum_{i \ge 1}
+|g_i|$; $|cr| \le (\bar Z_c + \epsilon_c)(1+E)y$; and $|r + d| \le ((1+E) + (\bar Z_c + \epsilon_c)(1+E) + \epsilon_d)y$. The
+part bounds $\mu$, $\pi^g$, $\chi$, $\delta$ and $\pi'$ of the results are Lemma~\ref{lem:g}(b), so the induction
 carries on to the next step.
 
 \emph{End.} $|z - \sqrt a| \le |z - ra| + a|r - y| \le \epsilon_z\sqrt a + E_J\sqrt a$, and $zs$ is exact. The values at
@@ -608,8 +606,8 @@ E_0 = \max\Bigl(\frac{(1 + \eta_3/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\et
 \\
 \pi^{(0)} = \Bigl(\frac{1+E_0}{1-u},\ \frac{u(1+E_0)}{1-u},\ 0, \dots, 0\Bigr).
 \end{gather*}
-With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \gamma, \epsilon_c, \chi$ and $\zeta$ be those
-of Theorem~\ref{thm:t7}, $\gamma' = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \zeta + \epsilon_c$, and
+With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \pi^g, \epsilon_c, \chi$ and $\bar Z_c$ be those
+of Theorem~\ref{thm:t7}, $\epsilon_{mgc} = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \bar Z_c + \epsilon_c$, and
 \begin{align*}
 (\epsilon_q, \nu) &= G_{\rm MUL}\bigl(\chi, \chi;\ \bar c^2\bigr), \quad \bar q = \bar c^2 + \epsilon_q, \\
 (\epsilon_t, \vartheta) &= G_{\rm ADD}\bigl(\nu, \tfrac12\nu;\ \tfrac32\bar q\bigr), \quad \bar t = \tfrac32\bar q +
@@ -621,7 +619,7 @@ of Theorem~\ref{thm:t7}, $\gamma' = \frac12\epsilon_m + \epsilon_g + \epsilon_c$
 \end{align*}
 \begin{align*}
 E_1 &= \tfrac52E^3 + \tfrac{15}8E^4 + \tfrac38E^5 + \epsilon_d + \epsilon_r \\
-&\quad + (1+E)\bigl(\gamma'(1 + 3(E + \tfrac12E^2) + \tfrac32\gamma') \\
+&\quad + (1+E)\bigl(\epsilon_{mgc}(1 + 3(E + \tfrac12E^2) + \tfrac32\epsilon_{mgc}) \\
 &\qquad + \tfrac32\epsilon_q + \epsilon_t + \epsilon_w\bigr).
 \end{align*}
 Let $E_2$ and $\pi^{(2)}$ be one step of Theorem~\ref{thm:t7} from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
@@ -641,10 +639,10 @@ and $1 - \eta_3 \le (1+d_3)^{1/2} \le 1 + \eta_3/2$ for $|d_3| \le \eta_3 \le 1$
 which is $\pi^{(0)}$.
 
 \emph{The second-order step.} With $r = y(1+e)$, the exact $c$ is $-e - \frac12e^2$, and $(1+e)(1 + c + \frac32c^2) = 1 +
-\frac52e^3 + \frac{15}8e^4 + \frac38e^5$. The computed $c$ differs from the exact one by at most $\gamma'$, as in the
+\frac52e^3 + \frac{15}8e^4 + \frac38e^5$. The computed $c$ differs from the exact one by at most $\epsilon_{mgc}$, as in the
 proof of Theorem~\ref{thm:t7}, and $|c| \le \bar c$. Then $q = c^2 + \hat\epsilon_q$, $t = \frac32q + \hat\epsilon_t$
 ($q/2$ is exact) and $w = c + t + \hat\epsilon_w$, so $w$ differs from $c_e + \frac32c_e^2$, $c_e$ the exact $c$, by at
-most $\gamma'(1 + 3|c_e| + \frac32\gamma') + \frac32\epsilon_q + \epsilon_t + \epsilon_w$, with $|c_e| \le E + \frac12E^2$.
+most $\epsilon_{mgc}(1 + 3|c_e| + \frac32\epsilon_{mgc}) + \frac32\epsilon_q + \epsilon_t + \epsilon_w$, with $|c_e| \le E + \frac12E^2$.
 As in Theorem~\ref{thm:t7}, $r' = r(1 + w) + \hat\epsilon_d + \hat\epsilon_r$, which gives $E_1$, and Lemma~\ref{lem:g}
 gives the errors and part bounds from the bounds $\bar Z$ listed.
 
@@ -667,8 +665,8 @@ product are $1, u, \dots, u^7$ and a ninth just below $u^8$ that the renormaliza
 Assume~\ref{as:fp}. (a) For $n \ge 3$, MUL of $a = (1, u, \dots, u^{n-2}, 0)$ and $b = (1, 0, \dots, 0, u^{n-1})$, both
 satisfying $H(1)$, errs by $\sum_{k=n}^{2n-3}u^k = u^n|ab|\,(1 - u^{n-2})/(1 - u^{2n-2})$. (b) For $n \ge 2$, ADD of $a
 = (1, u, \dots, u^{n-1})$ and $b = (u^n, 0, \dots, 0)$, and ADDF of the same $a$ and $b = u^n$, err by $u^n = u^n|a +
-b|\,(1-u)/(1-u^{n+1})$. (c) If $2^p + 1 = fg$ with integers $f, g > 1$ (for $p = 53$,
-$f = 3$), let $a_0 = f2^{-\lfloor\log_2 f\rfloor}$ and $b = (1+u)/a_0 = g\,2^{\lfloor\log_2 f\rfloor - p} \in \F$. For
+b|\,(1-u)/(1-u^{n+1})$. (c) If $2^p + 1 = m_1m_2$ with integers $m_1, m_2 > 1$ (for $p = 53$,
+$m_1 = 3$), let $a_0 = m_12^{-\lfloor\log_2 m_1\rfloor}$ and $b = (1+u)/a_0 = m_2\,2^{\lfloor\log_2 m_1\rfloor - p} \in \F$. For
 odd $n$, MULF of $a = (a_0, 0, a_0u^2, 0, \dots, a_0u^{n-1})$ and $b$ errs by $u^n = u^n|ab|\,(1-u)/(1-u^{n+1})$; for
 even $n$, with $a_{n-1} = a_0u^n$ in addition, it errs by $u^n + u^{n+1} = u^n|ab|\,(1-u^2)/(1-u^{n+2})$. Both $a$
 satisfy $H(1)$. In each case $M \le (1+O(u))|Z|$, so a bound $C u^n|Z| + \kappa' u^{n+1}M$ valid on these inputs has
@@ -722,7 +720,7 @@ inputs above do not give them a chain of ties. Inputs that do were constructed f
 (Table~\ref{tab:inputs}). The last product of the square root, $r\,a$, has the scaled input $a$ as a factor, so $a$'s
 parts were chosen one at a time, each so that the next level of the product is the next power of $u$, with $a$ near $(1
 + u + \dots + u^8)^2$; its ninth level, just below $u^8$, is the part that the renormalization drops. For the other functions,
-Newton's method in octo-double arithmetic gave an $x$ with $f(x)$ just past $\pm2^E(1 + cu + u + \dots + u^7)$, $c$ a
+Newton's method in octo-double arithmetic gave an $x$ with the function's value just past $\pm2^E(1 + cu + u + \dots + u^7)$, $c$ a
 multiple of 4, and among the values of $x$'s last part nearby, those whose result is $\pm2^E(1 + cu, u, \dots, u^7)$
 were kept, and the one with the largest error. Each input lies on the ladder, with normal parts. For the cosine and the tangent the last operation's own error is
 at most $(1 + 2^{-25})u^8$ times its exact result: the tangent's is a quotient (Theorem~\ref{thm:t6}), and the

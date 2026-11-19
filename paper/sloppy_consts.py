@@ -12,7 +12,7 @@ error is the roundings at level n-1 and the dropped products. Lemma 11 with leve
     R_s = Q theta^(n-1) d_(n-1) / (1 - Q u),
 
 with T_m = m (m + 1) two-sums at level m <= n-2 (as for MUL), Q = n^2 roundings at level n-1 (2n - 1 in the chain,
-one per dep: (n-1)^2), alpha_m as for MUL for m <= n-2, and alpha_(n-1) = n + (n-1)/theta + (n-1) rho (the n
+one per dep: (n-1)^2), A-hat_m as for MUL for m <= n-2 (alpha below), and A-hat_(n-1) = n + (n-1)/theta + (n-1) rho (the n
 products of order n-1 and the n-1 of order n, exact, and the n-1 errors of order n-2). `counts` walks the algorithm's
 deposits and checks T_m and Q.
 

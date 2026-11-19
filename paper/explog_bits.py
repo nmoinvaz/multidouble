@@ -16,7 +16,7 @@ usage: explog_bits.py bits [N [seed [control]]]   N inputs per function and cate
                                                   multiply-adds and quotients whose binary64 result would differ from
                                                   the unbounded-exponent one (underflow), and the power-of-two
                                                   scalings that would leave the normal range; exits 1 on any of the
-                                                  former but x_0 Lambda and the factors of the U's, which decide
+                                                  former but x_0 c_r and the factors of the U's, which decide
                                                   only k, m, the degree or a branch of LOG. control 'full_degree':
                                                   the Taylor polynomial at full degree for every r, which must
                                                   underflow (the run exits 1 unless it does)."""
@@ -330,7 +330,7 @@ def expm1_red(P, x):
     before = None if SCAN is None else SCAN['mul']
     kq = F.mul(x[0], LOG2_E)
     if SCAN is not None and SCAN['mul'] > before:
-        SCAN['k'] += 1                    # x_0 Lambda below 2^-1022: k = 0 whatever its rounding
+        SCAN['k'] += 1                    # x_0 c_r below 2^-1022: k = 0 whatever its rounding
         assert abs(val(kq)) < Q(1, 2)
     k = rnd_away(val(kq))
     r = x if k == 0 else P.reduce(x, fl(float(k)))
@@ -564,7 +564,7 @@ def scan_main(K, control=None):
         hits = SCAN['mul'] + SCAN['fma'] + SCAN['div'] - SCAN['k']
         worst = max(worst, hits)
         print(f'{"OD" if P is OD else "DD"} {fn}: {count} inputs over every binade{" (half at the top of the ladder)" if P.n > 2 else ""}; underflowing products {SCAN["mul"]}, '
-              f'FMAs {SCAN["fma"]}, quotients {SCAN["div"]}, of which {SCAN["k"]} are x_0 Lambda or a U, deciding only k, m, d or a branch; scalings '
+              f'FMAs {SCAN["fma"]}, quotients {SCAN["div"]}, of which {SCAN["k"]} are x_0 c_r or a U, deciding only k, m, d or a branch; scalings '
               f'leaving the normal range {SCAN["scale"]}; the MULs\' products clear the threshold by {SCAN["margin"]} binades at least' + (f'; other underflows at binades {where}' if where else ''))
     SCAN = None
     if control:

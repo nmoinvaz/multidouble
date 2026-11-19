@@ -638,7 +638,7 @@ def log_bound(Lg, e1, e0, pieces=(Fr(1), Fr(4)), sub=4, verbose=False, dd_split=
     tail = M.tail(red['parts']) if red['parts'] is not None else Fr(0)
     # E(l)/l at the ends of [lk, 1], [1, 4] and [4, XMAX] bounds it inside each: for a fixed case (sign, m, d, |r| in
     # [ra, rb]), E is nondecreasing and convex in l, since l enters only through y-bar = l + E0(l), linear, and the
-    # reduction's X, gamma and alpha, linear in y-bar (the appendix, proof of the log theorem, "Convexity"; chord())
+    # reduction's X, x-bar_t and alpha, linear in y-bar (the appendix, proof of the log theorem, "Convexity"; chord())
     ends = [lk] + list(pieces) + [XMAX]
     worst = (Fr(0), None)
     for (m, d, rlo, rhi, cap) in E.groups(tail, top):
@@ -728,9 +728,9 @@ def od_exp(n, s, d, theta=2):
 
 def od_start(n, eps_dd, fl_dd, theta=2):
     """E0(l) = e1 l + e0 for the expansion log's start: the double-double log of to_dd(x), within eps_dd |ln to_dd(x)|
-    + fl_dd of ln(to_dd(x)); to_dd's sum of the n - 1 lower parts errs by gamma_(n-2) sum |x_i|, so |ln x - ln
+    + fl_dd of ln(to_dd(x)); to_dd's sum of the n - 1 lower parts errs by g sum |x_i|, g = (n-2)u/(1-(n-2)u), so |ln x - ln
     to_dd(x)| <= delta. For x_0 >= 2^1023 the start is that of x/2 (the halving moves each part by at most ETA0,
-    relative to x below 2^-2090) plus LN2_DD, within eta_l of ln 2, by AccurateDWPlusDW, within alpha_A (l + 1) of
+    relative to x below 2^-2090) plus LN2_DD, within eta_l of ln 2, by AccurateDWPlusDW, within e_A (l + 1) of
     the sum: E0 covers both."""
     u = Fr(1, 2 ** 53)
     rho = Fr(theta) * u
