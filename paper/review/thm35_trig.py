@@ -15,7 +15,7 @@ from fractions import Fraction as Fr
 from math import factorial
 
 import gop
-from gop import abar, g_add, g_addf, g_mul, kappa_div, up
+from gop import abar, dec_up, g_add, g_addf, g_mul, kappa_div, up
 
 P = 53
 U = Fr(1, 2 ** P)
@@ -242,24 +242,24 @@ def main():
 
     def check(name, got, want):
         nonlocal ok
-        good = abs(want - float(got)) <= 1.01e-6
+        good = 0 <= want - float(got) <= 1.01e-6
         ok &= good
-        print(f'{name}: {float(got):.9f}, the paper has {want}: {"ok" if good else "DIFFERS"}')
+        print(f'{name}: {dec_up(got, 9)} (rounded up), the paper has {want}: {"ok" if good else "DIFFERS"}')
 
     C, CT, part, worst = theorem35(8)
-    check('n = 8: C / u^8', C, 3.163167)
+    check('n = 8: C / u^8', C, 3.163168)
     check('n = 8: C^T / u^8', CT, 6.418351)
     j, K, Kc, dS, dC = worst
     print(f'  the largest C_j is that of bucket {j}, K_s = {K}, K_c = {Kc}')
     check('n = 8, |r_0| < 1/2: C / u^8', part[1][0], 2.175822)
     check('n = 8, |r_0| < 1/2: C^T / u^8', part[1][1], 4.800526)
-    check('n = 8, |r_0| < 2^-5: C / u^8', part[5][0], 2.000705)
+    check('n = 8, |r_0| < 2^-5: C / u^8', part[5][0], 2.000706)
     check('n = 8, |r_0| < 2^-5: C^T / u^8', part[5][1], 4.002771)
     C, CT, _, _ = theorem35(2, dw=True)
-    check('double word: C / u^2', C, 7.841411)
-    check('double word: C^T / u^2', CT, 28.414065)
+    check('double word: C / u^2', C, 7.841412)
+    check('double word: C^T / u^2', CT, 28.414066)
     if 'all' in args:
-        for n, wc, wt in ((2, 3.168700, 6.452138), (4, 3.164154, 6.426154), (12, 3582.787311, 4929.367335)):
+        for n, wc, wt in ((2, 3.168701, 6.452138), (4, 3.164155, 6.426155), (12, 3582.787311, 4929.367335)):
             C, CT, _, _ = theorem35(n)
             check(f'n = {n}: C / u^{n}', C, wc)
             check(f'n = {n}: C^T / u^{n}', CT, wt)

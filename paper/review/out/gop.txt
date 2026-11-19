@@ -1,0 +1,13 @@
+Table IV log2 kappa mul theta=1: 36.409504870, the paper has 36.41: ok
+Table IV log2 kappa mul theta=2: 37.922092768, the paper has 37.93: ok
+Table IV log2 kappa add theta=1: 17.966240690, the paper has 17.97: ok
+Table IV log2 kappa add theta=2: 19.988742927, the paper has 19.99: ok
+Table IV log2 kappa mulf theta=1: 17.966240690, the paper has 17.97: ok
+Table IV log2 kappa mulf theta=2: 19.988742927, the paper has 19.99: ok
+Table IV log2 kappa addf theta=1: 6.459431619, the paper has 6.46: ok
+Table IV log2 kappa addf theta=2: 10.564149490, the paper has 10.57: ok
+Theorem 19 log2 kappa_DIV theta=1: 25.936779809, the paper has 26.0: ok
+Theorem 19 log2 kappa_DIV theta=2: 27.473745721, the paper has 27.48: ok
+Theorem 21 delta_4/u^8 theta=1: 3.000019707, the paper has 3.0000198: ok
+Theorem 21 delta_4/u^8 theta=2: 3.000031815, the paper has 3.0000319: ok
+PASS

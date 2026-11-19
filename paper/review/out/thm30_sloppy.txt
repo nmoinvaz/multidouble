@@ -1,0 +1,11 @@
+theta=1: log2(R_s + Delta_8 u): 30.411602, the paper has 30.4117: ok
+theta=1: log2(Delta_8 u): -50.415037, the paper has -50.41: ok
+theta=2: log2(R_s + Delta_8 u): 31.924189, the paper has 31.9242: ok
+theta=2: log2(Delta_8 u): -41.415037, the paper has -41.41: ok
+theta=2: log2 L_7: 25.924189, the paper has 25.93: ok
+theta=2, K=1: log2 of the second term of (c) / u^8 W: 31.924189, the paper has 31.9242: ok
+theta=2, K=4: log2 of the second term of (c) / u^8 W: 31.924189, the paper has 31.9242: ok
+theta=2, K=16: log2 of the second term of (c) / u^8 W: 31.924189, the paper has 31.9242: ok
+theta=2, K=64: log2 of the second term of (c) / u^8 W: 31.924189, the paper has 31.9242: ok
+theta=2, K=64: log2 E_lev / u^8 W: 2.683219, the paper has 2.6833: ok
+PASS

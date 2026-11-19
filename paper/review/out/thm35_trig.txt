@@ -1,0 +1,16 @@
+n = 8: C / u^8: 3.163167393 (rounded up), the paper has 3.163168: ok
+n = 8: C^T / u^8: 6.418350521 (rounded up), the paper has 6.418351: ok
+  the largest C_j is that of bucket 0, K_s = 41, K_c = 41
+n = 8, |r_0| < 1/2: C / u^8: 2.175821971 (rounded up), the paper has 2.175822: ok
+n = 8, |r_0| < 1/2: C^T / u^8: 4.800525525 (rounded up), the paper has 4.800526: ok
+n = 8, |r_0| < 2^-5: C / u^8: 2.000705468 (rounded up), the paper has 2.000706: ok
+n = 8, |r_0| < 2^-5: C^T / u^8: 4.002770876 (rounded up), the paper has 4.002771: ok
+double word: C / u^2: 7.841411278 (rounded up), the paper has 7.841412: ok
+double word: C^T / u^2: 28.414065409 (rounded up), the paper has 28.414066: ok
+n = 2: C / u^2: 3.168700337 (rounded up), the paper has 3.168701: ok
+n = 2: C^T / u^2: 6.452137636 (rounded up), the paper has 6.452138: ok
+n = 4: C / u^4: 3.164154339 (rounded up), the paper has 3.164155: ok
+n = 4: C^T / u^4: 6.426154346 (rounded up), the paper has 6.426155: ok
+n = 12: C / u^12: 3582.787310690 (rounded up), the paper has 3582.787311: ok
+n = 12: C^T / u^12: 4929.367334851 (rounded up), the paper has 4929.367335: ok
+PASS
