@@ -395,11 +395,7 @@ The quad-double \texttt{QD::exp} and \texttt{QD::ln} run the same steps with QD'
 bounds, and are tested to $64u^4$.
 
 \begin{remark}
-Against a reference accurate to $2^{-1600}$, multidouble's tests measure at most $0.25\,u^8$ on their generated
-arguments for \texttt{OD::exp} (at
-$x$ near $-450$, where the result's last part nears $2^{-1022}$) and $0.0070\,u^8$ for \texttt{OD::ln}, and $1.04\,u^2$
-and $1.27\,u^2$ for \texttt{DD::exp} and \texttt{DD::ln} (measured), and at most $3.491\,u$ for $\ln_{\rm b}$, at
-\texttt{0x1.22e14015c154dp+0}, found by a search and kept among the tests' arguments. Constructed arguments, whose results end in a
+Constructed arguments, whose results end in a
 chain of ties that the last renormalization cuts, give $(1 - 8.2u)u^8$ for \texttt{OD::exp} and $0.99998\,u^8$ for
 \texttt{OD::ln} (Table~\ref{tab:inputs}). Whether the bounds are approached is not known; they charge every operation
 its full rounding.
