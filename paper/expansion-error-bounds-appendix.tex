@@ -724,8 +724,9 @@ parts were chosen one at a time, each so that the next level of the product is t
 + u + \dots + u^8)^2$; its ninth level, just below $u^8$, is the part that the renormalization drops. For the other functions,
 Newton's method in octo-double arithmetic gave an $x$ with $f(x)$ just past $\pm2^E(1 + cu + u + \dots + u^7)$, $c$ a
 multiple of 4, and among the values of $x$'s last part nearby, those whose result is $\pm2^E(1 + cu, u, \dots, u^7)$
-were kept, and the one with the largest error. Each input lies on the ladder, with normal parts. The last operation's own error is at most $(1 +
-2^{-25})u^8$ times its exact result (Theorems~\ref{thm:t3} and~\ref{thm:t6}), so the cosine and the tangent exceed
+were kept, and the one with the largest error. Each input lies on the ladder, with normal parts. For the cosine and the tangent the last operation's own error is
+at most $(1 + 2^{-25})u^8$ times its exact result: the tangent's is a quotient (Theorem~\ref{thm:t6}), and the
+cosine's, at this argument, is the last ADD of SINR, where $M \le 2|Z|$ in Theorem~\ref{thm:t3}. So the two exceed
 $u^8|Z|$ because their earlier operations err in the same direction.
 
 \begin{table*}[tp]
