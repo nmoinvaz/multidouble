@@ -7,7 +7,7 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{Lane, Ou, Param};
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::jet::{OJet, OSeries};
 use multidouble::od::{OdAcc, OD};
 use multidouble::ov::{self, ODotAcc, OV};
@@ -298,7 +298,7 @@ impl Kernel for DvMatchesDd {
                 }
             }
             // the accumulator: a sum of products, against the same sum in scalar double-double to its own accuracy
-            let acc = DotAcc::zero().add_prod(vx, vy).add_prod(vy, vy).add(vx).finish();
+            let acc = DDotAcc::zero().add_prod(vx, vy).add_prod(vy, vy).add(vx).finish();
             for j in 0..8 {
                 let w = x[j] * y[j] + y[j] * y[j] + x[j];
                 let g = acc.lane(j);
@@ -1098,4 +1098,18 @@ fn ou_matches_od_control_fma_on_one_backend() {
         println!("{name}: {bad} lane parts differ (native {native})");
         assert_eq!(*bad > 0, native, "{name}: {bad}");
     }
+}
+
+/// The accumulator's former name `DotAcc` stays a working alias of `DDotAcc`, in both the generic and the `native` forms,
+/// struct literal included, so code written for it keeps compiling.
+#[test]
+#[allow(deprecated)]
+fn ddotacc_old_name_still_works() {
+    use multidouble::native::{DotAcc as NativeDotAcc, V8};
+    let z = V8::splat(0.0);
+    let a: NativeDotAcc = NativeDotAcc { s: z, e: z };
+    let b = multidouble::native::DDotAcc::zero();
+    let c: multidouble::dv::DotAcc<multidouble::simd::Native> = multidouble::dv::DDotAcc::zero();
+    assert_eq!(a.finish().hi.to_array(), b.finish().hi.to_array());
+    assert_eq!(c.finish().hi.to_array(), b.finish().hi.to_array());
 }

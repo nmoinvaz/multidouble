@@ -11,7 +11,7 @@
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::od::OD;
 use multidouble::pack::{self, Packed, PackedDD, Parts};
 use multidouble::qd::QD;
@@ -173,7 +173,7 @@ impl Kernel for DotBlocks<'_> {
     type Output = DD;
     #[inline(always)]
     fn run<S: Simd>(self) -> DD {
-        let mut acc = DotAcc::<S>::zero();
+        let mut acc = DDotAcc::<S>::zero();
         for (x, y) in self.0.blocks::<S>().zip(self.1.blocks::<S>()) {
             acc = acc.add_prod(DV { hi: x[0], lo: x[1] }, DV { hi: y[0], lo: y[1] });
         }

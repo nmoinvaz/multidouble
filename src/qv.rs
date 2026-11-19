@@ -11,7 +11,7 @@
 //!   output position k; every step reads `a[i]`, `b[j]` by selects, and lanes that have finished are frozen. The loop
 //!   runs at most seven steps and stops early once all eight lanes are done.
 //!
-//! `QDotAcc` accumulates a sum of quad-double products, in the spirit of `dv::DotAcc`: each product is expanded to
+//! `QDotAcc` accumulates a sum of quad-double products, in the spirit of `dv::DDotAcc`: each product is expanded to
 //! its partial products by order (a0b0; a0b1, a1b0 and the error of a0b0; ...; the O(eps^3) products by FMA, the
 //! O(eps^4) ones dropped, as in the sloppy multiply), and level l of the accumulator (l = 0..3) sums the order-l
 //! terms with error-free two-sums whose errors go to level l + 1; level 4 sums in plain f64 (Ogita-Rump-Oishi SumK,

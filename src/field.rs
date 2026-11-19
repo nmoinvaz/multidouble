@@ -17,7 +17,7 @@
 //! columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
-use crate::dv::{DotAcc, DV};
+use crate::dv::{DDotAcc, DV};
 use crate::jet::{Jet, OJet, QJet};
 use crate::linalg::DDLu;
 use crate::od::OD;
@@ -1112,7 +1112,7 @@ impl<S: Simd> MatLane for Fu<S> {
 impl<S: Simd, const N: usize> MatLane for Dtn<S, N> {
     #[inline(always)]
     fn dmat_apply<const B: usize>(dm: &DMat<S, B>, f: &Fl<Self, B>) -> Fl<Self, B> {
-        let mut av = [DotAcc::zero(); B];
+        let mut av = [DDotAcc::zero(); B];
         let mut ad = [[V8::zero(); N]; B];
         for jb in 0..B {
             for jl in 0..8 {

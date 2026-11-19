@@ -14,7 +14,7 @@ mod common;
 use common::Rng;
 use multidouble::dd::DD;
 use multidouble::dual::{op, take_counts, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Qu, F8};
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::field::{
     cs, cs_at, cs_at_cost, cs_at_par, cs_at_splits, cs_into, cs_lane_at, cs_lane_into, cs_par, cs_range, cs_range_at,
     cs_range_at_par, cs_range_into, cs_range_par, cs_splits, cs_w, cs_w_at, cs_w_at_par, cs_w_into, cs_w_lane_at,
@@ -66,7 +66,7 @@ fn put<S: Simd>(w: &mut Vec<u64>, v: V8<S>) {
 }
 
 /// the bits of a double-double accumulator, appended to w
-fn put_dot<S: Simd>(w: &mut Vec<u64>, a: &DotAcc<S>) {
+fn put_dot<S: Simd>(w: &mut Vec<u64>, a: &DDotAcc<S>) {
     put(w, a.s);
     put(w, a.e);
 }

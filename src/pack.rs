@@ -31,7 +31,7 @@
 //! The format, with diagrams, its size against general compressors and its speed:
 //! <https://github.com/nmoinvaz/multidouble/blob/main/docs/pack.md>.
 use crate::dd::DD;
-use crate::dv::{DotAcc, DV};
+use crate::dv::{DDotAcc, DV};
 use crate::od::OD;
 use crate::qd::QD;
 use crate::simd::{Kernel, Simd};
@@ -600,7 +600,7 @@ impl<const N: usize, T: Parts<N>> Unpack<'_, N, T> {
 }
 
 /// The double-double dot product of a and b as [`Packed::dot`] forms it, on the raw values: products i accumulated in
-/// lane i mod 8 by [`DotAcc`] (the last block padded with zeros), the lanes finished and added in order.
+/// lane i mod 8 by [`DDotAcc`] (the last block padded with zeros), the lanes finished and added in order.
 pub fn dot_raw(a: &[DD], b: &[DD]) -> DD {
     assert_eq!(a.len(), b.len(), "dot_raw: lengths {} and {}", a.len(), b.len());
     crate::simd::dispatch(DotRaw { a, b })
@@ -625,7 +625,7 @@ impl Kernel for DotRaw<'_> {
 impl DotRaw<'_> {
     #[inline(always)]
     fn body<S: Simd>(self) -> DD {
-        let mut acc = DotAcc::<S>::zero();
+        let mut acc = DDotAcc::<S>::zero();
         let (a, b) = (self.a.chunks(8), self.b.chunks(8));
         for (u, v) in a.zip(b) {
             let mut x = [[0.0; 8]; 2];
@@ -652,7 +652,7 @@ fn dv<S: Simd>(x: &[[f64; 8]; 2]) -> DV<S> {
 
 /// the accumulator's lanes finished and added in order
 #[inline(always)]
-fn lane_sum<S: Simd>(acc: DotAcc<S>) -> DD {
+fn lane_sum<S: Simd>(acc: DDotAcc<S>) -> DD {
     let f = acc.finish();
     let mut s = f.lane(0);
     for j in 1..8 {
@@ -663,7 +663,7 @@ fn lane_sum<S: Simd>(acc: DotAcc<S>) -> DD {
 
 impl Packed<2> {
     /// The double-double dot product with b, decoding both 8 values at a time on the best SIMD backend: products i
-    /// accumulated in lane i mod 8 by [`DotAcc`], the lanes finished and added in order. Bitwise [`dot_raw`] of the
+    /// accumulated in lane i mod 8 by [`DDotAcc`], the lanes finished and added in order. Bitwise [`dot_raw`] of the
     /// values.
     pub fn dot(&self, b: &Packed<2>) -> DD {
         assert_eq!(self.len, b.len, "Packed::dot: lengths {} and {}", self.len, b.len);
@@ -690,7 +690,7 @@ impl Kernel for Dot<'_> {
 impl Dot<'_> {
     #[inline(always)]
     fn body<S: Simd>(self) -> DD {
-        let mut acc = DotAcc::<S>::zero();
+        let mut acc = DDotAcc::<S>::zero();
         for (mut x, y) in self.a.blocks::<S>().zip(self.b.blocks::<S>()) {
             if mutate::on(mutate::DOT_LANE) {
                 for k in 0..2 {

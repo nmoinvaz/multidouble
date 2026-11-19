@@ -2,7 +2,7 @@
 //! the FMA two-product multiply and the three-quotient divide, so every operation is accurate to a few units of
 //! 2^-104 relative.
 //!
-//! `DotAcc` accumulates a sum of double-double products as (s, e): each product is formed exactly to ~2^-104,
+//! `DDotAcc` accumulates a sum of double-double products as (s, e): each product is formed exactly to ~2^-104,
 //! its leading part is added to s with an error-free two-sum and all error terms go into e (Ogita-Rump-Oishi
 //! Sum2 style). The result carries ~2^-104 relative to the sum of |terms|, at half the cost of chained DD adds.
 use crate::dd::DD;
@@ -204,17 +204,21 @@ impl<S: Simd> Div for DV<S> {
     }
 }
 
+/// The accumulator's former name, kept so that code written for it still compiles.
+#[deprecated(note = "renamed `DDotAcc`, like `QDotAcc` and `ODotAcc`")]
+pub type DotAcc<S> = DDotAcc<S>;
+
 /// Accumulator for sums of double-double products (see the module doc).
 #[derive(Clone, Copy, Debug)]
-pub struct DotAcc<S: Simd> {
+pub struct DDotAcc<S: Simd> {
     pub s: V8<S>,
     pub e: V8<S>,
 }
 
-impl<S: Simd> DotAcc<S> {
+impl<S: Simd> DDotAcc<S> {
     #[inline(always)]
     pub fn zero() -> Self {
-        DotAcc {
+        DDotAcc {
             s: V8::zero(),
             e: V8::zero(),
         }
@@ -226,7 +230,7 @@ impl<S: Simd> DotAcc<S> {
         let pe = a.hi.fma(b.lo, pe);
         let pe = a.lo.fma(b.hi, pe);
         let (s, t) = two_sum(self.s, p);
-        DotAcc {
+        DDotAcc {
             s,
             e: self.e.add(t.add(pe)),
         }
@@ -235,7 +239,7 @@ impl<S: Simd> DotAcc<S> {
     #[inline(always)]
     pub fn add(self, a: DV<S>) -> Self {
         let (s, t) = two_sum(self.s, a.hi);
-        DotAcc {
+        DDotAcc {
             s,
             e: self.e.add(t.add(a.lo)),
         }

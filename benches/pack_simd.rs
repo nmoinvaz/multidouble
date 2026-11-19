@@ -2,7 +2,7 @@
 // at a size that fits the caches (128 KiB of raw values per vector) and one that does not (256 MiB per vector)
 //
 // Throughput is counted in bytes of raw values (8 N per value, both vectors for a dot), so each line compares directly
-// with the copy and with the raw dot. The dots: double-double through `DotAcc` (`pack::dot_raw`, `Packed::dot`), the
+// with the copy and with the raw dot. The dots: double-double through `DDotAcc` (`pack::dot_raw`, `Packed::dot`), the
 // triple-word one of Mukunoki and Ozaki's quasi algorithms (QTWmul and QTWadd), octo-double through `ODotAcc`; the raw
 // ones read arrays of structs, as they do, and the packed ones decode 8 values at a time (`Packed::blocks`).
 //
@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
 use multidouble::dd::DD;
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::ov::{ODotAcc, OV};
 use multidouble::pack::{self, Packed};
 use multidouble::simd::{self, Kernel, Simd};
@@ -106,8 +106,8 @@ fn lanes<S: Simd>(v: &[V8<S>]) -> f64 {
     v.iter().map(|x| x.to_array().iter().sum::<f64>()).sum()
 }
 
-/// double-double, through `DotAcc`
-struct Dd<S: Simd>(DotAcc<S>);
+/// double-double, through `DDotAcc`
+struct Dd<S: Simd>(DDotAcc<S>);
 
 impl<S: Simd> Acc<S, 2> for Dd<S> {
     #[inline(always)]
@@ -188,7 +188,7 @@ impl Kernel for Dot2<'_> {
     type Output = f64;
     #[inline(always)]
     fn run<S: Simd>(self) -> f64 {
-        each(self.0, Dd(DotAcc::<S>::zero()))
+        each(self.0, Dd(DDotAcc::<S>::zero()))
     }
 }
 

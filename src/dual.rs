@@ -28,7 +28,7 @@
 //! Each lane type is generic over the backend (`crate::simd`), which `Lane::S` names, so that code generic over
 //! `Lane` runs on the instruction set [`crate::simd::dispatch`] picks.
 use crate::dd::DD;
-use crate::dv::{DotAcc, DV};
+use crate::dv::{DDotAcc, DV};
 use crate::ov::{ODotAcc, OV};
 use crate::qv::{QDotAcc, QV};
 use crate::simd::Simd;
@@ -364,7 +364,7 @@ pub trait Lane:
 
 impl<S: Simd> Lane for DV<S> {
     type S = S;
-    type Acc = DotAcc<S>;
+    type Acc = DDotAcc<S>;
     dd_param!();
     const TANGENT: bool = false;
     #[inline(always)]
@@ -408,23 +408,23 @@ impl<S: Simd> Lane for DV<S> {
         v
     }
     #[inline(always)]
-    fn acc0() -> DotAcc<S> {
-        DotAcc::zero()
+    fn acc0() -> DDotAcc<S> {
+        DDotAcc::zero()
     }
     #[inline(always)]
-    fn acc(a: DotAcc<S>, x: Self, y: Self) -> DotAcc<S> {
+    fn acc(a: DDotAcc<S>, x: Self, y: Self) -> DDotAcc<S> {
         a.add_prod(x, y)
     }
     #[inline(always)]
-    fn accc(a: DotAcc<S>, x: Self, c: DV<S>) -> DotAcc<S> {
+    fn accc(a: DDotAcc<S>, x: Self, c: DV<S>) -> DDotAcc<S> {
         a.add_prod(x, c)
     }
     #[inline(always)]
-    fn acc1(a: DotAcc<S>, x: Self) -> DotAcc<S> {
+    fn acc1(a: DDotAcc<S>, x: Self) -> DDotAcc<S> {
         a.add(x)
     }
     #[inline(always)]
-    fn fin(a: DotAcc<S>) -> Self {
+    fn fin(a: DDotAcc<S>) -> Self {
         a.finish()
     }
 }
@@ -467,7 +467,7 @@ impl<S: Simd> Mul for Du<S> {
     type Output = Self;
     #[inline(always)]
     fn mul(self, o: Du<S>) -> Du<S> {
-        let d = DotAcc::zero().add_prod(self.v, o.d).add_prod(self.d, o.v).finish();
+        let d = DDotAcc::zero().add_prod(self.v, o.d).add_prod(self.d, o.v).finish();
         Du { v: self.v * o.v, d }
     }
 }
@@ -485,7 +485,7 @@ impl<S: Simd> Div for Du<S> {
 
 impl<S: Simd> Lane for Du<S> {
     type S = S;
-    type Acc = (DotAcc<S>, DotAcc<S>);
+    type Acc = (DDotAcc<S>, DDotAcc<S>);
     dd_param!();
     const TANGENT: bool = true;
     #[inline(always)]
@@ -548,7 +548,7 @@ impl<S: Simd> Lane for Du<S> {
     }
     #[inline(always)]
     fn acc0() -> Self::Acc {
-        (DotAcc::zero(), DotAcc::zero())
+        (DDotAcc::zero(), DDotAcc::zero())
     }
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
@@ -625,8 +625,8 @@ impl<S: Simd> Mul for Dc<S> {
     type Output = Self;
     #[inline(always)]
     fn mul(self, o: Dc<S>) -> Dc<S> {
-        let r = DotAcc::zero().add_prod(self.v, o.r).add_prod(self.r, o.v).finish();
-        let i = DotAcc::zero().add_prod(self.v, o.i).add_prod(self.i, o.v).finish();
+        let r = DDotAcc::zero().add_prod(self.v, o.r).add_prod(self.r, o.v).finish();
+        let i = DDotAcc::zero().add_prod(self.v, o.i).add_prod(self.i, o.v).finish();
         Dc { v: self.v * o.v, r, i }
     }
 }
@@ -645,7 +645,7 @@ impl<S: Simd> Div for Dc<S> {
 
 impl<S: Simd> Lane for Dc<S> {
     type S = S;
-    type Acc = (DotAcc<S>, DotAcc<S>, DotAcc<S>);
+    type Acc = (DDotAcc<S>, DDotAcc<S>, DDotAcc<S>);
     dd_param!();
     const TANGENT: bool = true;
     #[inline(always)]
@@ -720,7 +720,7 @@ impl<S: Simd> Lane for Dc<S> {
     }
     #[inline(always)]
     fn acc0() -> Self::Acc {
-        (DotAcc::zero(), DotAcc::zero(), DotAcc::zero())
+        (DDotAcc::zero(), DDotAcc::zero(), DDotAcc::zero())
     }
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
@@ -1802,7 +1802,7 @@ impl<S: Simd, const N: usize> Div for Dtn<S, N> {
 
 impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
     type S = S;
-    type Acc = (DotAcc<S>, [V8<S>; N]);
+    type Acc = (DDotAcc<S>, [V8<S>; N]);
     dd_param!();
     const TANGENT: bool = true;
     const TAN_F64: bool = true;
@@ -1879,7 +1879,7 @@ impl<S: Simd, const N: usize> Lane for Dtn<S, N> {
     }
     #[inline(always)]
     fn acc0() -> Self::Acc {
-        (DotAcc::zero(), [V8::zero(); N])
+        (DDotAcc::zero(), [V8::zero(); N])
     }
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {

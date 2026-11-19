@@ -17,7 +17,7 @@
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::V8;
-use crate::native::{DotAcc, DV};
+use crate::native::{DDotAcc, DV};
 use crate::native::{QDotAcc, QV};
 #[cfg(feature = "mutate")]
 use crate::qd::mutate;
@@ -1682,7 +1682,7 @@ fn bench_qd() {
     let d_mul = time!(da, |x: DV, i: usize| x * dy[i]);
     let d_div = time!(da, |x: DV, i: usize| x / dy[i]);
     let d_fma = time!(da, |x: DV, i: usize| x.mul_f(0.5) * dy[i] + dz[i]);
-    let d_dot = dot!(da, dy, DotAcc::zero());
+    let d_dot = dot!(da, dy, DDotAcc::zero());
     let q_add = time!(qa, |x: QV, i: usize| (x + qz[i]).mul_pwr2(0.5));
     let q_iadd = time!(qa, |x: QV, i: usize| x.ieee_add(qz[i]).mul_pwr2(0.5));
     let q_mul = time!(qa, |x: QV, i: usize| x * qy[i]);

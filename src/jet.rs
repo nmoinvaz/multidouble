@@ -13,7 +13,7 @@
 #![allow(clippy::needless_range_loop)]
 use crate::dd::DD;
 use crate::dual::{mutate, Lane, Param};
-use crate::dv::{DotAcc, DV};
+use crate::dv::{DDotAcc, DV};
 use crate::od::{OdAcc, OD};
 use crate::ov::{ODotAcc, OV};
 use crate::qd::{QdAcc, QD};
@@ -164,8 +164,8 @@ impl<S: Simd, const N: usize> Jet<S, N> {
     }
     /// the Cauchy product's coefficient k of x and y, orders 0..=k through the dot accumulator
     #[inline(always)]
-    fn conv(x: &[DV<S>; N], y: &[DV<S>; N], k: usize) -> DotAcc<S> {
-        let mut a = DotAcc::zero();
+    fn conv(x: &[DV<S>; N], y: &[DV<S>; N], k: usize) -> DDotAcc<S> {
+        let mut a = DDotAcc::zero();
         for i in 0..=k {
             a = a.add_prod(x[i], y[k - i]);
         }
@@ -225,7 +225,7 @@ impl<S: Simd, const N: usize> Div for Jet<S, N> {
         let mut q = self.c;
         q[0] = self.c[0].div_by(o.c[0], r);
         for k in 1..N {
-            let mut a = DotAcc::zero();
+            let mut a = DDotAcc::zero();
             for i in 1..=k {
                 a = a.add_prod(o.c[i], q[k - i]);
             }
@@ -237,7 +237,7 @@ impl<S: Simd, const N: usize> Div for Jet<S, N> {
 
 impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     type S = S;
-    type Acc = [DotAcc<S>; N];
+    type Acc = [DDotAcc<S>; N];
     type P = Series<N>;
     const TANGENT: bool = true;
     const NJ: usize = N;
@@ -246,7 +246,7 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     fn mulp(self, p: Series<N>) -> Self {
         let mut c = self.c;
         for k in 0..N {
-            let mut a = DotAcc::zero();
+            let mut a = DDotAcc::zero();
             for i in 0..=k {
                 a = a.add_prod(self.c[i], DV::splat(p.c[k - i]));
             }
@@ -361,7 +361,7 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     }
     #[inline(always)]
     fn acc0() -> Self::Acc {
-        [DotAcc::zero(); N]
+        [DDotAcc::zero(); N]
     }
     #[inline(always)]
     fn acc(a: Self::Acc, x: Self, y: Self) -> Self::Acc {
@@ -440,7 +440,7 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
             into.c[0] = x.c[0].div_by(y.c[0], r);
             return;
         }
-        let mut a = DotAcc::zero();
+        let mut a = DDotAcc::zero();
         for i in 1..=k {
             a = a.add_prod(y.c[i], into.c[k - i]);
         }
@@ -449,7 +449,7 @@ impl<S: Simd, const N: usize> Lane for Jet<S, N> {
     /// `mulp`'s coefficient k
     #[inline(always)]
     fn mulp_at(x: &Self, p: &Series<N>, k: usize, into: &mut Self) {
-        let mut a = DotAcc::zero();
+        let mut a = DDotAcc::zero();
         for i in 0..=k {
             a = a.add_prod(x.c[i], DV::splat(p.c[k - i]));
         }
