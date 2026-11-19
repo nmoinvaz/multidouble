@@ -27,10 +27,11 @@ with $\bar r_j^{2K}/(2K+1)! \le 2^{-10}u^n(1 - \bar r_j^2/6)$, and $K_{\rm c}(j)
 their greedy $n$-part roundings. For $|r_0| < u^{n/2}$, $\textrm{SINR}(r) = r$ and $\textrm{COSR}(r) = 1$. Otherwise,
 with $z = \mathrm{MUL}(r, r)$, $K = K_{\rm s}(j)$ for SINR and $K_{\rm c}(j)$ for COSR,
 \begin{gather*}
-p_{K-1} = \hat s_{K-1}, \quad p_k = \mathrm{ADD}(\mathrm{MUL}(z, p_{k+1}), \hat s_k), \\
+p_{K-1} = \hat s_{K-1}, \\
+p_k = \mathrm{ADD}(\mathrm{MUL}(z, p_{k+1}), \hat s_k) \quad (k = K-2, \dots, 1), \\
 \textrm{SINR}(r) = 2^{-j-1}\mathrm{ADD}\bigl(r', \mathrm{MUL}(r', \mathrm{MUL}(z, p_1))\bigr),
 \end{gather*}
-for $k = K-2, \dots, 1$, with $r' = 2^{j+1}r$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z,
+with $r' = 2^{j+1}r$, and COSR$(r) = \mathrm{ADDF}(\mathrm{MUL}(z,
 p_1), 1)$ with $\hat c_k$ in place of $\hat s_k$. A power of two multiplies every part.
 
 \paragraph{The functions} For $|x_0| < u^{n/2}$, SIN$_n(x) = x$, COS$_n(x) = 1$ and TAN$_n(x) = x$. Otherwise, with $(q, r)
