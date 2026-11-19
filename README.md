@@ -251,14 +251,14 @@ The largest errors the tests measured on generated inputs, against exact arithme
 |---|---|---|---|
 | add, multiply, divide | 1.66, 3.12, 1.54 u² | | below 0.01 u⁸ |
 | exp, ln | 1.04, 1.27 u² | 0.55, 0.58 u⁴ | 0.25, 0.0070 u⁸ |
-| sin and cos, tan | 1.82, 4.07 u² | 1.24, 7.18 u⁴ | 0.48 u⁸ |
+| sin and cos, tan | 1.82, 4.07 u² | 1.24, 7.18 u⁴ | 0.48, 0.32 u⁸ |
 
 The exp and ln row is from ten times the tests' default inputs, and the other rows from the default run. The
 double-double add is measured relative to the result, the quad-double `+` and the octo-double add's second term against
 |a| + |b|, and the double-double divide on the residual of its quotient. The octo-double add, multiply and divide reach
 their bounds on the paper's worst-case inputs, its constructed inputs make the square root, sin, cos, tan, exp and ln
-err by about u⁸, and random inputs stay far inside. The octo-double sin, cos and tan reach 0.48 u⁸ on generated inputs
-only just below 2⁻²¹², from the early return's x²/2, and stay below 0.01 u⁸ elsewhere.
+err by about u⁸, and random inputs stay far inside. On generated inputs just below 2⁻²¹², the octo-double sin, cos and
+tan reach 0.16, 0.48 and 0.32 u⁸, the early return's x²/6, x²/2 and x²/3, and they stay below 0.01 u⁸ elsewhere.
 
 The quad-double types use the QD library's algorithms (Hida, Li and Bailey, ARITH-15, 2001) [[7]](#ref-hlb01) with three
 repairs, two to the accurate add and one to the square root, which now scales its argument by a power of four.
