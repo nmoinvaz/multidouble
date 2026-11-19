@@ -525,9 +525,9 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
   bound still holds, but it is no longer close to $u^n$.
 \item \textbf{Dot products.} A level accumulator is accurate to about $u^n$ for up to about 50 products at eight
   parts. Random terms do not show its growth beyond that.
-\item \textbf{Sloppy multiplication.} Summing the last level in plain arithmetic, as QD's sloppy multiplication
-  does, raises the multiplication's bound from about $u^8|Z|$ to $2^{31.93}u^8|a_0b_0|$ at eight parts
-  (Theorem~\ref{thm:sloppy}).
+\item \textbf{Sloppy multiplication.} Dropping level $n$ and summing level $n - 1$ in plain arithmetic, as QD's
+  sloppy multiplication does at four parts, raises the multiplication's bound from about $u^8|Z|$ to
+  $2^{31.93}u^8|a_0b_0|$ at eight parts (Theorem~\ref{thm:sloppy}).
 \item \textbf{Elementary functions.} Built on these operations, with a reduction by $\pi/2$ to 1216 bits in exact
   integer arithmetic and Taylor series, the sine and cosine err by at most $3.17\,u^8|f(x)| + 5|k|2^{-1217}$ and the
   tangent by $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)|\tan x|$, with $5|k|2^{-1217} < 2^{-1163}$, for $|x_0| \le
