@@ -1327,7 +1327,7 @@ fn from_f64s_parts<S: Simd, const N: usize>(v: &[f64; 8]) -> [V8<S>; N] {
     r
 }
 
-/// per lane 0 + |x_0| + |x_1| + ..., the scalar `abs_sum` of `QD` and `OD`
+/// per lane 0 + |x_0| + |x_1| + ..., the scalar `abs_sums` of `QD` and `OD`
 #[inline(always)]
 fn abs_sums_parts<S: Simd, const N: usize>(x: &[V8<S>; N]) -> [f64; 8] {
     let mut s = V8::zero();

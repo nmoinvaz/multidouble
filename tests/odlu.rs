@@ -309,7 +309,7 @@ fn od_lu_sparse_singular_and_non_finite() {
 }
 
 /// part q of entry (i, j) of the pinned system's matrix, or of entry i of b when j is None: small integers over powers
-/// of two, exact in f64, so that the Python tests (`od_pinned_system` in python/tests/test_od_solve.py) build the same
+/// of two, exact in f64, so that the Python tests (`pinned_system` in python/tests/test_od_solve.py) build the same
 /// system. The parts overlap, so `OD::new` renormalizes them, as the Python binding does.
 fn pinned_part(i: usize, j: Option<usize>, q: usize) -> f64 {
     let scale = 2f64.powi(-7 - 53 * q as i32);
