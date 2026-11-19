@@ -2203,7 +2203,7 @@ fn od_bits(b: [u64; 8]) -> OD {
     }
 }
 
-/// An input on which the square root errs by u^8 |sqrt x| to within a factor 1 - 5u (the paper's Table 1,
+/// An input on which the square root errs by u^8 |sqrt x| to within a factor 1 - 5u (the paper's Table V,
 /// paper/table1_inputs.py): x = (1 + 2u, x_1, ..., x_7), its parts chosen one at a time so that the levels of the last
 /// product, r x, are 1, u, ..., u^7 with a ninth just below u^8, which the renormalization drops, so that the result is
 /// (1, u, ..., u^7). Pass: that result, scalar and lanes alike, x within `proven`'s hypotheses, and the check, the
