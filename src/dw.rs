@@ -30,7 +30,7 @@ fn two_prod<L: Limb>(a: L, b: L) -> (L, L) {
 }
 
 /// a + b for a double-word a and a limb b: DWPlusFP, Algorithm 4 of Joldes, Muller and Popescu (2017), within
-/// 2u^2 / (1 - 2u) relative
+/// 2u^2 relative
 #[inline(always)]
 pub(crate) fn dw_plus_fp<L: Limb>(a: (L, L), b: L) -> (L, L) {
     let (sh, sl) = two_sum(a.0, b);

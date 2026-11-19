@@ -167,7 +167,7 @@ class DoubleWord:
         self.convex = convex
         self.n = 2
         self.a_add = 3 * u * u / (1 - 4 * u)        # AccurateDWPlusDW, Joldes-Muller-Popescu Thm 3.1, p >= 3
-        self.a_addf = 2 * u * u / (1 - 2 * u)       # DWPlusFP, Joldes-Muller-Popescu Algorithm 4, p >= 4
+        self.a_addf = 2 * u * u                     # DWPlusFP, Joldes-Muller-Popescu Algorithm 4, p >= 3
         self.a_mul = 5 * u * u / (1 + u) ** 2       # DWTimesDW2, Muller-Rideau 2022, p >= 5
         self.a_mulf = 2 * u * u                     # DWTimesFP3, Joldes-Muller-Popescu Algorithm 9
 

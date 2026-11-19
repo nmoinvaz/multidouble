@@ -315,7 +315,7 @@ $|f|$; at $n = 8$, as quoted, it exceeds the relative term only where $|\ln x| <
 \paragraph{Double words} \texttt{DD::exp} and \texttt{DD::ln} run EXP and LOG with the double-word operations of
 Joldes, Muller and Popescu~\cite{JMP17}, whose relative errors are bounded: AccurateDWPlusDW (their Algorithm 6, the
 ADD) within $\alpha_{\rm A} = 3u^2/(1-4u)$ (their Theorem 3.1), DWPlusFP (Algorithm 4, the ADDF) within $\alpha_{\rm F}
-= 2u^2/(1-2u)$, DWTimesFP3 (Algorithm 9, the MULF) within $\alpha_{\rm M} = 2u^2$, and DWTimesDW2 (Algorithm 11, the
+= 2u^2$, DWTimesFP3 (Algorithm 9, the MULF) within $\alpha_{\rm M} = 2u^2$, and DWTimesDW2 (Algorithm 11, the
 MUL) within $\alpha_{\rm P} = 5u^2/(1+u)^2$, the bound Muller and Rideau proved formally~\cite{MR22}, who also proved
 the others formally. The double-word product of multidouble sums its terms in another order, for which no bound is
 published, so \texttt{DD::exp} and \texttt{DD::ln} use DWTimesDW2. The reduction is $r =
