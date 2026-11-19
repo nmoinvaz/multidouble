@@ -185,7 +185,7 @@ The aliases in `native` (`native::DV`, `native::QV`, ...) are the lane types on 
 features select at compile time, for code that does not dispatch (`RUSTFLAGS="-C target-cpu=native"` makes that the
 best one too). Results are the same on every backend; only the speed changes.
 
-The cargo feature `f128` adds conversions between `f128` and the scalar types. It needs nightly Rust, as `f128` is
+The cargo feature `f128` adds conversions between `f128` and `DD` and `QD`. It needs nightly Rust, as `f128` is
 unstable. `QD::from_f128` is exact, `DD::from_f128` rounds to the nearest parts, and both `to_f128` are correctly
 rounded.
 
