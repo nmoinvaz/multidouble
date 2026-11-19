@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "multidouble"
-version = "4.9.1"
+version = "5.0.0"
 description = "Double-double arithmetic on numpy arrays (hi, lo pairs) and quad-double and octo-double LU solves, backed by the Rust crate multidouble"
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
