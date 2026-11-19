@@ -157,9 +157,9 @@ impl<S: Simd> OV<S> {
         OV { c: [V8::zero(); 8] }
     }
     /// The exact sum of eight finite parts in any order on each lane, lane j bitwise `OD::new` of the parts' lane j.
-    /// When every lane's parts are in decreasing magnitude and every lane's renormalization comes out on the ladder or
-    /// not finite, the lanes renormalize together (`OD::new` returns that renormalization on such parts); otherwise
-    /// each lane is `OD::new`.
+    /// When every lane's parts are in decreasing magnitude and every lane's renormalization comes out finite and on the
+    /// ladder (or has a part that is not finite), the lanes renormalize together (`OD::new` returns that renormalization
+    /// on such parts); otherwise each lane is `OD::new`.
     #[inline]
     pub fn new(c: [V8<S>; 8]) -> Self {
         S::vectorize(
@@ -183,7 +183,10 @@ impl<S: Simd> OV<S> {
                         let ulp = r[k].pow2_floor().max(tiny).mul(eps);
                         m.and(r[k + 1].eq(z).or(r[k].ne(z).and(ulp.ge(r[k + 1].abs()))))
                     });
-                    let keep = V8::splat(f64::INFINITY).gt(r[0].abs()).not().or(ladder);
+                    // as any_order::exact_sum: a finite result on the ladder, or a part that is not finite
+                    let inf = V8::splat(f64::INFINITY);
+                    let finite = (0..8).fold(all, |m, k| m.and(inf.gt(c[k].abs())));
+                    let keep = inf.gt(r[0].abs()).and(ladder).or(finite.not());
                     if keep.bits() == all.bits() || mutate::on(mutate::NO_FALLBACK) {
                         return OV { c: r };
                     }
