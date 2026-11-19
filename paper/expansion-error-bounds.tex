@@ -304,7 +304,8 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 \caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
 ladder and a floating-point number $f$. $Z$ is the exact result. Each bound assumes no underflow inside the run; for
 $e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
-(A2$'$)). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
+(A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\pi/2$ that the reduction removes, and $x$ lies at
+least $2^{-650}$ from every nonzero multiple of $\pi/2$ (Theorem~\ref{thm:trig}). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
 those of the others are in Table~\ref{tab:inputs}, each with its error as a multiple of $u^8|Z|$ (computed).}
 \label{tab:summary}
 \small
@@ -499,8 +500,8 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
 \item \textbf{Elementary functions.} Built on these operations, with a reduction by $\pi/2$ to 1216 bits in exact
   integer arithmetic and Taylor series, the sine and cosine err by at most $3.17\,u^8|f(x)| + 5|k|2^{-1217}$ and the
   tangent by $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)|\tan x|$, with $5|k|2^{-1217} < 2^{-1163}$, for $|x_0| \le
-  2^{52}$ and runs without underflow, which scaling the small reduced arguments gives for every one from $2^{-212}$ up
-  (Theorem~\ref{thm:trig}, Remark~\ref{rem:a2}).
+  2^{52}$, $x$ at least $2^{-650}$ from every nonzero multiple of $\pi/2$, and runs without underflow, which scaling
+  the small reduced arguments gives for every one from $2^{-212}$ up (Theorem~\ref{thm:trig}, Remark~\ref{rem:a2}).
 \item \textbf{Underflow.} The hypotheses exclude underflow in any intermediate value, not only in the operands. A part
   far below the one above it can make a product of two small parts underflow.
 \item \textbf{Open questions.} The second-order constants come from triangle inequalities and are not claimed to be
