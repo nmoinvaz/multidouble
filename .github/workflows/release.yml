@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# A second dispatch waits for the running one rather than racing it to push.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Bump version
@@ -20,6 +25,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          # The branch's tip when the job starts, not at dispatch, so that a run queued behind another builds on its bump.
+          ref: ${{ github.ref }}
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
