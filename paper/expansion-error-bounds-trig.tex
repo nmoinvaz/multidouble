@@ -53,10 +53,12 @@ Assume~\ref{as:fp}, let $x$ be finite with $|x_0| \le 2^{52}$ satisfying $H(2)$,
 Then $|k| < 0.64\cdot2^{52}$, $q \equiv k \pmod 4$, and with $r_{\rm e} = x - k\pi/2$ and $E_\pi = |k|\,2^{-1217}$:
 \begin{enumerate}
 \item[(a)] if $k = 0$, $r = x$ and $|r| \le 0.785399$;
-\item[(b)] otherwise $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_\pi$, $|r| \le \bar r_0$, and $|r_{i+1}| \le \frac12\ulp(r_i)$,
-  so $r$ satisfies $H(1)$.
+\item[(b)] otherwise $|r| \le \bar r_0$ and $|r_{i+1}| \le \frac12\ulp(r_i)$, so $r$ satisfies $H(1)$, and if
+  $|r_{\rm e}| \ge 2^{pn-1074}$ then $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_\pi$.
 \end{enumerate}
-In both cases $r$ in bucket $j$ has $|r| \le \bar r_j$, and its parts satisfy $|r_i| \le \bar a_i|r|$.
+In both cases $r$ in bucket $j$ has $|r| \le \bar r_j$ and its parts satisfy $|r_i| \le \bar a_i|r|$, and for $n \le
+38$, $|r_{\rm e}| \le \bar r_j$ too, and $|r_{\rm e}| \le \bar r_{\min} = u^{n/2}(1 + 2^{-50})$ where $|r_0| <
+u^{n/2}$.
 \end{lemma}
 
 \begin{proof}
@@ -70,10 +72,17 @@ r_{\max}(1+u)$. Otherwise the three terms of the same estimate with $|v| < 2.7$ 
 needs $|x_0| > 2^{31}$, as below it the first estimate is below $2^{-20}$ and $|v| < \pi/4 + 1.5\cdot10^{-6} < r_{\max}$.
 Then the first $k$ exceeds $2^{30}$ and $|k_2| \le 2$, so the final $k$ is 0 only when the first one is. (a)
 $\lfloor\RN(x_0c)\rceil = 0$ means $|\RN(x_0c)| < \frac12$, so $|x_0| < \frac\pi4(1+u)/(1-u) < 0.7853982$, and $|x| \le
-|x_0|/(1-2u)$. (b) By \eqref{eq:rn}, each
-remainder of the greedy rounding is at most $u_*$ times the one before, so $|r - v| \le u_*^n|v|$, and $|r_{i+1}| \le
-\frac12\ulp(r_i)$; then $|r - r_{\rm e}| \le u_*^n(|r_{\rm e}| + E_\pi) + E_\pi$. The bucket bounds follow from $|r| \le
-|r_0|/(1-2u)$, and the part bounds are \eqref{eq:abar}, since $H(1)$ implies $H(2)$.
+|x_0|/(1-2u)$. (b) The greedy rounding is exact arithmetic on $v$, rounded to binary64 part by part, so $|r_{i+1}| \le
+\frac12\ulp(r_i)$ whatever the sizes. A remainder $v - \sum_{l<i}r_l$ of magnitude at least $2^{-1022}$ is rounded
+within $u_*$ times itself by \eqref{eq:rn}, and a smaller one to a multiple of $2^{-1074}$, within $2^{-1075}$, as is
+every remainder after it. So $|r - v| \le \max(u_*^n|v|,\ 2^{-1075})$, which is $u_*^n|v|$ when $|r_{\rm e}| \ge
+2^{pn-1074}$, as then $|v| \ge |r_{\rm e}| - E_\pi \ge 2^{pn-1075}(1+u)^n$; then $|r - r_{\rm e}| \le u_*^n(|r_{\rm e}|
++ E_\pi) + E_\pi$. The bucket bounds follow from $|r| \le
+|r_0|/(1-2u)$ and $|r_0| \le 2^{-j}(1-u)$, and the part bounds are \eqref{eq:abar}, since $H(1)$ implies $H(2)$. For
+$r_{\rm e}$ with $k \ne 0$: in bucket 0, $|r_{\rm e}| \le |v| + E_\pi \le r_{\max}(1+u) + E_\pi < \bar r_0$. Otherwise
+$|r_{\rm e}| \le |r| + u_*^n(|r_{\rm e}| + E_\pi) + 2^{-1075} + E_\pi$, so $|r_{\rm e}|(1 - u^n) \le |r| + 2^{-1074}$,
+and $2^{-1074} \le 2^{-67}u^{n/2}$ for $n \le 38$: in bucket $j \ge 1$, where $|r| \ge u^{n/2}(1-2u)$, $|r_{\rm e}| \le
+2^{-j}(1 + 4u) \le \bar r_j$, and for $|r_0| < u^{n/2}$, $|r_{\rm e}| \le u^{n/2}(1 + 4u) \le \bar r_{\min}$.
 \end{proof}
 
 \paragraph{Horner's rule} The evaluation, and that of the exponential and the logarithm, sums a series by Horner's
@@ -167,8 +176,9 @@ and $\psi_{{\rm c},i} \le (\theta_ju)^i\lambda_{\rm c}$ for $i \ge 1$, where $\l
 u^n + \kdiv u^{n+1}$ with $\kdiv$ that of Theorem~\ref{thm:t6} at $\theta = \theta_j$, which needs $\theta_ju \le 1/4$.
 
 \begin{theorem}\label{thm:trig}
-Assume~\ref{as:fp} with $p = 53$ and (A3), $n$ even, and let $x$ be finite with $|x_0| \le 2^{52}$
-satisfying $H(2)$, $f \in \{\sin, \cos\}$, $E_\pi = |k|\,2^{-1217}$ and $\epsilon = 1 + 2u^n$. For each bucket $j$, let
+Assume~\ref{as:fp} with $p = 53$ and (A3), $n \le 38$ even, and let $x$ be finite with $|x_0| \le 2^{52}$
+satisfying $H(2)$ and, where the $k$ of RED is not zero, $|x - k\pi/2| \ge 2^{pn-1074}$. Let $f \in \{\sin, \cos\}$,
+$E_\pi = |k|\,2^{-1217}$ and $\epsilon = 1 + 2u^n$. For each bucket $j$, let
 \begin{align*}
 C_j &= \epsilon\max\bigl(\delta_{\rm S} + \epsilon u^n,\ \delta_{\rm C} + \epsilon u^n\bar r_j\tan_+ \bar r_j\bigr), \\
 C^{\rm T}_j &= \epsilon\Bigl(\max\Bigl(\frac{(1+\delta_{\rm S})(1+\delta_{\rm D})}{1 - \delta_{\rm C}},
@@ -195,7 +205,8 @@ double-double functions of a double-word $x$ ($x_0 = \RN(x)$) with $C \le 7.8414
 If $|x_0| < u^{n/2}$, $|x| < u^{n/2}(1-2u)^{-1} \le \bar r_{\min}$, and the returned $x$, $1$ and $x$ err by at most $|x|^3/6$, $x^2/2$ and $\tan|x|
 - |x|$, within the stated $C$ and $C^{\rm T}$. Otherwise Lemma~\ref{lem:red} gives $r$ in bucket $j$ with the
 hypotheses of Lemma~\ref{lem:sincosr}, and $f(x) = \pm\sin r_{\rm e}$ or $\pm\cos r_{\rm e}$ by the quadrant, as SIN$_n$
-and COS$_n$ return. Let $\eta = |r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_\pi$ (zero for $k = 0$). For the sine,
+and COS$_n$ return. Let $\eta = |r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_\pi$ (zero for $k = 0$), by Lemma~\ref{lem:red}(b) and the
+hypothesis on $x$; by the same lemma $|r_{\rm e}| \le \bar r_j$, which the bounds below at $\bar r_j$ use. For the sine,
 $|\sin r - \sin r_{\rm e}| \le \eta\cos\xi$ with $\xi$ between $r$ and $r_{\rm e}$, and $\cos\xi \le \cos|r_{\rm e}| +
 \eta$; with $|r_{\rm e}|\cos|r_{\rm e}| \le \sin|r_{\rm e}|$ and $|r_{\rm e}| \le 1.12\sin|r_{\rm e}|$ this is at most
 $u^n(1+u^n)|\sin r_{\rm e}| + 4E_\pi$. With Lemma~\ref{lem:sincosr} and $|\sin r| \le (1 + 1.2u^n)|\sin r_{\rm e}| + 2E_\pi$,
@@ -211,11 +222,9 @@ Theorem~\ref{thm:t6} gives DIV$(Y_{\rm s}, Y_{\rm c}) = (Y_{\rm s}/Y_{\rm c})(1 
 The numerator's $2^{3j+3}$ and the quotient's $2^{-3j-3}$ are exact under (A2), and Theorem~\ref{thm:t6}'s bound
 is relative, so the scaled quotient has it. For odd $q$ the quotient is $-$DIV$(Y_{\rm c}, Y_{\rm s})$, and $|\cot r -
 \cot r_{\rm e}|/|\cot r_{\rm e}| = |\sin(r - r_{\rm e})|/(|\sin r|\cos r_{\rm e})$, with $|\sin r|$ where the even case
-has $\cos r$. By (A2), $\RN(v)$, which is not zero as $P$ is odd and $|k| < 2^{142}$, is at least $2^{-1074} >
-2^{90}E_\pi$, so $|\sin r| \ge (1 - \eta/|\sin r_{\rm e}|)|\sin r_{\rm e}|$ with $\eta/|\sin r_{\rm e}| \le 1.2u^n +
-2^{-89}$. If $2E_\pi \le u^n|\sin r_{\rm e}|$ the factor is within $\epsilon$. Otherwise its excess over $\epsilon$, at
-most $2^{-88}$, multiplies a term below $2E_\pi/|\sin r_{\rm e}|$, which the absolute term absorbs. The rest is as for even
-$q$. For the double-double functions
+has $\cos r$. By the hypothesis on $x$, $|r_{\rm e}| \ge 2^{pn-1074}$, so $2E_\pi < 2^{-90}u^n|r_{\rm e}|$ and $\eta/|\sin
+r_{\rm e}| \le 1.2u^n$. Then $|\sin r| \ge (1 - 1.2u^n)|\sin r_{\rm e}|$, a factor within $\epsilon$, and the rest is
+as for even $q$. For the double-double functions
 the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, and with the last
 operation's $e_{\rm op}$ in place of $u^n$ in $E_{\rm S}$, $E_{\rm C}$, $\delta_{\rm S}$ and $\delta_{\rm C}$. Their
 operands are double-word numbers, since every algorithm ends with a $\FastTwoSum$, $r$ passes through one, and the
@@ -245,6 +254,13 @@ Whether the bounds are approached is not known.
 \end{remark}
 
 \begin{remark}\label{rem:a2}
+The hypothesis $|x - k\pi/2| \ge 2^{pn-1074}$, which is $2^{-650}$ at $n = 8$ and $2^{-968}$ for the double-double
+functions, keeps every part of the reduced argument where its rounding is relative. It excludes the arguments that
+agree with a nonzero multiple of $\pi/2$ to 650 binary places. Eight parts hold 424 bits, so 226 places or more would
+have to be runs of equal bits of $k\pi/2$ that the gaps between the parts skip. No such argument is known, and no
+lower bound on $|x - k\pi/2|$ over the $n$-part $x$ is proved here. Without the hypothesis the proof of
+Lemma~\ref{lem:red} gives $|r - r_{\rm e}| \le u_*^n|r_{\rm e}| + 2E_\pi + 2^{-1075}$.
+
 The theorem assumes (A2) for the whole run. With the scalings, the operands of every operation have leading parts
 between $2^{-427}$ and $2^{425}$: $r$ itself at least $u^4 = 2^{-212}$ in $z = \mathrm{MUL}(r, r)$, $r'$ and the sums
 in SINR near 1, $z$ and $t$ at least $2^{-2j-5}$, and the quotient near $2^{2j+2}$, whose divisor $Y_{\rm c}$
