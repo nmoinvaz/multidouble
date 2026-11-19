@@ -483,7 +483,7 @@ fn from_parts_refuses_arrays_of_different_lengths() {
 /// the bits of the pinned double-double outputs, by group. nudge flips the last bit of the first
 /// x's high part.
 fn dd_outputs(nudge: bool) -> Vec<Vec<u64>> {
-    use multidouble::native::{DotAcc, DV, V8};
+    use multidouble::native::{DDotAcc, DV, V8};
     let bits = |v: &[DD]| -> Vec<u64> { v.iter().flat_map(|d| [d.hi.to_bits(), d.lo.to_bits()]).collect() };
     let lanes = |v: DV| -> Vec<u64> { bits(&(0..8).map(|j| v.lane(j)).collect::<Vec<_>>()) };
     let dv = |v: &[DD; 8]| DV::load(&v.map(|d| d.hi), &v.map(|d| d.lo));
@@ -508,7 +508,9 @@ fn dd_outputs(nudge: bool) -> Vec<Vec<u64>> {
         for v in [xv.mul_v(fv), xv.add_v(fv), xv.div_by(yv, yv.hi.divisor())] {
             w[3].extend(lanes(v));
         }
-        w[4].extend(lanes(DotAcc::zero().add_prod(xv, yv).add_prod(yv, yv).add(xv).finish()));
+        w[4].extend(lanes(
+            DDotAcc::zero().add_prod(xv, yv).add_prod(yv, yv).add(xv).finish(),
+        ));
     }
     w
 }

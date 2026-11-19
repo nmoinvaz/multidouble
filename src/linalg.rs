@@ -7,7 +7,7 @@
 //! (`lu_rect_f64`) and of a staircase system (`StaircaseLu`), and the log-determinant and pivots of a complex
 //! double-double matrix (`clu_logdet`, `clu_pivots`).
 use crate::dd::{pow2_near, two_prod, two_sum, DD};
-use crate::dv::{self, DotAcc, DV};
+use crate::dv::{self, DDotAcc, DV};
 use crate::od::OD;
 use crate::ov::OV;
 use crate::qd::QD;
@@ -1500,7 +1500,7 @@ fn gram_on<S: Simd>(
         S::vectorize(
             #[inline(always)]
             || {
-                let mut acc = dv::DotAcc::<S>::zero();
+                let mut acc = dv::DDotAcc::<S>::zero();
                 let mut i = 0;
                 while i < ld {
                     let x = DV::load(&jh[a * ld + i..a * ld + i + 8], &jl[a * ld + i..a * ld + i + 8]);
@@ -3297,8 +3297,16 @@ fn clu_update<S: Simd>(
         let lr = DV::<S>::load(&mrh[i..i + 8], &mrl[i..i + 8]);
         let li = DV::<S>::load(&mih[i..i + 8], &mil[i..i + 8]);
         // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
-        let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
-        let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
+        let nr = DDotAcc::<S>::zero()
+            .add(ar)
+            .add_prod(lr, ntr)
+            .add_prod(li, pti)
+            .finish();
+        let ni = DDotAcc::<S>::zero()
+            .add(ai)
+            .add_prod(lr, nti)
+            .add_prod(li, ntr)
+            .finish();
         nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
         ni.store(&mut dh[i..i + 8], &mut dl[i..i + 8]);
         // x - x is zero exactly when x is finite; the accumulator's lo part is finite with its hi part
@@ -3717,8 +3725,16 @@ fn clu_dense_on<S: Simd>(
                                 let lr = DV::<S>::load(&lrh[i..i + 8], &lrl[i..i + 8]);
                                 let li = DV::<S>::load(&lih[i..i + 8], &lil[i..i + 8]);
                                 // a -= l t:  re: ar - lr tr + li ti,  im: ai - lr ti - li tr
-                                let nr = DotAcc::<S>::zero().add(ar).add_prod(lr, ntr).add_prod(li, pti).finish();
-                                let ni = DotAcc::<S>::zero().add(ai).add_prod(lr, nti).add_prod(li, ntr).finish();
+                                let nr = DDotAcc::<S>::zero()
+                                    .add(ar)
+                                    .add_prod(lr, ntr)
+                                    .add_prod(li, pti)
+                                    .finish();
+                                let ni = DDotAcc::<S>::zero()
+                                    .add(ai)
+                                    .add_prod(lr, nti)
+                                    .add_prod(li, ntr)
+                                    .finish();
                                 nr.store(&mut ch[i..i + 8], &mut cl[i..i + 8]);
                                 ni.store(&mut dh[i..i + 8], &mut dl[i..i + 8]);
                                 i += 8;

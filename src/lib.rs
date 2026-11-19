@@ -9,7 +9,7 @@
 //! * [`simd`]: the backends behind `V8`. [`simd::dispatch`] runs code written once over the backend on the best one
 //!   the CPU has, detected at run time; [`native`] has the lane types on the backend the build's target features
 //!   select at compile time.
-//! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DotAcc`] a sum-of-products accumulator.
+//! * [`dd::DD`] scalar and [`dv::DV`] 8-lane double-double; [`dv::DDotAcc`] a sum-of-products accumulator.
 //! * [`qd::QD`] scalar and [`qv::QV`] 8-lane quad-double (the algorithms of Hida, Li and Bailey's QD library, with
 //!   three repairs), exact decimal parsing and printing;
 //!   [`qd::QdAcc`] and [`qv::QDotAcc`] accumulators.
@@ -90,7 +90,9 @@ pub mod native {
     pub type V8 = crate::v8::V8<Native>;
     pub type M8 = crate::v8::M8<Native>;
     pub type DV = crate::dv::DV<Native>;
-    pub type DotAcc = crate::dv::DotAcc<Native>;
+    pub type DDotAcc = crate::dv::DDotAcc<Native>;
+    #[deprecated(note = "renamed `DDotAcc`, like `QDotAcc` and `ODotAcc`")]
+    pub type DotAcc = crate::dv::DDotAcc<Native>;
     pub type QV = crate::qv::QV<Native>;
     pub type QDotAcc = crate::qv::QDotAcc<Native>;
     pub type OV = crate::ov::OV<Native>;

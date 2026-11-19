@@ -13,7 +13,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use multidouble::dd::DD;
 use multidouble::dual::{Fu, Fun};
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::jet::Jet;
 use multidouble::od::OD;
 use multidouble::ov::{ODotAcc, OV};
@@ -262,12 +262,12 @@ impl Kernel for Lanes<'_, '_> {
                 black_box(&out);
             })
         });
-        g.bench_function("dv dot (DotAcc)", |bch| {
+        g.bench_function("dv dot (DDotAcc)", |bch| {
             bch.iter(|| {
                 S::vectorize(
                     #[inline(always)]
                     || {
-                        let mut s = DotAcc::zero();
+                        let mut s = DDotAcc::zero();
                         for &x in &dv {
                             s = s.add_prod(x, x);
                         }

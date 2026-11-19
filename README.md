@@ -26,7 +26,7 @@ algorithms at any number of parts, and shows that simple inputs reach the bounds
 | `dd::DD`, `dv::DV` | double-double, scalar and on 8 lanes |
 | `qd::QD`, `qv::QV` | quad-double, scalar and on 8 lanes, with exact decimal parsing and printing |
 | `od::OD`, `ov::OV` | octo-double, scalar and on 8 lanes, with exact decimal parsing and printing: the quad-double algorithms carried to eight parts and written once for both |
-| `dv::DotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
+| `dv::DDotAcc`, `qd::QdAcc`, `qv::QDotAcc`, `od::OdAcc`, `ov::ODotAcc` | accumulators for sums of products |
 
 The lanes give the scalar type's bits on every backend. The scalar types have `sqrt`, `recip`, `powi`, `exp`, `ln` (also
 on the lanes, NaNs included), and `sin`, `cos`, `tan` and `sin_cos` for arguments up to 2⁵², reduced by π/2 to 1216
@@ -151,7 +151,7 @@ The SIMD backend is the best one the CPU has, detected at run time:
 
 ```rust
 use multidouble::dd::DD;
-use multidouble::dv::{DotAcc, DV};
+use multidouble::dv::{DDotAcc, DV};
 use multidouble::simd::{self, Kernel, Simd};
 
 /// the sum of squares of the double-doubles (hi, lo), 8 lanes at a time
@@ -162,7 +162,7 @@ impl Kernel for SumSq<'_> {
     // inlined into the backend's instruction set, so that the lane operations become its instructions
     #[inline(always)]
     fn run<S: Simd>(self) -> DD {
-        let mut acc = DotAcc::<S>::zero();
+        let mut acc = DDotAcc::<S>::zero();
         for (h, l) in self.0.chunks_exact(8).zip(self.1.chunks_exact(8)) {
             let x = DV::load(h, l);
             acc = acc.add_prod(x, x);

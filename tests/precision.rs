@@ -1,5 +1,5 @@
 //! Error bounds against exact dyadic arithmetic (`multidouble::exact`) for what `tests/dd.rs` leaves out: the LU's
-//! update `dd_axpy`, the lane dot accumulator `DotAcc`, `recip` and `mul_pwr2`, the double-double operations over
+//! update `dd_axpy`, the lane dot accumulator `DDotAcc`, `recip` and `mul_pwr2`, the double-double operations over
 //! the whole exponent range where their bounds hold, and the LU solve's backward error and its forward error on
 //! ill-conditioned matrices. Errors are in units of u^2 = 2^-106. Every check has a control: a deliberately wrong
 //! result that must break it.
@@ -9,7 +9,7 @@ use common::{Rng, U2};
 use multidouble::dd::{two_prod, two_sum, DD};
 use multidouble::exact::Dy;
 use multidouble::linalg::{dd_axpy, ld_for, DDLu};
-use multidouble::native::{DotAcc, DV};
+use multidouble::native::{DDotAcc, DV};
 
 const N: usize = 20_000;
 
@@ -86,7 +86,7 @@ fn dd_axpy_within_bound() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// DotAcc: sums of double-double products on 8 lanes
+// DDotAcc: sums of double-double products on 8 lanes
 // ---------------------------------------------------------------------------------------------------------------
 
 /// worst |sum - exact| / sum |a_i b_i| over 8-lane dot products of length len, in u^2. cat: "random" (exponents in
@@ -116,7 +116,7 @@ fn dot_worst(len: usize, cat: &str, seed: u64, drop_e: bool) -> f64 {
             }
         }
         let lanes = |v: &[DD; 8]| DV::load(&v.map(|d| d.hi), &v.map(|d| d.lo));
-        let mut acc = DotAcc::zero();
+        let mut acc = DDotAcc::zero();
         for i in 0..len {
             acc = acc.add_prod(lanes(&a[i]), lanes(&b[i]));
         }
@@ -137,7 +137,7 @@ fn dot_worst(len: usize, cat: &str, seed: u64, drop_e: bool) -> f64 {
             }
             let g = got.lane(lane);
             if !drop_e {
-                assert!(normalized(g), "DotAcc len {len} {cat}: {g:?} not normalized");
+                assert!(normalized(g), "DDotAcc len {len} {cat}: {g:?} not normalized");
             }
             worst = worst.max(err_u2(g, &s, &m));
         }
@@ -155,13 +155,13 @@ fn dot_acc_within_bound() {
             let seed = 200 + 10 * ci as u64 + len as u64;
             let thr = len as f64 + 4.0;
             let worst = dot_worst(len, cat, seed, false);
-            println!("DotAcc {cat:6} len {len:3}: worst {worst:.3} u^2 of sum |a b| (bound {thr})");
-            assert!(worst <= thr, "DotAcc {cat} len {len}: {worst} u^2 (bound {thr})");
+            println!("DDotAcc {cat:6} len {len:3}: worst {worst:.3} u^2 of sum |a b| (bound {thr})");
+            assert!(worst <= thr, "DDotAcc {cat} len {len}: {worst} u^2 (bound {thr})");
             // control: the leading sum alone misses by about u = 2^53 u^2 (len 1: by the product's low part)
             let broken = dot_worst(len, cat, seed, true);
             assert!(
                 broken > thr,
-                "control: DotAcc without e passes {cat} len {len} ({broken} u^2)"
+                "control: DDotAcc without e passes {cat} len {len} ({broken} u^2)"
             );
         }
     }

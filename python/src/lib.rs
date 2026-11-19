@@ -3,7 +3,7 @@
 //! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and
 //! dense LU solves in double-double and in quad-double.
 use multidouble::dd::{self, DD};
-use multidouble::dv::{self, DotAcc, DV};
+use multidouble::dv::{self, DDotAcc, DV};
 use multidouble::linalg::{ld_for, DDLu, QDLu};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, renorm4_any, QV};
@@ -278,7 +278,7 @@ fn qd_add_dd<'py>(
     ))
 }
 
-/// sum_i x_i y_i in double-double: 8 lanes at a time with `DotAcc` on the backend S (the last block padded with
+/// sum_i x_i y_i in double-double: 8 lanes at a time with `DDotAcc` on the backend S (the last block padded with
 /// zeros, whose products add nothing), then the 8 lane sums added in double-double in lane order, so the result is
 /// bitwise the same on every backend
 struct Dot<'a> {
@@ -291,7 +291,7 @@ struct Dot<'a> {
 fn dot_on<S: Simd>(x: (&[f64], &[f64]), y: (&[f64], &[f64])) -> DD {
     let n = x.0.len();
     let full = n / 8 * 8;
-    let mut acc = DotAcc::<S>::zero();
+    let mut acc = DDotAcc::<S>::zero();
     for i in (0..full).step_by(8) {
         let xv = DV::<S>::load(&x.0[i..i + 8], &x.1[i..i + 8]);
         let yv = DV::<S>::load(&y.0[i..i + 8], &y.1[i..i + 8]);
