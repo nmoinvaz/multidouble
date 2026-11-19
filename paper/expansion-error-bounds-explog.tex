@@ -123,9 +123,7 @@ ADD rounds $2t + \RN(t^2)$, of magnitude at most the stated bound, within $\epsi
 bounded by $2\psi_j$. This gives $E_{j+1}$ and $\psi_{j+1}$, and $t^*_m = e^r - 1$.
 \end{proof}
 
-\begin{theorem}\label{thm:exp}
-Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
-$|x_0| \le X$, and let $y$ be the finite result of EXP$_{n,s,d}$. For a case, take $k = 0$ or $k \ne 0$, an exponent $e$
+\parhead{The bound of a case} The bound of EXP is the largest of the bounds of its cases. For a case, take $k = 0$ or $k \ne 0$, an exponent $e$
 of step (2) (one for each $m \ge 1$; for $m = 0$, all those of one degree $d'$), a sign of $r$, and an interval
 $[a, b]$ of the values of $|r|$ that can select $e$; for $k = 0$ let $\pi$ be the part bounds of an expansion on
 $H(\theta)$ with $|r| \le b$ and $\delta = 0$, and for $k \ne 0$ let $\pi = \pi^r$ and $\delta$ be those of
@@ -136,6 +134,10 @@ and $e^{-b-\delta}$ for $r \le 0$, and
 \[
 \varepsilon = \frac{E_m + \epsilon_s}{v} + e^\delta - 1.
 \]
+
+\begin{theorem}\label{thm:exp}
+Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
+$|x_0| \le X$, and let $y$ be the finite result of EXP$_{n,s,d}$, with $\varepsilon$ the bound of a case defined above.
 If the cases cover every $|r|$ that can select each $e$, $|y - e^x| \le \varepsilon_{\exp}e^x + n2^{-1074}$, with
 $\varepsilon_{\exp}$ the largest $\varepsilon$; the second term arises only where the result's parts fall below
 $2^{-1022}$. At $n = 8$, $s = 6$, $d = 43$ and $\theta = 2$ (computed, \texttt{explog\_consts.py}), $\varepsilon_{\exp} \le
@@ -198,9 +200,7 @@ and the renormalization is exact by Theorem~\ref{thm:t1}(a): a lossy last step w
 0)$, which is zero.
 \end{proof}
 
-\begin{theorem}\label{thm:log}
-Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
-$x_0 > 0$ and $|\ln x| \le X$, and let the result $y$ of LOG$_{n,s,d,q}$ be finite. Let $\epsilon_{\rm DW}$ and
+\parhead{The bound $\mathcal E(\ell)$} Let $\epsilon_{\rm DW}$ and
 $\Phi_{\rm DW}$ be the double-word logarithm's bounds of Proposition~\ref{prop:ddexplog}, $g = (n-2)u/(1 - (n-2)u)$, $w
 = g\rho/(1 - 2\rho - g\rho)$, $\delta_0 = w/(1-w)$, $e_{\rm A} = 3u^2/(1 - 4u)$, $\eta_L = |\ln 2 - c_{L,0} -
 c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\rm DW} + e_{\rm A}(\ell + 1) +
@@ -237,6 +237,11 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
   \frac{E_c}{1-C}$, $(\epsilon_y, \cdot) = G_{\rm ADD}(\pi^y, \omega_r;\ \ell + P)$, and $\mathcal E(\ell) = \epsilon_y
   + P$.
 \end{itemize}
+
+\begin{theorem}\label{thm:log}
+Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
+$x_0 > 0$ and $|\ln x| \le X$, let the result $y$ of LOG$_{n,s,d,q}$ be finite, and let $\mathcal E(\ell)$ be the bound
+defined above for $\ell \ge |\ln x|$.
 Then $|y - \ln x| \le \mathcal E(\ell)$ in the case of the run. With $\varepsilon_{\ln}$ and $\Phi$ defined from
 $\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, and at $n = 8$, $s = 6$, $d = 43$, $q
 = 4$ and $\theta = 2$ (computed, \texttt{explog\_consts.py}), $\varepsilon_{\ln} \le 9.926\,u^8$ and $\Phi \le
