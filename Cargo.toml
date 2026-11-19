@@ -14,7 +14,7 @@ exclude = ["/.github", "/.claude", "/CLAUDE.md", "/python", "/docs", "/scripts",
 [features]
 # Use the plain-array V8 backend whatever the target features, e.g. to compare it with the SIMD ones.
 portable = []
-# Deliberate breakage of the quad-double algorithms, for the controls of the accuracy tests (qd::mutate).
+# Deliberate breakage of the algorithms, for the controls of the tests (the mutate of qd, od, explog, trig, dual, pack).
 mutate = []
 # Conversions between f128 and DD/QD. Nightly only, f128 is unstable.
 f128 = []
