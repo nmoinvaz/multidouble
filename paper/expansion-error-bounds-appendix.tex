@@ -443,8 +443,8 @@ root bounded by $(1 + \delta)^{1/i} \le 1 + \delta/i$ (\texttt{constants.py}).
 \end{proof}
 
 After cancellation in ADD or ADDF, $M/|x_0|$ is unbounded, and Theorem~\ref{thm:t5} bounds the parts relative to $M$
-only. A subtraction of nearly equal values, as in the remainders of long division, can therefore leave a result
-outside $H(2)$, and the theorems above do not chain through it.
+only. A subtraction of nearly equal values, as in the remainders of long division, is therefore not shown to return a result
+in $H(2)$, and the theorems above do not chain through it.
 
 \section{Division}
 
@@ -527,7 +527,7 @@ arithmetic.
 \begin{remark}
 The bound on the remainders grows by about $7u$ per update at $\theta = 2$ ($P^{(k)}_0 \approx 6.7^k u^k$ at $n = 8$),
 so $\kdiv$ grows like $7^{n+1}$ times the cost of an update, and $\kdiv u < 1$ for $n \le 13$ at $p = 53$
-($\kdiv u \le 2^{-8.1}$ at $n = 12$ and $2^{-3.4}$ at $n = 13$, $\theta = 2$). The remainders after cancellation do not satisfy $H(\theta)$ for a useful
+($\kdiv u \le 2^{-8.1}$ at $n = 12$ and $2^{-3.4}$ at $n = 13$, $\theta = 2$). The remainders after cancellation are not shown to satisfy $H(\theta)$ for a useful
 $\theta$, so the proof carries part bounds $P^{(k)}$ relative to $|a_0|$ through Lemma~\ref{lem:o} instead of applying
 Theorem~\ref{thm:t3} to each update. The leading constant 1 is attained (Proposition~\ref{prop:sharp}(d)).
 \end{remark}

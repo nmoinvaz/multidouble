@@ -138,7 +138,8 @@ the parts shrink at least geometrically, a \emph{ladder}
 |a_i| \le (2u)^i\,|a_0|.
 \]
 The appendix calls this hypothesis $H(2)$. The usual expansions satisfy it: every expansion whose parts are each at
-most one ulp of the part above does, and those are what the algorithms return. The ladder also allows a part far below
+most one ulp of the part above does. So do the products, and the sums of operands whose leading parts have one sign,
+that the algorithms return at eight parts (Corollary~\ref{cor:closure}). The ladder also allows a part far below
 the one above it, and zero parts between nonzero ones (Figure~\ref{fig:ladder}).
 
 \nopagebreak
@@ -399,8 +400,8 @@ and~\ref{thm:log}). The logarithm starts from a binary64 logarithm of its own, w
 The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
 so is a sum whose operands' leading parts have one sign (Corollary~\ref{cor:closure}), so the bounds apply at every
 step of such a computation. A
-subtraction of nearly equal values can leave the ladder, and a computation that cancels needs its own analysis, as
-the division's remainders receive in the appendix.
+subtraction of nearly equal values is not shown to stay on the ladder, and a computation that cancels needs its own
+analysis, as the division's remainders receive in the appendix.
 
 \section{A worked example}\label{sec:example}
 
