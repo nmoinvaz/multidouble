@@ -275,7 +275,8 @@ so octo-double values above about 2⁻⁶⁰⁰; near underflow the tests allow 
 | `OJet` | coefficients within 10⁻¹²³ of the sum of their terms' magnitudes, where the quad-double jet errs by 2×10⁻⁶⁴; its order-by-order solve reaches planted solutions within 10⁻¹²⁰ in four refinement steps |
 | `Ou` | derivatives within 10⁻¹²³, and its value is `OV`'s bit for bit |
 
-Every check can fail. The feature `mutate` breaks the quad-double and octo-double algorithms, and exp and ln, one at a
+Every check can fail. The feature `mutate` breaks steps of the quad-double and octo-double algorithms, of exp, ln, sin,
+cos and tan and their lanes, of the jets, dual numbers and field sums, and of the packed storage's decoders, one at a
 time, and the tests run with it check that each breakage fails a test. The integration tests also feed deliberately
 wrong results to the same checks: a double-double add without its low parts, a wrong derivative, a perturbed LU factor,
 and f128 conversions that round twice.
