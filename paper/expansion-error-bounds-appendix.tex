@@ -374,7 +374,7 @@ gives the hypothesis of Theorem~\ref{thm:t1}(e), so with $\kappa_0 = 2(1+u)^{n-1
 
 \begin{table}[tp]
 \centering
-\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$ (computed, \texttt{constants.py}). In units of $2^{-418}$, the leading term is $1/64$ unit. Below each row, the bound for $\theta = 2$.}
+\caption{Theorem~\ref{thm:t3} at $n = 8$, $p = 53$ (computed, \texttt{constants.py}). Below each row, the bound for $\theta = 2$.}
 \label{tab:kappa}
 \small
 \begin{tabular}{@{}lcc@{}}
@@ -722,8 +722,7 @@ error is $\sum_{k \ge n}u^k = u^n/(1-u) = u^n|a/b|$.
 \begin{remark}
 In these examples the exact sum or product has an $n$-part representation with a much smaller error (the greedy one),
 so the loss of $u^n$ is the renormalization's: every step of its second pass emits, and each emitted error is as large
-as the rounding allows. Dense random operands at $n = 8$ err by at most $0.0064\,u^8|Z|$ (Section~\ref{sec:comp}); the worst case of each of the four operations is $u^8|Z|(1 - O(u))$, $1/64$ unit of
-$2^{-418}$.
+as the rounding allows. Dense random operands at $n = 8$ err by at most $0.0064\,u^8|Z|$ (Section~\ref{sec:comp}); the worst case of each of the four operations is $u^8|Z|(1 - O(u))$.
 \end{remark}
 
 \paragraph{The square root and the elementary functions} Their last operations act on computed values, so the simple
