@@ -52,16 +52,20 @@ pub mod mutate {
     /// `crate::dual::Lane::mulf_upto` on the jets: coefficient k left unweighted, so that a weighted order-k sum
     /// (`crate::field::cs_w_at`) takes the products of order k with x_k unweighted
     pub const MULF_UPTO: u32 = 5;
+    /// `crate::field::MatLane::dmat_apply` on the f64 lanes (`F8`, `Fu`, `Fun`, `Dtn`): the last lane vector's value
+    /// moved by one ulp in lane 0
+    pub const DMAT_CHUNK: u32 = 6;
     /// number of ids
-    pub const N: u32 = 5;
+    pub const N: u32 = 6;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 6] = [
+    pub const NAMES: [&str; 7] = [
         "none",
         "octo-double jet product: last convolution term dropped",
         "octo-double jet solve: residual at the iterate rounded to quad-double",
         "octo-double dual product: tangent term d o.v dropped",
         "split order-k Cauchy sum: last lane vector moved by an ulp",
         "jet times an f64 to order k: coefficient k left unweighted",
+        "f64 lanes' matrix product: last lane vector moved by an ulp",
     ];
 
     #[cfg(feature = "mutate")]
