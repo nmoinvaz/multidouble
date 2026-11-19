@@ -16,7 +16,7 @@ import sys
 from fractions import Fraction as Fr
 
 import gop
-from gop import abar, g_addf, up
+from gop import abar, dec_up, g_addf, up
 from explog_common import (Consts, U, degree, exp_down, exp_up, expm1_up, lemma38_setup, lemma38b, lemma39)
 
 N, S, D, THETA = 8, 6, 43, 2
@@ -103,7 +103,7 @@ def main():
     eps, case = worst
     got = float(eps / un)
     knz, e_lo, e_hi, m, dp, sign, a, b = case
-    print(f'{count} cases; the largest epsilon / u^8 = {got:.9f}')
+    print(f'{count} cases; the largest epsilon / u^8 = {dec_up(eps / un, 9)} (rounded up)')
     print(f'  at k {"!=" if knz else "="} 0, e = {e_hi}, m = {m}, d\' = {dp}, r {"> 0" if sign > 0 else "< 0"}, '
           f'|r| in [{a:.6f}, {b:.6f}]')
     ok = got <= 3.661 and abs(got - 3.660061) <= 1.01e-6

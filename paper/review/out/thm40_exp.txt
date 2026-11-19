@@ -1,0 +1,4 @@
+344 cases; the largest epsilon / u^8 = 3.660060455 (rounded up)
+  at k != 0, e = -2, m = 5, d' = 43, r < 0, |r| in [0.332708, 0.346574]
+the paper has 3.661 (Theorem 40) and 3.660061 (explog_consts.txt): ok
+PASS
