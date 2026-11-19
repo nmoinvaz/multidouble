@@ -33,6 +33,10 @@ fn ulp(x: f64) -> Dy {
 /// how r fails the constructors' contract for the parts c: "value" if its sum is not c's, "ladder" if a zero part
 /// precedes a nonzero one or a part exceeds the ulp of the one before
 fn faults(c: &[f64], r: &[f64]) -> (bool, bool) {
+    // a part that is not finite (a partial sum that overflowed) is a wrong value
+    if !r.iter().all(|x| x.is_finite()) {
+        return (true, false);
+    }
     let value = !Dy::sum(c).sub(&Dy::sum(r)).is_zero();
     let ladder = (0..r.len() - 1).any(|k| {
         if r[k] == 0.0 {
@@ -105,7 +109,7 @@ fn normalized<const N: usize>(r: &mut Rng) -> [f64; N] {
 }
 
 /// the families of inputs, by i
-const FAMILIES: usize = 11;
+const FAMILIES: usize = 12;
 
 /// the ulp of a finite x, 2^-1074 for zero and subnormal x
 fn ulp_f64(x: f64) -> f64 {
@@ -117,7 +121,8 @@ fn ulp_f64(x: f64) -> f64 {
 /// seven binades; a huge cancelling pair with tiny parts (the shape of the report on PR #89); parts over the whole
 /// exponent range with subnormals; positive parts in one binade (whose sorted renormalization can come out off the
 /// ladder); signed zeros among few-bit parts; parts already on the ladder, each up to a whole ulp of the one before
-/// and the first down to the subnormals (the constructors' path that renormalizes them as given)
+/// and the first down to the subnormals (the constructors' path that renormalizes them as given); two parts of one
+/// sign, cancelled by two smaller ones of the other sign whose sum overflows, among smaller parts
 fn inputs<const N: usize>(r: &mut Rng, i: usize) -> [f64; N] {
     match i % FAMILIES {
         0 => {
@@ -172,6 +177,20 @@ fn inputs<const N: usize>(r: &mut Rng, i: usize) -> [f64; N] {
                 sparse(r, -10, 10)
             }
         }),
+        11 => {
+            // a, b in [1.5, 1.75) 2^1023 and c, d in [1.25, 1.5) 2^1023 of the other sign: sorted, c + d overflows
+            // first, and the sum lies in (-2^1023, 2^1023)
+            let mut x: [f64; N] = std::array::from_fn(|_| double(r, -100, 1000));
+            let s = sign(r);
+            let mut big = |lo: f64| (lo + 0.25 * r.unit()) * 2f64.powi(1023);
+            let (a, b, c, d) = (big(1.5) * s, big(1.5) * s, -big(1.25) * s, -big(1.25) * s);
+            if N >= 4 {
+                (x[0], x[1], x[2], x[3]) = (a, b, c, d);
+            } else {
+                (x[0], x[1]) = (a, c);
+            }
+            permuted(r, x)
+        }
         _ => {
             let mut x = [0.0; N];
             x[0] = (1.0 + r.unit()) * 2f64.powi(int(r, -1022, 1000)) * sign(r);
@@ -234,7 +253,9 @@ fn run<const N: usize>(seed: u64) -> Tally {
         if (v || l) && t.example.is_none() {
             t.example = Some(c.to_vec());
         }
-        t.worst = t.worst.max(worst_ratio(&x));
+        if x.iter().all(|p| p.is_finite()) {
+            t.worst = t.worst.max(worst_ratio(&x));
+        }
     }
     t
 }
@@ -263,32 +284,46 @@ fn constructors_sum_exactly_onto_the_ladder() {
     }
 }
 
-/// a NaN or an infinity among the parts gives a first part that is not finite, in any position
+/// A NaN or an infinity among the parts, in any position, gives a first part that is not finite. Control: the same
+/// parts with a zero in its place give a finite one.
 #[test]
 fn non_finite_parts_give_a_non_finite_result() {
     let mut r = Rng(4);
     let specials = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
-    for i in 0..300 {
+    let not_finite = |x: &[f64]| !x[0].is_finite();
+    // the overflow family's parts, one replaced by zero, can sum past the largest double
+    for i in (0..300).filter(|i| i % FAMILIES != 11) {
         let s = specials[i % 3];
         let mut c2: [f64; 2] = inputs(&mut r, i);
         let mut c4: [f64; 4] = inputs(&mut r, i);
         let mut c8: [f64; 8] = inputs(&mut r, i);
-        c2[(r.next_u64() % 2) as usize] = s;
-        c4[(r.next_u64() % 4) as usize] = s;
-        c8[(r.next_u64() % 8) as usize] = s;
+        let (k2, k4, k8) = (
+            (r.next_u64() % 2) as usize,
+            (r.next_u64() % 4) as usize,
+            (r.next_u64() % 8) as usize,
+        );
+        (c2[k2], c4[k4], c8[k8]) = (0.0, 0.0, 0.0);
         for (c, x) in [
             (c2.to_vec(), construct(c2).to_vec()),
             (c4.to_vec(), construct(c4).to_vec()),
             (c8.to_vec(), construct(c8).to_vec()),
         ] {
-            assert!(!x[0].is_finite(), "{c:?} gives {x:?}");
+            assert!(!not_finite(&x), "control: {c:?} gives {x:?}");
+        }
+        (c2[k2], c4[k4], c8[k8]) = (s, s, s);
+        for (c, x) in [
+            (c2.to_vec(), construct(c2).to_vec()),
+            (c4.to_vec(), construct(c4).to_vec()),
+            (c8.to_vec(), construct(c8).to_vec()),
+        ] {
+            assert!(not_finite(&x), "{c:?} gives {x:?}");
         }
     }
 }
 
 /// The report of PR #89 and the two like it: `DD::new(2^-60, 1)` gave 1, `QD::new(2^-213, 2^54, 1, -2^54)` gave
 /// 2^-213, and `OD::new` of the same with 2^-270 gave the parts [2^-213, 1, 2^-270], whose reciprocal was NaN and whose
-/// cosine was 1.
+/// cosine was 1. Parts near the overflow threshold whose sorted sum overflows give their finite sum.
 #[test]
 fn reported_cases() {
     let p = |e: i32| 2f64.powi(e);
@@ -303,6 +338,11 @@ fn reported_cases() {
     // cos 1 = 0.5403023058681398 to f64; the tiny-argument shortcut would give 1
     let c = o.cos().to_f64();
     assert!((c - 1f64.cos()).abs() < 1e-15, "{c}");
+    // Greptile's case on this PR: sorted, (-h, -h, p, p) sums p + p first, which overflows, where the sum is -p
+    let h = 1.5 * p(1023);
+    assert_eq!(QD::new(-h, p(1023), -h, p(1023)).x, [-p(1023), 0.0, 0.0, 0.0]);
+    let o = OD::new([-h, p(1023), -h, p(1023), 0.0, 0.0, 0.0, 0.0]);
+    assert_eq!(o.x, [-p(1023), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
 }
 
 /// `OV::new` against `OD::new` lane by lane on one backend: the lanes whose parts differ in any bit (NaNs alike)
@@ -360,8 +400,8 @@ fn ov_new_matches_od_new_in_any_order() {
 }
 
 /// The controls: the constructors as they were fail the checks (`DD::new` and `QD::new` on the value, `QD::new` and
-/// `OD::new` on the ladder), and without the fallback `QD::new` and `OD::new` leave parts off the ladder. The lanes
-/// follow the scalar constructor under both.
+/// `OD::new` on the ladder), and without the fallback `QD::new` and `OD::new` leave parts off the ladder and overflow on
+/// the overflow family. The lanes follow the scalar constructor under both.
 #[cfg(feature = "mutate")]
 #[test]
 fn controls_fail_the_checks() {
@@ -385,7 +425,7 @@ fn controls_fail_the_checks() {
         if id == mutate::AS_GIVEN {
             assert!(dd.0 && qd.0 && qd.1 && od.1, "{dd:?} {qd:?} {od:?}");
         } else {
-            assert!(qd.1 && od.1, "{qd:?} {od:?}");
+            assert!(qd.0 && qd.1 && od.0 && od.1, "{qd:?} {od:?}");
         }
     }
 }
