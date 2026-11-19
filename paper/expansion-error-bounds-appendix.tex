@@ -453,9 +453,7 @@ and $q_0 = \RN(r^{(0)}_0/b_0)$, and for $k = 1, \dots, n$ let $r^{(k)} = \mathrm
 performs $\dep(s, l+1, t_l)$ and $\dep(s, l+1, -w_l)$ for $l = 0, \dots, n-2$, and returns $\Ren_n(s)$. At $n = 8$ and $p =
 53$ this is multidouble's division (identical bits on the inputs of \texttt{campaign.py}).
 
-\begin{theorem}\label{thm:t6}
-Assume~\ref{as:fp} and $(2n-1)u < 1$, and let $a$ and $b$ satisfy $H(\theta)$
-with $b_0 \ne 0$. Define, in units of $|a_0|$, $P^{(0)}_i = \rho^i$ ($0 \le i \le n-1$), and for $k = 0, \dots, n$ let
+\parhead{The constant $\kdiv$} For operands on $H(\theta)$ and $(2n-1)u < 1$, define, in units of $|a_0|$, $P^{(0)}_i = \rho^i$ ($0 \le i \le n-1$), and for $k = 0, \dots, n$ let
 $\bar q_k = (1+u)P^{(k)}_0$. For $k = 0, \dots, n-1$, with $P = P^{(k)}$, let
 \[
 G_0 = u(P_0 + \bar q_k), \quad G_i = P_i + (1+u)\rho^i\bar q_k \ (1 \le i < n),
@@ -477,11 +475,18 @@ P^{(k+1)}_i = (1+u)(uP^{(k+1)}_{i-1} + W_i).
 \end{gather*}
 Let $\Theta_0 = \sum_{i \ge 1}P^{(n)}_i + uP^{(n)}_0 + \bar q_n\rho/(1-\rho)$ and $\Theta = \Theta_0 + \sum_{k=1}^n \varepsilon_k$; let
 $V^q_j$ be the bounds $V_j$ above computed from $X_m = \bar q_m$ ($0 \le m \le n$), and $\Xi = u^n\sum_{j \ge 1}V^q_j +
-\sum_{j \ge 1}u^{n+1-j}V^q_j$. Then the result satisfies
-\begin{gather*}
-\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + \kdiv u^{n+1})\Bigl|\frac ab\Bigr|, \\
+\sum_{j \ge 1}u^{n+1-j}V^q_j$,
+and
+\[
 \kdiv = \frac{(1+u^n)\Theta\frac{1-\rho}{1-2\rho} + \Xi}{(1-2\rho)\,u^{n+1}}.
-\end{gather*}
+\]
+
+\begin{theorem}\label{thm:t6}
+Under Assumption~\ref{as:fp} and $(2n-1)u < 1$, let $a$ and $b$ satisfy $H(\theta)$
+with $b_0 \ne 0$, and let $\kdiv$ be the constant defined above. Then the result of the division satisfies
+\[
+\Bigl|\frac ab - \sum_k x_k\Bigr| \le (u^n + \kdiv u^{n+1})\Bigl|\frac ab\Bigr|.
+\]
 At $n = 8$, $p = 53$ (computed, \texttt{div\_consts.py}): $\kdiv \le 2^{26.0}$ for $\theta = 1$ and $\kdiv \le 2^{27.48}$ for $\theta = 2$, so $|a/b - x| \le (1 +
 2^{-25.5})\,2^{-424}|a/b|$ for ulp-nonoverlapping $a$ and $b$.
 \end{theorem}
@@ -537,8 +542,7 @@ SQRT$_{n,J}$ takes $J$ Newton steps on the reciprocal root from a binary64 start
 \mathrm{MUL}(h, m)$, $c = \mathrm{ADDF}(-g, 1/2)$, $d = \mathrm{MUL}(c, r)$, $r \gets \mathrm{ADD}(r, d)$; then $z =
 \mathrm{MUL}(r, a)$, and the result is $zs$.
 
-\begin{theorem}\label{thm:t7}
-Assume~\ref{as:fp} and (A3), and let $x$ satisfy $H(\theta)$ with $x_0 > 0$. Write $a$ also for its value $\sum_i
+\parhead{The constant $\delta_J$} For $x$ on $H(\theta)$ with $x_0 > 0$, write $a$ also for its value $\sum_i
 a_i$, as in \eqref{eq:a0}, let $y = a^{-1/2}$, and measure $r$ and $d$ in units of $y$, the parts of $a$ and $h$ in
 units of $a$, and $m$ in units of $y^2$, so that $g$ and $c$ are dimensionless. With the $\bar a_i$ of \eqref{eq:abar}, let $\bar
 h_i = \bar a_i/2$, $E_0 = \max\bigl(\frac{1+2u}{1-\rho} - 1,\ 1 - \frac{(1-2u)(1-2\rho)}{1-\rho}\bigr)$ and $\pi^{(0)} =
@@ -558,7 +562,11 @@ and let
 E_{k+1} &= \tfrac32E^2 + \tfrac12E^3 + (1+E)\bigl(\tfrac12\epsilon_m + \epsilon_g + \epsilon_c\bigr) \\
 &\quad + \epsilon_d + \epsilon_r, \qquad \pi^{(k+1)} = \pi'.
 \end{align*}
-With $(\epsilon_z, \cdot) = G_{\rm MUL}(\pi^{(J)}, \bar a;\ 1 + E_J)$ and $\delta_J = E_J + \epsilon_z$, the result
+Finally let $(\epsilon_z, \cdot) = G_{\rm MUL}(\pi^{(J)}, \bar a;\ 1 + E_J)$ and $\delta_J = E_J + \epsilon_z$.
+
+\begin{theorem}\label{thm:t7}
+Under Assumption~\ref{as:fp} and (A3), let $x$ satisfy $H(\theta)$ with $x_0 > 0$, and let $\delta_J$ be the constant
+defined above. Then the result
 satisfies $|\sqrt x - \sum_k \mathrm{SQRT}(x)_k| \le \delta_J\sqrt x$. At $n = 8$, $J = 4$, $p = 53$ (computed, \texttt{sqrt\_consts.py}): $\delta_4 \le
 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$.
 \end{theorem}
@@ -598,8 +606,7 @@ second-order term: with $m$, $g$ and $c$ as above, $q = \mathrm{MUL}(c, c)$, $t 
 then $z = \mathrm{MUL}(r, a)$, and the result is $zs$. At $n = 8$ this is multidouble's square root (identical bits on
 2000 inputs, \texttt{sqrt\_bits.py}).
 
-\begin{theorem}\label{thm:t8}
-Assume the hypotheses of Theorem~\ref{thm:t7}, with its units, $\bar a$ and $\bar h$, and $p \ge 7$. Let $\eta_1 =
+\parhead{The constant $\delta^{\rm DD}$} With the units, $\bar a$ and $\bar h$ of the paragraph on $\delta_J$, let $\eta_1 =
 \frac{25}{8}u^2$, $\eta_2 = 15u^2 + 56u^3$, $\eta_3 = \rho^2/(1-\rho)^2$,
 \begin{gather*}
 E_0 = \max\Bigl(\frac{(1 + \eta_3/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\eta_3)(1-\eta_2)}{1+\eta_1}\Bigr),
@@ -607,7 +614,7 @@ E_0 = \max\Bigl(\frac{(1 + \eta_3/2)(1+\eta_2)}{1-\eta_1} - 1,\ 1 - \frac{(1-\et
 \pi^{(0)} = \Bigl(\frac{1+E_0}{1-u},\ \frac{u(1+E_0)}{1-u},\ 0, \dots, 0\Bigr).
 \end{gather*}
 With $E = E_0$ and $\pi = \pi^{(0)}$, let $\epsilon_m, \mu, \epsilon_g, \pi^g, \epsilon_c, \chi$ and $\bar Z_c$ be those
-of Theorem~\ref{thm:t7}, $\epsilon_{mgc} = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \bar Z_c + \epsilon_c$, and
+of the recursion of $\delta_J$, $\epsilon_{mgc} = \frac12\epsilon_m + \epsilon_g + \epsilon_c$, $\bar c = \bar Z_c + \epsilon_c$, and
 \begin{align*}
 (\epsilon_q, \nu) &= G_{\rm MUL}\bigl(\chi, \chi;\ \bar c^2\bigr), \quad \bar q = \bar c^2 + \epsilon_q, \\
 (\epsilon_t, \vartheta) &= G_{\rm ADD}\bigl(\nu, \tfrac12\nu;\ \tfrac32\bar q\bigr), \quad \bar t = \tfrac32\bar q +
@@ -622,8 +629,12 @@ E_1 &= \tfrac52E^3 + \tfrac{15}8E^4 + \tfrac38E^5 + \epsilon_d + \epsilon_r \\
 &\quad + (1+E)\bigl(\epsilon_{mgc}(1 + 3(E + \tfrac12E^2) + \tfrac32\epsilon_{mgc}) \\
 &\qquad + \tfrac32\epsilon_q + \epsilon_t + \epsilon_w\bigr).
 \end{align*}
-Let $E_2$ and $\pi^{(2)}$ be one step of Theorem~\ref{thm:t7} from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
-G_{\rm MUL}(\pi^{(2)}, \bar a;\ 1 + E_2)$ and $\delta^{\rm DD} = E_2 + \epsilon_z$. Then $|\sqrt x - \sum_k
+Let $E_2$ and $\pi^{(2)}$ be one step of the recursion of $\delta_J$ from $E_1$ and $\pi^{(1)}$, $(\epsilon_z, \cdot) =
+G_{\rm MUL}(\pi^{(2)}, \bar a;\ 1 + E_2)$ and $\delta^{\rm DD} = E_2 + \epsilon_z$.
+
+\begin{theorem}\label{thm:t8}
+Under the hypotheses of Theorem~\ref{thm:t7} and $p \ge 7$, let $\delta^{\rm DD}$ be the constant defined above.
+Then $|\sqrt x - \sum_k
 \mathrm{SQRT}^{\rm DD}_n(x)_k| \le \delta^{\rm DD}\sqrt x$. At $n = 8$, $p = 53$ (computed, \texttt{sqrt\_consts.py}): $E_0 \le 22.125\,u^2 + 72\,u^3$ for
 $\theta = 2$ and $19.125\,u^2 + 58\,u^3$ for $\theta = 1$, $E_1 \le 2^{-303}$, and
 $\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $\theta = 1$, the bounds of SQRT$_{8,4}$.
