@@ -424,9 +424,9 @@ For $n$ or fewer terms in any order, the renormalization is exact. For $n + 1$ t
 $u^n|v_0| + \sum_{j=1}^{n}u^{n+1-j}|v_j|$, where $v$ is VecSum's output, and this is attained.
 \end{theorem}
 
-Earlier analyses of renormalization assumed that the terms arrive in decreasing order and do not
-overlap~\cite{JMMP16,BJMP17,FMP19}. Theorem~\ref{thm:renorm} needs neither, because $\TwoSum$ is exact for terms in any
-order. With $\FastTwoSum$ alone, the same pass can drop terms when an operand has a gap: at $n = 8$, terms of
+Earlier analyses of renormalization assumed that the terms arrive in decreasing order and overlap by at most $p - 2$
+digits~\cite{JMMP16,BJMP17}, or are ordered~\cite{FMP19}. Theorem~\ref{thm:renorm} needs neither, because $\TwoSum$
+is exact for terms in any order. With $\FastTwoSum$ alone, the same pass can drop terms when an operand has a gap: at $n = 8$, terms of
 relative size $2^{-325}$. The same failure has been seen elsewhere. Kouya~\cite{Kouya26} gives an input whose VecSum
 output is out of order, so that a following $\FastTwoSum$ chain drops a term. The Universal library found its
 quad-double addition losing accuracy when QD's renormalization received overlapping terms~\cite{universal}.
