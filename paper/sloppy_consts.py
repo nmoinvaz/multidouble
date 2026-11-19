@@ -28,12 +28,12 @@ usage: sloppy_consts.py [p] [n]   (default 53 8); prints the deposit counts, the
        sloppy_consts.py check     the control: the multiply's bound with the plain level one level higher (level
                                   n-2 plain) must exceed u^(n-1) M, which the n-level bound must not.
 """
-import math
 import sys
 from fractions import Fraction as Fr
 from math import comb
 
 from constants import consts
+from rounding import lg2_up, sig_up
 from sqrt_consts import op_bounds
 
 
@@ -115,8 +115,9 @@ def dot_bound(n, theta, u, K):
     return total / u ** n, eprod / u ** n, elev / u ** n
 
 
-def lg(x):
-    return math.log2(x) if x > 0 else float('-inf')
+def lg(x, k=2):
+    """log2 of a bound, rounded up to k decimals"""
+    return lg2_up(x, k) if x > 0 else '-inf'
 
 
 if __name__ == '__main__':
@@ -130,8 +131,8 @@ if __name__ == '__main__':
             w = sloppy_consts(n - 1, theta, u)
             good = (s['R'] + s['drop'] * u) * u ** n
             wrong = (w['R'] + w['drop'] * u) * u ** (n - 1)
-            print(f'theta {theta}: n-level bound 2^{lg(good):.2f} M, one level higher 2^{lg(wrong):.2f} M, '
-                  f'u^(n-1) = 2^{lg(u ** (n - 1)):.0f}')
+            print(f'theta {theta}: n-level bound 2^{lg(good)} M, one level higher 2^{lg(wrong)} M, '
+                  f'u^(n-1) = 2^{lg(u ** (n - 1), 0)}')
             ok &= good < u ** (n - 1) / 2 ** 20 and wrong > u ** (n - 1)
         print('PASS' if ok else 'FAIL')
         sys.exit(0 if ok else 1)
@@ -146,12 +147,12 @@ if __name__ == '__main__':
     for theta in (1, 2):
         s = sloppy_consts(n, theta, u)
         c = s['R'] + s['drop'] * u
-        print(f'theta {theta}: L_m (log2) = {[round(lg(x), 2) for x in s["L"]]}, Q = {s["Q"]}')
-        print(f'  R_s + Delta u = 2^{lg(c):.4f} = {float(c):.6e}, in units of 2^-418 (u^n/64): 2^{lg(c / 64):.4f}')
-        print(f'  R_s = 2^{lg(s["R"]):.4f}, Delta u = 2^{lg(s["drop"] * u):.2f}')
+        print(f'theta {theta}: L_m (log2) = [' + ', '.join(lg(x) for x in s['L']) + f'], Q = {s["Q"]}')
+        print(f'  R_s + Delta u = 2^{lg(c, 4)} = {sig_up(c, 7)}, in units of 2^-418 (u^n/64): 2^{lg(c / 64, 4)}')
+        print(f'  R_s = 2^{lg(s["R"], 4)}, Delta u = 2^{lg(s["drop"] * u)}')
         mul = consts('mul', n, theta, u)
-        print(f'  default multiply: u^n |ab| + 2^{lg(mul["kappa"] * u):.2f} u^n |a_0 b_0|')
+        print(f'  default multiply: u^n |ab| + 2^{lg(mul["kappa"] * u)} u^n |a_0 b_0|')
     print('sloppy dot of K products, theta 2: |Z - x| <= u^n |Z| + c_K u^n W; c_K (log2), of which E_prod, E_lev')
     for K in (1, 4, 16, 64):
         t, ep, el = dot_bound(n, 2, u, K)
-        print(f'  K {K:3d}: c_K = {float(t):.6e} = 2^{lg(t):.4f}  (E_prod 2^{lg(ep):.4f}, E_lev 2^{lg(el):.4f})')
+        print(f'  K {K:3d}: c_K = {sig_up(t, 7)} = 2^{lg(t, 4)}  (E_prod 2^{lg(ep, 4)}, E_lev 2^{lg(el, 4)})')

@@ -15,6 +15,7 @@ operations with part bounds carried through every step, err by at most 3.661 u^8
 | `trig_consts.py` | the bounds of the sine, cosine and tangent, Theorem 35, in exact rational arithmetic, for the octo-double functions (Lemma 13 at every step, at n = 2, 4, 8 and 12) and the double-double ones (the published double-word bounds); it checks that its series lengths and constants are those of `src/trig/tables.rs`, and `check` adds controls that must raise the bound; its output is `trig_consts.txt` |
 | `sloppy_consts.py` | the bound of the opt-in sloppy multiply (`OD::sloppy_mul`) and of sums of its products, Theorem 30, in exact rational arithmetic, with a walk of the algorithm's deposits that checks its two-sum and rounding counts; `check` is its control |
 | `sloppy_emu.py` | the sloppy multiply on `fpemu.py`, written from its description: hill climbs against `sloppy_consts.py`'s bound at p = 6 to 53 and n = 3 to 8, the crate's worst found pair bit for bit, and a control that must fire |
+| `rounding.py` | the directed rounding of every printed bound: an upper bound is printed rounded up and a lower bound down, at the digits shown; run alone it checks itself and prints PASS |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` and bit for bit with it on 10,000 inputs per operation |
 | `example_n3.py` | the worked example of Section IV on `fpemu.py`, with a control that must fail |
 | `explog_consts.py` | the bounds of the exponential and the logarithm, Theorems 40 and 42, Lemma 43 and Proposition 44, in exact rational arithmetic: Lemma 13 at every operation of the octo-double ones (any n), the published double-word bounds for the double-double ones, and the bound of the start `ln_f64`; `check` samples the convexity the logarithm's chords use |
@@ -28,6 +29,7 @@ operations with part bounds carried through every step, err by at most 3.661 u^8
 From this folder:
 
 ```sh
+python3 rounding.py      # prints PASS
 python3 constants.py     # prints constants.txt
 python3 div_consts.py    # prints div_consts.txt
 python3 sqrt_consts.py   # prints sqrt_consts.txt

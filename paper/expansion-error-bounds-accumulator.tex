@@ -88,9 +88,9 @@ Theorem~\ref{thm:t2}, $1$ for ADDX); the other terms carry at most $K^{(n)}$, $E
 the levels that the last ADDF renormalizes grow with $K$.
 \end{proof}
 
-At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is $2^{-14.9}$ for $K = 1$ (the product's
-$E_{\rm prod} = 2^{-15.1}$ and the levels' $2^{-17.9}$), $2^{-10.6}$ for $K = 16$, $2^{-4.8}$ for $K = 32$, $2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.1}$
-for $K = 1024$ (\texttt{acc\_bound.py}). The second term is at most $u^8W/8$ for $K \le 38$ products and at most $u^8W$
+At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is at most $2^{-14.9}$ for $K = 1$ (the
+product's $E_{\rm prod} \le 2^{-15.1}$ and the levels' $2^{-17.8}$), $2^{-10.5}$ for $K = 16$, $2^{-4.7}$ for $K = 32$,
+$2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.2}$ for $K = 1024$ (\texttt{acc\_bound.py}). The second term is at most $u^8W/8$ for $K \le 38$ products and at most $u^8W$
 for $K \le 50$ ($\theta = 2$; $40$ and $52$ for $\theta = 1$; for sums of octo-doubles $41$ and $53$, and $42$ and $54$ for $\theta =
 1$). Beyond, the bound
 grows like $(Ku)^{9}W$, and the growth is real.
@@ -115,7 +115,7 @@ The inputs are built one part at a time: each part is aimed at a midpoint of the
 $\TwoSum$ there carries about half an ulp down, and the next level grows by that carry at every deposit. Level $m$
 then grows like $(ku)^m/m!$ in units of $W$, and the final rounding errors at level $n$ like $(Ku)^{n+1}/(n+1)!$; the
 bound of Lemma~\ref{lem:acc} counts $m+1$ roundings per level and deposit where the construction realizes about one, and
-lies $2^{22}$ above it at $n = 8$ ($2^{46.0}$ against $2^{23.8}$ at $K = 2048$). Measured, level $m+1$ grows per
+lies about $2^{22}$ above it at $n = 8$ ($2^{46.1}$ against $2^{23.8}$ at $K = 2048$). Measured, level $m+1$ grows per
 deposit by about $0.6\,u|s_m|$ in the construction, and aiming a part at the midpoints of two or three levels at once
 (\texttt{acc\_construct.py \dots\ joint}) gains nothing. A carry chain started by a part $t_l$ consists of multiples of
 the last bit of $t_l$ as long as the levels it passes are coarser, so it can round at level $m$ only if that bit lies

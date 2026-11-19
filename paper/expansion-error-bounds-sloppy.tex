@@ -46,8 +46,8 @@ L_{n-1} = \frac{\theta^{n-1}d_{n-1}}{1 - Qu}, \qquad R_{\rm s} = QL_{n-1}.
   Theorem~\ref{thm:acc} with $\tau_l = \max(L_lu^l, \rho^l)$ for $l < n$, $\tau_n = 0$, and $E_{\rm prod} =
   (R_{\rm s} + \Delta_nu)u^nW$.
 \end{enumerate}
-At $n = 8$ and $p = 53$, $Q = 64$, and $R_{\rm s} + \Delta_8u = 2^{30.4116}$ for $\theta = 1$ and $2^{31.9242}$ for
-$\theta = 2$, of which $\Delta_8u$ is $2^{-50.42}$ and $2^{-41.42}$.
+At $n = 8$ and $p = 53$, $Q = 64$, and $R_{\rm s} + \Delta_8u \le 2^{30.4117}$ for $\theta = 1$ and $2^{31.9242}$ for
+$\theta = 2$, of which $\Delta_8u$ is at most $2^{-50.41}$ and $2^{-41.41}$.
 \end{theorem}
 
 \begin{proof}
@@ -92,13 +92,13 @@ The values at $n = 8$ are those of \texttt{sloppy\_consts.py}, in exact rational
 (1)--(4) and checks $T_m$ and the three sources of $Q$.
 \end{proof}
 
-At $n = 8$, $p = 53$ and $\theta = 2$ the second term of (c), in units of $u^8W$, is $2^{31.9242}$ for $K = 1$,
-4, 16 and 64 products, to the digits shown. It is the products' $E_{\rm prod}$; the levels' $E_{\rm lev}$ is
-$2^{2.6832}$ at $K = 64$ (\texttt{sloppy\_consts.py}).
+At $n = 8$, $p = 53$ and $\theta = 2$ the second term of (c), in units of $u^8W$, is at most $2^{31.9242}$ for $K =
+1$, 4, 16 and 64 products. It is the products' $E_{\rm prod}$; the levels' $E_{\rm lev}$ is at most
+$2^{2.6833}$ at $K = 64$ (\texttt{sloppy\_consts.py}).
 
 \begin{remark}
-The term $R_{\rm s} = QL_{n-1}$ charges each of the $Q$ roundings $u$ times the bound of level $n-1$, $L_7u^7M =
-2^{25.92}u^7M$ at $n = 8$ and $\theta = 2$. MUL's bound there is $u^8|ab| + 2^{-15.08}u^8M$ (Theorem~\ref{thm:t3}), at
+The term $R_{\rm s} = QL_{n-1}$ charges each of the $Q$ roundings $u$ times the bound of level $n-1$, $L_7u^7M \le
+2^{25.93}u^7M$ at $n = 8$ and $\theta = 2$. MUL's bound there is $u^8|ab| + 2^{-15.07}u^8M$ (Theorem~\ref{thm:t3}), at
 the cost of $168$ $\TwoSum$s against SLOPPY-MUL's $112$. The bound is a triangle inequality over the $64$ roundings
 and is not claimed to be tight: the worst pair found by a hill climb in multidouble's tests errs by $581.97\,u^8M$
 (measured; \texttt{sloppy\_emu.py} recomputes it).

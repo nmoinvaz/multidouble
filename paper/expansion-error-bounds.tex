@@ -319,7 +319,7 @@ $a + f$ & $u^8|Z| + 2^{-42.4}u^8(|a_0| + |f|)$ \\
 & $(1, u, \dots, u^7) + u^8$ \\ \addlinespace
 $a \times f$ & $u^8|Z| + 2^{-33.0}u^8|a_0f|$ \\
 & $a_0 = \frac32$, $f = (1+u)/a_0$, Proposition~\ref{prop:sharp}(c) \\ \addlinespace
-$a \times b$ & $u^8|Z| + 2^{-15.1}u^8|a_0b_0|$ \\
+$a \times b$ & $u^8|Z| + 2^{-15.0}u^8|a_0b_0|$ \\
 & $(1, u, \dots, u^6, 0) \times (1, 0, \dots, 0, u^7)$ \\ \addlinespace
 $a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ \\
 & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\ \addlinespace
@@ -340,17 +340,17 @@ $\ln a$ & $9.926\,u^8|Z| + 2^{-509}$ \\
 \nopagebreak
 \begin{table}[H]
 \centering
-\caption{The second term of Theorem~\ref{thm:main} relative to the first, $\kappa_nu$, in binary64. The
+\caption{The second term of Theorem~\ref{thm:main} relative to the first, $\kappa_nu$, in binary64, rounded up. The
 multiplication's constant grows like $n(n!)^2$, and from eleven parts its second term is the larger one.}
 \label{tab:main}
 \begin{tabular}{rccccc}
 \toprule
 $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
 \midrule
-2 & $2^{-106}$ & $2^{-48.5}$ & $2^{-48.5}$ & $2^{-49.2}$ & $2^{-45.9}$ \\
+2 & $2^{-106}$ & $2^{-48.4}$ & $2^{-48.4}$ & $2^{-49.1}$ & $2^{-45.8}$ \\
 4 & $2^{-212}$ & $2^{-43.8}$ & $2^{-43.8}$ & $2^{-46.6}$ & $2^{-37.3}$ \\
-8 & $2^{-424}$ & $2^{-33.0}$ & $2^{-33.0}$ & $2^{-42.4}$ & $2^{-15.1}$ \\
-12 & $2^{-636}$ & $2^{-19.6}$ & $2^{-19.6}$ & $2^{-38.4}$ & $2^{12.5}$ \\
+8 & $2^{-424}$ & $2^{-33.0}$ & $2^{-33.0}$ & $2^{-42.4}$ & $2^{-15.0}$ \\
+12 & $2^{-636}$ & $2^{-19.5}$ & $2^{-19.5}$ & $2^{-38.4}$ & $2^{12.6}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -465,13 +465,13 @@ eight parts in binary64. It stays below 1 up to $K = 50$ products, and the secon
 \begin{table}[H]
 \centering
 \caption{The second term of Theorem~\ref{thm:dot} in units of $u^8W$, for products of octo-doubles on the ladder in
-binary64.}
+binary64, rounded up.}
 \label{tab:dot}
 \begin{tabular}{rccccccc}
 \toprule
 $K$ & 1 & 4 & 16 & 32 & 64 & 128 & 1024 \\
 \midrule
-$c_K$ & $2^{-14.9}$ & $2^{-14.3}$ & $2^{-10.6}$ & $2^{-4.8}$ & $2^{2.7}$ & $2^{10.9}$ & $2^{37.1}$ \\
+$c_K$ & $2^{-14.9}$ & $2^{-14.2}$ & $2^{-10.5}$ & $2^{-4.7}$ & $2^{2.7}$ & $2^{10.9}$ & $2^{37.2}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -509,7 +509,7 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
   and logarithm by $0.99998$ to $1.00138$ times $u^8|Z|$ (Table~\ref{tab:inputs}), so the least leading constant of the
   square root's bound lies between $1 - 5u$ and $3.00004$. Whether 3, or the functions' constants, are reached is open,
   and so is how close the accumulator's bound is to its worst case, which the constructed inputs reach to within
-  $2^{22}$.
+  $2^{22.3}$.
 \end{itemize}
 
 \section{Computations}
