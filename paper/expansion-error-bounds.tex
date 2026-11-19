@@ -337,7 +337,7 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 ladder and a floating-point number $f$. $Z$ is the exact result. Each bound is a proved recursion whose constant a
 script evaluates in exact rational arithmetic and prints rounded up (Section~\ref{sec:comp}). Each bound assumes no underflow inside the run; for
 $e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
-(A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\cpi/2$ that the reduction removes, and $x$ lies at
+(A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\cpi/2$ that the reduction removes, and $a$ lies at
 least $2^{-650}$ from every nonzero multiple of $\cpi/2$ (Theorem~\ref{thm:trig}). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
 those of the others are in Table~\ref{tab:inputs}, each with its error as a multiple of $u^8|Z|$ (computed).}
 \label{tab:summary}
@@ -358,9 +358,9 @@ $a / b$ & $(1 + 2^{-25.5})\,u^8|Z|$ \\
 & $(1, 0, \dots, 0) / (-1, u, 0, \dots, 0)$ \\ \addlinespace
 $\sqrt a$ & $3.00004\,u^8|Z|$ \\
 & Table~\ref{tab:inputs}: $(1 - 5u)\,u^8|Z|$ \\ \addlinespace
-$\sin x$, $\cos x$ & $3.17\,u^8|Z| + 5|k|2^{-1217}$, $|x_0| \le 2^{52}$ \\
+$\sin a$, $\cos a$ & $3.17\,u^8|Z| + 5|k|2^{-1217}$, $|a_0| \le 2^{52}$ \\
 & Table~\ref{tab:inputs}: $0.999999995\,u^8|Z|$ and $1.00069\,u^8|Z|$ \\ \addlinespace
-$\tan x$ & $(6.42\,u^8 + 5|k|2^{-1217}/|\sin x\cos x|)\,|Z|$ \\
+$\tan a$ & $(6.42\,u^8 + 5|k|2^{-1217}/|\sin a\cos a|)\,|Z|$ \\
 & Table~\ref{tab:inputs}: $1.00138\,u^8|Z|$ \\ \addlinespace
 $e^a$ & $3.661\,u^8|Z| + 2^{-1071}$ \\
 & Table~\ref{tab:inputs}: $(1 - 8.2u)\,u^8|Z|$ \\ \addlinespace
@@ -378,12 +378,12 @@ multiplication's constant grows like $n(n!)^2$, and from eleven parts its second
 \label{tab:main}
 \begin{tabular}{rccccc}
 \toprule
-$n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
+$n$ & $u^n$ & $a + b$ & $a + f$ & $a \times f$ & $a \times b$ \\
 \midrule
-2 & $2^{-106}$ & $2^{-48.4}$ & $2^{-48.4}$ & $2^{-49.1}$ & $2^{-45.8}$ \\
-4 & $2^{-212}$ & $2^{-43.8}$ & $2^{-43.8}$ & $2^{-46.6}$ & $2^{-37.3}$ \\
-8 & $2^{-424}$ & $2^{-33.0}$ & $2^{-33.0}$ & $2^{-42.4}$ & $2^{-15.0}$ \\
-12 & $2^{-636}$ & $2^{-19.5}$ & $2^{-19.5}$ & $2^{-38.4}$ & $2^{12.6}$ \\
+2 & $2^{-106}$ & $2^{-48.4}$ & $2^{-49.1}$ & $2^{-48.4}$ & $2^{-45.8}$ \\
+4 & $2^{-212}$ & $2^{-43.8}$ & $2^{-46.6}$ & $2^{-43.8}$ & $2^{-37.3}$ \\
+8 & $2^{-424}$ & $2^{-33.0}$ & $2^{-42.4}$ & $2^{-33.0}$ & $2^{-15.0}$ \\
+12 & $2^{-636}$ & $2^{-19.5}$ & $2^{-38.4}$ & $2^{-19.5}$ & $2^{12.6}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
