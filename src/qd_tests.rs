@@ -12,8 +12,9 @@
 //! ```
 //! QD_N sets the samples per operation and input category (default 4000), QD_SEED the seed (default 1), QD_REPORT=1
 //! prints the tables. RUSTFLAGS selects the `v8` backend: "-C target-cpu=native" (AVX-512 here), "-C
-//! target-feature=+avx2,+fma" (AVX2), none (portable). The digest line of qd_accuracy hashes every scalar result; it
-//! is the same on every backend, and the 8-lane results equal the scalar ones bit for bit.
+//! target-feature=+avx2,+fma" (AVX2), none (SSE2 on x86, NEON on aarch64); the feature `portable` selects the plain
+//! array. The digest line of qd_accuracy hashes every scalar result; it is the same on every backend, and the 8-lane
+//! results equal the scalar ones bit for bit.
 use crate::dd::DD;
 use crate::exact::{BigU, Dy};
 use crate::native::V8;
