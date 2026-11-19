@@ -124,7 +124,7 @@ fn poly<T: Lane>(x: T, y: T, c: DD) -> T {
 }
 
 /// Generic code over `Lane` in octo-double: a polynomial against its exact value, within 2^-410 of the sum of its
-/// terms' magnitudes (4e-124 relative; about 2e-129 seen), and against the same code in quad-double (QV) within
+/// terms' magnitudes (4e-124 relative; about 1e-130 seen), and against the same code in quad-double (QV) within
 /// 1e-60 of that sum. Control: the quad-double lanes miss the octo-double bound by more than 1e50.
 #[test]
 fn generic_lane_code_in_octo_double() {

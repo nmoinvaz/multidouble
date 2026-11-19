@@ -124,7 +124,7 @@ fn od_solve_errors(n: usize, seed: u64, par: bool, ctl: OdLuControl) -> (f64, f6
 }
 
 /// Well-conditioned systems of order 1 to 70 (one row block, partial blocks, several): the solve and the transpose
-/// solve recover the planted x within 1e-120 (about 1e-127 seen; the parts hold 2^-424, about 2e-128), and their exact
+/// solve recover the planted x within 1e-120 (about 2e-130 seen; the parts hold 2^-424, about 2e-128), and their exact
 /// backward error is within n 2^-418 (partial pivoting is backward stable with a small growth factor here).
 #[test]
 fn od_lu_solves_to_octo_double() {
