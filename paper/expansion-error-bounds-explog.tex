@@ -194,7 +194,7 @@ In LOG$_{n,s,d,q}$ under the hypotheses of Theorem~\ref{thm:log}, $\varphi = x' 
 \begin{proof}
 By Lemma~\ref{lem:expred}(a), $2^kx = e^{-e_0 - r_e}$ with $e_0 = y_0 - \ln x$ and $|r_e| \le \bar r_{\max}$, so $2^kx \in
 [0.70, 1.42]$ by the bound on $|e_0|$ of Theorem~\ref{thm:log}, and $x'_0 = 2^kx_0$ lies in $[\frac12, 2]$ by
-\eqref{eq:a0}. ADDF's first $\TwoSum(x'_0, -1)$ is then exact with error zero (Sterbenz), each later one is
+\eqref{eq:a0}. ADDF's first $\TwoSum(x'_0, -1)$ is then exact with error zero (Sterbenz~\cite{Sterbenz74}), each later one is
 $\TwoSum(x'_i, 0) = (x'_i, 0)$, and the level $s_n$ is zero. VecSum's first $\TwoSum$ adds that zero, so $v_n = 0$,
 and the renormalization is exact by Theorem~\ref{thm:t1}(a): a lossy last step would lose the error of $\TwoSum(\acc,
 0)$, which is zero.
@@ -344,7 +344,7 @@ multidouble's \texttt{ln\_f64}.
 \end{lemma}
 
 \begin{proof}
-The scalings are exact, so $h = 2^em$ with $m \in (\mu/2, \mu]$, and $m - 1$ is exact (Sterbenz). Let $s_t = (m-1)/(m
+The scalings are exact, so $h = 2^em$ with $m \in (\mu/2, \mu]$, and $m - 1$ is exact (Sterbenz~\cite{Sterbenz74}). Let $s_t = (m-1)/(m
 + 1)$ and $\bar s = (\mu - 1)/(\mu + 1)$, so $|s_t| \le \bar s$, as $(2 - \mu)/(2 + \mu) < \bar s$. No
 operation underflows, since $|s_t| \ge 2^{-55}$ for $m \ne 1$. By \eqref{eq:rn}, $s = s_t(1 + \theta_s)$ with
 $|\theta_s| \le (1 + \us)/(1 - \us) - 1 = 2u$, and $z = s_t^2(1 + \theta_z)$ with $|\theta_z| \le (1 + 2u)^2(1 + \us)

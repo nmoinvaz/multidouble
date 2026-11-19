@@ -77,7 +77,7 @@ allows its input terms in any order.
 \section{Introduction}
 
 Many computations need more precision than the hardware gives, but far less than arbitrary precision. A common answer
-is to store a number as an \emph{expansion}~\cite{Priest91}, an unevaluated sum of floating-point numbers, each much
+is to store a number as an \emph{expansion}~\cite{Priest91,Shewchuk97}, an unevaluated sum of floating-point numbers, each much
 smaller than the one before. In binary64, $\cpi$ is stored with two parts as
 \[
 3.141592653589793 + 1.2246467991473532 \times 10^{-16},
@@ -172,7 +172,7 @@ right of its dashed line.}
 
 \begin{samepage}
 The algorithms are built from three operations that return a rounded result together with its exact
-error~\cite{Dekker71,ORO05}:
+error~\cite{Moller65,Knuth97,Dekker71,ORO05}:
 \begin{itemize}
 \item $\TwoSum(a, b)$ returns $s = \RN(a + b)$ and $e$ with $s + e = a + b$ exactly, using six operations;
 \item $\FastTwoSum(a, b)$ returns the same $s$ and $e$ with three operations, but only when $|a| \ge |b|$;
@@ -628,47 +628,57 @@ to~\ref{sec:explog} from the text alone with programs of its own (\texttt{review
 \input{expansion-error-bounds-explog}
 
 \begin{thebibliography}{99}
-\bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
-renormalization algorithm. \emph{ITP 2017}, LNCS 10499, 98--113, 2017. doi:10.1007/978-3-319-66107-0\_7.
-\bibitem{CW80} W. J. Cody, Jr., W. Waite. \emph{Software Manual for the Elementary Functions}. Prentice-Hall,
-Englewood Cliffs, NJ, 1980. ISBN 0-13-822064-6.
-\bibitem{Dekker71} T. J. Dekker. A floating-point technique for extending the available precision. \emph{Numer.
-Math.} 18(3), 224--242, 1971. doi:10.1007/BF01397083.
-\bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
-68(11), 1573--1583, 2019. doi:10.1109/TC.2019.2918451.
+\bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
+132--143, 1991. doi:10.1109/ARITH.1991.145549.
+\bibitem{Shewchuk97} J. R. Shewchuk. Adaptive precision floating-point arithmetic and fast robust geometric predicates.
+\emph{Discrete Comput. Geom.} 18(3), 305--363, 1997. doi:10.1007/PL00009321.
 \bibitem{HLB01} Y. Hida, X. S. Li, D. H. Bailey. Algorithms for quad-double precision floating point arithmetic.
 \emph{ARITH-15}, 155--162, 2001. doi:10.1109/ARITH.2001.930115.
 \bibitem{JMMP16} M. Joldes, O. Marty, J.-M. Muller, V. Popescu. Arithmetic algorithms for extended precision using
 floating-point expansions. \emph{IEEE Trans. Comput.} 65(4), 1197--1210, 2016. doi:10.1109/TC.2015.2441714.
+\bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust. Version 4.9.0
+with the changes to commit 187ce44, 18 November 2026. \url{https://github.com/nmoinvaz/multidouble}.
 \bibitem{JMP17} M. Joldes, J.-M. Muller, V. Popescu. Tight and rigorous error bounds for basic building blocks of
-double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), Article 15res, 2017. doi:10.1145/3121432.
-\bibitem{Kouya26} T. Kouya. A branch-free general renormalization scheme for pair arithmetic and its performance
-evaluation. arXiv:2609.35844, 2026.
-\bibitem{Kouya26fma} T. Kouya. Performance evaluation of branch-free fused multiply-add algorithms for
-multi-component-type multiple-precision floating-point arithmetic. arXiv:2607.11391, 2026.
-\bibitem{LLMPR23} V. Lef\`evre, N. Louvet, J.-M. Muller, J. Picot, L. Rideau. Accurate calculation of Euclidean
-norms using double-word arithmetic. \emph{ACM Trans. Math. Softw.} 49(1), 2023. doi:10.1145/3568672.
-\bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust.
-\url{https://github.com/nmoinvaz/multidouble}.
+double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), 1--27, 2017. doi:10.1145/3121432.
+\bibitem{Zhang25} D. K. Zhang. \emph{Fast Algorithms for High-Precision Floating-Point Arithmetic}. PhD dissertation,
+Stanford University, 2025. \url{https://purl.stanford.edu/gt930wy1453}.
+\bibitem{Moller65} O. M{\o}ller. Quasi double-precision in floating point addition. \emph{BIT} 5(1), 37--50, 1965.
+doi:10.1007/BF01975722.
+\bibitem{Knuth97} D. E. Knuth. \emph{The Art of Computer Programming, Volume 2: Seminumerical Algorithms}, 3rd ed.
+Addison-Wesley, Reading, MA, 1997. ISBN 0-201-89684-2.
+\bibitem{Dekker71} T. J. Dekker. A floating-point technique for extending the available precision. \emph{Numer.
+Math.} 18(3), 224--242, 1971. doi:10.1007/BF01397083.
+\bibitem{ORO05} T. Ogita, S. M. Rump, S. Oishi. Accurate sum and dot product. \emph{SIAM J. Sci. Comput.} 26(6),
+1955--1988, 2005. doi:10.1137/030601818.
+\bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
+renormalization algorithm. \emph{ITP 2017}, LNCS 10499, 98--113, 2017. doi:10.1007/978-3-319-66107-0\_7.
+\bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
+de Lyon, 2017. HAL tel-01534090.
 \bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using
 floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
+\bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
+68(11), 1573--1583, 2019. doi:10.1109/TC.2019.2918451.
+\bibitem{Kouya26} T. Kouya. A branch-free general renormalization scheme for pair arithmetic and its performance
+evaluation. arXiv:2609.35844, 2026.
+\bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request
+1321, ``fix(qd\_cascade): compress the expansion before renormalizing addition'', 2026.
+\url{https://github.com/stillwater-sc/universal/pull/1321}.
+\bibitem{LLMPR23} V. Lef\`evre, N. Louvet, J.-M. Muller, J. Picot, L. Rideau. Accurate calculation of Euclidean
+norms using double-word arithmetic. \emph{ACM Trans. Math. Softw.} 49(1), 1--34, 2023. doi:10.1145/3568672.
 \bibitem{MR22} J.-M. Muller, L. Rideau. Formalization of double-word arithmetic, and comments on ``Tight and rigorous
 error bounds for basic building blocks of double-word arithmetic''. \emph{ACM Trans. Math. Softw.} 48(1), 1--24, 2022.
 doi:10.1145/3484514.
-\bibitem{ORO05} T. Ogita, S. M. Rump, S. Oishi. Accurate sum and dot product. \emph{SIAM J. Sci. Comput.} 26(6),
-1955--1988, 2005. doi:10.1137/030601818.
-\bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
-de Lyon, 2017. HAL tel-01534090.
-\bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
-132--143, 1991. doi:10.1109/ARITH.1991.145549.
-\bibitem{QD237} Y. Hida, X. S. Li, D. H. Bailey. QD, a double-double and quad-double library, version 2.3.7: the
-functions \texttt{exp} and \texttt{log} of \texttt{src/dd\_real.cpp} and \texttt{src/qd\_real.cpp} (source package
-qd 2.3.7, Debian).
-\bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request
-1321, ``compress the expansion before renormalizing addition'', 2026.
-\url{https://github.com/stillwater-sc/universal/pull/1321}.
-\bibitem{Zhang25} D. K. Zhang. \emph{Fast Algorithms for High-Precision Floating-Point Arithmetic}. PhD dissertation,
-Stanford University, 2025. \url{https://purl.stanford.edu/gt930wy1453}.
+\bibitem{Kouya26fma} T. Kouya. Performance evaluation of branch-free fused multiply-add algorithms for
+multi-component-type multiple-precision floating-point arithmetic. arXiv:2607.11391, 2026.
+\bibitem{PH83} M. H. Payne, R. N. Hanek. Radian reduction for trigonometric functions. \emph{ACM SIGNUM Newsl.}
+18(1), 19--24, 1983. doi:10.1145/1057600.1057602.
+\bibitem{CW80} W. J. Cody, Jr., W. Waite. \emph{Software Manual for the Elementary Functions}. Prentice-Hall,
+Englewood Cliffs, NJ, 1980. ISBN 0-13-822064-6.
+\bibitem{QD237} Y. Hida, X. S. Li, D. H. Bailey. QD: a double-double and quad-double package, version 2.3.24: the
+functions \texttt{exp} and \texttt{log} of \texttt{src/dd\_real.cpp} and \texttt{src/qd\_real.cpp}.
+\url{https://github.com/BL-highprecision/QD}.
+\bibitem{Sterbenz74} P. H. Sterbenz. \emph{Floating-Point Computation}. Prentice-Hall, Englewood Cliffs, NJ, 1974.
+ISBN 0-13-322495-3.
 \end{thebibliography}
 
 \end{document}
