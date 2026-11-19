@@ -80,9 +80,16 @@ impl DD {
         lo: 2.4492935982947064e-16,
     };
 
+    /// hi + lo exactly, the two parts in either order: a two-sum, so `hi` is the sum rounded to nearest and `lo` its
+    /// error, at most ulp(hi)/2. Parts in that order already keep their bits, except that a zero low part is +0 (the
+    /// two-sum's error is never a negative zero). An infinite or NaN part gives a NaN low part.
     #[inline(always)]
     pub fn new(hi: f64, lo: f64) -> DD {
-        let (h, l) = quick_two_sum(hi, lo);
+        let (h, l) = if crate::any_order::mutate::on(crate::any_order::mutate::AS_GIVEN) {
+            quick_two_sum(hi, lo)
+        } else {
+            two_sum(hi, lo)
+        };
         DD { hi: h, lo: l }
     }
     #[inline(always)]
