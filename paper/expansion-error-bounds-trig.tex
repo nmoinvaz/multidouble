@@ -18,7 +18,8 @@ greedy rounding $r$ of $2^{-F}N$ to $n$ parts: $r_0 = \RN(2^{-F}N)$ and $r_i = \
 multidouble $N$ is a two's-complement integer of 1280 bits. Where a test in binary64 arithmetic decides the rounding of
 every part, multidouble takes the same $k$ and $r$ from a reduction in binary64 limbs instead
 (\texttt{src/trig/fast\_reduce.rs}). $P$ and $c$ come from Machin's formula in exact integer
-arithmetic, checked against Gauss's formula (\texttt{scripts/trig\_tables.py}).
+arithmetic, checked against Gauss's formula (\texttt{scripts/trig\_tables.py}). Arguments beyond $2^{52}$ need the reduction of Payne and
+Hanek~\cite{PH83}, which is not analyzed here.
 
 \paragraph{Evaluation} For $j \ge 0$ let $\bar r_0 = 0.78541$ and $\bar r_j = 2^{-j}(1 + 2^{-50})$ for $j \ge 1$. Bucket $j$ holds
 the $r$ with $2^{-j-1} \le |r_0| < 2^{-j}$, and $[\frac12, r_{\max}]$ for $j = 0$. $K_{\rm s}(j)$ is the least $K \ge 2$
