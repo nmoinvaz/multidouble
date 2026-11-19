@@ -106,6 +106,7 @@ pub mod mutate {
 /// A number type stored as N `f64` parts, largest first.
 pub trait Parts<const N: usize>: Copy {
     fn to_parts(self) -> [f64; N];
+    /// the value of the parts as they are, largest first as `to_parts` gives them, not renormalized
     fn from_parts(p: [f64; N]) -> Self;
     /// whether the type is its N parts in order in memory and nothing else, so that the bulk paths may write it as
     /// `f64`: the crate's own types, checked again at run time (`f64s`)

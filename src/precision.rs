@@ -61,7 +61,7 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     const ZERO: Self::Scalar;
     const ONE: Self::Scalar;
 
-    /// a scalar from up to PARTS parts, the missing ones zero, renormalized (`QD::new`, `OD::new`)
+    /// the exact sum of up to PARTS parts in any order, the missing ones zero (`DD::new`, `QD::new`, `OD::new`)
     ///
     /// # Panics
     /// `p` has more than PARTS parts.
