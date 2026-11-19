@@ -63,7 +63,10 @@ From `accumulator/`:
 
 ```sh
 python3 acc_bound.py 53 8 2 prod 1 4 8 16 24 32 48 64 128 256 512 1024 2048   # out/acc_bound_n8.txt
-python3 acc_bound.py 53 8 2 prod cross 1/8 1   # out/acc_bound_thresholds.txt, with 1 prod, 1 add and 2 add
+python3 acc_bound.py 53 8 2 prod cross 1/8 1   # out/acc_bound_thresholds.txt, with the three lines below
+python3 acc_bound.py 53 8 1 prod cross 1/8 1
+python3 acc_bound.py 53 8 1 add cross 1/8 1
+python3 acc_bound.py 53 8 2 add cross 1/8 1
 python3 acc_check.py                           # out/acc_check.txt, prints PASS
 python3 acc_construct.py 53 8 2048 none terms.txt   # out/acc_construct_p53_n8_K2048.txt, the terms and the result
 for f in 1 0; do python3 acc_greedy.py 53 8 2048 1 11 err $f | tail -1; done   # out/acc_random_p53_n8_K2048.txt
