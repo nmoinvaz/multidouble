@@ -9,7 +9,7 @@ $N \in \{n-1, n\}$, performs $\dep(s, l, t_l)$ for $l = 0, \dots, n-1$ (with $t_
 \RN(s_n + t_n)$ if $N = n$. ADDPROD$(a, b)$ deposits the $n+1$ levels of MUL before renormalization (steps (1)--(4)),
 ADDX$(a)$ deposits the $n$ parts of $a$, and FINISH returns $r^{(n)}$, where $r^{(0)} = (s_0, 0, \dots, 0)$ and
 $r^{(l)} = \mathrm{ADDF}(r^{(l-1)}, s_l)$. At $n = 8$ and $p = 53$ these are \texttt{OdAcc::add\_prod}, \texttt{add}
-and \texttt{finish} of multidouble~4.8.2 (identical bits on the inputs of Proposition~\ref{prop:acc-low}). We write
+and \texttt{finish} of multidouble (identical bits on the inputs of Proposition~\ref{prop:acc-low}). We write
 $k^{(r)} = k(k+1)\cdots(k+r-1)$, $k^{(0)} = 1$, for the rising factorial.
 
 \begin{lemma}\label{lem:acc}
