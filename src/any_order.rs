@@ -12,12 +12,14 @@
 //!   exact for N parts to N (paper/expansion-error-bounds.pdf, renormalization in any order). The result is kept when
 //!   it is on the ladder. Sorting alone does not guarantee that: parts that overlap in one binade can leave the second
 //!   part past the ulp of the first (`tests/any_order.rs`, the control without the fallback).
-//! * Such a result is replaced by `expansion_sum`, on the ladder for any finite parts. Grow-Expansion (J. R. Shewchuk,
-//!   "Adaptive precision floating-point arithmetic and fast robust geometric predicates", Discrete Comput. Geom. 18
-//!   (1997) 305-363, doi:10.1007/PL00009321) adds the parts one by one into an expansion whose nonzero components do
-//!   not overlap: the msb of each is below the lsb of the next larger one. Every step is a two-sum, so the sum is
-//!   exact. Then the renormalization's second pass (the first half of Shewchuk's Compress) runs from the largest
-//!   component down.
+//! * Such a result, or one that overflowed although the parts are finite, is replaced by `expansion_sum`, on the ladder
+//!   for any finite parts. Grow-Expansion (J. R. Shewchuk, "Adaptive precision floating-point arithmetic and fast
+//!   robust geometric predicates", Discrete Comput. Geom. 18 (1997) 305-363, doi:10.1007/PL00009321) adds the parts
+//!   one by one into an expansion whose nonzero components do not overlap: the msb of each is below the lsb of the next
+//!   larger one. Every step is a two-sum, so the sum is exact in any order. The next part is the largest left of the
+//!   sign opposite to the running sum, if there is one, so the running sum stays within the largest part or the total
+//!   and overflows only if the total does. Then the renormalization's second pass (the first half of Shewchuk's
+//!   Compress) runs from the largest component down.
 //!
 //! The second pass adds each component w_j into an accumulator A by two-sum, emits the sum t as a part when the error
 //! is nonzero, and carries the error on. On components that do not overlap it is exact and on the ladder. A is built
@@ -104,15 +106,23 @@ pub(crate) fn on_ladder<const N: usize>(x: &[f64; N]) -> bool {
     quick || (0..N - 1).all(|k| x[k + 1] == 0.0 || (x[k] != 0.0 && x[k + 1].abs() <= ulp(x[k])))
 }
 
-/// The exact sum of N finite parts in any order as N parts on the ladder (see the module doc): Grow-Expansion, then the
-/// pass from the largest component down. Each of the N - 1 steps emits at most one part, so none is lost.
+/// The exact sum of N finite parts, sorted by decreasing magnitude, as N parts on the ladder (see the module doc):
+/// Grow-Expansion, each next part the largest left of the sign opposite to the running sum, then the pass from the
+/// largest component down. Each of the N - 1 steps of the pass emits at most one part, so none is lost.
 #[cold]
 #[inline(never)]
 pub(crate) fn expansion_sum<const N: usize>(x: [f64; N]) -> [f64; N] {
-    // e[..=m] nonoverlapping, increasing in magnitude, zeros allowed
+    // e[..m] nonoverlapping, increasing in magnitude, zeros allowed; its last component is the running sum
     let mut e = [0.0f64; N];
+    let mut used = [false; N];
     for m in 0..N {
-        let mut q = x[m];
+        let s = if m == 0 { 0.0 } else { e[m - 1] };
+        let next = (0..N)
+            .find(|&i| !used[i] && ((s > 0.0 && x[i] < 0.0) || (s < 0.0 && x[i] > 0.0)))
+            .or_else(|| (0..N).find(|&i| !used[i]))
+            .unwrap_or(m);
+        used[next] = true;
+        let mut q = x[next];
         for c in e.iter_mut().take(m) {
             let (s, h) = two_sum(q, *c);
             *c = h;
@@ -138,8 +148,8 @@ pub(crate) fn expansion_sum<const N: usize>(x: [f64; N]) -> [f64; N] {
 }
 
 /// The constructors' paths (see the module doc): `renorm`, the renormalization as the arithmetic runs it, for parts on
-/// the ladder; otherwise the parts sorted and renormalized by `renorm_exact` (exact for N parts to N), kept when on the
-/// ladder or not finite, and `expansion_sum` of the sorted parts when not.
+/// the ladder; otherwise the parts sorted and renormalized by `renorm_exact` (exact for N parts to N), kept when it is
+/// finite and on the ladder or when a part is not finite, and `expansion_sum` of the sorted parts when not.
 #[inline(always)]
 pub(crate) fn exact_sum<const N: usize>(
     x: [f64; N],
@@ -151,7 +161,8 @@ pub(crate) fn exact_sum<const N: usize>(
     }
     let c = by_magnitude(x);
     let r = renorm_exact(c);
-    if !r[0].is_finite() || on_ladder(&r) || mutate::on(mutate::NO_FALLBACK) {
+    let finite = c.iter().all(|p| p.is_finite());
+    if !finite || (r[0].is_finite() && on_ladder(&r)) || mutate::on(mutate::NO_FALLBACK) {
         r
     } else {
         expansion_sum(c)
