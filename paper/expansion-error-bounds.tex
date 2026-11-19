@@ -103,8 +103,8 @@ We prove bounds for one scheme of this style, with $\TwoSum$ throughout, for eve
 $n = 4$, and Section~\ref{sec:qd} lists the differences:
 \begin{itemize}
 \item addition and multiplication of two expansions, and of an expansion and a floating-point number, are accurate to
-  $u^n$ relative, plus a small second term (Theorem~\ref{thm:main}), a leading constant of 1 against $2^n$ and more
-  for the variants;
+  $u^n$ relative, plus a small second term (Theorem~\ref{thm:main}), a leading constant of 1 where the bounds known
+  for other generalizations have $2^n$ and more;
 \item division is accurate to $u^n$, and the square root to $3u^n$ at $n = 8$ (Theorem~\ref{thm:divsqrt});
 \item simple inputs reach the bound $u^n$ for the sum, the product and the quotient, so its leading constant cannot
   be lowered (Section~\ref{sec:example});
@@ -292,7 +292,6 @@ renormalization works are not known~\cite{HLB01}. Here both passes use $\TwoSum$
 gives the same bits whenever $|\acc| \ge |v_j|$, which holds when the terms arrive in decreasing order. They need not:
 when an operand has a gap, a level can be larger than the level above it, and then only $\TwoSum$ is exact.
 
-\section{The results}
 \subsection{Differences from QD}\label{sec:qd}
 
 \begin{samepage}
@@ -310,6 +309,7 @@ authors left unproved. It differs in four ways:
 \end{samepage}
 The division is QD's long division with $n + 1$ quotient terms.
 
+\section{The results}
 
 The sum, the product and the quotient have the same leading term, $u^n$ times the exact result. The square root and
 the elementary functions have a few times it (Table~\ref{tab:summary}).
@@ -332,8 +332,9 @@ gives the bounds at $n = 8$ in binary64, and Table~\ref{tab:main} shows how the 
 \nopagebreak
 \begin{table}[H]
 \centering
-\caption{Proven error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
-ladder and a floating-point number $f$. $Z$ is the exact result. Each bound assumes no underflow inside the run; for
+\caption{Error bounds at $n = 8$ parts in binary64, where $u^8 = 2^{-424}$, for expansions $a$ and $b$ on the
+ladder and a floating-point number $f$. $Z$ is the exact result. Each bound is a proved recursion whose constant a
+script evaluates in exact rational arithmetic and prints rounded up (Section~\ref{sec:comp}). Each bound assumes no underflow inside the run; for
 $e^a$ and $\ln a$ the scalings by powers of two may underflow, and their losses are in the bounds (Appendix,
 (A2$'$)). For the sine, cosine and tangent, $k$ is the multiple of $\pi/2$ that the reduction removes, and $x$ lies at
 least $2^{-650}$ from every nonzero multiple of $\pi/2$ (Theorem~\ref{thm:trig}). The inputs of the first five rows err by $u^8|Z|$ up to a factor $1 - O(u)$ (Proposition~\ref{prop:worst});
@@ -388,14 +389,15 @@ $n$ & $u^n$ & $a + b$ & $a \times f$ & $a + f$ & $a \times b$ \\
 
 \begin{theorem}[Appendix, Theorems~\ref{thm:t6} and~\ref{thm:t8}]\label{thm:divsqrt}
 For expansions on the ladder, long division with $n+1$ quotient terms errs by at most $(u^n + \kdiv u^{n+1})|a/b|$, with
-$\kdiv u = 2^{-25.5}$ at $n = 8$ and $\kdiv u < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
+$\kdiv u \le 2^{-25.5}$ at $n = 8$ and $\kdiv u < 1$ up to $n = 13$ in binary64. The square root by two Newton steps from the
 double-double square root, the first with its second-order term, errs by at most $3.00004\,u^8\sqrt a$ at $n = 8$.
+The constants are computed from the proved recursions (Section~\ref{sec:comp}).
 \end{theorem}
 
 The exponential and the logarithm, built from these operations with each part's bound carried through every step, err
 by at most $3.661\,u^8e^a + 2^{-1071}$ and $9.926\,u^8|\ln a| + 2^{-509}$ at $n = 8$ (Theorems~\ref{thm:exp}
-and~\ref{thm:log}). The logarithm starts from a binary64 logarithm of its own, whose error is proved too
-(Lemma~\ref{lem:lnb}), so no bound rests on the platform's logarithm.
+and~\ref{thm:log}, constants computed). The logarithm starts from a binary64 logarithm of its own, whose error is
+bounded the same way (Lemma~\ref{lem:lnb}), so no bound rests on the platform's logarithm.
 
 The bounds chain. At eight parts in binary64, a product of two expansions on the ladder is again on the ladder, and
 so is a sum whose operands' leading parts have one sign (Corollary~\ref{cor:closure}), so the bounds apply at every
@@ -543,7 +545,7 @@ Random positive terms of the same sizes err by less than $0.004\,u^8W$.
   $2^{22.3}$.
 \end{itemize}
 
-\section{Computations}
+\section{Computations}\label{sec:comp}
 
 The constants were evaluated in exact rational arithmetic (\texttt{constants.py}, \texttt{div\_consts.py},
 \texttt{sqrt\_consts.py}). A reviewer who had not seen the checks recomputed them from the definitions with separate
