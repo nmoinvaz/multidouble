@@ -67,7 +67,17 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "release: bump version to $VERSION"
           fi
-          git tag "$VERSION"
+          # A cancelled run may have pushed the tag already. It is reused when HEAD descends from it and its crate has
+          # this version, which the jobs below check out and publish.
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            if ! git merge-base --is-ancestor "$VERSION" HEAD ||
+              ! git show "$VERSION:Cargo.toml" | grep -qxF "version = \"$VERSION\""; then
+              echo "::error::Tag $VERSION exists off HEAD's history or without version $VERSION"
+              exit 1
+            fi
+          else
+            git tag "$VERSION"
+          fi
           git push origin "HEAD:$BRANCH"
           git push origin "$VERSION"
 
