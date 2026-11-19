@@ -642,7 +642,7 @@ $\delta^{\rm DD} \le 3.0000319\,u^8$ for $\theta = 2$ and $3.0000198\,u^8$ for $
 
 \begin{proof}
 \emph{Start.} $\FastTwoSum$ is exact, since $|a_1| \le \rho|a_0|$, and $(a_0', a_1')$ is a double-word number far from
-underflow, as $a_0 \in [1, 4)$. Theorem~3.5 of~\cite{LLMPR23} gives $v = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
+underflow, as $a_0 \in [1, 4)$. The theorem on that algorithm in~\cite{LLMPR23} (Theorem~3.5 of its preprint, HAL hal-03482567v1) gives $v = \sqrt{a_0 + a_1}(1 + d_1)$ with $|d_1| \le
 \eta_1$, and Theorem~7.1 of~\cite{JMP17}, which~\cite{MR22} proved formally, gives $r v = 1 + d_2$ with $|d_2| \le
 \eta_2$ for $p \ge 7$. With $a = (a_0 + a_1)(1 + d_3)$, where $|d_3| \le \eta_3$ by $|a_2 + \dots| \le
 \rho^2a_0/(1-\rho)$ and $|a_0 + a_1| \ge (1-\rho)a_0$, $r/y = (1+d_3)^{1/2}(1+d_2)/(1+d_1)$ for $y = a^{-1/2}$,
