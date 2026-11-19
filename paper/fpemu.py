@@ -1,9 +1,9 @@
 """Exact emulator of p-bit binary floating point (RN, ties to even, unbounded exponents, signed zeros) and of
-multidouble 4.8.2's octo-double algorithms (src/od.rs) generalized to n parts.
+multidouble's octo-double algorithms (src/od.rs) generalized to n parts.
 
 A value is a tuple (m, e) worth m 2^e with |m| < 2^p and m odd (canonical), or a zero (0, s) with s = 1 for -0.
 Every operation rounds the exact result once, with IEEE 754's signed-zero rules (an exact zero sum of nonzero
-operands is +0). Written from multidouble 4.8.2 src/od.rs (git tag 4.8.2), operation by operation.
+operands is +0). Written from src/od.rs, operation by operation; campaign.py compares it with the crate bit for bit.
 """
 from math import isqrt
 

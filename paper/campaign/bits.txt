@@ -1,0 +1,18 @@
+bits: p = 53, n = 8, 10000 inputs per operation, seed 1; operands dense, at the top of the ladder, with gaps, with zero parts and anywhere below the edge; every fifth ADD pair cancels
+ADD  10000 inputs (0 left the normal range and are not counted), 0 mismatches with multidouble; largest error / bound 0.0056; 0 of 3975 results off the ladder H(2)
+     the 400 with dense random parts: largest error / (u^8 |Z|) 0.0051
+     control (the error of a_1 + b_1 dropped): 182 of 300 mismatch
+ADDF 10000 inputs (0 left the normal range and are not counted), 0 mismatches with multidouble; largest error / bound 0.0064; 0 of 4951 results off the ladder H(2)
+     the 2000 with dense random parts: largest error / (u^8 |Z|) 0.0058
+     control (two-sum's error with the wrong sign): 300 of 300 mismatch
+MULF 10000 inputs (0 left the normal range and are not counted), 0 mismatches with multidouble; largest error / bound 0.0073, largest error / (u^8 |Z|) 0.0073; 0 of 10000 results off the ladder H(2)
+     the 2000 with dense random parts: largest error / (u^8 |Z|) 0.0064
+     control (the error of a_3 f dropped): 283 of 300 mismatch
+MUL  10000 inputs (0 left the normal range and are not counted), 0 mismatches with multidouble; largest error / bound 0.0061, largest error / (u^8 |Z|) 0.0061; 0 of 10000 results off the ladder H(2)
+     the 400 with dense random parts: largest error / (u^8 |Z|) 0.0035
+     control (the error of a_2 b_3 dropped): 265 of 300 mismatch
+DIV  10000 inputs (0 left the normal range and are not counted), 0 mismatches with multidouble; largest error / bound 0.0068, largest error / (u^8 |Z|) 0.0068
+     the 400 with dense random parts: largest error / (u^8 |Z|) 0.0056
+     control (one remainder update skipped): 300 of 300 mismatch
+multidouble returns +-(1, u, ..., u^7) on the 5 inputs of Proposition 24 at n = 8: True
+PASS

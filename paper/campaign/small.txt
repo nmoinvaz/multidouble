@@ -1,0 +1,20 @@
+small: Theorem 9 at p = 3, every tuple of the family in every order, first term not negative
+  n = 2, 3 terms from 81 values (leading exponents -8 to 1, every mantissa): 269001 tuples, 76424 lossy, 0 beyond min_k B_k, 0 lossy without n - 1 emissions, 28998 with |E| = min_k B_k; controls: 47696 beyond half the bound, 0 where Fast2Sum throughout loses more
+  n = 3, 3 terms from 81 values (leading exponents -9 to 0, every mantissa): 269001 tuples, 0 lossy (Theorem 9(a): none); control, Fast2Sum throughout: 21662 lossy
+  n = 3, 4 terms from 61 values (leading exponents -9 to 0, mantissas 1, 5/4 and 7/4): 7036411 tuples, 769006 lossy, 0 beyond min_k B_k, 0 lossy without n - 1 emissions, 40600 with |E| = min_k B_k; controls: 281138 beyond half the bound, 948874 where Fast2Sum throughout loses more
+small: Theorems 15 and 19, operands on H(2): a_0 every mantissa, each later part zero, the ladder's edge, the largest float below u^i or a power of two far below, with both signs
+  p = 5, n = 3: 784 operands a (of the family's 784), 400 operands b (and their negations for ADD), 16 of them as divisors (and their negations), 128 floats f
+    ADD  627200 pairs, 0 beyond the bound, largest error / bound 0.0477
+    ADDF 100352 pairs, 0 beyond the bound, largest error / bound 0.0000
+    MULF 100352 pairs, 0 beyond the bound, largest error / bound 0.0108
+    MUL  313600 pairs, 0 beyond the bound, largest error / bound 0.0103
+    DIV  25088 pairs, 0 beyond the bound, largest error / bound 0.0189
+    control (two-sum's error with the wrong sign), pairs beyond the bound: ADD 4813 of 5600, ADDF 3939 of 5120, MULF 4416 of 5120, MUL 4281 of 5200, DIV 3932 of 5024
+  p = 7, n = 4: 2000 operands a (of the family's 8000), 24 operands b (and their negations for ADD), 4 of them as divisors (and their negations), 48 floats f
+    ADD  96000 pairs, 0 beyond the bound, largest error / bound 0.0000
+    ADDF 96000 pairs, 0 beyond the bound, largest error / bound 0.0000
+    MULF 96000 pairs, 0 beyond the bound, largest error / bound 0.0000
+    MUL  48000 pairs, 0 beyond the bound, largest error / bound 0.0022
+    DIV  16000 pairs, 0 beyond the bound, largest error / bound 0.0145
+    control (two-sum's error with the wrong sign), pairs beyond the bound: ADD 5014 of 5040, ADDF 4963 of 5040, MULF 5040 of 5040, MUL 4983 of 5016, DIV 4998 of 5000
+PASS
