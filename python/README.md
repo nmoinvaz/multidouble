@@ -60,8 +60,8 @@ Needs a Rust toolchain (1.89 or later).
 
 ```sh
 pip install ./python                    # from the repository root, builds with maturin
-pip install pytest && pytest python/tests
+pip install pytest mpmath && pytest python/tests
 ```
 
-The tests compare every operation with exact rational arithmetic (`fractions.Fraction`) and contain controls that feed
-the same checks a wrong result.
+The tests compare every operation with exact rational arithmetic (`fractions.Fraction`) or with mpmath at more digits
+than the result holds, and contain controls that feed the same checks a wrong result.
