@@ -149,19 +149,19 @@ the one above it, and zero parts between nonzero ones (Figure~\ref{fig:ladder}).
 \centering
 \resizebox{\columnwidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm]
-  \foreach \i in {1,2,3} { \draw[densely dashed, gray] (2.35*\i, -1.75) -- (2.35*\i, 0.55); }
-  \node[gray, font=\small, above] at (2.35, 0.55) {$2u|a_0|$};
-  \node[gray, font=\small, above] at (4.70, 0.55) {$(2u)^2|a_0|$};
-  \node[gray, font=\small, above] at (7.05, 0.55) {$(2u)^3|a_0|$};
-  \node[left, font=\small] at (-0.2, 0) {(a)};
+  \foreach \i in {1,2,3} { \draw[densely dashed, gray] (2.35*\i, -2.25) -- (2.35*\i, 0.7); }
+  \node[gray, font=\Large, above] at (2.35, 0.7) {$2u|a_0|$};
+  \node[gray, font=\Large, above] at (4.70, 0.7) {$(2u)^2|a_0|$};
+  \node[gray, font=\Large, above] at (7.05, 0.7) {$(2u)^3|a_0|$};
+  \node[left, font=\Large] at (-0.2, 0) {(a)};
   \foreach \x/\l in {0/a_0, 2.4/a_1, 4.8/a_2, 7.2/a_3} {
-    \draw[fill=blue!12] (\x, -0.2) rectangle ++(2.3, 0.4); \node[font=\small] at (\x+1.15, 0) {$\l$}; }
-  \node[left, font=\small] at (-0.2, -1.2) {(b)};
-  \draw[fill=blue!12] (0, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (1.15, -1.2) {$a_0$};
-  \draw[fill=blue!12] (3.4, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (4.55, -1.2) {$a_1$};
-  \node[font=\small] at (6.5, -1.2) {$a_2 = 0$};
-  \draw[fill=blue!12] (8.3, -1.4) rectangle ++(2.3, 0.4); \node[font=\small] at (9.45, -1.2) {$a_3$};
-  \draw[->] (0, -2.0) -- (10.8, -2.0) node[right, font=\small] {smaller};
+    \draw[fill=blue!12] (\x, -0.32) rectangle ++(2.3, 0.64); \node[font=\Large] at (\x+1.15, 0) {$\l$}; }
+  \node[left, font=\Large] at (-0.2, -1.5) {(b)};
+  \draw[fill=blue!12] (0, -1.82) rectangle ++(2.3, 0.64); \node[font=\Large] at (1.15, -1.5) {$a_0$};
+  \draw[fill=blue!12] (3.4, -1.82) rectangle ++(2.3, 0.64); \node[font=\Large] at (4.55, -1.5) {$a_1$};
+  \node[font=\Large] at (6.65, -1.5) {$a_2 = 0$};
+  \draw[fill=blue!12] (8.3, -1.82) rectangle ++(2.3, 0.64); \node[font=\Large] at (9.45, -1.5) {$a_3$};
+  \draw[->] (0, -2.5) -- (10.8, -2.5) node[right, font=\Large] {smaller};
 \end{tikzpicture}}
 \caption{Two four-part expansions on the ladder. Each box is a part's $p$ significant bits, placed by its exponent.
 (a)~Each part at most one ulp of the part above. (b)~A gap after $a_0$ and a zero part. A part may lie anywhere to the
@@ -621,6 +621,7 @@ work, one tested the statements in exact arithmetic without reading the proofs, 
 products, and one recomputed the constants of Appendices~\ref{sec:bounds} to~\ref{sec:sqrt} and~\ref{sec:sloppy}
 to~\ref{sec:explog} from the text alone with programs of its own (\texttt{review/}).
 
+\clearpage
 \appendices
 \input{expansion-error-bounds-appendix}
 \input{expansion-error-bounds-accumulator}
@@ -635,10 +636,16 @@ to~\ref{sec:explog} from the text alone with programs of its own (\texttt{review
 \emph{Discrete Comput. Geom.} 18(3), 305--363, 1997. doi:10.1007/PL00009321.
 \bibitem{HLB01} Y. Hida, X. S. Li, D. H. Bailey. Algorithms for quad-double precision floating point arithmetic.
 \emph{ARITH-15}, 155--162, 2001. doi:10.1109/ARITH.2001.930115.
-\bibitem{JMMP16} M. Joldes, O. Marty, J.-M. Muller, V. Popescu. Arithmetic algorithms for extended precision using
-floating-point expansions. \emph{IEEE Trans. Comput.} 65(4), 1197--1210, 2016. doi:10.1109/TC.2015.2441714.
 \bibitem{md} N. Moinvaziri. multidouble: double-double, quad-double and octo-double arithmetic in Rust. Version 4.9.0
 with the changes to commit 187ce44, 18 November 2026. \url{https://github.com/nmoinvaz/multidouble}.
+\bibitem{JMMP16} M. Joldes, O. Marty, J.-M. Muller, V. Popescu. Arithmetic algorithms for extended precision using
+floating-point expansions. \emph{IEEE Trans. Comput.} 65(4), 1197--1210, 2016. doi:10.1109/TC.2015.2441714.
+\bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
+de Lyon, 2017. HAL tel-01534090.
+\bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using
+floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
+\bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
+68(11), 1573--1583, 2019. doi:10.1109/TC.2019.2918451.
 \bibitem{JMP17} M. Joldes, J.-M. Muller, V. Popescu. Tight and rigorous error bounds for basic building blocks of
 double-word arithmetic. \emph{ACM Trans. Math. Softw.} 44(2), 1--27, 2017. doi:10.1145/3121432.
 \bibitem{Zhang25} D. K. Zhang. \emph{Fast Algorithms for High-Precision Floating-Point Arithmetic}. PhD dissertation,
@@ -653,12 +660,6 @@ Math.} 18(3), 224--242, 1971. doi:10.1007/BF01397083.
 1955--1988, 2005. doi:10.1137/030601818.
 \bibitem{BJMP17} S. Boldo, M. Joldes, J.-M. Muller, V. Popescu. Formal verification of a floating-point expansion
 renormalization algorithm. \emph{ITP 2017}, LNCS 10499, 98--113, 2017. doi:10.1007/978-3-319-66107-0\_7.
-\bibitem{Popescu17} V. Popescu. \emph{Towards fast and certified multiple-precision librairies}. PhD thesis, Universit\'e
-de Lyon, 2017. HAL tel-01534090.
-\bibitem{MPT16} J.-M. Muller, V. Popescu, P. T. P. Tang. A new multiplication algorithm for extended precision using
-floating-point expansions. \emph{ARITH-23}, 39--46, 2016. doi:10.1109/ARITH.2016.18.
-\bibitem{FMP19} N. Fabiano, J.-M. Muller, J. Picot. Algorithms for triple-word arithmetic. \emph{IEEE Trans. Comput.}
-68(11), 1573--1583, 2019. doi:10.1109/TC.2019.2918451.
 \bibitem{Kouya26} T. Kouya. A branch-free general renormalization scheme for pair arithmetic and its performance
 evaluation. arXiv:2609.35844, 2026.
 \bibitem{universal} Stillwater Supercomputing. Universal: number systems for mixed-precision arithmetic, pull request

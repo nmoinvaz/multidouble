@@ -418,8 +418,13 @@ for ADD and ADDF when the leading parts $a_0$ and $b_0$ (or $b$) have the same s
 \end{theorem}
 
 \begin{proof}
-By Theorem~\ref{thm:t1}(d) and Theorem~\ref{thm:t2}(a), $W_k \le \sum_{j=k+1}^{n} u(1+u)^{n-j}\sum_{m \ge j-1}L_mu^mM
-\le u(1+u)^{n-1}M\sum_{m \ge k}(m-k+1)L_mu^m \le u^{k+1}(1+u)^{n-1}\Lambda M$. Unrolling Lemma~\ref{lem:o},
+By Theorem~\ref{thm:t1}(d) and Theorem~\ref{thm:t2}(a),
+\begin{align*}
+W_k &\le \sum_{j=k+1}^{n} u(1+u)^{n-j}\sum_{m \ge j-1}L_mu^mM \\
+&\le u(1+u)^{n-1}M\sum_{m \ge k}(m-k+1)L_mu^m \\
+&\le u^{k+1}(1+u)^{n-1}\Lambda M.
+\end{align*}
+Unrolling Lemma~\ref{lem:o},
 \begin{align*}
 |x_i| &\le (1+u)^iu^i|x_0| \\
 &\quad + \sum_{k=1}^{i}\bigl((1+u)u\bigr)^{i-k}(1+u)\,u^{k+1}(1+u)^{n-1}\Lambda M,
@@ -673,6 +678,33 @@ product are $1, u, \dots, u^7$ and a ninth just below $u^8$ that the renormaliza
 (Table~\ref{tab:inputs}); whether 3 is attained is not known.
 \end{remark}
 
+\begin{table*}[tp]
+\centering
+\caption{Inputs on which multidouble's octo-double square root, sine, cosine, tangent, exponential and logarithm err by
+about $u^8|Z|$, $Z$ the exact result: the bits of the input's parts, the result $z$, and the error $|Z - z|/(u^8|Z|)$,
+rounded down (computed, \texttt{table1\_inputs.py}).}
+\label{tab:inputs}
+\footnotesize
+\begin{tabular}{@{}llll@{}}
+\toprule
+& input, $x_0, \dots, x_3$ above $x_4, \dots, x_7$ & result & error \\
+\midrule
+$\sqrt x$ & \texttt{3ff0000000000001 3967fdf3b645a1cb 38b0624dd2f1af00 35f0000000000004} & $(1, u, \dots, u^7)$ & $1 - 5u$ \\
+& \texttt{32b0000000000003 2c3bff7ced916873 2b60624dd2f1be00 28b0000000000009} & & \\ \addlinespace
+$\sin x$ & \texttt{3ee000000000aaab 3b75555eeef6eef2 381729d2975900e8 348a195a54a29eb4} & $2^{-17}(1, u, \dots, u^7)$ & $0.999999995$ \\
+& \texttt{3128cc3a41f5cda2 ad6de6f5c4da02df 29dad523df82f39d 261efb1a1688e432} & & \\ \addlinespace
+$\cos x$ & \texttt{3ff941fb6999a8d4 3c98b0c392810f09 b93572503683ff67 b58f05686f022788} & $-2^{-7}(1 + 4u, u, \dots, u^7)$ & $1.00069$ \\
+& \texttt{b1ca742cfa0db1ed 2e6693f13d61b2d3 ab0bccc00c1d973a a7a798c3c05b350e} & & \\ \addlinespace
+$\tan x$ & \texttt{3e0000000000000e 3aaffaaaaaaaaaac b748f55222222223 b3eb04e88ad1ad57} & $2^{-31}(1 + 28u, u, \dots, u^7)$ & $1.00138$ \\
+& \texttt{307dc840ac82561c 2d0b1f36bfab0d59 299bd6c73c83ad94 a5fdb97f61d2dd6c} & & \\ \addlinespace
+$e^x$ & \texttt{3cd1fffffffffffe b97dffffffffffe3 3617fffffffffe78 3290000000005734} & $(1 + 8u, u, \dots, u^7)$ & $1 - 8.2u$ \\
+& \texttt{af399999999ea6ee abd1111110c3fec7 286c09c092a9409b 25442702796c90a9} & & \\ \addlinespace
+$\ln x$ & \texttt{3fef80feabfeefa4 3c7804fa722c50e6 b90d33e543ae606f b5a9c51096bddb1f} & $-2^{-6}(1 + 24u, u, \dots, u^7)$ & $0.99998$ \\
+& \texttt{b220568c7ee0a0ac aeb561138ac7c121 2b51118a13c0f359 27f77c36d87db0bc} & & \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 \section{Sharpness}
 
 \begin{proposition}\label{prop:sharp}
@@ -740,30 +772,4 @@ at most $(1 + 2^{-25})u^8$ times its exact result: the tangent's is a quotient (
 cosine's, at this argument, is the last ADD of SINR, where $M \le 2|Z|$ in Theorem~\ref{thm:t3}. So the two exceed
 $u^8|Z|$ because their earlier operations err in the same direction.
 
-\begin{table*}[tp]
-\centering
-\caption{Inputs on which multidouble's octo-double square root, sine, cosine, tangent, exponential and logarithm err by
-about $u^8|Z|$, $Z$ the exact result: the bits of the input's parts, the result $z$, and the error $|Z - z|/(u^8|Z|)$,
-rounded down (computed, \texttt{table1\_inputs.py}).}
-\label{tab:inputs}
-\footnotesize
-\begin{tabular}{@{}llll@{}}
-\toprule
-& input, $x_0, \dots, x_3$ above $x_4, \dots, x_7$ & result & error \\
-\midrule
-$\sqrt x$ & \texttt{3ff0000000000001 3967fdf3b645a1cb 38b0624dd2f1af00 35f0000000000004} & $(1, u, \dots, u^7)$ & $1 - 5u$ \\
-& \texttt{32b0000000000003 2c3bff7ced916873 2b60624dd2f1be00 28b0000000000009} & & \\ \addlinespace
-$\sin x$ & \texttt{3ee000000000aaab 3b75555eeef6eef2 381729d2975900e8 348a195a54a29eb4} & $2^{-17}(1, u, \dots, u^7)$ & $0.999999995$ \\
-& \texttt{3128cc3a41f5cda2 ad6de6f5c4da02df 29dad523df82f39d 261efb1a1688e432} & & \\ \addlinespace
-$\cos x$ & \texttt{3ff941fb6999a8d4 3c98b0c392810f09 b93572503683ff67 b58f05686f022788} & $-2^{-7}(1 + 4u, u, \dots, u^7)$ & $1.00069$ \\
-& \texttt{b1ca742cfa0db1ed 2e6693f13d61b2d3 ab0bccc00c1d973a a7a798c3c05b350e} & & \\ \addlinespace
-$\tan x$ & \texttt{3e0000000000000e 3aaffaaaaaaaaaac b748f55222222223 b3eb04e88ad1ad57} & $2^{-31}(1 + 28u, u, \dots, u^7)$ & $1.00138$ \\
-& \texttt{307dc840ac82561c 2d0b1f36bfab0d59 299bd6c73c83ad94 a5fdb97f61d2dd6c} & & \\ \addlinespace
-$e^x$ & \texttt{3cd1fffffffffffe b97dffffffffffe3 3617fffffffffe78 3290000000005734} & $(1 + 8u, u, \dots, u^7)$ & $1 - 8.2u$ \\
-& \texttt{af399999999ea6ee abd1111110c3fec7 286c09c092a9409b 25442702796c90a9} & & \\ \addlinespace
-$\ln x$ & \texttt{3fef80feabfeefa4 3c7804fa722c50e6 b90d33e543ae606f b5a9c51096bddb1f} & $-2^{-6}(1 + 24u, u, \dots, u^7)$ & $0.99998$ \\
-& \texttt{b220568c7ee0a0ac aeb561138ac7c121 2b51118a13c0f359 27f77c36d87db0bc} & & \\
-\bottomrule
-\end{tabular}
-\end{table*}
 
