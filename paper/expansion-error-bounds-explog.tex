@@ -8,7 +8,7 @@
 The exponential and the logarithm are built from MUL, ADD, MULF and ADDF, and their errors are bounded as the square
 root's are (Theorem~\ref{thm:t7}), by the bounds $G_{\rm OP}$ of Lemma~\ref{lem:g}. In binary64, $p = 53$.
 
-\paragraph{Underflow} A few steps below may leave the normal range, and the bounds include what they lose. A scaling by
+\parhead{Underflow} A few steps below may leave the normal range, and the bounds include what they lose. A scaling by
 a power of two is exact while each part stays zero or at least $2^{-1022}$ in magnitude; a part that falls below is
 rounded to a multiple of $2^{-1074}$ and moves by at most $\eta_0 = 2^{-1075}$. The product $x_0c_{\rm r}$ of step (1) of
 EXP decides only $k$: if it underflows, $|x_0c_{\rm r}| < 2^{-1022}$ and $k = 0$, as with an unbounded exponent range. The
@@ -18,14 +18,14 @@ if one underflows, every partial sum of $\sum_i|v_i|$ is below $2^{-1022}$, so e
 (A2$'$) for (A2) required of every other operation of a run, the products, fused multiply-adds and quotients among them;
 a sum never leaves (A2), as one that underflows is exact. The theorems below assume (A2$'$) and no overflow.
 
-\paragraph{Constants} $c_h$ is $\ln 2$ rounded to 42 significant bits, so that for every integer $|k| < 2^{11}$, $kc_h$
+\parhead{Constants} $c_h$ is $\ln 2$ rounded to 42 significant bits, so that for every integer $|k| < 2^{11}$, $kc_h$
 is in $\F$ and is a multiple of $2^{-42}$. $c_\ell$ is the greedy $n$-part expansion of $\ln 2 - c_h$ ($v_0 = \RN(v)$,
 $v_1 = \RN(v - v_0)$, \dots), and $\eta_\ell = |\ln 2 - c_h - \sum_i c_{\ell,i}|$. $F_j$ is the greedy $n$-part
 expansion of $1/j!$ and $\phi_j = |\sum_iF_{j,i} - 1/j!|$; $F'_i$ is that of $(-1)^{i+1}/i$ and $\phi'_i =
 |\sum_jF'_{i,j} - (-1)^{i+1}/i|$. $c_{\rm r} = \RN(1/\ln 2)$, a floating-point number. $B = pn + 12$, so that a term below $2^{-B}$ of a
 result is below $2^{-12}u^n$ of it.
 
-\paragraph{EXP$_{n,s,d}$} For an $n$-part $x$ with $|x_0| \le X = 745.2$:
+\parhead{EXP$_{n,s,d}$} For an $n$-part $x$ with $|x_0| \le X = 745.2$:
 \begin{enumerate}
 \item[(1)] $k = \RN(x_0c_{\rm r})$ rounded to the nearest integer, half away from zero. If $k = 0$, $r = x$; otherwise
   $x' = (x_0 - kc_h, x_1, \dots, x_{n-1})$ and $r = \mathrm{ADD}(x', \mathrm{MULF}(c_\ell, -k))$.
@@ -164,7 +164,7 @@ The constant is about one rounding per operation that touches the result's scale
 $u^8|t|$ to $t$'s error, which enters the result divided by $e^r$, ADDF adds $u^8$, and the reduction $u^8|r|$. The
 products and Horner's inner steps add terms smaller by factors of $|t|$ or $|r'|$.
 
-\paragraph{LOG$_{n,s,d,q}$} For an $n$-part $x$ with $x_0 > 0$:
+\parhead{LOG$_{n,s,d,q}$} For an $n$-part $x$ with $x_0 > 0$:
 \begin{enumerate}
 \item[(1)] $y_0 = (y_h, y_l)$, the double-word logarithm (Proposition~\ref{prop:ddexplog}) of $\FastTwoSum(x_0, \RN(x_1
   + \RN(x_2 + \dots)))$; or, if $x_0 \ge 2^{1023}$, where that $\FastTwoSum$ can round past the largest finite value,
@@ -318,7 +318,7 @@ $1/|\ln x|$, toward the last ADD's $u^8$. The term $\Phi$ is the
 second-order part of Lemma~\ref{lem:g} for $\varphi$, whose part bounds follow $x$'s ladder from $x_0 \approx 1$ rather than
 $|\varphi|$; at $n = 8$, as quoted, it exceeds the relative term only where $|\ln x| < 2^{-88}$.
 
-\paragraph{Double words} \texttt{DD::exp} and \texttt{DD::ln} run EXP and LOG with the double-word operations of
+\parhead{Double words} \texttt{DD::exp} and \texttt{DD::ln} run EXP and LOG with the double-word operations of
 Joldes, Muller and Popescu~\cite{JMP17}, whose relative errors are bounded: AccurateDWPlusDW (their Algorithm 6, the
 ADD) within $e_{\rm A} = 3u^2/(1-4u)$ (their Theorem 3.1), DWPlusFP (Algorithm 4, the ADDF) within $e_{\rm F}
 = 2u^2$, DWTimesFP3 (Algorithm 9, the MULF) within $e_{\rm M} = 2u^2$, and DWTimesDW2 (Algorithm 11, the
@@ -333,7 +333,7 @@ $\ln_{\rm b}$ the binary64 logarithm of Lemma~\ref{lem:lnb}, with $q = 3$ and th
 $\mathrm{DWPlusFP}(\cdot, y_0)$.
 
 \begin{lemma}\label{lem:lnb}
-Assume~\ref{as:fp} with $p = 53$ and binary64's exponent range. For a positive $h \in \F$, let $\ln_{\rm b}(h)$ be: $h
+Under Assumption~\ref{as:fp} with $p = 53$ and binary64's exponent range, for a positive $h \in \F$, let $\ln_{\rm b}(h)$ be: $h
 \gets 2^{54}h$ and $e_0 = -54$ if $h < 2^{-1022}$, else $e_0 = 0$; $h = 2^{e - e_0}m$ with $m \in [1, 2)$; if $m >
 \mu = \RN(\sqrt 2)$, $m \gets m/2$ and $e \gets e + 1$; $s = \RN((m - 1)/\RN(m + 1))$ and $z = \RN(s^2)$; $v \gets
 c_9$ and $v \gets \RN(zv + c_j)$, a fused multiply-add, for $j = 8, \dots, 0$, with $c_j = \RN(1/(2j+1))$; and return
@@ -386,7 +386,7 @@ remaining steps follow the recursions of Lemma~\ref{lem:core} and Theorems~\ref{
 values are those of \texttt{explog\_consts.py}.
 \end{proof}
 
-\paragraph{Which runs meet (A2$'$)} Step (3) of EXP forms no term far below its result, and the products whose factors
+\parhead{Which runs meet (A2$'$)} Step (3) of EXP forms no term far below its result, and the products whose factors
 are small are formed with those factors scaled to sizes near 1, so the size of the argument does not by itself push a
 product toward the underflow threshold. That the products then clear it is checked, not proved: the Horner values $q_j$
 of a small $r'$ are expansions with gaps, their parts following the powers of $r'$, so no count from contiguous parts

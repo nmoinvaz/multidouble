@@ -13,7 +13,7 @@ and \texttt{finish} of multidouble (identical bits on the inputs of Proposition~
 $k^{(r)} = k(k+1)\cdots(k+r-1)$, $k^{(0)} = 1$, for the rising factorial.
 
 \begin{lemma}\label{lem:acc}
-Assume~\ref{as:fp}. Let $K$ deposits be made into zero levels, the $k$-th with $|t^{(k)}_l| \le \tau_l\mu_k$ ($0 \le l
+Under Assumption~\ref{as:fp}, let $K$ deposits be made into zero levels, the $k$-th with $|t^{(k)}_l| \le \tau_l\mu_k$ ($0 \le l
 \le n$, $\tau_n = 0$ when $N = n - 1$), let $W = \sum_k \mu_k$, and assume $(n+1)Ku < 1$, $\Gamma = 1/(1 - (n+1)Ku)$.
 \begin{enumerate}
 \item[(a)] At every moment up to the end of the $k$-th deposit, $|s_m| \le S_m(k)$, where
@@ -51,7 +51,7 @@ S_n(k)$; the same sum identity and $\binom{n}{l}\frac{n+1}{n+1-l} = \binom{n+1}{
 \end{proof}
 
 \begin{theorem}\label{thm:acc}
-Assume~\ref{as:fp}, (A3) and $(n+1)Ku < 1$. Let the accumulator
+Under Assumption~\ref{as:fp}, (A3) and $(n+1)Ku < 1$, let the accumulator
 receive $K$ terms, each ADDPROD$(a, b)$ or ADDX$(a)$ with operands satisfying $H(\theta)$ (if all terms are ADDX, $|a_l|
 \le (\theta u)^l|a_0|$ with any $\theta \ge 1$ serves), and let $x = $ FINISH. Let
 $Z$ be the exact sum of the terms, $\mu_k = |a_0b_0|$ or $|a_0|$, $W = \sum_k\mu_k$, $\tau_l = \max(L_lu^l,
