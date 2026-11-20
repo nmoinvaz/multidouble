@@ -1,10 +1,11 @@
 //! Python bindings of multidouble: double-double numbers as pairs of float64 numpy arrays (hi, lo), elementwise
 //! arithmetic, dot products, matrix-vector products and the Horner sum of a power series on them on the best SIMD
 //! backend the CPU has, quad-double arrays (four parts) plus a double-double one or plus a multiple of another, and
-//! dense LU solves in double-double and in quad-double. The octo-double solve and arrays are in `octo`.
+//! dense LU solves and the sign and log-determinant of a real matrix in double-double and in quad-double. The
+//! octo-double solve and arrays are in `octo`.
 use multidouble::dd::{self, DD};
 use multidouble::dv::{self, DDotAcc, DV};
-use multidouble::linalg::{ld_for, DDLu, QDLu};
+use multidouble::linalg::{ld_for, DDLu, DdLuControl, QDLu, QdLuControl};
 use multidouble::qd::QD;
 use multidouble::qv::{axpy_parts, renorm4_any, QV};
 use multidouble::simd::{self, Kernel, Simd};
@@ -676,6 +677,123 @@ impl PyQdLu {
     }
 }
 
+/// A in the layout of `DDLu::factor`: (n, n) row-major hi and lo arrays, each entry the exact sum of its two parts
+/// (`DD::new`), stored column-major with leading dimension `ld_for(n)`, the padding rows zero. Returns (n, ld, hi,
+/// lo). Raises ValueError for unequal or non-square shapes and for an entry that is not finite.
+fn dd_matrix(
+    ah: &PyReadonlyArray2<'_, f64>,
+    al: &PyReadonlyArray2<'_, f64>,
+) -> PyResult<(usize, usize, Vec<f64>, Vec<f64>)> {
+    let n = ah.shape()[0];
+    if ah.shape() != [n, n] || al.shape() != [n, n] {
+        return Err(PyValueError::new_err("A must be (n, n), the same in both parts"));
+    }
+    let (sh, sl) = (rows(ah, "ah")?, rows(al, "al")?);
+    let ld = ld_for(n);
+    let (mut h, mut l) = (vec![0.0; ld * n], vec![0.0; ld * n]);
+    for i in 0..n {
+        for j in 0..n {
+            let v = DD::new(sh[i * n + j], sl[i * n + j]);
+            if !(v.hi.is_finite() && v.lo.is_finite()) {
+                return Err(PyValueError::new_err(format!("A has a non-finite entry at ({i}, {j})")));
+            }
+            h[j * ld + i] = v.hi;
+            l[j * ld + i] = v.lo;
+        }
+    }
+    Ok((n, ld, h, l))
+}
+
+/// The breakage `dd_logdet` and `qd_logdet` apply for the tests' controls (their argument `control`): "none";
+/// "no_pivot", the LU without row interchanges (`DdLuControl::NoPivot`, `QdLuControl::NoPivot`); "no_swap_sign", the
+/// sign without its flip per row interchange; and, for `qd_logdet` only, "update_dd", every trailing update rounded to
+/// double-double (`QdLuControl::UpdateDd`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DetControl {
+    None,
+    NoPivot,
+    NoSwapSign,
+    UpdateDd,
+}
+
+fn det_control(name: &str, qd: bool) -> PyResult<DetControl> {
+    match name {
+        "none" => Ok(DetControl::None),
+        "no_pivot" => Ok(DetControl::NoPivot),
+        "no_swap_sign" => Ok(DetControl::NoSwapSign),
+        "update_dd" if qd => Ok(DetControl::UpdateDd),
+        _ => Err(PyValueError::new_err(format!("unknown control {name:?}"))),
+    }
+}
+
+/// (sign, ln|det|, min |u_kk|, max |u_kk|) from an LU's `logdet`, `pivot_range` and row interchanges; under
+/// `DetControl::NoSwapSign` the sign drops its flips for the interchanges
+fn det_parts(sign_ln: (f64, f64), range: (f64, f64), perm: &[usize], ctl: DetControl) -> (f64, f64, f64, f64) {
+    let swaps = perm.iter().enumerate().filter(|&(k, &p)| p != k).count();
+    let sign = if ctl == DetControl::NoSwapSign && swaps % 2 == 1 {
+        -sign_ln.0
+    } else {
+        sign_ln.0
+    };
+    (sign, sign_ln.1, range.0, range.1)
+}
+
+/// (sign, ln|det|, min |u_kk|, max |u_kk|) of a real n x n matrix A by the double-double LU with partial pivoting
+/// (`DDLu::factor`, then `DDLu::logdet` and `DDLu::pivot_range`): A as (n, n) row-major hi and lo arrays, each entry
+/// the exact sum of its two parts. par: update the trailing columns on rayon's threads. control: "none", or a
+/// breakage for the tests' controls (`DetControl`). Raises ValueError if A is singular (an exactly zero pivot), has
+/// an entry that is not finite or is not square.
+#[pyfunction]
+#[pyo3(signature = (ah, al, par = false, control = "none"))]
+fn dd_logdet(
+    py: Python<'_>,
+    ah: PyReadonlyArray2<'_, f64>,
+    al: PyReadonlyArray2<'_, f64>,
+    par: bool,
+    control: &str,
+) -> PyResult<(f64, f64, f64, f64)> {
+    let ctl = det_control(control, false)?;
+    let (n, ld, h, l) = dd_matrix(&ah, &al)?;
+    let lc = if ctl == DetControl::NoPivot {
+        DdLuControl::NoPivot
+    } else {
+        DdLuControl::None
+    };
+    let lu = py
+        .detach(|| DDLu::factor_control(n, ld, h, l, par, lc))
+        .map_err(PyValueError::new_err)?;
+    Ok(det_parts(lu.logdet(), lu.pivot_range(), &lu.perm, ctl))
+}
+
+/// (sign, ln|det|, min |u_kk|, max |u_kk|) of a real n x n matrix A by the quad-double LU with partial pivoting
+/// (`QDLu::factor`, then `QDLu::logdet` and `QDLu::pivot_range`): A as four (n, n) row-major part arrays, each entry
+/// the exact sum of its parts in any order. par: update the trailing columns on rayon's threads. control: "none", or a
+/// breakage for the tests' controls (`DetControl`). Raises ValueError if A is singular (an exactly zero pivot), has
+/// an entry that is not finite or is not square.
+#[pyfunction]
+#[pyo3(signature = (a0, a1, a2, a3, par = false, control = "none"))]
+fn qd_logdet(
+    py: Python<'_>,
+    a0: PyReadonlyArray2<'_, f64>,
+    a1: PyReadonlyArray2<'_, f64>,
+    a2: PyReadonlyArray2<'_, f64>,
+    a3: PyReadonlyArray2<'_, f64>,
+    par: bool,
+    control: &str,
+) -> PyResult<(f64, f64, f64, f64)> {
+    let ctl = det_control(control, true)?;
+    let (n, ld, c) = qd_matrix([&a0, &a1, &a2, &a3])?;
+    let lc = match ctl {
+        DetControl::NoPivot => QdLuControl::NoPivot,
+        DetControl::UpdateDd => QdLuControl::UpdateDd,
+        _ => QdLuControl::None,
+    };
+    let lu = py
+        .detach(|| QDLu::factor_control(n, ld, c, par, lc))
+        .map_err(PyValueError::new_err)?;
+    Ok(det_parts(lu.logdet(), lu.pivot_range(), &lu.perm, ctl))
+}
+
 /// a x in double-double for an f64 a, as the numpy `dd_scale` forms it: the two-product of a and x.hi (exact, so
 /// bitwise Dekker's product there), then a x.lo added to its error unfused (`DD::mul_f` fuses it), then the quick
 /// two-sum
@@ -803,6 +921,8 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
     m.add_function(wrap_pyfunction!(qd_solve, m)?)?;
     m.add_class::<PyQdLu>()?;
+    m.add_function(wrap_pyfunction!(dd_logdet, m)?)?;
+    m.add_function(wrap_pyfunction!(qd_logdet, m)?)?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
