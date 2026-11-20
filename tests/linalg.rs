@@ -1,6 +1,7 @@
 //! Double-double LU against known solutions: A x = b with x chosen first and b formed in double-double, so the
 //! solve must give x back to about cond(A) u^2. Also the transpose solve, the many-right-hand-side solve (bitwise
-//! the single solves), the f64 factorization, the determinant, and the unblocked/blocked dispatch.
+//! the single solves), the f64 factorization, the determinant (also of the quad-double LU, under row permutations
+//! and with a control without pivoting), and the unblocked/blocked dispatch.
 #![allow(clippy::needless_range_loop)]
 mod common;
 use common::Rng;
@@ -806,6 +807,225 @@ fn qd_lu_pinned_bits() {
     z[5].x[1] = f64::from_bits(z[5].x[1].to_bits() ^ 1);
     lu.solve(&mut z);
     assert_ne!(parts_hash(&z), hx);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// the sign and log-determinant of a real matrix
+// ---------------------------------------------------------------------------------------------------------------
+
+use multidouble::linalg::DdLuControl;
+
+/// a double-double matrix as quad-double parts, the two lower parts zero
+fn dd_parts_qd(hi: &[f64], lo: &[f64]) -> [Vec<f64>; 4] {
+    [hi.to_vec(), lo.to_vec(), vec![0.0; hi.len()], vec![0.0; hi.len()]]
+}
+
+/// (sign, ln|det|) of the double-double and the quad-double LU of the double-double matrix (hi, lo) under the
+/// controls dc and qc, None where the factorization stops at a zero pivot
+fn logdets(n: usize, ld: usize, hi: &[f64], lo: &[f64], dc: DdLuControl, qc: QdLuControl) -> [Option<(f64, f64)>; 2] {
+    let d = DDLu::factor_control(n, ld, hi.to_vec(), lo.to_vec(), false, dc).ok();
+    let q = QDLu::factor_control(n, ld, dd_parts_qd(hi, lo), false, qc).ok();
+    [d.map(|lu| lu.logdet()), q.map(|lu| lu.logdet())]
+}
+
+/// (-1)^(the number of row interchanges of an LU)
+fn swap_sign(perm: &[usize]) -> f64 {
+    let s = perm.iter().enumerate().filter(|&(k, &p)| p != k).count();
+    if s % 2 == 0 {
+        1.0
+    } else {
+        -1.0
+    }
+}
+
+/// the sign of the permutation p, from its cycles
+fn parity(p: &[usize]) -> f64 {
+    let mut seen = vec![false; p.len()];
+    let mut s = 1.0;
+    for i in 0..p.len() {
+        let (mut j, mut len) = (i, 0);
+        while !seen[j] {
+            seen[j] = true;
+            j = p[j];
+            len += 1;
+        }
+        if len > 0 && len % 2 == 0 {
+            s = -s;
+        }
+    }
+    s
+}
+
+/// a random permutation of 0..n (Fisher-Yates)
+fn shuffle(n: usize, r: &mut Rng) -> Vec<usize> {
+    let mut p: Vec<usize> = (0..n).collect();
+    for i in (1..n).rev() {
+        p.swap(i, (r.next_u64() % (i as u64 + 1)) as usize);
+    }
+    p
+}
+
+/// the column-major matrix a with its rows permuted: row i of the result is row p[i] of a
+fn permute_rows(n: usize, ld: usize, a: &[f64], p: &[usize]) -> Vec<f64> {
+    let mut b = a.to_vec();
+    for j in 0..n {
+        for i in 0..n {
+            b[j * ld + i] = a[j * ld + p[i]];
+        }
+    }
+    b
+}
+
+/// An upper triangular matrix with diagonal d_k = k + 1, negated for k % 3 == 0 (five negative entries at n = 13),
+/// needs no pivoting: `QDLu::logdet` and `DDLu::logdet` give sign -1 and ln 13! to 1e-13, and the pivot range is 1 to
+/// n.
+#[test]
+fn qd_logdet_of_a_triangular_matrix() {
+    let n = 13;
+    let ld = ld_for(n);
+    let mut hi = vec![0.0; ld * n];
+    for j in 0..n {
+        for i in 0..=j {
+            hi[j * ld + i] = match (i == j, j % 3 == 0) {
+                (true, true) => -((j + 1) as f64),
+                (true, false) => (j + 1) as f64,
+                _ => 0.5,
+            };
+        }
+    }
+    let lo = vec![0.0; ld * n];
+    let want: f64 = (1..=n).map(|k| (k as f64).ln()).sum();
+    let lu = QDLu::factor(n, ld, dd_parts_qd(&hi, &lo), false).unwrap();
+    let (sign, ln) = lu.logdet();
+    assert_eq!(sign, -1.0);
+    assert!((ln - want).abs() < 1e-13, "{ln} {want}");
+    assert_eq!(lu.pivot_range(), (1.0, n as f64));
+    let dd = logdets(n, ld, &hi, &lo, DdLuControl::None, QdLuControl::None)[0];
+    assert_eq!(dd, Some((sign, ln)));
+}
+
+/// A = P U for an upper triangular U with random entries above its diagonal d_k = +-(k + 2) and a row permutation P:
+/// partial pivoting finds the rows of U again with no arithmetic on them, so both LUs give the sign sign(P) prod
+/// sign(d_k) and ln|det| = sum ln|d_k| bit for bit (the same f64 sum). P runs over the identity, a cyclic shift (odd
+/// at n = 10), a transposition and random shuffles. Controls: the sign without its flips for the row interchanges
+/// fails for every odd P, and the LU without pivoting (`NoPivot`) stops at a zero pivot wherever P moves row 0.
+#[test]
+fn logdet_of_a_row_permuted_triangular_matrix() {
+    let mut r = Rng(91);
+    let n = 10;
+    let ld = ld_for(n);
+    let d: Vec<f64> = (0..n)
+        .map(|k| (k + 2) as f64 * if r.next_u64() & 1 == 0 { 1.0 } else { -1.0 })
+        .collect();
+    let mut u = vec![0.0; ld * n];
+    for j in 0..n {
+        for i in 0..j {
+            u[j * ld + i] = r.sym();
+        }
+        u[j * ld + j] = d[j];
+    }
+    let want_ln: f64 = d.iter().map(|v| v.abs().ln()).sum();
+    let want_sign: f64 = d.iter().map(|v| v.signum()).product();
+    let mut perms = vec![(0..n).collect::<Vec<_>>(), (0..n).map(|i| (i + 1) % n).collect()];
+    let mut t: Vec<usize> = (0..n).collect();
+    t.swap(2, 7);
+    perms.push(t);
+    perms.extend((0..6).map(|_| shuffle(n, &mut r)));
+    assert!(perms.iter().any(|p| parity(p) < 0.0) && perms.iter().any(|p| parity(p) > 0.0));
+    let lo = vec![0.0; ld * n];
+    for p in &perms {
+        let a = permute_rows(n, ld, &u, p);
+        let dd = DDLu::factor(n, ld, a.clone(), lo.clone(), false).unwrap();
+        let qd = QDLu::factor(n, ld, dd_parts_qd(&a, &lo), false).unwrap();
+        let want = (parity(p) * want_sign, want_ln);
+        assert_eq!(dd.logdet(), want, "{p:?}");
+        assert_eq!(qd.logdet(), want, "{p:?}");
+        for (s, perm) in [(dd.logdet().0, &dd.perm), (qd.logdet().0, &qd.perm)] {
+            let blind = s * swap_sign(perm);
+            assert_eq!(blind == want.0, parity(p) > 0.0, "control: {p:?}");
+        }
+        if p[0] != 0 {
+            let nopiv = logdets(n, ld, &a, &lo, DdLuControl::NoPivot, QdLuControl::NoPivot);
+            assert_eq!(nopiv, [None, None], "control: {p:?}");
+        }
+    }
+}
+
+/// Permuting the rows of a random matrix leaves partial pivoting's pivots as they are (the same rows win, in another
+/// order), so ln|det| and the pivot range are bit for bit those of A and the sign flips by the permutation's parity,
+/// in the double-double LU (unblocked at n = 9 and 37, blocked at 130) and the quad-double one. Control: the sign
+/// without its flips for the interchanges is the same for A and P A, which the check rejects for every odd P.
+#[test]
+fn logdet_sign_follows_row_permutations() {
+    let mut r = Rng(92);
+    let blind = |s: f64, perm: &[usize]| s * swap_sign(perm);
+    for n in [9usize, 37, 130] {
+        let (ld, hi, lo) = matrix(n, &mut r);
+        let a_dd = DDLu::factor(n, ld, hi.clone(), lo.clone(), false).unwrap();
+        let a_qd = QDLu::factor(n, ld, dd_parts_qd(&hi, &lo), false).unwrap();
+        let mut odd = 0;
+        for _ in 0..4 {
+            let p = shuffle(n, &mut r);
+            let s = parity(&p);
+            let (ph, pl) = (permute_rows(n, ld, &hi, &p), permute_rows(n, ld, &lo, &p));
+            let dd = DDLu::factor(n, ld, ph.clone(), pl.clone(), false).unwrap();
+            let qd = QDLu::factor(n, ld, dd_parts_qd(&ph, &pl), false).unwrap();
+            for (pa, a) in [(dd.logdet(), a_dd.logdet()), (qd.logdet(), a_qd.logdet())] {
+                assert_eq!(pa, (s * a.0, a.1), "n {n}");
+            }
+            assert_eq!(dd.pivot_range(), a_dd.pivot_range());
+            assert_eq!(qd.pivot_range(), a_qd.pivot_range());
+            let (b_pa, b_a) = (blind(dd.logdet().0, &dd.perm), blind(a_dd.logdet().0, &a_dd.perm));
+            assert_eq!(b_pa == s * b_a, s > 0.0, "control: n {n}");
+            odd += usize::from(s < 0.0);
+        }
+        assert!(odd > 0, "n {n}: no odd permutation drawn");
+    }
+}
+
+/// A random well-conditioned matrix with its entry (0, 0) replaced by 1.37 2^-300 needs pivoting: with it the
+/// double-double and quad-double LUs agree on the sign and on ln|det| to 1e-12, in the unblocked and the blocked
+/// double-double LU. Control: without pivoting (`NoPivot`) the multipliers reach 2^300 and the trailing matrix is
+/// lost to rounding, so that in both precisions the factorization meets an exactly zero pivot (the rank-one update
+/// cancels) or ln|det| misses by more than 100.
+#[test]
+fn logdet_no_pivot_control_is_caught() {
+    let mut r = Rng(93);
+    for n in [9usize, 40, 130] {
+        let (ld, mut hi, mut lo) = matrix(n, &mut r);
+        (hi[0], lo[0]) = (1.37 * 2f64.powi(-300), 0.0);
+        let [d, q] = logdets(n, ld, &hi, &lo, DdLuControl::None, QdLuControl::None);
+        let ((sd, ln_d), (sq, ln_q)) = (d.unwrap(), q.unwrap());
+        println!("n {n}: double-double ({sd}, {ln_d}), quad-double ({sq}, {ln_q})");
+        assert!(sd == sq && (ln_d - ln_q).abs() <= 1e-12 * ln_q.abs(), "n {n}");
+        let nopiv = logdets(n, ld, &hi, &lo, DdLuControl::NoPivot, QdLuControl::NoPivot);
+        for (name, v) in ["double-double", "quad-double"].into_iter().zip(nopiv) {
+            println!("n {n}: {name} without pivoting: {v:?}");
+            assert!(
+                v.is_none_or(|(_, lv)| (lv - ln_q).abs() > 100.0),
+                "control: n {n}, {name}"
+            );
+        }
+    }
+}
+
+/// On random double-double matrices (n = 1, 8, 37 and 130, the last blocked in double-double) the quad-double LU's
+/// sign is the double-double one's, and its ln|det| and pivot range agree to 1e-12 relative.
+#[test]
+fn qd_logdet_matches_dd_logdet() {
+    let mut r = Rng(94);
+    for n in [1usize, 8, 37, 130] {
+        let (ld, hi, lo) = matrix(n, &mut r);
+        let dd = DDLu::factor(n, ld, hi.clone(), lo.clone(), false).unwrap();
+        let qd = QDLu::factor(n, ld, dd_parts_qd(&hi, &lo), false).unwrap();
+        let ((sd, l1), (sq, l2)) = (dd.logdet(), qd.logdet());
+        assert!(
+            sd == sq && (l1 - l2).abs() <= 1e-12 * l2.abs().max(1.0),
+            "n {n}: {l1} {l2}"
+        );
+        let ((a0, a1), (b0, b1)) = (dd.pivot_range(), qd.pivot_range());
+        assert!((a0 - b0).abs() <= 1e-12 * b0 && (a1 - b1).abs() <= 1e-12 * b1, "n {n}");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
