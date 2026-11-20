@@ -357,6 +357,14 @@ Jacobian at the speed of SIMD f64 code, and at large D, where rounding is amplif
    arithmetic", 15th IEEE Symposium on Computer Arithmetic (ARITH-15), 155–162, 2001,
    [doi:10.1109/ARITH.2001.930115](https://doi.org/10.1109/ARITH.2001.930115).
 
+## Related crates
+
+- [multisolver](https://github.com/nmoinvaz/multisolver) solves nonlinear systems F(z) = 0 in this crate's double-,
+  quad- and octo-double precisions, by Newton's method and its variants, Levenberg-Marquardt, the asymptotic
+  numerical method and the argument-principle zero count.
+- [multishoot](https://github.com/nmoinvaz/multishoot) solves boundary-value problems by multiple shooting, with
+  Taylor-series steps between nodes, exact Jacobians from this crate's dual numbers, and multisolver's solvers.
+
 ## License
 
 [BSD 3-Clause](LICENSE), the license of the QD library whose quad-double algorithms `src/qd.rs` and `src/qv.rs`
