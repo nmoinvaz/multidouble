@@ -75,6 +75,11 @@ Taylor continuation. The quad-double and octo-double jets keep the coefficients 
 computation amplifies double-double rounding. `Counted<L>` returns L's results bit for bit and counts every operation on
 the thread that runs it (`dual::take_counts`), so counting a whole computation takes running it on one thread.
 
+The dual numbers give a derivative to within the precision's own rounding, with no step to choose, where central
+differences at their best step lose about a third of the digits:
+
+![The error of central differences against the step size, and of the dual numbers, in each precision, animated](docs/derivatives.svg)
+
 ### Fields and linear algebra
 
 | Type | What it is |
@@ -314,6 +319,7 @@ cargo test --release --test explog timing -- --ignored --nocapture      # exp an
 cargo run --release --example lane_speedups > docs/lane-speedups.jsonl   # the elementary functions, scalar against lanes
 cargo run --release --example precision_costs > docs/precision-costs.jsonl   # add, multiply, divide, scalar against lanes
 cargo run --release --example hilbert > docs/hilbert.jsonl                   # Hilbert solves in each precision
+cargo run --release --example derivatives > docs/derivatives.jsonl           # central differences against dual numbers
 ```
 
 Each precision costs more than the one below it:
