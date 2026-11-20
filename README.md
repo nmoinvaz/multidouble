@@ -307,6 +307,7 @@ cargo bench --bench jet                                         # OJet<24> again
 cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the octo-double LU at n = 64, 256, 800
 cargo test --release --test explog timing -- --ignored --nocapture      # exp and ln, scalar and lanes, time per value
 cargo run --release --example lane_speedups > docs/lane-speedups.jsonl   # the elementary functions, scalar against lanes
+cargo run --release --example precision_costs > docs/precision-costs.jsonl   # add, multiply, divide, scalar against lanes
 ```
 
 Each precision costs more than the one below it:
@@ -322,6 +323,10 @@ solve on 32 values 8.3 times, with four refinement steps against two.
 On the NEON lanes the elementary functions take 58 to 81% less time per value than on the scalar types:
 
 ![Time per value of exp, ln, sin, cos, tan and sin_cos on the 8-lane types against the scalar types](docs/lane-speedups.svg)
+
+Add, multiply and divide take 28 to 62% less time per value on the NEON lanes than on the scalar types:
+
+![Time per value of add, multiply and divide against each precision's significant digits, scalar and on 8 lanes](docs/precision-costs.svg)
 
 The tests check that `V8`, `DV`, `QV` and `OV` match the scalar types bit for bit, `OJet` its scalar series `OSeries`
 and `Ou` its scalar formulas, on every backend the CPU has. The NEON backend's code is also compiled on x86 against a

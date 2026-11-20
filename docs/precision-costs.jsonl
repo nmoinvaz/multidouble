@@ -1,0 +1,13 @@
+{"isa": "neon", "values": 4096, "runs": 101, "version": "5.1.0", "date": "2026-11-20", "machine": "Apple M5, macOS"}
+{"type": "f64", "op": "add", "scalar_ns": 2.828, "lanes_ns": 1.180}
+{"type": "f64", "op": "mul", "scalar_ns": 3.265, "lanes_ns": 1.241}
+{"type": "f64", "op": "div", "scalar_ns": 3.326, "lanes_ns": 1.282}
+{"type": "double-double", "op": "add", "scalar_ns": 4.700, "lanes_ns": 2.980}
+{"type": "double-double", "op": "mul", "scalar_ns": 4.435, "lanes_ns": 2.269}
+{"type": "double-double", "op": "div", "scalar_ns": 23.051, "lanes_ns": 8.921}
+{"type": "quad-double", "op": "add", "scalar_ns": 20.416, "lanes_ns": 14.730}
+{"type": "quad-double", "op": "mul", "scalar_ns": 25.675, "lanes_ns": 17.507}
+{"type": "quad-double", "op": "div", "scalar_ns": 199.768, "lanes_ns": 82.143}
+{"type": "octo-double", "op": "add", "scalar_ns": 104.655, "lanes_ns": 56.478}
+{"type": "octo-double", "op": "mul", "scalar_ns": 377.218, "lanes_ns": 147.756}
+{"type": "octo-double", "op": "div", "scalar_ns": 1259.735, "lanes_ns": 601.532}
