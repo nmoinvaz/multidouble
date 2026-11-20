@@ -89,6 +89,11 @@ the thread that runs it (`dual::take_counts`), so counting a whole computation t
 | `linalg::QDLu`, `linalg::ODLu` | dense LU in quad-double and octo-double on 8-row lanes, for systems too ill-conditioned for the precision below (an `ODLu` solve errs by about cond(A) 2⁻⁴¹⁸); `QDLu` also gives the sign and ln\|det\| |
 | `linalg::lu_rect_f64`, `linalg::StaircaseLu` | the `f64` LU of a block of columns, and of a staircase system with one global parameter, as multiple shooting gives |
 
+On Hilbert matrices, whose condition number grows like e^(3.5 n), the solves keep a correct digit up to n = 12 in
+`f64`, 22 in double-double, 44 in quad-double and 87 in octo-double:
+
+![The error of Hilbert solves in f64, double-double, quad-double and octo-double as the matrix size grows, animated](docs/hilbert.svg)
+
 ### Generic code
 
 | Type | What it is |
@@ -308,6 +313,7 @@ cargo test --release --test odlu bench_od_lu -- --ignored --nocapture   # the oc
 cargo test --release --test explog timing -- --ignored --nocapture      # exp and ln, scalar and lanes, time per value
 cargo run --release --example lane_speedups > docs/lane-speedups.jsonl   # the elementary functions, scalar against lanes
 cargo run --release --example precision_costs > docs/precision-costs.jsonl   # add, multiply, divide, scalar against lanes
+cargo run --release --example hilbert > docs/hilbert.jsonl                   # Hilbert solves in each precision
 ```
 
 Each precision costs more than the one below it:
