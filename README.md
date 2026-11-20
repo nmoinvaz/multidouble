@@ -112,7 +112,7 @@ or as a dependency in `Cargo.toml`:
 
 ```toml
 [dependencies]
-multidouble = "5.0"
+multidouble = "5.1"
 ```
 
 It needs Rust 1.89 or later, the version in which the AVX-512 intrinsics became stable.

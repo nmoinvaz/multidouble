@@ -1,6 +1,6 @@
 [package]
 name = "multidouble-python"
-version = "5.0.0"
+version = "5.1.0"
 edition = "2021"
 rust-version = "1.89"
 description = "Python bindings of multidouble: double-double arithmetic on numpy arrays and LU solves in double-double, quad-double and octo-double"
