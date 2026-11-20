@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="890" height="683" viewBox="0 0 890 683" font-family="system-ui, sans-serif">
+<style>@media (prefers-color-scheme: dark){[fill="#fcfcfb"]{fill:#201f1d}[stroke="#fcfcfb"]{stroke:#201f1d}[fill="#0b0b0b"]{fill:#e8e6e3}[stroke="#0b0b0b"]{stroke:#e8e6e3}[fill="#52514e"]{fill:#a8a49d}[stroke="#52514e"]{stroke:#a8a49d}[fill="#e7e6e2"]{fill:#343230}[stroke="#e7e6e2"]{stroke:#343230}[fill="#c98500"]{fill:#d69a2d}[stroke="#c98500"]{stroke:#d69a2d}[fill="#eb6834"]{fill:#dd5c26}[stroke="#eb6834"]{stroke:#dd5c26}[fill="#eda100"]{fill:#c08800}[stroke="#eda100"]{stroke:#c08800}[fill="#e87ba4"]{fill:#d1678f}[stroke="#e87ba4"]{stroke:#d1678f}[fill="#4a3aa7"]{fill:#7263cf}[stroke="#4a3aa7"]{stroke:#7263cf}[fill="#a6339a"]{fill:#c257b5}[stroke="#a6339a"]{stroke:#c257b5}[fill="#7a7668"]{fill:#948e82}[stroke="#7a7668"]{stroke:#948e82}}</style>
+<rect width="890" height="683" fill="#fcfcfb"/>
+<text x="16.0" y="24.0" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">Error bounds and the largest measured errors, per operation and precision</text>
+<text x="16.0" y="40.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">in units of uⁿ = 2⁻⁵³ⁿ, the rounding of the 53n bits of n parts: proven bounds, the tests' thresholds, and the tests' largest errors; lower is better</text>
+<g><circle cx="21.0" cy="66.0" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>double-double</title></g>
+<text x="32.0" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">double-double, n = 2</text>
+<g><circle cx="182.6" cy="66.0" r="5.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>quad-double</title></g>
+<text x="193.6" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">quad-double, n = 4</text>
+<g><circle cx="331.4" cy="66.0" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>octo-double</title></g>
+<text x="342.4" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">octo-double, n = 8</text>
+<g><circle cx="490.3" cy="66.0" r="5.5" fill="#52514e" stroke="#fcfcfb" stroke-width="2"/><title>proven bound</title></g>
+<text x="501.3" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">proven bound</text>
+<g><rect x="595.3" y="60.5" width="11.0" height="11.0" fill="#52514e" stroke="#fcfcfb" stroke-width="2"/><title>tested bound</title></g>
+<text x="611.8" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">tested bound</text>
+<g><polygon points="711.4,59.5 717.9,66.0 711.4,72.5 704.9,66.0" fill="#52514e" stroke="#fcfcfb" stroke-width="2"/><title>largest measured</title></g>
+<text x="722.4" y="70.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="normal">largest measured</text>
+<line x1="150.0" y1="118.0" x2="150.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="178.0" y1="118.0" x2="178.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="178.0" y="626.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">0.01</text>
+<line x1="206.0" y1="118.0" x2="206.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="243.0" y1="118.0" x2="243.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="271.0" y1="118.0" x2="271.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="271.0" y="626.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">0.1</text>
+<line x1="299.0" y1="118.0" x2="299.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="336.0" y1="118.0" x2="336.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="364.0" y1="118.0" x2="364.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="364.0" y="626.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">1</text>
+<line x1="392.0" y1="118.0" x2="392.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="429.0" y1="118.0" x2="429.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="457.0" y1="118.0" x2="457.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="457.0" y="626.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">10</text>
+<line x1="485.0" y1="118.0" x2="485.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="522.0" y1="118.0" x2="522.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<line x1="550.0" y1="118.0" x2="550.0" y2="611.0" stroke="#e7e6e2" stroke-width="1"/>
+<text x="550.0" y="626.0" font-size="11" fill="#52514e" text-anchor="middle" font-weight="normal" font-variant-numeric="tabular-nums">100</text>
+<line x1="150.0" y1="611.0" x2="550.0" y2="611.0" stroke="#52514e" stroke-width="1"/>
+<line x1="150.0" y1="118.0" x2="150.0" y2="611.0" stroke="#52514e" stroke-width="1"/>
+<text x="350.0" y="645.0" font-size="12" fill="#0b0b0b" text-anchor="middle" font-weight="normal">relative error (units of uⁿ, u = 2⁻⁵³)</text>
+<line x1="364.0" y1="118.0" x2="364.0" y2="611.0" stroke="#52514e" stroke-width="1"/>
+<text x="364.0" y="112.0" font-size="10" fill="#52514e" text-anchor="middle" font-weight="normal">1 uⁿ: the rounding of 53n bits</text>
+<text x="670.0" y="112.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="bold">bound</text>
+<text x="790.0" y="112.0" font-size="10" fill="#52514e" text-anchor="end" font-weight="bold">measured</text>
+<text x="16.0" y="134.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">add, subtract</text>
+<text x="140.0" y="134.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="384.5" y1="130.5" x2="408.4" y2="130.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="384.5,124.0 391.0,130.5 384.5,137.0 378.0,130.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>add, subtract, double-double: largest measured 1.66 u²</title></g>
+<g><circle cx="408.4" cy="130.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>add, subtract, double-double: proven bound 3 u², 1.6 of 106 bits given up</title></g>
+<text x="670.0" y="134.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3 u²</text>
+<text x="790.0" y="134.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.66 u²</text>
+<text x="140.0" y="151.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<g><rect x="442.5" y="142.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>add, subtract, quad-double: tested bound 8 u⁴, 3.0 of 212 bits given up</title></g>
+<text x="670.0" y="151.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">8 u⁴</text>
+<text x="790.0" y="151.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="140.0" y="168.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="178.0" y1="164.5" x2="364.0" y2="164.5" stroke="#1baf7a" stroke-width="2"/>
+<text x="169.0" y="168.5" font-size="11" fill="#1baf7a" text-anchor="end" font-weight="bold">&lt;</text>
+<g><polygon points="178.0,158.0 184.5,164.5 178.0,171.0 171.5,164.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>add, subtract, octo-double: largest measured below 0.01 u⁸</title></g>
+<g><circle cx="364.0" cy="164.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>add, subtract, octo-double: proven bound 1 u⁸, 0.0 of 424 bits given up</title></g>
+<text x="670.0" y="168.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1 u⁸</text>
+<text x="790.0" y="168.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">&lt; 0.01 u⁸</text>
+<text x="16.0" y="196.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">multiply</text>
+<text x="140.0" y="196.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="410.0" y1="192.5" x2="429.0" y2="192.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="410.0,186.0 416.5,192.5 410.0,199.0 403.5,192.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>multiply, double-double: largest measured 3.12 u²</title></g>
+<g><rect x="423.5" y="187.0" width="11.0" height="11.0" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>multiply, double-double: tested bound 5 u², 2.3 of 106 bits given up</title></g>
+<text x="670.0" y="196.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">5 u²</text>
+<text x="790.0" y="196.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3.12 u²</text>
+<text x="140.0" y="213.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<g><rect x="470.5" y="204.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>multiply, quad-double: tested bound 16 u⁴, 4.0 of 212 bits given up</title></g>
+<text x="670.0" y="213.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">16 u⁴</text>
+<text x="790.0" y="213.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="140.0" y="230.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="178.0" y1="226.5" x2="364.0" y2="226.5" stroke="#1baf7a" stroke-width="2"/>
+<text x="169.0" y="230.5" font-size="11" fill="#1baf7a" text-anchor="end" font-weight="bold">&lt;</text>
+<g><polygon points="178.0,220.0 184.5,226.5 178.0,233.0 171.5,226.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>multiply, octo-double: largest measured below 0.01 u⁸</title></g>
+<g><circle cx="364.0" cy="226.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>multiply, octo-double: proven bound 1 u⁸, 0.0 of 424 bits given up</title></g>
+<text x="670.0" y="230.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1 u⁸</text>
+<text x="790.0" y="230.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">&lt; 0.01 u⁸</text>
+<text x="16.0" y="258.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">divide</text>
+<text x="140.0" y="258.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="381.4" y1="254.5" x2="448.0" y2="254.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="381.4,248.0 387.9,254.5 381.4,261.0 374.9,254.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>divide, double-double: largest measured 1.54 u²</title></g>
+<g><rect x="442.5" y="249.0" width="11.0" height="11.0" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>divide, double-double: tested bound 8 u², 3.0 of 106 bits given up</title></g>
+<text x="670.0" y="258.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">8 u²</text>
+<text x="790.0" y="258.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.54 u²</text>
+<text x="140.0" y="275.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<g><rect x="498.5" y="266.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>divide, quad-double: tested bound 32 u⁴, 5.0 of 212 bits given up</title></g>
+<text x="670.0" y="275.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">32 u⁴</text>
+<text x="790.0" y="275.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="140.0" y="292.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="178.0" y1="288.5" x2="364.0" y2="288.5" stroke="#1baf7a" stroke-width="2"/>
+<text x="169.0" y="292.5" font-size="11" fill="#1baf7a" text-anchor="end" font-weight="bold">&lt;</text>
+<g><polygon points="178.0,282.0 184.5,288.5 178.0,295.0 171.5,288.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>divide, octo-double: largest measured below 0.01 u⁸</title></g>
+<g><circle cx="364.0" cy="288.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>divide, octo-double: proven bound 1 u⁸, 0.0 of 424 bits given up</title></g>
+<text x="670.0" y="292.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1 u⁸</text>
+<text x="790.0" y="292.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">&lt; 0.01 u⁸</text>
+<text x="16.0" y="320.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">square root</text>
+<text x="140.0" y="320.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<g><circle cx="410.0" cy="316.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>square root, double-double: proven bound 3.125 u², 1.6 of 106 bits given up</title></g>
+<text x="670.0" y="320.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3.125 u²</text>
+<text x="790.0" y="320.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="140.0" y="337.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<g><rect x="498.5" y="328.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>square root, quad-double: tested bound 32 u⁴, 5.0 of 212 bits given up</title></g>
+<text x="670.0" y="337.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">32 u⁴</text>
+<text x="790.0" y="337.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="140.0" y="354.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<g><circle cx="408.4" cy="350.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>square root, octo-double: proven bound 3 u⁸, 1.6 of 424 bits given up</title></g>
+<text x="670.0" y="354.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3 u⁸</text>
+<text x="790.0" y="354.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">—</text>
+<text x="16.0" y="382.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">exp</text>
+<text x="140.0" y="382.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="365.6" y1="378.5" x2="432.6" y2="378.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="365.6,372.0 372.1,378.5 365.6,385.0 359.1,378.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>exp, double-double: largest measured 1.04 u²</title></g>
+<g><circle cx="432.6" cy="378.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>exp, double-double: proven bound 5.465 u², 2.5 of 106 bits given up</title></g>
+<text x="670.0" y="382.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">5.465 u²</text>
+<text x="790.0" y="382.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.04 u²</text>
+<text x="140.0" y="399.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<line x1="339.9" y1="395.5" x2="532.0" y2="395.5" stroke="#eb6834" stroke-width="2"/>
+<g><polygon points="339.9,389.0 346.4,395.5 339.9,402.0 333.4,395.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>exp, quad-double: largest measured 0.55 u⁴</title></g>
+<g><rect x="526.5" y="390.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>exp, quad-double: tested bound 64 u⁴, 6.0 of 212 bits given up</title></g>
+<text x="670.0" y="399.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">64 u⁴</text>
+<text x="790.0" y="399.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.55 u⁴</text>
+<text x="140.0" y="416.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="308.0" y1="412.5" x2="416.4" y2="412.5" stroke="#1baf7a" stroke-width="2"/>
+<g><polygon points="308.0,406.0 314.5,412.5 308.0,419.0 301.5,412.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>exp, octo-double: largest measured 0.25 u⁸</title></g>
+<g><circle cx="416.4" cy="412.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>exp, octo-double: proven bound 3.661 u⁸, 1.9 of 424 bits given up</title></g>
+<text x="670.0" y="416.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3.661 u⁸</text>
+<text x="790.0" y="416.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.25 u⁸</text>
+<text x="16.0" y="444.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">ln</text>
+<text x="140.0" y="444.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="373.7" y1="440.5" x2="474.3" y2="440.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="373.7,434.0 380.2,440.5 373.7,447.0 367.2,440.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>ln, double-double: largest measured 1.27 u²</title></g>
+<g><circle cx="474.3" cy="440.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>ln, double-double: proven bound 15.351 u², 3.9 of 106 bits given up</title></g>
+<text x="670.0" y="444.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">15.351 u²</text>
+<text x="790.0" y="444.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.27 u²</text>
+<text x="140.0" y="461.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<line x1="342.0" y1="457.5" x2="532.0" y2="457.5" stroke="#eb6834" stroke-width="2"/>
+<g><polygon points="342.0,451.0 348.5,457.5 342.0,464.0 335.5,457.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>ln, quad-double: largest measured 0.58 u⁴</title></g>
+<g><rect x="526.5" y="452.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>ln, quad-double: tested bound 64 u⁴, 6.0 of 212 bits given up</title></g>
+<text x="670.0" y="461.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">64 u⁴</text>
+<text x="790.0" y="461.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.58 u⁴</text>
+<text x="140.0" y="478.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="163.6" y1="474.5" x2="456.7" y2="474.5" stroke="#1baf7a" stroke-width="2"/>
+<g><polygon points="163.6,468.0 170.1,474.5 163.6,481.0 157.1,474.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>ln, octo-double: largest measured 0.007 u⁸</title></g>
+<g><circle cx="456.7" cy="474.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>ln, octo-double: proven bound 9.926 u⁸, 3.3 of 424 bits given up</title></g>
+<text x="670.0" y="478.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">9.926 u⁸</text>
+<text x="790.0" y="478.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.007 u⁸</text>
+<text x="16.0" y="506.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">sin, cos</text>
+<text x="140.0" y="506.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="388.2" y1="502.5" x2="447.2" y2="502.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="388.2,496.0 394.7,502.5 388.2,509.0 381.7,502.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, double-double: largest measured 1.82 u²</title></g>
+<g><circle cx="447.2" cy="502.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, double-double: proven bound 7.85 u², 3.0 of 106 bits given up</title></g>
+<text x="670.0" y="506.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">7.85 u²</text>
+<text x="790.0" y="506.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.82 u²</text>
+<text x="140.0" y="523.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<line x1="372.7" y1="519.5" x2="504.0" y2="519.5" stroke="#eb6834" stroke-width="2"/>
+<g><polygon points="372.7,513.0 379.2,519.5 372.7,526.0 366.2,519.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, quad-double: largest measured 1.24 u⁴</title></g>
+<g><rect x="498.5" y="514.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, quad-double: tested bound 32 u⁴, 5.0 of 212 bits given up</title></g>
+<text x="670.0" y="523.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">32 u⁴</text>
+<text x="790.0" y="523.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">1.24 u⁴</text>
+<text x="140.0" y="540.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="334.4" y1="536.5" x2="410.6" y2="536.5" stroke="#1baf7a" stroke-width="2"/>
+<g><polygon points="334.4,530.0 340.9,536.5 334.4,543.0 327.9,536.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, octo-double: largest measured 0.48 u⁸</title></g>
+<g><circle cx="410.6" cy="536.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>sin, cos, octo-double: proven bound 3.17 u⁸, 1.7 of 424 bits given up</title></g>
+<text x="670.0" y="540.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">3.17 u⁸</text>
+<text x="790.0" y="540.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.48 u⁸</text>
+<text x="16.0" y="568.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="normal">tan</text>
+<text x="140.0" y="568.5" font-size="10" fill="#2a78d6" text-anchor="end" font-weight="bold">DD</text>
+<line x1="420.7" y1="564.5" x2="499.3" y2="564.5" stroke="#2a78d6" stroke-width="2"/>
+<g><polygon points="420.7,558.0 427.2,564.5 420.7,571.0 414.2,564.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>tan, double-double: largest measured 4.07 u²</title></g>
+<g><circle cx="499.3" cy="564.5" r="5.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/><title>tan, double-double: proven bound 28.5 u², 4.8 of 106 bits given up</title></g>
+<text x="670.0" y="568.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">28.5 u²</text>
+<text x="790.0" y="568.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">4.07 u²</text>
+<text x="140.0" y="585.5" font-size="10" fill="#eb6834" text-anchor="end" font-weight="bold">QD</text>
+<line x1="443.6" y1="581.5" x2="532.0" y2="581.5" stroke="#eb6834" stroke-width="2"/>
+<g><polygon points="443.6,575.0 450.1,581.5 443.6,588.0 437.1,581.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>tan, quad-double: largest measured 7.18 u⁴</title></g>
+<g><rect x="526.5" y="576.0" width="11.0" height="11.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/><title>tan, quad-double: tested bound 64 u⁴, 6.0 of 212 bits given up</title></g>
+<text x="670.0" y="585.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">64 u⁴</text>
+<text x="790.0" y="585.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">7.18 u⁴</text>
+<text x="140.0" y="602.5" font-size="10" fill="#1baf7a" text-anchor="end" font-weight="bold">OD</text>
+<line x1="318.0" y1="598.5" x2="439.1" y2="598.5" stroke="#1baf7a" stroke-width="2"/>
+<g><polygon points="318.0,592.0 324.5,598.5 318.0,605.0 311.5,598.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>tan, octo-double: largest measured 0.32 u⁸</title></g>
+<g><circle cx="439.1" cy="598.5" r="5.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/><title>tan, octo-double: proven bound 6.42 u⁸, 2.7 of 424 bits given up</title></g>
+<text x="670.0" y="602.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">6.42 u⁸</text>
+<text x="790.0" y="602.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="normal" font-variant-numeric="tabular-nums">0.32 u⁸</text>
+<g opacity="0.35"><line x1="626.0" y1="611.0" x2="568.0" y2="611.0" stroke="#52514e" stroke-width="2"/><polygon points="562.0,611.0 571.0,607.0 571.0,615.0" fill="#52514e"/><text x="594.0" y="604.0" font-size="11" fill="#52514e" text-anchor="middle" transform="rotate(360.0 594.0 611.0)">better</text></g>
+<circle cx="364.0" cy="164.5" r="10" fill="none" stroke="#0b0b0b" stroke-width="1.5"/>
+<line x1="373.6" y1="161.6" x2="410.0" y2="150.5" stroke="#0b0b0b" stroke-width="1"/>
+<text x="414.0" y="154.5" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="bold">proven: no bits lost</text>
+<circle cx="499.3" cy="564.5" r="10" fill="none" stroke="#0b0b0b" stroke-width="1.5"/>
+<line x1="489.6" y1="562.2" x2="439.3" y2="550.5" stroke="#0b0b0b" stroke-width="1"/>
+<text x="435.3" y="554.5" font-size="11" fill="#0b0b0b" text-anchor="end" font-weight="bold">loosest proven: 4.8 bits</text>
+<text x="16.0" y="671.0" font-size="10" fill="#52514e" text-anchor="start" font-weight="normal">multidouble 5.1.0, README Accuracy tables: bounds proved or checked by the tests, largest errors of the tests</text>
+<a href="https://github.com/nmoinvaz/multidouble"><text x="874" y="671" font-size="10" fill="#52514e" text-anchor="end" text-decoration="underline">github.com/nmoinvaz/multidouble</text></a>
+</svg>

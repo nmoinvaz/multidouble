@@ -264,6 +264,11 @@ their bounds on the paper's worst-case inputs, its constructed inputs make the s
 err by about u⁸, and random inputs stay far inside. On generated inputs just below 2⁻²¹², the octo-double sin, cos and
 tan reach 0.16, 0.48 and 0.32 u⁸, the early return's x²/6, x²/2 and x²/3, and they stay below 0.01 u⁸ elsewhere.
 
+The octo-double add, multiply and divide give up none of their 424 bits, and the loosest proven bound, the
+double-double tan's, gives up 4.8 of 106:
+
+![Each operation's error bound against the largest error the tests measured, in double-double, quad-double and octo-double](docs/accuracy.svg)
+
 The quad-double types use the QD library's algorithms (Hida, Li and Bailey, ARITH-15, 2001) [[7]](#ref-hlb01) with three
 repairs, two to the accurate add and one to the square root, which now scales its argument by a power of four.
 `OD::sloppy_mul` errs by at most 2³¹·⁹³ u⁸|a₀b₀| for operands on the ladder (the paper's Theorem 30), where `*` errs by
