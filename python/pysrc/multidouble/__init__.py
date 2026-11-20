@@ -13,6 +13,9 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
 - ``qd_solve``: x with A x = b by LU with partial pivoting in quad-double, A and b as four float64 part arrays each,
   to about cond(A) 2^-209; ``QDLu`` factors A once for several solves (and solves with A^T);
+- ``dd_logdet``, ``qd_logdet``: the sign and ln|det A| of a real square matrix by the LU of ``dd_solve`` or
+  ``qd_solve``, with the smallest and largest pivot, A as two or four float64 part arrays (a float64 matrix a is
+  (a, zeros));
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double;
 - ``od_solve``: x with A x = b by LU with partial pivoting in octo-double, A and b as eight float64 part arrays each,
@@ -41,7 +44,7 @@ from ._multidouble import isa
 
 __all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "qd_solve", "QDLu", "qd_add_dd",
            "qd_axpy", "isa", "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot",
-           "gcr"]
+           "gcr", "dd_logdet", "qd_logdet"]
 
 
 def _masked(v):
@@ -169,6 +172,31 @@ class QDLu:
         bits of qd_solve (8 rows at a time on the SIMD lanes); A^T x = b runs in scalar quad-double. Raises ValueError
         if b has an entry that is not finite or the wrong shape."""
         return self._lu.solve(*_parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3), bool(transpose))
+
+
+def dd_logdet(ah, al, par=False):
+    """(sign, ln|det A|, min |u_kk|, max |u_kk|) of a real square matrix A, by the double-double LU with partial
+    pivoting of dd_solve (the Rust crate's DDLu): A as (n, n) hi and lo arrays, each entry the exact sum of its two
+    parts, so a float64 matrix a is (a, np.zeros_like(a)). The sign, 1.0 or -1.0, is that of the product of the pivots
+    u_kk, flipped once per row interchange. ln|det A| is the float64 sum of ln|u_kk|, each pivot rounded to float64, so
+    it carries float64 rounding of about n 2^-53 (1 + sum_k |ln|u_kk||) at most. min and max |u_kk| are over the
+    pivots' leading parts. The factors are those of a matrix within about n 2^-106 |L| |U| of A entrywise (partial
+    pivoting is backward stable), so the sign is that of det A unless a perturbation that small makes A singular.
+    par: update the trailing columns on rayon's threads (RAYON_NUM_THREADS, read at their first use, sets how many),
+    with the same bits. The factorization costs about n^3 / 3 double-double multiply-adds. Raises ValueError if A is
+    singular (an exactly zero pivot), has an entry that is not finite, or is not square."""
+    return _md.dd_logdet(_f64(ah, "ah"), _f64(al, "al"), bool(par))
+
+
+def qd_logdet(a0, a1, a2, a3, par=False):
+    """(sign, ln|det A|, min |u_kk|, max |u_kk|) of a real square matrix A, by the quad-double LU with partial
+    pivoting of qd_solve (the Rust crate's QDLu): A as four (n, n) part arrays, each entry the exact sum of its parts in
+    any order, so a float64 matrix a is (a, z, z, z) with z = np.zeros_like(a). The sign and ln|det A| follow the rules
+    of dd_logdet, ln|det A| again a float64 sum. The factors are those of a matrix within about n 2^-209 |L| |U| of A
+    entrywise, so the sign is that of det A where A is too close to a singular matrix for dd_logdet. par as for
+    dd_logdet. The factorization costs about n^3 / 3 quad-double multiply-adds. Raises ValueError if A is singular (an
+    exactly zero pivot), has an entry that is not finite, or is not square."""
+    return _md.qd_logdet(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3), bool(par))
 
 
 def qd_add_dd(z0, z1, z2, z3, dh, dl):
