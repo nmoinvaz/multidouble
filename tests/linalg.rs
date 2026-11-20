@@ -878,7 +878,8 @@ fn permute_rows(n: usize, ld: usize, a: &[f64], p: &[usize]) -> Vec<f64> {
 
 /// An upper triangular matrix with diagonal d_k = k + 1, negated for k % 3 == 0 (five negative entries at n = 13),
 /// needs no pivoting: `QDLu::logdet` and `DDLu::logdet` give sign -1 and ln 13! to 1e-13, and the pivot range is 1 to
-/// n.
+/// n. Controls: the same checks reject the matrix with d_1 negated (the sign) and with d_0 times 1 + 2^-40 (ln|det|
+/// off by 9e-13, and the smallest pivot).
 #[test]
 fn qd_logdet_of_a_triangular_matrix() {
     let n = 13;
@@ -895,13 +896,26 @@ fn qd_logdet_of_a_triangular_matrix() {
     }
     let lo = vec![0.0; ld * n];
     let want: f64 = (1..=n).map(|k| (k as f64).ln()).sum();
-    let lu = QDLu::factor(n, ld, dd_parts_qd(&hi, &lo), false).unwrap();
-    let (sign, ln) = lu.logdet();
-    assert_eq!(sign, -1.0);
-    assert!((ln - want).abs() < 1e-13, "{ln} {want}");
-    assert_eq!(lu.pivot_range(), (1.0, n as f64));
-    let dd = logdets(n, ld, &hi, &lo, DdLuControl::None, QdLuControl::None)[0];
-    assert_eq!(dd, Some((sign, ln)));
+    // (sign right, ln|det| right, pivot range right) for the quad-double LU, which the double-double one must match
+    let checks = |hi: &[f64]| -> (bool, bool, bool) {
+        let lu = QDLu::factor(n, ld, dd_parts_qd(hi, &lo), false).unwrap();
+        let (sign, ln) = lu.logdet();
+        let dd = logdets(n, ld, hi, &lo, DdLuControl::None, QdLuControl::None)[0];
+        assert_eq!(dd, Some((sign, ln)));
+        (
+            sign == -1.0,
+            (ln - want).abs() < 1e-13,
+            lu.pivot_range() == (1.0, n as f64),
+        )
+    };
+    assert_eq!(checks(&hi), (true, true, true));
+    let mut neg = hi.clone();
+    neg[ld + 1] = -neg[ld + 1];
+    assert!(!checks(&neg).0, "control: d_1 negated");
+    let mut scaled = hi.clone();
+    scaled[0] *= 1.0 + 2f64.powi(-40);
+    let (_, ln_ok, range_ok) = checks(&scaled);
+    assert!(!ln_ok && !range_ok, "control: d_0 scaled");
 }
 
 /// A = P U for an upper triangular U with random entries above its diagonal d_k = +-(k + 2) and a row permutation P:
@@ -1010,21 +1024,38 @@ fn logdet_no_pivot_control_is_caught() {
 }
 
 /// On random double-double matrices (n = 1, 8, 37 and 130, the last blocked in double-double) the quad-double LU's
-/// sign is the double-double one's, and its ln|det| and pivot range agree to 1e-12 relative.
+/// sign is the double-double one's, and its ln|det| and pivot range agree to 1e-12 relative. Controls: the same
+/// checks reject the quad-double LU of the matrix with row 0 negated (the sign) and of the matrix times 1 + 2^-20
+/// (ln|det| off by n 9.5e-7, the pivots by 9.5e-7 relative).
 #[test]
 fn qd_logdet_matches_dd_logdet() {
     let mut r = Rng(94);
+    let close = |a: f64, b: f64, tol: f64| (a - b).abs() <= tol * b.abs().max(1.0);
     for n in [1usize, 8, 37, 130] {
         let (ld, hi, lo) = matrix(n, &mut r);
         let dd = DDLu::factor(n, ld, hi.clone(), lo.clone(), false).unwrap();
-        let qd = QDLu::factor(n, ld, dd_parts_qd(&hi, &lo), false).unwrap();
-        let ((sd, l1), (sq, l2)) = (dd.logdet(), qd.logdet());
-        assert!(
-            sd == sq && (l1 - l2).abs() <= 1e-12 * l2.abs().max(1.0),
-            "n {n}: {l1} {l2}"
-        );
-        let ((a0, a1), (b0, b1)) = (dd.pivot_range(), qd.pivot_range());
-        assert!((a0 - b0).abs() <= 1e-12 * b0 && (a1 - b1).abs() <= 1e-12 * b1, "n {n}");
+        let ((sd, l1), (p0, p1)) = (dd.logdet(), dd.pivot_range());
+        // (sign, ln|det|, pivot range) of the quad-double LU of (h, l) against the double-double LU of (hi, lo)
+        let checks = |h: &[f64], l: &[f64]| -> (bool, bool, bool) {
+            let qd = QDLu::factor(n, ld, dd_parts_qd(h, l), false).unwrap();
+            let ((sq, l2), (q0, q1)) = (qd.logdet(), qd.pivot_range());
+            (
+                sd == sq,
+                close(l1, l2, 1e-12),
+                close(p0, q0, 1e-12) && close(p1, q1, 1e-12),
+            )
+        };
+        assert_eq!(checks(&hi, &lo), (true, true, true), "n {n}");
+        let (mut nh, mut nl) = (hi.clone(), lo.clone());
+        for j in 0..n {
+            nh[j * ld] = -nh[j * ld];
+            nl[j * ld] = -nl[j * ld];
+        }
+        assert!(!checks(&nh, &nl).0, "control: row 0 negated, n {n}");
+        let s = 1.0 + 2f64.powi(-20);
+        let (sh, sl): (Vec<f64>, Vec<f64>) = hi.iter().zip(&lo).map(|(&h, &l)| (h * s, l * s)).unzip();
+        let (_, ln_ok, range_ok) = checks(&sh, &sl);
+        assert!(!ln_ok && !range_ok, "control: scaled, n {n}");
     }
 }
 
