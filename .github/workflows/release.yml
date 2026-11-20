@@ -28,7 +28,7 @@ jobs:
           # The branch's tip when the job starts, not at dispatch, so that a run queued behind another builds on its bump.
           ref: ${{ github.ref }}
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Normalize version
         id: version
