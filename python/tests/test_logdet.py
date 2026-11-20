@@ -93,6 +93,16 @@ def test_logdet_of_random_matrices_against_mpmath():
     assert misses > 0
 
 
+def test_logdet_parallel_is_serial():
+    """at n = 300 the double-double LU's trailing updates run on rayon's threads (they do not below about 150) and so do
+    the quad-double ones: par=True gives the serial result bit for bit"""
+    rng = np.random.default_rng(7)
+    A = rng.standard_normal((300, 300))
+    z = np.zeros_like(A)
+    assert md.dd_logdet(A, z, par=True) == md.dd_logdet(A, z)
+    assert md.qd_logdet(A, z, z, z, par=True) == md.qd_logdet(A, z, z, z)
+
+
 def near_singular(n, tau, seed):
     """a float64 matrix A = [[B, b], [c^T, d]] (B of order n - 1) whose Schur complement s = d - c^T B^-1 b is tau to
     about 2^-50 relative, so that det A = s det B with |s| far below the float64 rounding of A's entries: B, b and c
