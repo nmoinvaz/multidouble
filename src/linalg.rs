@@ -153,6 +153,17 @@ fn pivot_search<S: Simd>(col: &[f64], k: usize, n: usize) -> (usize, f64) {
     (p, m)
 }
 
+/// The pivot of column col as `pivot_search` finds it, or row k itself when no_pivot (the controls' breakage
+/// `DdLuControl::NoPivot` and `QdLuControl::NoPivot`)
+#[inline(always)]
+fn choose_pivot<S: Simd>(col: &[f64], k: usize, n: usize, no_pivot: bool) -> (usize, f64) {
+    if no_pivot {
+        (k, col[k].abs())
+    } else {
+        pivot_search::<S>(col, k, n)
+    }
+}
+
 /// d[i] = q[i].to_dd(), 8 entries at a time (`QV::to_dv`), the remainder scalar
 #[inline(always)]
 fn to_dd_lanes<S: Simd>(q: &[QD], d: &mut [DD]) {
@@ -198,6 +209,7 @@ const TR: usize = 2;
 /// row swaps within the panel, scaling, and updates of the later panel columns, as `factor_unblocked` does them,
 /// except that updates which cannot change a value are skipped: 8-row blocks whose multipliers are all exactly zero,
 /// and columns whose pivot-row entry is exactly zero (a - 0 t and a - l 0 return a; at most the sign of a zero differs).
+#[allow(clippy::too_many_arguments)]
 fn panel_getf2<S: Simd>(
     n: usize,
     ld: usize,
@@ -206,6 +218,7 @@ fn panel_getf2<S: Simd>(
     ph: &mut [f64],
     pl: &mut [f64],
     perm: &mut [usize],
+    ctl: DdLuControl,
 ) -> Result<(), String> {
     S::vectorize(
         #[inline(always)]
@@ -216,7 +229,7 @@ fn panel_getf2<S: Simd>(
             for c in 0..jb {
                 let k = j0 + c;
                 let ck = c * ld;
-                let (p, best) = pivot_search::<S>(&ph[ck..ck + ld], k, n);
+                let (p, best) = choose_pivot::<S>(&ph[ck..ck + ld], k, n, ctl == DdLuControl::NoPivot);
                 if best == 0.0 || !best.is_finite() {
                     return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                 }
@@ -415,21 +428,63 @@ fn tile_rows<S: Simd, const R: usize, const W: usize>(
     }
 }
 
+/// Deliberate breakage of `DDLu::factor_control`, for the controls of its tests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DdLuControl {
+    None,
+    /// no row interchanges: the pivot of every column is its diagonal entry
+    NoPivot,
+}
+
 impl DDLu {
     /// Factor the n x n matrix given column-major with leading dimension ld (ld % 8 == 0, padding rows zero).
     /// par: work in parallel (rayon's current pool). Large matrices take the blocked path (`factor_blocked`), which
     /// gives the unblocked one's factors, equal as numbers (the signs of zeros may differ).
     pub fn factor(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
+        Self::factor_control(n, ld, hi, lo, par, DdLuControl::None)
+    }
+
+    /// `factor` with a control (`DdLuControl`; None is `factor`), on the same path
+    pub fn factor_control(
+        n: usize,
+        ld: usize,
+        hi: Vec<f64>,
+        lo: Vec<f64>,
+        par: bool,
+        ctl: DdLuControl,
+    ) -> Result<DDLu, String> {
         if n >= BLOCKED_MIN {
-            Self::factor_blocked(n, ld, hi, lo, par)
+            simd::dispatch(FactorBlocked {
+                n,
+                ld,
+                hi,
+                lo,
+                par,
+                ctl,
+            })
         } else {
-            Self::factor_unblocked(n, ld, hi, lo, par)
+            simd::dispatch(FactorUnblocked {
+                n,
+                ld,
+                hi,
+                lo,
+                par,
+                ctl,
+            })
         }
     }
 
     /// LAPACK getf2 order: for each column k, pivot, scale, and update all trailing columns (in parallel if par).
     pub fn factor_unblocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
-        simd::dispatch(FactorUnblocked { n, ld, hi, lo, par })
+        let ctl = DdLuControl::None;
+        simd::dispatch(FactorUnblocked {
+            n,
+            ld,
+            hi,
+            lo,
+            par,
+            ctl,
+        })
     }
 
     fn factor_unblocked_on<S: Simd>(
@@ -438,6 +493,7 @@ impl DDLu {
         mut hi: Vec<f64>,
         mut lo: Vec<f64>,
         par: bool,
+        ctl: DdLuControl,
     ) -> Result<DDLu, String> {
         S::vectorize(
             #[inline(always)]
@@ -448,7 +504,7 @@ impl DDLu {
                 let mut ml = vec![0.0f64; ld];
                 for k in 0..n {
                     let ck = k * ld;
-                    let (p, best) = pivot_search::<S>(&hi[ck..ck + ld], k, n);
+                    let (p, best) = choose_pivot::<S>(&hi[ck..ck + ld], k, n, ctl == DdLuControl::NoPivot);
                     if best == 0.0 || !best.is_finite() {
                         return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                     }
@@ -534,7 +590,15 @@ impl DDLu {
     ///
     /// Step 3 runs in parallel over chunks of CW columns when par.
     pub fn factor_blocked(n: usize, ld: usize, hi: Vec<f64>, lo: Vec<f64>, par: bool) -> Result<DDLu, String> {
-        simd::dispatch(FactorBlocked { n, ld, hi, lo, par })
+        let ctl = DdLuControl::None;
+        simd::dispatch(FactorBlocked {
+            n,
+            ld,
+            hi,
+            lo,
+            par,
+            ctl,
+        })
     }
 
     fn factor_blocked_on<S: Simd>(
@@ -543,6 +607,7 @@ impl DDLu {
         mut hi: Vec<f64>,
         mut lo: Vec<f64>,
         par: bool,
+        ctl: DdLuControl,
     ) -> Result<DDLu, String> {
         S::vectorize(
             #[inline(always)]
@@ -557,7 +622,7 @@ impl DDLu {
                     let (left_l, rest_l) = lo.split_at_mut(j0 * ld);
                     let (pan_h, right_h) = rest_h.split_at_mut(jb * ld);
                     let (pan_l, right_l) = rest_l.split_at_mut(jb * ld);
-                    panel_getf2::<S>(n, ld, j0, jb, pan_h, pan_l, &mut perm)?;
+                    panel_getf2::<S>(n, ld, j0, jb, pan_h, pan_l, &mut perm, ctl)?;
                     let pv = &perm[j0..je];
                     // 2. swaps left of the panel
                     for (ch, cl) in left_h.chunks_mut(ld).zip(left_l.chunks_mut(ld)) {
@@ -1553,13 +1618,14 @@ struct FactorUnblocked {
     hi: Vec<f64>,
     lo: Vec<f64>,
     par: bool,
+    ctl: DdLuControl,
 }
 
 impl Kernel for FactorUnblocked {
     type Output = Result<DDLu, String>;
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
-        DDLu::factor_unblocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par)
+        DDLu::factor_unblocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par, self.ctl)
     }
 }
 
@@ -1569,13 +1635,14 @@ struct FactorBlocked {
     hi: Vec<f64>,
     lo: Vec<f64>,
     par: bool,
+    ctl: DdLuControl,
 }
 
 impl Kernel for FactorBlocked {
     type Output = Result<DDLu, String>;
     #[inline(always)]
     fn run<S: Simd>(self) -> Self::Output {
-        DDLu::factor_blocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par)
+        DDLu::factor_blocked_on::<S>(self.n, self.ld, self.hi, self.lo, self.par, self.ctl)
     }
 }
 
@@ -2386,6 +2453,8 @@ pub enum QdLuControl {
     None,
     /// every trailing update rounded to double-double (its two lower parts dropped)
     UpdateDd,
+    /// no row interchanges: the pivot of every column is its diagonal entry
+    NoPivot,
 }
 
 /// Dense quad-double LU with partial pivoting (LAPACK getf2 order, as `DDLu::factor_unblocked`), column-major with
@@ -2472,7 +2541,7 @@ impl QDLu {
                 let mut m: [Vec<f64>; 4] = std::array::from_fn(|_| vec![0.0f64; ld]);
                 for k in 0..n {
                     let ck = k * ld;
-                    let (p, best) = pivot_search::<S>(&c[0][ck..ck + ld], k, n);
+                    let (p, best) = choose_pivot::<S>(&c[0][ck..ck + ld], k, n, ctl == QdLuControl::NoPivot);
                     if best == 0.0 || !best.is_finite() {
                         return Err(format!("singular or non-finite pivot at column {k} ({best})"));
                     }
@@ -4065,8 +4134,10 @@ mod tests {
         #[inline(always)]
         fn run<S: Simd>(self) -> Vec<f64> {
             let (n, ld, k) = (self.n, self.ld, 11);
-            let u = DDLu::factor_unblocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true).unwrap();
-            let b = DDLu::factor_blocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true).unwrap();
+            let u =
+                DDLu::factor_unblocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true, DdLuControl::None).unwrap();
+            let b =
+                DDLu::factor_blocked_on::<S>(n, ld, self.h.clone(), self.l.clone(), true, DdLuControl::None).unwrap();
             let f = DDLu::factor_f64_on::<S>(n, ld, self.h.clone(), true).unwrap();
             let (mut xh, mut xl) = (self.h[..k * n].to_vec(), self.l[..k * n].to_vec());
             b.solve_many_on::<S>(&mut xh, &mut xl, k, false, true);
@@ -4438,7 +4509,7 @@ mod tests {
                 for j in 0..n {
                     h[j * ld + j] += 4.0;
                 }
-                let lu = DDLu::factor_unblocked_on::<S>(n, ld, h, l, false).unwrap();
+                let lu = DDLu::factor_unblocked_on::<S>(n, ld, h, l, false, DdLuControl::None).unwrap();
                 let b: Vec<DD> = (0..n)
                     .map(|i| match i % 4 {
                         0 => DD::ZERO,
