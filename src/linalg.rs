@@ -4,7 +4,8 @@
 //! mixed-precision use, solves and transpose solves in double-double with either set of factors, solves refined to
 //! quad-double (`DDLu::solve_refine_qd`), Gram matrices, and the same unblocked LU in quad-double (`QDLu`) and
 //! octo-double (`ODLu`) for systems too ill-conditioned for the precision below. Also the f64 LU of a block of columns
-//! (`lu_rect_f64`) and of a staircase system (`StaircaseLu`), and the log-determinant and pivots of a complex
+//! (`lu_rect_f64`) and of a staircase system (`StaircaseLu`), the sign and log-determinant of a real matrix in
+//! double-double and quad-double (`DDLu::logdet`, `QDLu::logdet`), and the log-determinant and pivots of a complex
 //! double-double matrix (`clu_logdet`, `clu_pivots`).
 use crate::dd::{pow2_near, two_prod, two_sum, DD};
 use crate::dv::{self, DDotAcc, DV};
@@ -162,6 +163,25 @@ fn choose_pivot<S: Simd>(col: &[f64], k: usize, n: usize, no_pivot: bool) -> (us
     } else {
         pivot_search::<S>(col, k, n)
     }
+}
+
+/// (sign, ln|det|) of P A = L U from its pivots u_kk rounded to f64 (`u(k)`) and its row interchanges: the sign of
+/// their product, flipped once per interchange, and the f64 sum of ln|u_kk| for k = 0, 1, ..., n - 1 in turn. The
+/// rule of `DDLu::logdet` and `QDLu::logdet`.
+fn sign_ln_det(perm: &[usize], u: impl Fn(usize) -> f64) -> (f64, f64) {
+    let mut sign = 1.0f64;
+    let mut la = 0.0f64;
+    for (k, &p) in perm.iter().enumerate() {
+        let v = u(k);
+        if v < 0.0 {
+            sign = -sign;
+        }
+        la += v.abs().ln();
+        if p != k {
+            sign = -sign;
+        }
+    }
+    (sign, la)
 }
 
 /// d[i] = q[i].to_dd(), 8 entries at a time (`QV::to_dv`), the remainder scalar
@@ -1093,22 +1113,13 @@ impl DDLu {
         )
     }
 
-    /// (sign, ln|det|) of the factored matrix: product of the pivots u_kk, sign flipped per row interchange.
+    /// (sign, ln|det|) of the factored matrix: product of the pivots u_kk, sign flipped per row interchange. Each
+    /// pivot is rounded to f64 (hi + lo), and ln|det| is the f64 sum of their ln|u_kk|.
     pub fn logdet(&self) -> (f64, f64) {
-        let mut sign = 1.0f64;
-        let mut la = 0.0f64;
-        for k in 0..self.n {
+        sign_ln_det(&self.perm, |k| {
             let u = self.at(k, k);
-            let v = u.hi + u.lo;
-            if v < 0.0 {
-                sign = -sign;
-            }
-            la += v.abs().ln();
-            if self.perm[k] != k {
-                sign = -sign;
-            }
-        }
-        (sign, la)
+            u.hi + u.lo
+        })
     }
 
     /// min and max |u_kk| (hi parts)
@@ -2712,6 +2723,12 @@ impl QDLu {
                 b.swap(k, p);
             }
         }
+    }
+
+    /// (sign, ln|det|) of the factored matrix by the rule of `DDLu::logdet`: product of the pivots u_kk, sign flipped
+    /// per row interchange, each pivot rounded to f64 (`QD::to_f64`) and ln|det| the f64 sum of their ln|u_kk|.
+    pub fn logdet(&self) -> (f64, f64) {
+        sign_ln_det(&self.perm, |k| self.at(k, k).to_f64())
     }
 
     /// min and max |u_kk| (leading parts)

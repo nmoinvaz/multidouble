@@ -43,7 +43,8 @@
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
 //!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double) and in octo-double
 //!   ([`linalg::ODLu`], for those too ill-conditioned for quad-double), solves,
-//!   transpose solves, solves refined to quad-double and Gram matrices, and the determinant of a complex matrix
+//!   transpose solves, solves refined to quad-double and Gram matrices, the sign and log-determinant of a real matrix
+//!   ([`linalg::DDLu::logdet`], [`linalg::QDLu::logdet`]) and the determinant of a complex one
 //!   ([`linalg::clu_logdet`]); [`linalg::lu_rect_f64`], the f64 LU of the
 //!   first columns of a rectangular block (the step of a block LU), and [`linalg::StaircaseLu`], the LU of a staircase
 //!   system with one global parameter (the Newton system of multiple shooting) built from those steps.
