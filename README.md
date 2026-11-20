@@ -84,9 +84,9 @@ the thread that runs it (`dual::take_counts`), so counting a whole computation t
 | `field::DMat` | a constant double-double matrix applied to a field |
 | `field::FieldSolve` | solves with a `DDLu`, refined in the lane type, and a jet's system order by order |
 | `field::TangentTail` | ends a series once its tangent terms have stayed small for a run of orders |
-| `linalg::DDLu` | dense LU with partial pivoting in double-double, blocked in `f64`: solves, transpose solves, solves refined to quad-double, Gram matrices and the determinant |
+| `linalg::DDLu` | dense LU with partial pivoting in double-double, blocked in `f64`: solves, transpose solves, solves refined to quad-double, Gram matrices, and the sign and ln\|det\| |
 | `linalg::clu_logdet`, `linalg::clu_pivots` | ln\|det\|, arg det and the pivots of a complex double-double matrix |
-| `linalg::QDLu`, `linalg::ODLu` | dense LU in quad-double and octo-double on 8-row lanes, for systems too ill-conditioned for the precision below (an `ODLu` solve errs by about cond(A) 2⁻⁴¹⁸) |
+| `linalg::QDLu`, `linalg::ODLu` | dense LU in quad-double and octo-double on 8-row lanes, for systems too ill-conditioned for the precision below (an `ODLu` solve errs by about cond(A) 2⁻⁴¹⁸); `QDLu` also gives the sign and ln\|det\| |
 | `linalg::lu_rect_f64`, `linalg::StaircaseLu` | the `f64` LU of a block of columns, and of a staircase system with one global parameter, as multiple shooting gives |
 
 ### Generic code
@@ -196,9 +196,10 @@ rounded.
 
 [`python/`](python/README.md) is a Python package of the same arithmetic on numpy arrays: elementwise double-double add,
 subtract, multiply and divide on (hi, lo) array pairs on the best backend the CPU has, double-double, quad-double and
-octo-double LU solves (`od_solve` takes eight part arrays), quad-double and octo-double arrays plus a double-double one
-or a multiple of another (`qd_add_dd`, `qd_axpy`, `od_add_dd`, `od_axpy`), and numpy versions of the error-free
-transformations (`pip install ./python`, which builds it with maturin).
+octo-double LU solves (`od_solve` takes eight part arrays), the sign and ln|det| of a real matrix in double-double and
+quad-double (`dd_logdet`, `qd_logdet`), quad-double and octo-double arrays plus a double-double one or a multiple of
+another (`qd_add_dd`, `qd_axpy`, `od_add_dd`, `od_axpy`), and numpy versions of the error-free transformations (`pip
+install ./python`, which builds it with maturin).
 
 ## Accuracy
 
