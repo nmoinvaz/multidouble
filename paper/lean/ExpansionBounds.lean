@@ -3,3 +3,4 @@ import ExpansionBounds.Rounding
 import ExpansionBounds.Bridge
 import ExpansionBounds.Facts
 import ExpansionBounds.Renorm
+import ExpansionBounds.RenormSharp
