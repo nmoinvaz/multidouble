@@ -6,3 +6,6 @@ python/target/
 python/pysrc/multidouble/*.so
 python/pysrc/multidouble/*.pyd
 __pycache__/
+
+# the Lean proofs' dependencies and build
+paper/lean/.lake/

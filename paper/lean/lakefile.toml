@@ -1,0 +1,31 @@
+name = "ExpansionBounds"
+defaultTargets = ["ExpansionBounds"]
+
+[leanOptions]
+autoImplicit = false
+# a proof left as `sorry` warns, so this fails the build on one
+warningAsError = true
+# FloatSpec's style lints, which FloatSpec itself turns off
+weak.linter.preferGrind = false
+weak.linter.preferSimp = false
+
+# FloatSpec pins Lean v4.34.0-rc2, whose executables abort at thread exit on macOS 27 (leanprover/lean4#15087), so
+# cslib and Mathlib are pinned here to v4.34.1. Mathlib comes last so that its dependencies' versions win.
+[[require]]
+name = "cslib"
+git = "https://github.com/leanprover/cslib"
+rev = "v4.34.1"
+
+# FloatSpec, a Lean port of Flocq, supplies the rounding model and the TwoSum and Fast2Sum theorems.
+[[require]]
+name = "FloatSpec"
+git = "https://github.com/Beneficial-AI-Foundation/FloatSpec"
+rev = "158263e983ec3925e02b10f5b312498bf414e0f1"
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "v4.34.1"
+
+[[lean_lib]]
+name = "ExpansionBounds"
