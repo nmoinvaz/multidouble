@@ -7,6 +7,7 @@ The table lists those proved so far.
 | File | Contents |
 |---|---|
 | `ExpansionBounds/Model.lean` | Assumption 6: `F p`, the binary numbers of precision `p` with an unbounded exponent range, `RN p`, rounding to nearest with ties to even, `u` and `ū`, and TwoSum, FastTwoSum and TwoProd |
+| `ExpansionBounds/Rounding.lean` | the bounds on `RN p` stated after Assumption 6 |
 
 From this folder:
 
