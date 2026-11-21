@@ -8,6 +8,8 @@ The table lists those proved so far.
 |---|---|
 | `ExpansionBounds/Model.lean` | Assumption 6: `F p`, the binary numbers of precision `p` with an unbounded exponent range, `RN p`, rounding to nearest with ties to even, `u` and `ū`, and TwoSum, FastTwoSum and TwoProd |
 | `ExpansionBounds/Rounding.lean` | the bounds on `RN p` stated after Assumption 6 |
+| `ExpansionBounds/Bridge.lean` | FloatSpec proves TwoSum and FastTwoSum for a format with a least exponent `emin`; on multiples of `2^emin` its rounding is that of `F p`, which carries both to the unbounded model |
+| `ExpansionBounds/Facts.lean` | Lemma 8, (a) to (c) |
 
 From this folder:
 
