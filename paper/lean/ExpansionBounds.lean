@@ -2,3 +2,4 @@ import ExpansionBounds.Model
 import ExpansionBounds.Rounding
 import ExpansionBounds.Bridge
 import ExpansionBounds.Facts
+import ExpansionBounds.Renorm

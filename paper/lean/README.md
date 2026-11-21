@@ -10,6 +10,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Rounding.lean` | the bounds on `RN p` stated after Assumption 6 |
 | `ExpansionBounds/Bridge.lean` | FloatSpec proves TwoSum and FastTwoSum for a format with a least exponent `emin`; on multiples of `2^emin` its rounding is that of `F p`, which carries both to the unbounded model |
 | `ExpansionBounds/Facts.lean` | Lemma 8, (a) to (c) |
+| `ExpansionBounds/Renorm.lean` | VecSum and `Ren_n`, and Theorem 9 (a), (b), (d) and (e) |
 
 From this folder:
 
