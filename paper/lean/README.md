@@ -18,6 +18,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Ops.lean` | ADD, MULF and ADDF and Lemma 13 for each; ADD and MULF share one program of Lemma 11 |
 | `ExpansionBounds/MulOps.lean` | MUL and Lemma 13 for it: `T_m = m(m + 1)`, `Q = n² + n - 1`, the inputs within `A_m` and the dropped products within `Δ` |
 | `ExpansionBounds/Acc.lean` | the accumulator's lemma (`lem:acc`): `K` deposits into the levels, each within `S_m(k)` at every moment and the rounding errors within `Ē_lev`, with the bounds in the lemma's closed form |
+| `ExpansionBounds/Horner.lean` | Lemma 33 (`lem:horner`): Horner's rule on expansions, with Lemma 13's bounds `G_MUL` and `G_ADD` applied in turn |
 
 From this folder:
 
