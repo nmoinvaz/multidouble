@@ -13,3 +13,4 @@ import ExpansionBounds.Acc
 import ExpansionBounds.Horner
 import ExpansionBounds.GScale
 import ExpansionBounds.Taylor
+import ExpansionBounds.SinCos
