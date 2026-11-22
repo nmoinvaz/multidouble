@@ -20,6 +20,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Acc.lean` | the accumulator's lemma (`lem:acc`): `K` deposits into the levels, each within `S_m(k)` at every moment and the rounding errors within `Ē_lev`, with the bounds in the lemma's closed form |
 | `ExpansionBounds/Horner.lean` | Lemma 33 (`lem:horner`): Horner's rule on expansions, with Lemma 13's bounds `G_MUL` and `G_ADD` applied in turn |
 | `ExpansionBounds/GScale.lean` | Lemma 13's bounds `G_MUL` and `G_ADD` homogeneous of degree one in the operands' part bounds and `Z̄`, nonnegative, and `G_ADDF` for ADDF |
+| `ExpansionBounds/Taylor.lean` | the sine and cosine series: for `\|r\| ≤ 1` a partial sum errs by at most its first omitted term, `\|sin r\| ≥ \|r\|(1 - r²/6)` and `cos r ≥ cos₋ r̄` |
 
 From this folder:
 
