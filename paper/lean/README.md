@@ -14,6 +14,9 @@ The table lists those proved so far.
 | `ExpansionBounds/RenormSharp.lean` | Theorem 9 (c): on `(1, u, u², …, uⁿ)` the loss is `B_0 = uⁿ` |
 | `ExpansionBounds/Levels.lean` | Lemma 11: a run on the levels as a list of assignments, deps and roundings, bounded at every state it passes through |
 | `ExpansionBounds/Parts.lean` | Lemma 12: the parts of `Ren_n`, `x_0` from `S` and each `x_i` from `x_{i-1}` and the `v_j` after |
+| `ExpansionBounds/OpBounds.lean` | Lemma 13 (a) and (b) from the bounds on an operation's levels, and the bounds of Lemma 11 growing with the inputs' totals |
+| `ExpansionBounds/Ops.lean` | ADD, MULF and ADDF and Lemma 13 for each; ADD and MULF share one program of Lemma 11 |
+| `ExpansionBounds/MulOps.lean` | MUL and Lemma 13 for it: `T_m = m(m + 1)`, `Q = n² + n - 1`, the inputs within `A_m` and the dropped products within `Δ` |
 
 From this folder:
 
