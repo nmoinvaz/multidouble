@@ -21,6 +21,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Horner.lean` | Lemma 33 (`lem:horner`): Horner's rule on expansions, with Lemma 13's bounds `G_MUL` and `G_ADD` applied in turn |
 | `ExpansionBounds/GScale.lean` | Lemma 13's bounds `G_MUL` and `G_ADD` homogeneous of degree one in the operands' part bounds and `Z̄`, nonnegative, and `G_ADDF` for ADDF |
 | `ExpansionBounds/Taylor.lean` | the sine and cosine series: for `\|r\| ≤ 1` a partial sum errs by at most its first omitted term, `\|sin r\| ≥ \|r\|(1 - r²/6)` and `cos r ≥ cos₋ r̄` |
+| `ExpansionBounds/SinCos.lean` | Lemma 34 (`lem:sincosr`): SINR and COSR within `δ_S\|sin r\|` and `δ_C cos r`, with parts at most `ψ_s\|r\|` and `ψ_c`, for any `K ≥ 2`, scaling `2^e` and `r̄ ≤ 1`, and SINR's `r` and COSR's `1` below `\|r_0\| < u^{n/2}` |
 
 From this folder:
 
