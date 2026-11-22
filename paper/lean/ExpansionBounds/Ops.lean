@@ -379,4 +379,105 @@ theorem lemma13_mulf (hp : 1 < p) (hn : 1 ≤ n) (a : ℕ → ℝ) (b : ℝ) (ha
   rw [hZg] at r1 c2
   exact ⟨r1, r2, r3, c1, c2, c3, c4⟩
 
+/-- ADDF's carries: `addfE a b m = e_{m-1}`, with `e_{-1} = b` and `e_m` the error of `TwoSum(a_m, e_{m-1})` -/
+noncomputable def addfE (a : ℕ → ℝ) (b : ℝ) : ℕ → ℝ
+  | 0 => b
+  | m + 1 => (twoSum p (a m) (addfE a b m)).2
+
+/-- ADDF's levels: `s_m = RN(a_m + e_{m-1})` for `m < n`, and `s_n = e_{n-1}` -/
+noncomputable def addfLevels (a : ℕ → ℝ) (b : ℝ) (m : ℕ) : ℝ :=
+  if m < n then (twoSum p (a m) (addfE p a b m)).1 else if m = n then addfE p a b n else 0
+
+/-- ADDF: `e ← b`, `(s_i, e) ← TwoSum(a_i, e)` for `i = 0, …, n - 1`, `s_n ← e`, and `Ren_n(s)` -/
+noncomputable def addfOp (a : ℕ → ℝ) (b : ℝ) : List ℝ := ren p n n (addfLevels p n a b)
+
+/-- `ε_0 = uλ_0` and `ε_m = u(α_m + ε_{m-1})` -/
+noncomputable def addfEps (α : ℕ → ℝ) (lam0 : ℝ) : ℕ → ℝ
+  | 0 => u p * lam0
+  | m + 1 => u p * (α (m + 1) + addfEps α lam0 m)
+
+/-- ADDF's level bounds: `X_0 = (1 + u)λ_0`, `X_m = (1 + u)(α_m + ε_{m-1})` for `1 ≤ m < n`, `X_n = ε_{n-1}` -/
+noncomputable def addfX (α : ℕ → ℝ) (lam0 : ℝ) (m : ℕ) : ℝ :=
+  if m = 0 then (1 + u p) * lam0
+  else if m < n then (1 + u p) * (α m + addfEps p α lam0 (m - 1))
+  else if m = n then addfEps p α lam0 (n - 1) else 0
+
+/-- ADDF's chain: `|e_m| ≤ ε_m`, `|s_m| ≤ X_m`, every carry in `F`, and `∑_{i ≤ m} s_i + e_m = ∑_{i ≤ m} a_i + b` -/
+theorem addf_chain (hp : 1 < p) (a : ℕ → ℝ) (b : ℝ) (ha : ∀ i < n, F p (a i)) (hb : F p b) (α : ℕ → ℝ)
+    (hα : ∀ m < n, |a m| ≤ α m) (lam0 : ℝ) (hlam : |a 0 + b| ≤ lam0) :
+    ∀ m < n, |addfE p a b (m + 1)| ≤ addfEps p α lam0 m ∧ |(twoSum p (a m) (addfE p a b m)).1| ≤ addfX p n α lam0 m ∧
+      F p (addfE p a b (m + 1)) ∧
+      ∑ i ∈ range (m + 1), (twoSum p (a i) (addfE p a b i)).1 + addfE p a b (m + 1) = ∑ i ∈ range (m + 1), a i + b := by
+  have hu := u_pos p
+  have hus : ∀ z : ℝ, us p * |z| ≤ u p * |z| := fun z => mul_le_mul_of_nonneg_right (us_le_u p) (abs_nonneg _)
+  intro m
+  induction m with
+  | zero =>
+    intro h0
+    have hfa := facts_a p hp (ha 0 h0) hb
+    refine ⟨?_, ?_, F_twoSum_snd p _ _, ?_⟩
+    · show |(twoSum p (a 0) b).2| ≤ u p * lam0
+      exact ((hfa.2.1.trans (min_le_right _ _)).trans (hus _)).trans (mul_le_mul_of_nonneg_left hlam hu.le)
+    · simp only [addfX, ite_true]
+      exact (abs_RN_le p _).trans (mul_le_mul_of_nonneg_left hlam (by linarith))
+    · rw [Nat.zero_add, sum_range_one, sum_range_one]
+      exact hfa.1
+  | succ m ih =>
+    intro hm
+    obtain ⟨i1, -, i3, i4⟩ := ih (by omega)
+    have hfa := facts_a p hp (ha (m + 1) hm) i3
+    have hsum : |a (m + 1) + addfE p a b (m + 1)| ≤ α (m + 1) + addfEps p α lam0 m :=
+      (abs_add_le _ _).trans (add_le_add (hα (m + 1) hm) i1)
+    refine ⟨?_, ?_, F_twoSum_snd p _ _, ?_⟩
+    · show |(twoSum p (a (m + 1)) (addfE p a b (m + 1))).2| ≤ u p * (α (m + 1) + addfEps p α lam0 m)
+      exact ((hfa.2.1.trans (min_le_right _ _)).trans (hus _)).trans (mul_le_mul_of_nonneg_left hsum hu.le)
+    · simp only [addfX, Nat.add_one_ne_zero, ite_false, hm, ite_true, Nat.add_sub_cancel]
+      exact (abs_RN_le p _).trans (mul_le_mul_of_nonneg_left hsum (by linarith))
+    · rw [sum_range_succ _ (m + 1), sum_range_succ _ (m + 1)]
+      have h := hfa.1
+      show _ + (twoSum p (a (m + 1)) (addfE p a b (m + 1))).2 = _
+      linarith
+
+variable {n} in
+/-- Lemma 13 for ADDF, with `|a_m| ≤ α_m`, `λ_0 ≥ |a_0 + b|` and `R = Δ = 0`: (c) the levels have `|s_m| ≤ X_m`
+(each level is set once) and sum to `a + b`, and (a) and (b) follow -/
+theorem lemma13_addf (hp : 1 < p) (hn : 1 ≤ n) (a : ℕ → ℝ) (b : ℝ) (ha : ∀ i < n, F p (a i)) (hb : F p b)
+    (α : ℕ → ℝ) (hα : ∀ m < n, |a m| ≤ α m) (lam0 : ℝ) (hlam : |a 0 + b| ≤ lam0) (Zb : ℝ)
+    (hZ : |∑ i ∈ range n, a i + b| ≤ Zb) :
+    |∑ i ∈ range n, a i + b - (addfOp p n a b).sum| ≤
+        u p ^ n * Zb + ∑ j ∈ Ioc 0 n, (u p ^ n + u p ^ (n + 1 - j)) * Vb p n (addfX p n α lam0) j ∧
+      |(addfOp p n a b).getD 0 0| ≤ (1 + u p) * (Zb + ∑ j ∈ Ioc 1 n, Vb p n (addfX p n α lam0) j) ∧
+      (∀ i, 1 ≤ i → i ≤ n - 1 → |(addfOp p n a b).getD i 0| ≤
+        (1 + u p) * (u p * |(addfOp p n a b).getD (i - 1) 0| + ∑ j ∈ Ioc i n, Vb p n (addfX p n α lam0) j)) ∧
+      (∀ m ≤ n, |addfLevels p n a b m| ≤ addfX p n α lam0 m) ∧
+      ∑ m ∈ range (n + 1), addfLevels p n a b m = ∑ i ∈ range n, a i + b := by
+  have hch := addf_chain p n hp a b ha hb α hα lam0 hlam
+  obtain ⟨n', rfl⟩ : ∃ n', n = n' + 1 := ⟨n - 1, by omega⟩
+  obtain ⟨l1, -, l3, l4⟩ := hch n' (by omega)
+  have hlev : ∀ m ≤ n' + 1, |addfLevels p (n' + 1) a b m| ≤ addfX p (n' + 1) α lam0 m := by
+    intro m hm
+    rcases Nat.lt_or_ge m (n' + 1) with hlt | hge
+    · simp only [addfLevels, hlt, ite_true]
+      exact (hch m hlt).2.1
+    · obtain rfl : m = n' + 1 := by omega
+      simp only [addfLevels, lt_irrefl, ite_false, ite_true, addfX, Nat.add_one_ne_zero, Nat.add_sub_cancel]
+      exact l1
+  have hsum : ∑ m ∈ range (n' + 1 + 1), addfLevels p (n' + 1) a b m = ∑ i ∈ range (n' + 1), a i + b := by
+    rw [sum_range_succ, ← l4]
+    simp only [addfLevels, lt_irrefl, ite_false, ite_true]
+    congr 1
+    exact sum_congr rfl fun i hi => by simp [mem_range.mp hi]
+  have hF : ∀ i ≤ n' + 1, F p (addfLevels p (n' + 1) a b i) := by
+    intro i hi
+    rcases Nat.lt_or_ge i (n' + 1) with hlt | hge
+    · simp only [addfLevels, hlt, ite_true]
+      exact F_twoSum_fst p _ _
+    · obtain rfl : i = n' + 1 := by omega
+      simp only [addfLevels, lt_irrefl, ite_false, ite_true]
+      exact l3
+  obtain ⟨r1, r2, r3⟩ := ren_of_levels p hp (n' + 1) hn _ hF (addfX p (n' + 1) α lam0) hlev
+    (∑ i ∈ range (n' + 1), a i + b) Zb 0 hZ (by rw [hsum, sub_self, abs_zero])
+  simp only [mul_zero, add_zero] at r1 r2
+  exact ⟨r1, r2, r3, hlev, hsum⟩
+
 end ExpansionBounds
