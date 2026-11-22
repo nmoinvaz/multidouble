@@ -22,6 +22,7 @@ The table lists those proved so far.
 | `ExpansionBounds/GScale.lean` | Lemma 13's bounds `G_MUL` and `G_ADD` homogeneous of degree one in the operands' part bounds and `Z̄`, nonnegative, and `G_ADDF` for ADDF |
 | `ExpansionBounds/Taylor.lean` | the sine and cosine series: for `\|r\| ≤ 1` a partial sum errs by at most its first omitted term, `\|sin r\| ≥ \|r\|(1 - r²/6)` and `cos r ≥ cos₋ r̄` |
 | `ExpansionBounds/SinCos.lean` | Lemma 34 (`lem:sincosr`): SINR and COSR within `δ_S\|sin r\|` and `δ_C cos r`, with parts at most `ψ_s\|r\|` and `ψ_c`, for any `K ≥ 2`, scaling `2^e` and `r̄ ≤ 1`, and SINR's `r` and COSR's `1` below `\|r_0\| < u^{n/2}` |
+| `ExpansionBounds/FExact.lean` | Lemma 41 (`lem:fexact`): `ADDF(x', -1) = x' - 1` exactly for `x'_0 ∈ [1/2, 2]`, by Sterbenz and Theorem 9 (a); that range, from Lemma 38 (a) and Theorem 42, is the hypothesis |
 
 From this folder:
 
