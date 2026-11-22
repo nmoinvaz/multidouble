@@ -12,6 +12,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Facts.lean` | Lemma 8, (a) to (c) |
 | `ExpansionBounds/Renorm.lean` | VecSum and `Ren_n`, and Theorem 9 (a), (b), (d) and (e) |
 | `ExpansionBounds/RenormSharp.lean` | Theorem 9 (c): on `(1, u, u², …, uⁿ)` the loss is `B_0 = uⁿ` |
+| `ExpansionBounds/Levels.lean` | Lemma 11: a run on the levels as a list of assignments, deps and roundings, bounded at every state it passes through |
 
 From this folder:
 
