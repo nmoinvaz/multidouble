@@ -23,3 +23,4 @@ import ExpansionBounds.ExpThm
 import ExpansionBounds.Sharp
 import ExpansionBounds.AccThm
 import ExpansionBounds.Sloppy
+import ExpansionBounds.SharpMul
