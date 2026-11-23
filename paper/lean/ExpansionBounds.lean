@@ -32,3 +32,4 @@ import ExpansionBounds.Red
 import ExpansionBounds.Trig
 import ExpansionBounds.TrigTan
 import ExpansionBounds.LnB
+import ExpansionBounds.Cor18
