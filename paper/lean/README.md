@@ -30,6 +30,7 @@ The table lists those proved so far.
 | `ExpansionBounds/ExpThm.lean` | Theorem 40 (`thm:exp`), for a case: with `r` within `δ` of `x - k ln 2`, `a ≤ \|r\| ≤ b` and its sign, EXP's `y = 2^k ADDF(t, 1)` satisfies `\|y - e^x\| ≤ ε e^x` with `ε = (E_m + ε_s)/v + e^δ - 1`; `n 2^{-1074}` is zero with no exponent limits |
 | `ExpansionBounds/Sharp.lean` | Proposition 24 (b) (`prop:sharp`): ADD of `(1, u, …, u^{n-1})` and `(u^n, 0, …, 0)`, and ADDF of the same and `u^n`, err by exactly `u^n = u^n\|a + b\|(1 - u)/(1 - u^{n+1})`, so Theorem 15's leading constant `1` is attained |
 | `ExpansionBounds/AccThm.lean` | Theorem 27 (`thm:acc`): `K` terms, each ADDPROD or ADDX of operands on `H(θ)`, then FINISH, give `\|Z - x\| ≤ u^n\|Z\| + (1 + u^n)(Ē_lev + E_prod) + Φ`; FINISH is exact up to its last ADDF, as each `r^{(l)}` is zero above index `l` |
+| `ExpansionBounds/Sloppy.lean` | Theorem 30 (`thm:sloppy`): SLOPPY-MUL on `H(θ)` operands with `n²u < 1`, (a) `T_m = m(m + 1)`, `Q = n²` and its levels within `L_m u^m M`, (b) `\|ab - x\| ≤ (R_s + Δ_n u) u^n M` and its form relative to `\|ab\|`, and (c) Theorem 27's bound for FINISH after ADDPROD-SLOPPY and ADDX terms |
 
 From this folder:
 

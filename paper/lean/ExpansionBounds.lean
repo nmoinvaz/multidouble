@@ -22,3 +22,4 @@ import ExpansionBounds.Closure
 import ExpansionBounds.ExpThm
 import ExpansionBounds.Sharp
 import ExpansionBounds.AccThm
+import ExpansionBounds.Sloppy
