@@ -28,6 +28,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Closed.lean` | Theorems 14 and 15 (`thm:t2`, `thm:t3`): on `H(θ)` operands, the closed forms `L_m`, `R_n` and `Δ_n` of the level bounds of MUL, ADD, MULF and ADDF, and `\|Z - x\| ≤ u^n\|Z\| + κu^{n+1}M`, with its forms relative to the result by `(eq:a0)`; for any `θ > 0`, and `2ρ < 1` for the relative forms |
 | `ExpansionBounds/Closure.lean` | Theorem 17 (`thm:t5`): the parts of the result of MUL, ADD, MULF and ADDF within `u^i((1 + u)^i\|x_0\| + i u (1 + u)^{n+i-1} Λ M)`, by Theorem 9 (d) and Lemma 12; and for `\|Z\| ≥ ζM` with `ξ > 0`, `\|x_0\| ≥ ξM` and the part inequalities of `H(θ')` (the paper's `H(θ')` also needs `θ'u ≤ 1/4`), with the paper's `ζ` for MUL and MULF, and for ADD and ADDF on leading parts of one sign |
 | `ExpansionBounds/ExpThm.lean` | Theorem 40 (`thm:exp`), for a case: with `r` within `δ` of `x - k ln 2`, `a ≤ \|r\| ≤ b` and its sign, EXP's `y = 2^k ADDF(t, 1)` satisfies `\|y - e^x\| ≤ ε e^x` with `ε = (E_m + ε_s)/v + e^δ - 1`; `n 2^{-1074}` is zero with no exponent limits |
+| `ExpansionBounds/Sharp.lean` | Proposition 24 (b) (`prop:sharp`): ADD of `(1, u, …, u^{n-1})` and `(u^n, 0, …, 0)`, and ADDF of the same and `u^n`, err by exactly `u^n = u^n\|a + b\|(1 - u)/(1 - u^{n+1})`, so Theorem 15's leading constant `1` is attained |
 
 From this folder:
 

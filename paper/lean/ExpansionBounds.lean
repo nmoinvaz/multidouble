@@ -20,3 +20,4 @@ import ExpansionBounds.ExpCore
 import ExpansionBounds.Closed
 import ExpansionBounds.Closure
 import ExpansionBounds.ExpThm
+import ExpansionBounds.Sharp
