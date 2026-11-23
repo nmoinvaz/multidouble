@@ -629,8 +629,9 @@ theorem accOps_Y (t : ℕ → ℕ → ℝ) (top : ℕ → Bool) (K : ℕ) :
       list_sum_map_range]
     split_ifs <;> simp [opY]
 
-/-- Lemma `lem:acc`. `K` deposits are made into zero levels, the `k`-th with `|t_l^{(k)}| ≤ τ_l μ_k` for `l < n`
-and, where `N = n`, for `t_n`; `W = ∑ μ_k`, `(n + 1)Ku < 1` and `Γ = 1/(1 - (n + 1)Ku)`. (a) At every moment up
+/-- Lemma `lem:acc`. `K` deposits are made into zero levels, the `k`-th with `t_l^{(k)} ∈ F` and
+`|t_l^{(k)}| ≤ τ_l μ_k` for `l < n` and, where `N = n`, `|t_n^{(k)}| ≤ τ_n μ_k`; `W = ∑ μ_k`, `(n + 1)Ku < 1` and
+`Γ = 1/(1 - (n + 1)Ku)`. (a) At every moment up
 to the end of the `k`-th deposit, `|s_m| ≤ S_m(k)`. (b) At the end, `∑ s_m = ∑_{k,l} t_l^{(k)} - E_lev` with
 `|E_lev| ≤ Ē_lev`. -/
 theorem lemma_acc (hp : 1 < p) (t : ℕ → ℕ → ℝ) (top : ℕ → Bool) (K : ℕ) (τ μ : ℕ → ℝ) (hτ : ∀ l, 0 ≤ τ l)
