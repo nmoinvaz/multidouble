@@ -33,3 +33,4 @@ import ExpansionBounds.Trig
 import ExpansionBounds.TrigTan
 import ExpansionBounds.LnB
 import ExpansionBounds.Cor18
+import ExpansionBounds.LogThm
