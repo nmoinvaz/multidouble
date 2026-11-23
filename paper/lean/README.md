@@ -35,6 +35,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Div.lean` | Theorem 19 (`thm:t6`): DIV of `a` and `b` on `H(θ)` with `b_0 ≠ 0` and `(2n - 1)u < 1` errs by at most `(u^n + κ_DIV u^{n+1})\|a/b\|`, `κ_DIV` defined by the recursion of the paper; SMF is a program of Lemma 11 with `T_m = 2m` and `Q = 2n - 1`, each update errs by `ε_k\|a_0\|` with part bounds `P^{(k+1)}\|a_0\|`, and the updates telescope |
 | `ExpansionBounds/SharpDiv.lean` | Proposition 24 (d) (`prop:sharp`): DIV of `(1, 0, …, 0)` and `(-1, u, 0, …, 0)`, both on `H(1)`, errs by exactly `u^n\|a/b\|`: the remainders are `(u^k, 0, …, 0)` and the quotient terms `-u^k`, and `Ren_n` commutes with negation |
 | `ExpansionBounds/Sqrt.lean` | Theorem 21 (`thm:t7`): SQRT_{n,J} of `x` on `H(θ)` with `0 ≤ θ`, `2θu < 1`, `x_0 > 0` and `(n² + n)u < 1` is within `δ_J√x` of `√x`, `δ_J` defined by the paper's recursion through `G_MUL`, `G_ADDF` and `G_ADD`; the start `RN(1/RN(√a_0))` is within `E_0` relatively, and each Newton step adds the five rounding errors to `N(r) = y(1 - 3e²/2 - e³/2)` |
+| `ExpansionBounds/SqrtDD.lean` | Theorem 22 (`thm:t8`): SQRT^DD_n of `x` on `H(θ)` with `0 ≤ θ`, `2θu < 1`, `x_0 > 0`, `(n² + n)u < 1`, `n ≥ 2` and `p ≥ 7` is within `δ^DD√x` of `√x`, given the published bounds on its double-word start as hypotheses (the square root within `η_1 = 25u²/8`, DWDivDW2 within `η_2 = 15u² + 56u³`, and `\|r_1\| ≤ u\|r_0\|`); the second-order step uses `(1 + e)(1 + c_e + 3c_e²/2) = 1 + 5e³/2 + 15e⁴/8 + 3e⁵/8` |
 
 From this folder:
 
