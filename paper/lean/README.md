@@ -33,6 +33,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Sloppy.lean` | Theorem 30 (`thm:sloppy`): SLOPPY-MUL on `H(θ)` operands with `n²u < 1`, (a) `T_m = m(m + 1)`, `Q = n²` and its levels within `L_m u^m M`, (b) `\|ab - x\| ≤ (R_s + Δ_n u) u^n M` and its form relative to `\|ab\|`, and (c) Theorem 27's bound for FINISH after ADDPROD-SLOPPY and ADDX terms |
 | `ExpansionBounds/SharpMul.lean` | Proposition 24 (a) and (c) (`prop:sharp`): MUL of `(1, u, …, u^{n-2}, 0)` and `(1, 0, …, 0, u^{n-1})` errs by `∑_{k=n}^{2n-3} u^k = u^n\|ab\|(1 - u^{n-2})/(1 - u^{2n-2})`; with `a_0b = 1 + u`, MULF of `(a_0, 0, a_0u², 0, …)` and `b` errs by `u^n` for odd `n` and, with `a_{n-1} = a_0u^n`, by `u^n + u^{n+1}` for even `n`, the operands satisfying `H(1)`; `2^p + 1 = m_1m_2` with `m_1, m_2 > 1` gives such `a_0` and `b` in `F` |
 | `ExpansionBounds/Div.lean` | Theorem 19 (`thm:t6`): DIV of `a` and `b` on `H(θ)` with `b_0 ≠ 0` and `(2n - 1)u < 1` errs by at most `(u^n + κ_DIV u^{n+1})\|a/b\|`, `κ_DIV` defined by the recursion of the paper; SMF is a program of Lemma 11 with `T_m = 2m` and `Q = 2n - 1`, each update errs by `ε_k\|a_0\|` with part bounds `P^{(k+1)}\|a_0\|`, and the updates telescope |
+| `ExpansionBounds/SharpDiv.lean` | Proposition 24 (d) (`prop:sharp`): DIV of `(1, 0, …, 0)` and `(-1, u, 0, …, 0)`, both on `H(1)`, errs by exactly `u^n\|a/b\|`: the remainders are `(u^k, 0, …, 0)` and the quotient terms `-u^k`, and `Ren_n` commutes with negation |
 
 From this folder:
 
