@@ -23,6 +23,7 @@ The table lists those proved so far.
 | `ExpansionBounds/Taylor.lean` | the sine and cosine series: for `\|r\| ≤ 1` a partial sum errs by at most its first omitted term, `\|sin r\| ≥ \|r\|(1 - r²/6)` and `cos r ≥ cos₋ r̄` |
 | `ExpansionBounds/SinCos.lean` | Lemma 34 (`lem:sincosr`): SINR and COSR within `δ_S\|sin r\|` and `δ_C cos r`, with parts at most `ψ_s\|r\|` and `ψ_c`, for any `K ≥ 2`, scaling `2^e` and `r̄ ≤ 1`, and SINR's `r` and COSR's `1` below `\|r_0\| < u^{n/2}` |
 | `ExpansionBounds/FExact.lean` | Lemma 41 (`lem:fexact`): `ADDF(x', -1) = x' - 1` exactly for `x'_0 ∈ [1/2, 2]`, by Sterbenz and Theorem 9 (a); that range, from Lemma 38 (a) and Theorem 42, is the hypothesis |
+| `ExpansionBounds/ExpRed.lean` | Lemma 38 (`lem:expred`): EXP's reduction, `\|k\| ≤ 1075`, `\|r_e\| ≤ r̄_max` and `x_0 - kc_h ∈ F`, and `r` within `δ` of `r_e` with parts at most `π^r`, for `p ≥ 14`, `c_r = RN(1/ln 2)` and `c_h` a multiple of `2^{-p-1}`, with `η_0 = 0` as the exponent range is unbounded; and `G_MULF` for MULF |
 
 From this folder:
 
