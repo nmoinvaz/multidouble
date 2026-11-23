@@ -27,3 +27,4 @@ import ExpansionBounds.SharpMul
 import ExpansionBounds.Div
 import ExpansionBounds.SharpDiv
 import ExpansionBounds.Sqrt
+import ExpansionBounds.SqrtDD
