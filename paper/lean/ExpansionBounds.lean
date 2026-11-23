@@ -25,3 +25,4 @@ import ExpansionBounds.AccThm
 import ExpansionBounds.Sloppy
 import ExpansionBounds.SharpMul
 import ExpansionBounds.Div
+import ExpansionBounds.SharpDiv
