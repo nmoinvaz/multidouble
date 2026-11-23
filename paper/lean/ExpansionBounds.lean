@@ -29,3 +29,4 @@ import ExpansionBounds.SharpDiv
 import ExpansionBounds.Sqrt
 import ExpansionBounds.SqrtDD
 import ExpansionBounds.Red
+import ExpansionBounds.Trig
