@@ -17,3 +17,4 @@ import ExpansionBounds.SinCos
 import ExpansionBounds.FExact
 import ExpansionBounds.ExpRed
 import ExpansionBounds.ExpCore
+import ExpansionBounds.Closed
