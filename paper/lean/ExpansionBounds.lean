@@ -36,3 +36,4 @@ import ExpansionBounds.Cor18
 import ExpansionBounds.LogThm
 import ExpansionBounds.DDLog
 import ExpansionBounds.Kappa8
+import ExpansionBounds.Sloppy8
