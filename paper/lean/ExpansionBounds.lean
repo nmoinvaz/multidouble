@@ -35,3 +35,4 @@ import ExpansionBounds.LnB
 import ExpansionBounds.Cor18
 import ExpansionBounds.LogThm
 import ExpansionBounds.DDLog
+import ExpansionBounds.Kappa8
