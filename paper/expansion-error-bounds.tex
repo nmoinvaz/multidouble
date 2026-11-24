@@ -66,7 +66,7 @@ prove that its sum and its product of two $n$-part expansions err by at most $u^
 is the unit roundoff of the hardware format. This is the bound of rounding to a format with $n$ times the precision. A
 second, much smaller term is added, at most $2^{-15}$ of the first at eight parts in binary64, and measured against
 the operands' size for sums. Division has the same bound. Simple inputs reach it for the sum, the product and the
-quotient, so its leading constant cannot be lowered. The square root's bound is three times it at eight parts. For
+quotient, so lowering its leading constant raises the second term by about as much. The square root's bound is three times it at eight parts. For
 sums of $K$ products accumulated in levels, as dot-product kernels do, the second term grows like $(Ku)^{n+1}$ times
 the products' total size, and constructed inputs show that this growth is real. The same analysis, with a bound on
 each part carried through every step, covers a cheaper multiplication without the last level, within
@@ -108,8 +108,8 @@ $n = 4$, and Section~\ref{sec:qd} lists the differences:
   $u^n$ relative, plus a small second term (Theorem~\ref{thm:main}), a leading constant of 1 where the bounds known
   for other generalizations have $2^n$ and more;
 \item division is accurate to $u^n$, and the square root to $3u^n$ at $n = 8$ (Theorem~\ref{thm:divsqrt});
-\item simple inputs reach the bound $u^n$ for the sum, the product and the quotient, so its leading constant cannot
-  be lowered (Section~\ref{sec:example});
+\item simple inputs reach the bound $u^n$ for the sum, the product and the quotient, so lowering its leading
+  constant raises the second term by about as much (Section~\ref{sec:example});
 \item a sum of $K$ products accumulated in levels is accurate to $u^n$ plus a term that grows like $(Ku)^{n+1}$, which
   stays below $u^n$ up to about 50 products at $n = 8$, and inputs exist that show the growth (Section~\ref{sec:dot});
 \item a multiplication without the last level, as QD's sloppy one, is accurate to $2^{31.93}u^8|a_0b_0|$ at $n = 8$

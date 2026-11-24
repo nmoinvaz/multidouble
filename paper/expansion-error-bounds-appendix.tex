@@ -716,8 +716,9 @@ $m_1 = 3$), let $a_0 = m_12^{-\lfloor\log_2 m_1\rfloor}$ and $b = (1+u)/a_0 = m_
 odd $n$, MULF of $a = (a_0, 0, a_0u^2, 0, \dots, a_0u^{n-1})$ and $b$ errs by $u^n = u^n|ab|\,(1-u)/(1-u^{n+1})$; for
 even $n$, with $a_{n-1} = a_0u^n$ in addition, it errs by $u^n + u^{n+1} = u^n|ab|\,(1-u^2)/(1-u^{n+2})$. Both $a$
 satisfy $H(1)$. In each case $M \le (1+O(u))|Z|$, so a bound $C u^n|Z| + \kappa' u^{n+1}M$ valid on these inputs has
-$C + \kappa' u \ge 1 - O(u)$: the leading constant 1 of Theorem~\ref{thm:t3} can be lowered only by raising $\kappa$
-by about $1/u$, which makes the second term as large as the first. (d) DIV of $a = (1, 0, \dots, 0)$ and $b = (-1, u, 0, \dots, 0)$, both satisfying $H(1)$, errs by exactly
+$C + \kappa' u \ge 1 - O(u)$: lowering the leading constant 1 of Theorem~\ref{thm:t3} to $C = 1 - \delta$ for a fixed
+$\delta > 0$ needs $\kappa' \ge (\delta - O(u))/u$, which grows like $1/u$, and the second term then gives back what the
+first saves, up to $O(u^{n+1})|Z|$. (d) DIV of $a = (1, 0, \dots, 0)$ and $b = (-1, u, 0, \dots, 0)$, both satisfying $H(1)$, errs by exactly
 $u^n|a/b|$, so the leading constant 1 of Theorem~\ref{thm:t6} is attained in the same sense.
 \end{proposition}
 
