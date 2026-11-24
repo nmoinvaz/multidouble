@@ -38,3 +38,4 @@ import ExpansionBounds.DDLog
 import ExpansionBounds.Kappa8
 import ExpansionBounds.Sloppy8
 import ExpansionBounds.Div8
+import ExpansionBounds.SqrtDD8
