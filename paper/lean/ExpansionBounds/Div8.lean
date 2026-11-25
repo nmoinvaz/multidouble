@@ -1,13 +1,12 @@
-import ExpansionBounds.Div
+import ExpansionBounds.DivEval
 import ExpansionBounds.Sloppy8
 
 /-!
 # Theorem 19 (`thm:t6`) at `n = 8` and `p = 53`
 
 DIV's `κ_DIV` evaluated in rational arithmetic, as `div_consts.py` computes it: `κ_DIV ≤ 2^{26.0}` on `H(1)` and
-`2^{27.48}` on `H(2)`, so `|a/b - x| ≤ (1 + 2^{-25.5})2^{-424}|a/b|` on `H(2)` operands. The recursion `P^{(k)}` runs
-eight steps, each reading the last one at several indices; simp's cache evaluates each value once, and the exact
-rationals reach about 3800 digits.
+`2^{27.48}` on `H(2)`, so `|a/b - x| ≤ (1 + 2^{-25.5})2^{-424}|a/b|` on `H(2)` operands. The kernel evaluates the
+rational mirror `kdivQ` (`DivEval.lean`), whose exact rationals reach about 3800 digits.
 -/
 
 namespace ExpansionBounds
@@ -17,28 +16,35 @@ open Finset
 variable (p : ℤ) [Prec_gt_0 p]
 
 omit [Prec_gt_0 p] in
-theorem inf_eq_min_real (a b : ℝ) : a ⊓ b = min a b := rfl
+/-- `κ_DIV` on `H(θ)` at `p = 53` is the cast of its rational mirror -/
+theorem kdiv_53 (hp : p = 53) (n : ℕ) (θ : ℚ) :
+    kdiv p n (θ * u p) = ((kdivQ (1 / 9007199254740992) n (θ * (1 / 9007199254740992)) : ℚ) : ℝ) := by
+  have h := u_53_rat p hp
+  have hρ : ((θ * (1 / 9007199254740992) : ℚ) : ℝ) = θ * u p := by
+    rw [← h]
+    exact Rat.cast_mul _ _
+  rw [cast_kdiv p n h, hρ]
 
 omit [Prec_gt_0 p] in
-set_option maxHeartbeats 20000000 in
 /-- Theorem 19 at `n = 8` on `H(1)`: `κ_DIV ≤ 2^{26.0}` -/
 theorem kdiv8_one (hp : p = 53) : kdiv p 8 (1 * u p) ≤ 2 ^ 26 := by
-  have hu := u_53 p hp
-  norm_num (config := { maxSteps := 5000000 }) [kdiv, divTheta, divXi, divQb, divEps, divR, renMin, renB, vB, divPk,
-    divP', gParts, divX, levX, levD, divA, divG, divT, sigmaX, Vb, us, hu, ← Finset.Ico_add_one_add_one_eq_Ioc,
-    sum_Ico_eq_sum_range, sum_range_succ, Finset.range_add_one, Finset.inf'_insert, inf_eq_min_real, min_def]
+  have hc := kdiv_53 p hp 8 1
+  rw [Rat.cast_one] at hc
+  have hq : kdivQ (1 / 9007199254740992) 8 (1 * (1 / 9007199254740992)) ≤ 2 ^ 26 := by decide +kernel
+  rw [hc]
+  exact_mod_cast hq
 
 omit [Prec_gt_0 p] in
-set_option maxHeartbeats 20000000 in
 /-- Theorem 19 at `n = 8` on `H(2)`: `κ_DIV ≤ 2^{27.48}` -/
 theorem kdiv8_two (hp : p = 53) : kdiv p 8 (2 * u p) ≤ (2 : ℝ) ^ (27.48 : ℝ) := by
-  have hu := u_53 p hp
+  have hc := kdiv_53 p hp 8 2
+  rw [Rat.cast_ofNat] at hc
+  have hq : kdivQ (1 / 9007199254740992) 8 (2 * (1 / 9007199254740992)) ≤ 187000000 := by decide +kernel
   refine le_trans ?_
     (le_two_rpow (m := 187000000) (d := 1) (N := 2748) (K := 100) (by norm_num) (by norm_num) (by norm_num)
       (by decide +kernel))
-  norm_num (config := { maxSteps := 5000000 }) [kdiv, divTheta, divXi, divQb, divEps, divR, renMin, renB, vB, divPk,
-    divP', gParts, divX, levX, levD, divA, divG, divT, sigmaX, Vb, us, hu, ← Finset.Ico_add_one_add_one_eq_Ioc,
-    sum_Ico_eq_sum_range, sum_range_succ, Finset.range_add_one, Finset.inf'_insert, inf_eq_min_real, min_def]
+  rw [hc, Nat.cast_one, div_one]
+  exact_mod_cast hq
 
 /-- Theorem 19 at `n = 8`, `p = 53`: DIV of `H(2)` operands errs by at most `(1 + 2^{-25.5})2^{-424}|a/b|` -/
 theorem div8 (hp : p = 53) (a b : ℕ → ℝ) (ha : ∀ i < 8, F p (a i)) (hb : ∀ i < 8, F p (b i))

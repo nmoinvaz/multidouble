@@ -33,6 +33,12 @@ theorem u8_53 (hp : p = 53) : u p ^ 8 = (2 : ℝ) ^ (-424 : ℝ) := by
   norm_num
 
 omit [Prec_gt_0 p] in
+/-- `u = 2^{-53}` as the cast of a rational -/
+theorem u_53_rat (hp : p = 53) : ((1 / 9007199254740992 : ℚ) : ℝ) = u p := by
+  rw [u_53 p hp]
+  norm_num
+
+omit [Prec_gt_0 p] in
 /-- `κ ≤ 2^x` gives `κu^9 ≤ 2^{x - 477}` at `p = 53` -/
 theorem kappa_u9 (hp : p = 53) {κ x : ℝ} (h : κ ≤ (2 : ℝ) ^ x) : κ * u p ^ 9 ≤ (2 : ℝ) ^ (x - 477) := by
   have h9 : u p ^ 9 = ((2 : ℝ) ^ (477 : ℝ))⁻¹ := by
