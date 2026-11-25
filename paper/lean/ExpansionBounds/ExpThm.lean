@@ -95,14 +95,14 @@ noncomputable def expEps (η₁ η₂ : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a
     Real.exp δ - 1
 
 /-- Theorem 40 (`thm:exp`), for a case: if `r` is within `δ` of `r_e = x - k ln 2` with `a ≤ |r| ≤ b` and the case's
-sign, and steps (2) to (4) run with `U < 2^{e+1}`, `m` squarings and degree `d'`, then `y = 2^k ADDF(t, 1)`, each part
+sign, and steps (2) to (4) run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`, then `y = 2^k ADDF(t, 1)`, each part
 of the scaling rounded by `S₃`, satisfies `|y - e^x| ≤ ε e^x + nη₃` -/
 theorem thm40_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ η₃ : ℝ}
     {S₁ S₂ S₃ : ℝ → ℝ} (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (hS₃ : Scl p η₃ S₃) (r : ℕ → ℝ)
     (hr : ∀ i < n, F p (r i)) (X : ℝ) (k : ℤ) (δ : ℝ)
     (hδ : |∑ i ∈ range n, r i - (X - k * Real.log 2)| ≤ δ) (a b : ℝ) (ha : a ≤ |∑ i ∈ range n, r i|)
-    (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
-    (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2)
+    (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
+    (e : ℤ) (hU : ∑ i ∈ range n, |r i| < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2)
     (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i)) (φ : ℕ → ℝ)
     (hφ : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φ k) (pos : Bool)
@@ -112,7 +112,7 @@ theorem thm40_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hu := u_pos p
   obtain ⟨R, hR⟩ : ∃ R, R = ∑ i ∈ range n, r i := ⟨_, rfl⟩
   rw [← hR] at hδ ha hb hsgn
-  obtain ⟨c1, c2, -⟩ := lemma_core p n hp hn hA3 hS₁ hS₂ r hr R hR a b ha hb π hπ γ hγ e hU m d' hd hbd hb2 Fk hF
+  obtain ⟨c1, c2, -⟩ := lemma_core p n hp hn hA3 hS₁ hS₂ r hr R hR a b ha hb π hπ e hU m d' hd hbd hb2 Fk hF
     φ hφ pos hsgn
   obtain ⟨E, hE⟩ : ∃ E, E = (coreBound p n η₁ η₂ pos e m a b π Fk φ d').1 := ⟨_, rfl⟩
   obtain ⟨ψ, hψ⟩ : ∃ ψ, ψ = (coreBound p n η₁ η₂ pos e m a b π Fk φ d').2 := ⟨_, rfl⟩
@@ -230,8 +230,8 @@ theorem thm40_case_sub (hp : p = 53) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) *
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (r : ℕ → ℝ) (hr : ∀ i < n, F p (r i)) (X : ℝ) (k₁ k₂ : ℤ) (hk : k₂ ≤ 0) (δ : ℝ)
     (hδ : |∑ i ∈ range n, r i - (X - (k₁ + k₂ : ℤ) * Real.log 2)| ≤ δ) (a b : ℝ) (ha : a ≤ |∑ i ∈ range n, r i|)
-    (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
-    (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d')
+    (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
+    (e : ℤ) (hU : ∑ i ∈ range n, |r i| < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d')
     (hbd : coreBp n e m b (eta0m m) < d' + 2) (hb2 : 0 < m → Real.exp (coreBp n e m b (eta0m m)) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i)) (φ : ℕ → ℝ)
     (hφ : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φ k) (pos : Bool)
@@ -250,7 +250,7 @@ theorem thm40_case_sub (hp : p = 53) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) *
     rcases Nat.eq_zero_or_pos m with h0 | h0
     · simp [eta0m, h0] at h
     · exact h0
-  have h := thm40_case p n (by omega) hn hA3 hS₁ hS0 (hS0.two_step p hk) r hr X (k₁ + k₂) δ hδ a b ha hb π hπ γ hγ e
+  have h := thm40_case p n (by omega) hn hA3 hS₁ hS0 (hS0.two_step p hk) r hr X (k₁ + k₂) δ hδ a b ha hb π hπ e
     hU m d' hd hbd (fun h0 => hb2 (hpos h0)) Fk hF φ hφ pos hsgn
   have hsc : ∀ s : ℝ, (2 : ℝ) ^ (-k₂) * ((2 : ℝ) ^ (k₁ + k₂) * s) = (2 : ℝ) ^ k₁ * s := fun s => by
     rw [← mul_assoc, ← zpow_add₀ two_ne_zero, show -k₂ + (k₁ + k₂) = k₁ by ring]
