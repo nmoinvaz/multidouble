@@ -7,8 +7,9 @@ The constants of the appendix are rational: each is a recursion of sums, product
 `u = 2^{-p}`, the `θ` of the ladder and natural numbers. Each definition here mirrors one of those bounds over `ℚ`,
 with the same recursion, and its `cast_` theorem shows that the mirror's value, cast to `ℝ`, is the bound at the cast
 arguments. An inequality between two such rationals is then decided by the kernel, which computes with
-arbitrary-precision integers, in place of rewriting the real expression step by step. This file mirrors Lemma 13's
-bounds, ADDF's, MUL's `L_m`, the accumulator's closed forms and the part bounds along FINISH.
+arbitrary-precision integers, in place of rewriting the real expression step by step. This file mirrors Lemma 11's
+`D_m` and `X_m`, Lemma 13's bounds, ADDF's, MUL's `L_m`, the accumulator's closed forms and the part bounds along
+FINISH.
 -/
 
 namespace ExpansionBounds
@@ -60,6 +61,14 @@ def GaddfPQ (α : ℕ → ℚ) (β0 Zb : ℚ) : ℕ → ℚ := gPartsQ uq n (add
 def finishPQ (S : ℕ → ℚ) : ℕ → ℕ → ℚ
   | 0 => fun i => if i = 0 then S 0 else 0
   | l + 1 => GaddfPQ uq n (finishPQ S l) (S (l + 1)) (∑ m ∈ range (l + 2), S m)
+
+/-- `D_m` of Lemma 11 -/
+def levDQ (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) : ℕ → ℚ
+  | 0 => A 0
+  | m + 1 => A (m + 1) + T m * uu * levDQ A T uu m / (1 - T m * uu)
+
+/-- `X_m = D_m/(1 - T_m u)` -/
+def levXQ (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) (m : ℕ) : ℚ := levDQ A T uu m / (1 - T m * uu)
 
 /-- the rising factorial -/
 def riseQ (k : ℚ) (r : ℕ) : ℚ := ∏ i ∈ range r, (k + i)
@@ -171,6 +180,17 @@ theorem cast_finishP (S : ℕ → ℚ) :
     have hP : (fun i => ((finishPQ uq n S l i : ℚ) : ℝ)) = finishP p n (fun m => (S m : ℝ)) l :=
       funext (cast_finishP S l)
     simp only [finishPQ, finishP, cast_GaddfP p n h, hP, Rat.cast_sum]
+
+omit h in
+theorem cast_levD (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) :
+    ∀ m, ((levDQ A T uu m : ℚ) : ℝ) = levD (fun k => (A k : ℝ)) T uu m
+  | 0 => by simp [levDQ, levD]
+  | m + 1 => by simp [levDQ, levD, cast_levD A T uu m]
+
+omit h in
+theorem cast_levX (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) (m : ℕ) :
+    ((levXQ A T uu m : ℚ) : ℝ) = levX (fun k => (A k : ℝ)) T uu m := by
+  simp [levXQ, levX, cast_levD]
 
 omit h in
 theorem cast_rise (k : ℚ) (r : ℕ) : ((riseQ k r : ℚ) : ℝ) = rise (k : ℝ) r := by
