@@ -615,11 +615,14 @@ the logarithm the same way against a reference accurate to $2^{-1600}$, which is
 
 \section*{How this work was done}
 
-Nathan Moinvaziri posed the problem and directed the work. Claude, an AI model made by Anthropic, drafted the
-statements and proofs. Further Claude instances checked them independently: one refereed the proofs and the prior
-work, one tested the statements in exact arithmetic without reading the proofs, one refereed the section on sums of
-products, and one recomputed the constants of Appendices~\ref{sec:bounds} to~\ref{sec:sqrt} and~\ref{sec:sloppy}
-to~\ref{sec:explog} from the text alone with programs of its own (\texttt{review/}).
+Claude, an AI model made by Anthropic, wrote the statements and the proofs of this paper under the direction of
+Nathan Moinvaziri, in the quest to solve a physics problem. Claude instances that had not written the proofs checked
+them at every stage. While the paper grew, referees read the proofs and the prior work, and the statements were tested
+in exact arithmetic by an instance that did not read the proofs. The constants were recomputed from the text of the
+appendices alone, with programs that share no code with the paper's scripts (\texttt{review/}). A referee then read
+the finished paper. No step of a proof failed, and the statements, constants and steps that had been put loosely were
+corrected. Since then most of the appendix's lemmas and theorems have been proved in Lean~4, where an incomplete proof
+does not build (\texttt{lean/}, whose README lists them).
 
 \clearpage
 \appendices
