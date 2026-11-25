@@ -21,8 +21,10 @@ written by \texttt{acc\_lean.py}, \texttt{trig\_lean.py} and \texttt{exp\_lean.p
 \texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
 kernel's checks has controls, the same check on a wrong number, a wrong state or a narrower hypothesis, which the
 kernel proves false (\texttt{Controls/}).
-\item Three statements are proved in part. Theorem~\ref{thm:t8} takes the published bounds on its double-word
-start~\cite{JMP17,LLMPR23,MR22} as hypotheses. Theorem~\ref{thm:log} is proved for each case, and its constant at
+\item The three published theorems under the double-word start of Theorem~\ref{thm:t8} are proved as well:
+Theorems~4.1 and~7.1 of~\cite{JMP17}, which~\cite{MR22} proved in Coq, and Theorem~3.5 of~\cite{LLMPR23}
+(\texttt{DWord.lean}, \texttt{DWDiv.lean}, \texttt{DWSqrt.lean}).
+\item Two statements are proved in part. Theorem~\ref{thm:log} is proved for each case, and its constant at
 $n = 8$ is computed (\texttt{explog\_consts.py}). Proposition~\ref{prop:ddexplog} is proved for its start.
 \end{itemize}
 
@@ -61,8 +63,9 @@ Theorem~\ref{thm:t6} & \texttt{Div.lean}, \texttt{DivEval.lean}, \texttt{Div8.le
 Theorem~\ref{thm:t7} & \texttt{Sqrt.lean}, \texttt{SqrtEval.lean}, \texttt{Sqrt8.lean} & \texttt{thm21},
   \texttt{cast\_sqrtDelta}, \texttt{sqrt8} \\
 Theorem~\ref{thm:t8} & \texttt{SqrtDD.lean}, \texttt{SqrtDD8.lean}, \texttt{SqrtDD8Delta.lean},
-  \texttt{DWord.lean}, \texttt{DWDiv.lean}, \texttt{DWSqrt.lean} & \texttt{thm22}, \texttt{ddE0\_8},
-  \texttt{sqrtdd8}, \texttt{dwTimesFP1\_err}, \texttt{dwDivDW2\_err}, \texttt{sqrtDW\_err} \\
+  \texttt{DWord.lean}, \texttt{DWDiv.lean}, \texttt{DWSqrt.lean}, \texttt{SqrtDDStart.lean} & \texttt{thm22},
+  \texttt{ddE0\_8}, \texttt{sqrtdd8}, \texttt{dwTimesFP1\_err}, \texttt{dwDivDW2\_err}, \texttt{sqrtDW\_err},
+  \texttt{thm22\_start}, \texttt{sqrtdd8\_start} \\
 Proposition~\ref{prop:sharp} & \texttt{Sharp.lean}, \texttt{SharpMul.lean}, \texttt{SharpDiv.lean} &
   \texttt{prop24\_mul}, \texttt{prop24\_add}, \texttt{prop24\_addf}, \texttt{prop24\_mulf\_odd},
   \texttt{prop24\_mulf\_even}, \texttt{prop24\_div} \\
