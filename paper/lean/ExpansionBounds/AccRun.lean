@@ -1,5 +1,5 @@
 import ExpansionBounds.AccSum
-import ExpansionBounds.RoundEval
+import ExpansionBounds.Dyadic
 
 /-!
 # The accumulator run on rationals
@@ -318,21 +318,6 @@ theorem cast_finishR (hp : 1 < p) (s : ℕ → ℚ) (hs : ∀ j, F p (s j : ℝ)
 
 /-! ### A run on dyadic data -/
 
-/-- `m/2^k` -/
-def dyQ (mk : ℤ × ℕ) : ℚ := mk.1 / 2 ^ mk.2
-
-/-- a list of dyadic rationals as a function, zero past its end -/
-def dyFn (l : List (ℤ × ℕ)) : ℕ → ℚ := fun i => dyQ (l.getD i (0, 0))
-
-omit [Prec_gt_0 p] in
-theorem dyQ_zero : dyQ (0, 0) = 0 := by simp [dyQ]
-
-omit [Prec_gt_0 p] in
-theorem dyFn_of_le (l : List (ℤ × ℕ)) {i : ℕ} (h : l.length ≤ i) : dyFn l i = 0 := by
-  unfold dyFn
-  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_none h]
-  simp only [Option.getD_none, dyQ_zero]
-
 omit [Prec_gt_0 p] in
 /-- a dep leaves the levels above `n` as they are -/
 theorem depSQ_above : ∀ (k m : ℕ) (e : ℚ) (s : ℕ → ℚ) (j : ℕ), m + k = n → n < j → depSQ p n k m e s j = s j
@@ -525,20 +510,6 @@ theorem half_ulp_cast {q r : ℚ} (hq : q ≠ 0) (h : |r| ≤ (2 : ℚ) ^ (magQ 
     rwa [Rat.cast_abs, Rat.cast_zpow, Rat.cast_ofNat] at this
   · have := (Rat.cast_le (K := ℝ)).mpr h
     rwa [Rat.cast_abs, Rat.cast_zpow, Rat.cast_ofNat] at this
-
-/-- dyadic data that `rnQ` leaves as it is lies in `F p`, as do the zeros past a term's end -/
-theorem dyF_of_all (T : List (List (ℤ × ℕ))) (h : ∀ t ∈ T, ∀ q ∈ t, rnQ p (dyQ q) = dyQ q) :
-    ∀ t ∈ T, ∀ l, F p (dyFn t l : ℝ) := by
-  intro t ht l
-  unfold dyFn
-  rw [List.getD_eq_getElem?_getD]
-  cases hq : t[l]? with
-  | none =>
-    simp only [Option.getD_none, dyQ_zero, Rat.cast_zero]
-    exact F_zero p
-  | some q =>
-    simp only [Option.getD_some]
-    exact (F_iff_rn p _).mpr (h t ht q (List.mem_of_getElem? hq))
 
 /-- every part of every term of dyadic data in `F p` is in `F p` -/
 theorem dyTerms_F (T : List (List (ℤ × ℕ))) (hF : ∀ t ∈ T, ∀ l, F p (dyFn t l : ℝ)) (k i : ℕ) :
