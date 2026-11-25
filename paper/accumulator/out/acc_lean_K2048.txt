@@ -2,3 +2,9 @@ the run gives the stored emulator's result: True
 control, ties away from zero, gives it: False
 |Z - x| / (u^8 |Z|) = 14675797.392; W/|Z| - 1 = -1.262e-29
 every part in F: True ; leading parts positive: True ; |a_(i+1)| <= u |a_i|: True
+the first 256 terms: |Z - x| / (u^8 |Z|) = 0.1029073, between 0.1029 and 0.1030: True; control, the sum moved by u: False
+the first 512 terms: |Z - x| / (u^8 |Z|) = 36.39197, between 36.39 and 36.40: True; control, the sum moved by u: False
+the first 1024 terms: |Z - x| / (u^8 |Z|) = 11805.39, between 11805 and 11806: True; control, the sum moved by u: False
+|Z|(1 - 2^-96) < W < |Z|: True; control, with 2^-97: False
+the first term is 1: True; control, a second part of u: False; the other leading parts in [(1 - 2^-42)u, u): True; control, with 2^-43: False
+each part zero or at most half an ulp of the one before: True; control, a quarter: False
