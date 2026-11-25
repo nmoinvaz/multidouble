@@ -15,8 +15,10 @@ and the constants at $n = 8$ are stated at $p = 53$.
 with the recursion over the reals (\texttt{Eval.lean}, \texttt{DivEval.lean}, \texttt{SqrtEval.lean}). Where exact
 values grow too long the copy rounds up, which the bounds of Lemma~\ref{lem:g} allow because they grow with their
 arguments (\texttt{GMono.lean}, \texttt{TrigEval.lean}, \texttt{ExpEval.lean}). The longest runs are cut into steps
-that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/} and \texttt{Exp8/},
-written by \texttt{acc\_lean.py}, \texttt{trig\_lean.py} and \texttt{exp\_lean.py}).
+that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/}, \texttt{Exp8/},
+and \texttt{Trig2/} and \texttt{Trig4/} for the remark after Theorem~\ref{thm:trig}, written by
+\texttt{acc\_lean.py}, \texttt{trig\_lean.py} and \texttt{exp\_lean.py}). That remark's bounds at $n = 12$ are computed
+(\texttt{trig\_lean.py}), not proved: the kernel would need some eight hours for them.
 \item No declaration depends on an axiom other than \texttt{propext}, \texttt{Classical.choice} and
 \texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
 kernel's checks has controls, the same check on a wrong number, a wrong state or a narrower hypothesis, which the
@@ -84,12 +86,13 @@ Lemma~\ref{lem:horner} & \texttt{Horner.lean} & \texttt{lemma\_horner} \\
 Lemma~\ref{lem:sincosr} & \texttt{SinCos.lean}, \texttt{Taylor.lean} & \texttt{lemma34\_sin}, \texttt{lemma34\_cos},
   \texttt{sin\_taylor}, \texttt{cos\_taylor} \\
 Theorem~\ref{thm:trig} & \texttt{Trig.lean}, \texttt{TrigTan.lean}, \texttt{TrigEval.lean}, \texttt{TanEval.lean},
-  \texttt{Trig8.lean}, \texttt{Tan8.lean}, \texttt{TrigN.lean} & \texttt{thm35\_sincos}, \texttt{thm35\_small},
-  \texttt{thm35\_tan},
+  \texttt{Trig8.lean}, \texttt{Tan8.lean}, \texttt{TrigN.lean}, \texttt{Trig2.lean}, \texttt{Trig4.lean} &
+  \texttt{thm35\_sincos}, \texttt{thm35\_small}, \texttt{thm35\_tan},
   \texttt{thm35\_tan\_small}, \texttt{sinTail\_le}, \texttt{cosTail\_le}, \texttt{tanCT\_le},
   \texttt{thm35\_sincos\_8}, \texttt{thm35\_tan\_8}, \texttt{thm35\_sincos\_8\_half},
   \texttt{thm35\_sincos\_8\_32}, \texttt{thm35\_tan\_8\_half}, \texttt{thm35\_tan\_8\_32},
-  \texttt{thm35\_sincos\_tab}, \texttt{thm35\_tan\_tab} \\
+  \texttt{thm35\_sincos\_tab}, \texttt{thm35\_tan\_tab}, \texttt{thm35\_sincos\_2}, \texttt{thm35\_tan\_2},
+  \texttt{thm35\_sincos\_4}, \texttt{thm35\_tan\_4} \\
 Lemma~\ref{lem:expred} & \texttt{ExpRed.lean}, \texttt{ExpRed8.lean} & \texttt{lemma\_expred\_a},
   \texttt{lemma\_expred\_b}, \texttt{lemma38\_8} \\
 Lemma~\ref{lem:core} & \texttt{ExpCore.lean} & \texttt{lemma\_core} \\
