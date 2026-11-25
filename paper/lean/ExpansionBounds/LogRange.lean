@@ -137,16 +137,16 @@ theorem thm42_case_ladder (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n)
     (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
     (pos : Bool) (hsgn : if pos then 0 ≤ ∑ i ∈ range n, r i else ∑ i ∈ range n, r i ≤ 0)
     (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
-    (hd : 1 ≤ d') (hbd : coreBp e m b < d' + 2) (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
+    (hd : 1 ≤ d') (hbd : coreBp n e m b 0 < d' + 2) (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φF : ℕ → ℝ) (hφF : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φF k)
     (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |(2 : ℝ) ^ k * x i| ≤ πx i) (B eφ et ec : ℤ)
     (hUφ : expU p n γ (logPhi p n k x) < (2 : ℝ) ^ (eφ + 1))
-    (hUt : expU p n γ (expCore p n e m r Fk d') < (2 : ℝ) ^ (et + 1))
-    (hUc : expU p n γ (logC p n B eφ et (logPhi p n k x) (expCore p n e m r Fk d')) < (2 : ℝ) ^ (ec + 1))
+    (hUt : expU p n γ (expCore p n id id e m r Fk d') < (2 : ℝ) ^ (et + 1))
+    (hUc : expU p n γ (logC p n B eφ et (logPhi p n k x) (expCore p n id id e m r Fk d')) < (2 : ℝ) ^ (ec + 1))
     (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q)
     (hC : Real.exp E - 1 + (logCase4 p n E pos e m a b δ π Fk φF d' πx B).1 < 1) :
-    |(logOp p n y0 x k (expCore p n e m r Fk d') B eφ et ec F' q).sum - Real.log (∑ i ∈ range n, x i)| ≤
+    |(logOp p n y0 x k (expCore p n id id e m r Fk d') B eφ et ec F' q).sum - Real.log (∑ i ∈ range n, x i)| ≤
       logBound p n ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B :=
   thm42_case p n hp hn hA3 x hx hX0 y0 hy0 πy hπy ℓ E hℓ hE r hr k δ hδ a b ha hb π hπ pos hsgn γ hγ e hU m d' hd hbd
     Fk hF φF hφF πx hπx0 hπx (log_range_half_two p n hn θ hθ hρ x hH hX0 _ _ k E δ b hE hδ hb hc) B eφ et ec hUφ hUt

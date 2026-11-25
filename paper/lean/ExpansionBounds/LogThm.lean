@@ -674,8 +674,8 @@ omit [Prec_gt_0 p] in
 noncomputable def logCase4 (E : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b δ : ℝ) (π : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ)
     (φF : ℕ → ℝ) (d' : ℕ) (πx : ℕ → ℝ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
   logC4 p n (GaddfP' p n πx (logPhiB pos E a b δ + ∑ i ∈ Ico 1 n, πx i) (logPhiB pos E a b δ))
-    (fun i => max ((coreBound p n pos e m a b π Fk φF d').2 i) 0) (logPhiB pos E a b δ)
-    (coreT pos (coreBp e m b) m) (coreBound p n pos e m a b π Fk φF d').1 E δ b (logXi pos E a b δ) B
+    (fun i => max ((coreBound p n 0 0 pos e m a b π Fk φF d').2 i) 0) (logPhiB pos E a b δ)
+    (coreT pos (coreBp n e m b 0) m) (coreBound p n 0 0 pos e m a b π Fk φF d').1 E δ b (logXi pos E a b δ) B
 
 omit [Prec_gt_0 p] in
 /-- `𝓔(ℓ) = ε_y + P` with `(ε_y, ·) = G_ADD(π^y, ω_r; ℓ + P)`, `C = e^E - 1 + E_c` -/
@@ -699,17 +699,17 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
     (ha : a ≤ |∑ i ∈ range n, r i|) (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
     (pos : Bool) (hsgn : if pos then 0 ≤ ∑ i ∈ range n, r i else ∑ i ∈ range n, r i ≤ 0)
     (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
-    (hd : 1 ≤ d') (hbd : coreBp e m b < d' + 2) (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
+    (hd : 1 ≤ d') (hbd : coreBp n e m b 0 < d' + 2) (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φF : ℕ → ℝ) (hφF : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φF k)
     (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |(2 : ℝ) ^ k * x i| ≤ πx i)
     (hx0 : 1 / 2 ≤ (2 : ℝ) ^ k * x 0 ∧ (2 : ℝ) ^ k * x 0 ≤ 2) (B eφ et ec : ℤ)
     (hUφ : expU p n γ (logPhi p n k x) < (2 : ℝ) ^ (eφ + 1))
-    (hUt : expU p n γ (expCore p n e m r Fk d') < (2 : ℝ) ^ (et + 1))
-    (hUc : expU p n γ (logC p n B eφ et (logPhi p n k x) (expCore p n e m r Fk d')) < (2 : ℝ) ^ (ec + 1))
+    (hUt : expU p n γ (expCore p n id id e m r Fk d') < (2 : ℝ) ^ (et + 1))
+    (hUc : expU p n γ (logC p n B eφ et (logPhi p n k x) (expCore p n id id e m r Fk d')) < (2 : ℝ) ^ (ec + 1))
     (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q)
     (hC : Real.exp E - 1 + (logCase4 p n E pos e m a b δ π Fk φF d' πx B).1 < 1) :
-    |(logOp p n y0 x k (expCore p n e m r Fk d') B eφ et ec F' q).sum - Real.log (∑ i ∈ range n, x i)| ≤
+    |(logOp p n y0 x k (expCore p n id id e m r Fk d') B eφ et ec F' q).sum - Real.log (∑ i ∈ range n, x i)| ≤
       logBound p n ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B := by
   set X := ∑ i ∈ range n, x i with hXd
   set Y0 := ∑ i ∈ range n, y0 i with hY0d
@@ -717,14 +717,14 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hE0 : 0 ≤ E := (abs_nonneg _).trans hE
   have hδ0 : 0 ≤ δ := (abs_nonneg _).trans hδ
   -- Lemma 39
-  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 r hr R hRd a b ha hb π hπ γ hγ e hU m d' hd hbd Fk hF φF hφF pos
-    hsgn
-  set t := expCore p n e m r Fk d' with htd
-  set Em := (coreBound p n pos e m a b π Fk φF d').1 with hEm
-  set ψ := fun i => max ((coreBound p n pos e m a b π Fk φF d').2 i) 0 with hψd
+  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 (Scl.id p) (Scl.id p) r hr R hRd a b ha hb π hπ γ hγ e hU m d' hd
+    hbd (fun h => absurd h (lt_irrefl 0)) Fk hF φF hφF pos hsgn
+  set t := expCore p n id id e m r Fk d' with htd
+  set Em := (coreBound p n 0 0 pos e m a b π Fk φF d').1 with hEm
+  set ψ := fun i => max ((coreBound p n 0 0 pos e m a b π Fk φF d').2 i) 0 with hψd
   have hψ0 : ∀ i, 0 ≤ ψ i := fun i => le_max_right _ _
   have hψ : ∀ i < n, |t i| ≤ ψ i := fun i hi => (c2 i hi).trans (le_max_left _ _)
-  set tb := coreT pos (coreBp e m b) m with htb
+  set tb := coreT pos (coreBp n e m b 0) m with htb
   -- `2^kx = e^{-e_0 - r_e}` with `e_0 = y_0 - ln x` and `r_e = -y_0 - k ln 2`
   set e0 := Y0 - Real.log X with he0d
   set re := -Y0 - k * Real.log 2 with hred
@@ -780,7 +780,8 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hπφ0 : ∀ i, 0 ≤ πφ i := gParts_nonneg p n (addfX_nonneg p n hπx0 (by
     have := sum_nonneg fun i (_ : i ∈ Ico 1 n) => hπx0 i; linarith)) hφb0 le_rfl
   -- step (4)
-  obtain ⟨d1, d2, d3, d4⟩ := log_step4 p n hp hn hA3 φ t (fun i _ => f3 i) (expCore_F p n hp hn hA3 e m r hr Fk hF d')
+  obtain ⟨d1, d2, d3, d4⟩ := log_step4 p n hp hn hA3 φ t (fun i _ => f3 i)
+    (expCore_F p n hp hn hA3 (Scl.id p) (Scl.id p) e m r hr Fk hF d')
     πφ ψ hπφ0 hψ0 (fun i _ => f2 i) hψ hδ (show |e0| ≤ E from hE) hb hφs hξ hφb c1 c3 B eφ et γ hγ hUφ hUt
   set c := logC p n B eφ et φ t with hcd
   set c4 := logC4 p n πφ ψ φb tb Em E δ b ξ B with hc4
