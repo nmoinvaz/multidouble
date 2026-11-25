@@ -1,4 +1,4 @@
-import ExpansionBounds.AccRun
+import ExpansionBounds.Dyadic
 import ExpansionBounds.TrigEval
 import ExpansionBounds.Trig8.Data
 
