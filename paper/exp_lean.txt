@@ -1,0 +1,6 @@
+74 groups, 344 cases, 1426 steps of Horner's rule
+the largest: 3.660060474 u^8 at k != 0, (m, d, e_lo, e_hi) = (5, 43, -2, -2), r < 0, |r| in [0.332708, 0.346574]
+within 3.661 u^8: True
+control, 3.66 u^8 must not hold: True
+agrees with explog_consts.py (3.660060455 u^8) to 7 digits: True
+control, no error of the last ADDF, falls below explog_consts.py: True

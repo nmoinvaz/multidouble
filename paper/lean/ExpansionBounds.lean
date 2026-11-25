@@ -61,3 +61,4 @@ import ExpansionBounds.TanEval
 import ExpansionBounds.Tan8
 import ExpansionBounds.ExpRed8
 import ExpansionBounds.ExpEval
+import ExpansionBounds.Exp8
