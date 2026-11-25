@@ -90,3 +90,7 @@ on the rational mirrors of `Eval.lean`, and adds no axiom: `decide +kernel` redu
 
 Lean is pinned to v4.34.1, and Mathlib and cslib to their v4.34.1 tags. FloatSpec pins v4.34.0-rc2, whose executables
 abort at thread exit on macOS 27 ([lean4#15087](https://github.com/leanprover/lean4/issues/15087)).
+
+`Controls/` is a second library, built with the proofs. `Controls/Axioms.lean` reads the axioms that Lean recorded for
+every declaration of `ExpansionBounds`, the generated ones included, and fails the build on any but those three; its
+own control is a theorem that rests on an axiom declared there, which the same test must report.
