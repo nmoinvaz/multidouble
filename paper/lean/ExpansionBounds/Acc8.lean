@@ -39,11 +39,6 @@ theorem le_two_rpow_u8 (hp : p = 53) {c x : ℝ} {m d N K : ℕ} (hd : 0 < d) (h
     _ = (m : ℝ) / d * u p * u p ^ 8 := by ring
     _ ≤ (2 : ℝ) ^ x * u p ^ 8 := mul_le_mul_of_nonneg_right h1 (pow_nonneg (u_pos p).le 8)
 
-/-- `u = 2^{-53}` as the cast of a rational -/
-theorem u_53_rat (hp : p = 53) : ((1 / 9007199254740992 : ℚ) : ℝ) = u p := by
-  rw [u_53 p hp]
-  norm_num
-
 /-- `Φ ≤ 2^{-47}u^8` at `K = 1024` on `H(2)`: the kernel evaluates the rational mirror `accPhiQ` -/
 theorem accPhi8_1024 (hp : p = 53) : accPhi p 8 2 1024 ≤ u p ^ 8 / 2 ^ 47 := by
   have h := u_53_rat p hp
