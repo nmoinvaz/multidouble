@@ -53,6 +53,7 @@ import ExpansionBounds.Sqrt8
 import ExpansionBounds.LogRange
 import ExpansionBounds.RoundEval
 import ExpansionBounds.Dyadic
+import ExpansionBounds.DWord
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono
