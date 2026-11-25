@@ -1,12 +1,12 @@
-import ExpansionBounds.SqrtDD
-import ExpansionBounds.Cor18
+import ExpansionBounds.SqrtEval
+import ExpansionBounds.Kappa8
 
 /-!
 # Theorem 22 (`thm:t8`) at `n = 8` and `p = 53`: the start
 
 SQRT^DD's start constants evaluated in rational arithmetic, as `sqrt_consts.py` computes them: the double-word start
 is within `E_0 ≤ 22.125u² + 72u³` on `H(2)` and `19.125u² + 58u³` on `H(1)`, and the second-order step leaves
-`E_1 ≤ 2^{-303}` on both. The step's six `G` bounds are evaluated once each through simp's cache.
+`E_1 ≤ 2^{-303}` on both. The kernel evaluates `E_1` on its rational mirror `ddE1Q` (`SqrtEval.lean`).
 -/
 
 namespace ExpansionBounds
@@ -26,26 +26,34 @@ theorem ddE0_8 (hp : p = 53) :
   have hu := u_53 p hp
   constructor <;> norm_num [ddE0, ddEta1, ddEta2, ddEta3, hu, max_def]
 
-set_option maxHeartbeats 20000000 in
+/-- `E_1` of SQRT^DD on `H(θ)` at `p = 53` is the cast of its rational mirror -/
+theorem ddE1_53 (hp : p = 53) (n : ℕ) (θ : ℚ) :
+    (sqrtB2 p n (fun i => abar ((θ : ℝ) * u p) i / 2) (ddE0 p (θ * u p)) (ddPi0 p (θ * u p))).1 =
+      ((ddE1Q (1 / 9007199254740992) n (θ * (1 / 9007199254740992)) : ℚ) : ℝ) := by
+  have h := u_53_rat p hp
+  have hρ : ((θ * (1 / 9007199254740992) : ℚ) : ℝ) = θ * u p := by
+    rw [← h]
+    exact Rat.cast_mul _ _
+  rw [cast_ddE1 p n h, hρ]
+
 /-- Theorem 22 at `n = 8`: the second-order step leaves `E_1 ≤ 2^{-303}` on `H(2)` -/
 theorem ddE1_8_two (hp : p = 53) :
     (sqrtB2 p 8 (fun i => abar (2 * u p) i / 2) (ddE0 p (2 * u p)) (ddPi0 p (2 * u p))).1 ≤ (2 : ℝ) ^ (-303 : ℤ) := by
-  have hu := u_53 p hp
-  rw [← u5_div_two38 p hp]
-  norm_num (config := { maxSteps := 20000000 }) [sqrtB2, sqrtEm, sqrtEg, sqrtPg, sqrtZc, sqrtL0, sqrtEc, sqrtChi,
-    ddE0, ddEta1, ddEta2, ddEta3, ddPi0, abar, GmulE, GmulP, GaddE, GaddP, GaddfE', GaddfP', gErr, gParts, mulX, mulR,
-    mulDelta, mulA, mulP, mulT, levX, levD, pairX, pairR, pairA, addfX, addfEps, Vb, sigmaX, us, id, hu,
-    ← Finset.Ico_add_one_add_one_eq_Ioc, sum_Ico_eq_sum_range, sum_range_succ, min_def, max_def]
+  have hc := ddE1_53 p hp 8 2
+  rw [Rat.cast_ofNat] at hc
+  have hq : ddE1Q (1 / 9007199254740992) 8 (2 * (1 / 9007199254740992)) ≤ (1 / 9007199254740992) ^ 5 / 2 ^ 38 := by
+    decide +kernel
+  rw [← u5_div_two38 p hp, hc, ← u_53_rat p hp]
+  exact_mod_cast hq
 
-set_option maxHeartbeats 20000000 in
 /-- Theorem 22 at `n = 8`: the second-order step leaves `E_1 ≤ 2^{-303}` on `H(1)` -/
 theorem ddE1_8_one (hp : p = 53) :
     (sqrtB2 p 8 (fun i => abar (1 * u p) i / 2) (ddE0 p (1 * u p)) (ddPi0 p (1 * u p))).1 ≤ (2 : ℝ) ^ (-303 : ℤ) := by
-  have hu := u_53 p hp
-  rw [← u5_div_two38 p hp]
-  norm_num (config := { maxSteps := 20000000 }) [sqrtB2, sqrtEm, sqrtEg, sqrtPg, sqrtZc, sqrtL0, sqrtEc, sqrtChi,
-    ddE0, ddEta1, ddEta2, ddEta3, ddPi0, abar, GmulE, GmulP, GaddE, GaddP, GaddfE', GaddfP', gErr, gParts, mulX, mulR,
-    mulDelta, mulA, mulP, mulT, levX, levD, pairX, pairR, pairA, addfX, addfEps, Vb, sigmaX, us, id, hu,
-    ← Finset.Ico_add_one_add_one_eq_Ioc, sum_Ico_eq_sum_range, sum_range_succ, min_def, max_def]
+  have hc := ddE1_53 p hp 8 1
+  rw [Rat.cast_one] at hc
+  have hq : ddE1Q (1 / 9007199254740992) 8 (1 * (1 / 9007199254740992)) ≤ (1 / 9007199254740992) ^ 5 / 2 ^ 38 := by
+    decide +kernel
+  rw [← u5_div_two38 p hp, hc, ← u_53_rat p hp]
+  exact_mod_cast hq
 
 end ExpansionBounds
