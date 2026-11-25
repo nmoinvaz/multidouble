@@ -118,7 +118,8 @@ $n = 4$, and Section~\ref{sec:qd} lists the differences:
   (Theorem~\ref{thm:renorm}), and the other bounds rest on this.
 \end{itemize}
 \end{samepage}
-The main text states the results and shows why they hold. The full statements and proofs are in the appendix.
+The main text states the results and shows why they hold. The full statements and proofs are in the appendix, and
+its last section gives the Lean~4 proof of each statement (Table~\ref{tab:lean}).
 
 \section{Expansions and their arithmetic}
 
@@ -615,7 +616,12 @@ every ratio far below its stated value. \\ \addlinespace
 multidouble's tests & The bound of Theorem~\ref{thm:main} against exact arithmetic on every random input that meets
 the hypotheses, with the inputs of Proposition~\ref{prop:worst} and Table~\ref{tab:inputs} pinned; the bounds of the
 exponential and the logarithm against a reference accurate to $2^{-1600}$. & The reference is checked against planted
-truth. \\
+truth. \\ \addlinespace
+Lean & The statements of the appendices are proved in Lean~4, and its kernel evaluates their constants
+(Appendix~\ref{sec:lean}). Table~\ref{tab:lean} is checked against the sources: every file is named, and every
+theorem named is declared in its files (\texttt{lean\_refs.py}). & The build reports a theorem that rests on a planted
+axiom, and the kernel proves each check false on a wrong number or state (\texttt{Controls/}). The table's check
+reports a theorem and a file that do not exist. \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -628,9 +634,9 @@ them at every stage. While the paper grew, referees read the proofs and the prio
 in exact arithmetic by an instance that did not read the proofs. The constants were recomputed from the text of the
 appendices alone, with programs that share no code with the paper's scripts (\texttt{review/}). A referee then read
 the finished paper. No step of a proof failed, and the statements, constants and steps that had been put loosely were
-corrected. Since then most of the appendix's lemmas and theorems have been proved in Lean~4. The proofs are in
-\texttt{paper/lean/} of the repository~\cite{md}, added after the commit cited there. Its README lists them, and the
-build treats warnings as errors, so it fails on a proof left unfinished.
+corrected. Since then the statements of the appendices have been proved in Lean~4, three of them in part
+(Appendix~\ref{sec:lean}). The proofs are in \texttt{paper/lean/} of the repository~\cite{md}, added after the commit
+cited there, and the build fails on a proof left unfinished.
 
 \clearpage
 \appendices
@@ -639,7 +645,10 @@ build treats warnings as errors, so it fails on a proof left unfinished.
 \input{expansion-error-bounds-sloppy}
 \input{expansion-error-bounds-trig}
 \input{expansion-error-bounds-explog}
+\input{expansion-error-bounds-lean}
 
+% the references left for the last page, under Table~\ref{tab:lean}, in two columns of four
+\IEEEtriggeratref{25}
 \begin{thebibliography}{99}
 \bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
 132--143, 1991. doi:10.1109/ARITH.1991.145549.
@@ -692,6 +701,14 @@ functions \texttt{exp} and \texttt{log} of \texttt{src/dd\_real.cpp} and \texttt
 \url{https://github.com/BL-highprecision/QD}.
 \bibitem{Sterbenz74} P. H. Sterbenz. \emph{Floating-Point Computation}. Prentice-Hall, Englewood Cliffs, NJ, 1974.
 ISBN 0-13-322495-3.
+\bibitem{Lean4} L. de Moura, S. Ullrich. The Lean 4 theorem prover and programming language. \emph{CADE 28}, LNCS
+12699, 625--635, 2021. doi:10.1007/978-3-030-79876-5\_37.
+\bibitem{Mathlib} The mathlib Community. The Lean mathematical library. \emph{CPP 2020}, 367--381, 2020.
+doi:10.1145/3372885.3373824.
+\bibitem{FloatSpec} Beneficial AI Foundation. FloatSpec: formally verified float implementation with Lean~4. Commit
+158263e, 12 September 2026. \url{https://github.com/Beneficial-AI-Foundation/FloatSpec}.
+\bibitem{BM11} S. Boldo, G. Melquiond. Flocq: a unified library for proving floating-point algorithms in Coq.
+\emph{ARITH-20}, 243--252, 2011. doi:10.1109/ARITH.2011.40.
 \end{thebibliography}
 
 \end{document}
