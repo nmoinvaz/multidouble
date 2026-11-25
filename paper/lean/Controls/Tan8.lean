@@ -40,4 +40,26 @@ example : ¬ tan8Chk trig8T (trig8T ^ 2 / (6 - trig8T ^ 2)) (trig8T ^ 2 / (2 * c
 example : ¬ tanHiQ trig8T / trig8T - 1 ≤ 1 / 4 * trig8U ^ 8 := by
   decide +kernel
 
+/-! ### The buckets below the top one -/
+
+set_option maxHeartbeats 4000000 in
+/-- the top bucket's `C^T` is not within the bound of the buckets with `|r_0| < 1/2` -/
+example : ¬ tan8CtLe (tan8Low 1) 0 41 41 (dySt trig8_s0_39) (dySt trig8_c0_39) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- `C^T` of the bucket from `1/4` to `1/2` is not below `4.800525u^8` -/
+example : ¬ tan8CtLe (4800525 / 1000000) 1 37 38 (dySt trig8_s1_35) (dySt trig8_c1_36) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- nor within the bound of the buckets with `|r_0| < 2^{-5}` -/
+example : ¬ tan8CtLe (tan8Low 5) 1 37 38 (dySt trig8_s1_35) (dySt trig8_c1_36) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- `C^T` of bucket 5 is not below `4.002770u^8` -/
+example : ¬ tan8CtLe (4002770 / 1000000) 5 24 24 (dySt trig8_s5_22) (dySt trig8_c5_22) := by
+  decide +kernel
+
 end ExpansionBounds

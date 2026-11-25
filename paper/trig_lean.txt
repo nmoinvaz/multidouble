@@ -35,3 +35,6 @@ bucket 0 of the tangent agrees with trig_consts.py to 9 digits: True
 bucket 0 agrees with trig_consts.py to 50 digits: True
 control, no truncation term, falls below trig_consts.py: True
 control, the ladder H(1) in the top bucket, must not hold: True
+|r_0| < 1/2: C 2.175821971 u^8 <= 2.175822 u^8 and C^T 4.800525568 u^8 <= 4.800526 u^8: True
+|r_0| < 2^-5: C 2.000705468 u^8 <= 2.000706 u^8 and C^T 4.002770921 u^8 <= 4.002771 u^8: True
+control, the bounds for |r_0| < 2^-5 hold from |r_0| < 1/2 on: False
