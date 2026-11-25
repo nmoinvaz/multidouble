@@ -47,3 +47,4 @@ import ExpansionBounds.Acc8Sum
 import ExpansionBounds.Eval
 import ExpansionBounds.DivEval
 import ExpansionBounds.DivN
+import ExpansionBounds.SqrtEval
