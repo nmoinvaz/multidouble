@@ -7,8 +7,10 @@ import ExpansionBounds.Sqrt
 
 LOG's steps (2) to (5) after its start `y_0`: `(k, t)` by EXP's reduction and core on `-y_0`, `x' = 2^k x`,
 `φ = ADDF(x', -1)`, `c` from `φ` and `t`, Horner's rule for `log(1 + c)` and the last ADD. The products of steps (4) and
-(5) are formed on a factor scaled by a power of two; the exponent range is unbounded, so the scalings are exact and
-`η_0 = 0`.
+(5) are formed on a factor scaled by a power of two. The scalings that can leave the normal range are rounded
+(`Scl`): EXP's by `2^{-m}` within `η₁` and its scaling back within `η₂`, step (3)'s by `2^k` within `η_x`, step (4)'s
+scalings back of `p` within `η_p`, and step (5)'s of each `c ⊗ v` within `η_c`. In binary64 these are `η_0[m > 0]`,
+`η_0`, `2η_0`, `2η_0` and `η_0`, with `η_0 = 2^{-1075}`; with an unbounded exponent range all are zero.
 -/
 
 namespace ExpansionBounds
@@ -18,23 +20,38 @@ open Finset
 variable (p : ℤ) (n : ℕ) [Prec_gt_0 p]
 
 omit [Prec_gt_0 p] in
-/-- `2^e MUL(2^{-e}a, b)`: LOG's product with the factor `a` scaled near 1 -/
-noncomputable def smulOp (e : ℤ) (a b : ℕ → ℝ) : List ℝ :=
-  (mulOp p n (fun i => (2 : ℝ) ^ (-e) * a i) b).map fun v => (2 : ℝ) ^ e * v
-
-omit [Prec_gt_0 p] in
-theorem getD_map_mul (l : List ℝ) (c : ℝ) (i : ℕ) : (l.map fun v => c * v).getD i 0 = c * l.getD i 0 := by
-  rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_map]
-  cases l[i]? <;> simp
+/-- `2^e MUL(2^{-e}a, b)`: LOG's product with the factor `a` scaled near 1, the scaling back rounded by `S` -/
+noncomputable def smulOp (S : ℝ → ℝ) (e : ℤ) (a b : ℕ → ℝ) : List ℝ :=
+  (mulOp p n (fun i => (2 : ℝ) ^ (-e) * a i) b).map fun v => S ((2 : ℝ) ^ e * v)
 
 omit [Prec_gt_0 p] in
 theorem sum_map_mul (l : List ℝ) (c : ℝ) : (l.map fun v => c * v).sum = c * l.sum := by
   induction l <;> simp [*, mul_add]
 
-/-- the scaled product is within `G_MUL`'s bounds, which scale with the factor -/
-theorem smulOp_within (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (e : ℤ) :
-    MulWithin p n (smulOp p n e) 0 := by
+omit [Prec_gt_0 p] in
+/-- a part of a mapped list is the image of a part, or zero past its end -/
+theorem getD_map_cases (l : List ℝ) (f : ℝ → ℝ) (i : ℕ) :
+    (l.map f).getD i 0 = f (l.getD i 0) ∨ (l.map f).getD i 0 = 0 := by
+  rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_map]
+  cases l[i]? <;> simp
+
+omit [Prec_gt_0 p] in
+theorem abs_sum_map_sub_le (l : List ℝ) (f g : ℝ → ℝ) {η : ℝ} (h : ∀ v, |f v - g v| ≤ η) :
+    |(l.map f).sum - (l.map g).sum| ≤ l.length * η := by
+  induction l with
+  | nil => simp
+  | cons v l ih =>
+    simp only [List.map_cons, List.sum_cons, List.length_cons, Nat.cast_add, Nat.cast_one]
+    rw [show f v + (l.map f).sum - (g v + (l.map g).sum) = (f v - g v) + ((l.map f).sum - (l.map g).sum) by ring,
+      add_mul, one_mul]
+    exact (abs_add_le _ _).trans (by linarith [h v])
+
+/-- the scaled product is within `G_MUL`'s bounds, which scale with the factor, and the scaling back moves each part by
+at most `η` -/
+theorem smulOp_within (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {S : ℝ → ℝ}
+    (hS : Scl p η S) (e : ℤ) : MulWithin p n (smulOp p n S e) η := by
   intro a b α β Zb ha hb hα hβ hZ
+  have hη := hS.nonneg
   have hc : (0 : ℝ) < (2 : ℝ) ^ (-e) := by positivity
   have hce : (2 : ℝ) ^ e * (2 : ℝ) ^ (-e) = 1 := by rw [← zpow_add₀ two_ne_zero]; simp
   have h := mul_G p n hp hn hA3 (fun i => (2 : ℝ) ^ (-e) * a i) b (fun i => (2 : ℝ) ^ (-e) * α i) β
@@ -46,23 +63,42 @@ theorem smulOp_within (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u
   simp only [one_mul, mul_one] at hG
   rw [hG.1] at h
   obtain ⟨h1, h2, h3, h4⟩ := h
-  simp only [mul_zero, add_zero, smulOp]
-  refine ⟨?_, fun i => ?_, fun i => ?_, by rw [List.length_map]; exact h4⟩
-  · rw [sum_map_mul]
-    have e1 : (∑ i ∈ range n, a i) * (∑ j ∈ range n, b j) -
-        (2 : ℝ) ^ e * (mulOp p n (fun i => (2 : ℝ) ^ (-e) * a i) b).sum =
-        (2 : ℝ) ^ e * ((∑ i ∈ range n, (2 : ℝ) ^ (-e) * a i) * (∑ j ∈ range n, b j) -
-          (mulOp p n (fun i => (2 : ℝ) ^ (-e) * a i) b).sum) := by
+  simp only [smulOp]
+  obtain ⟨l, hl⟩ : ∃ l, l = mulOp p n (fun i => (2 : ℝ) ^ (-e) * a i) b := ⟨_, rfl⟩
+  rw [← hl] at h1 h2 h3 h4 ⊢
+  -- the exact scaling back
+  have hex : |(∑ i ∈ range n, a i) * (∑ j ∈ range n, b j) - (2 : ℝ) ^ e * l.sum| ≤ GmulE p n α β Zb := by
+    have e1 : (∑ i ∈ range n, a i) * (∑ j ∈ range n, b j) - (2 : ℝ) ^ e * l.sum =
+        (2 : ℝ) ^ e * ((∑ i ∈ range n, (2 : ℝ) ^ (-e) * a i) * (∑ j ∈ range n, b j) - l.sum) := by
       rw [← mul_sum, mul_sub, ← mul_assoc, ← mul_assoc, hce, one_mul]
     rw [e1, abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ e)]
     calc (2 : ℝ) ^ e * |_| ≤ (2 : ℝ) ^ e * ((2 : ℝ) ^ (-e) * GmulE p n α β Zb) :=
           mul_le_mul_of_nonneg_left h1 (by positivity)
       _ = GmulE p n α β Zb := by rw [← mul_assoc, hce, one_mul]
-  · rw [getD_map_mul, abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ e)]
+  have hpart : ∀ i, |(2 : ℝ) ^ e * l.getD i 0| ≤ GmulP p n α β Zb i := fun i => by
+    rw [abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ e)]
     calc (2 : ℝ) ^ e * |_| ≤ (2 : ℝ) ^ e * ((2 : ℝ) ^ (-e) * GmulP p n α β Zb i) :=
           mul_le_mul_of_nonneg_left ((h2 i).trans_eq (hG.2 i)) (by positivity)
       _ = GmulP p n α β Zb i := by rw [← mul_assoc, hce, one_mul]
-  · rw [getD_map_mul]; exact F_zpow_mul p _ (h3 i)
+  refine ⟨?_, fun i => ?_, fun i => ?_, by rw [List.length_map]; exact h4⟩
+  · have hd := abs_sum_map_sub_le l (fun v => S ((2 : ℝ) ^ e * v)) (fun v => (2 : ℝ) ^ e * v) fun v => hS.err _
+    rw [sum_map_mul] at hd
+    have hlen : (l.length : ℝ) * η ≤ n * η := mul_le_mul_of_nonneg_right (by exact_mod_cast h4) hη
+    rw [show (∑ i ∈ range n, a i) * (∑ j ∈ range n, b j) - (l.map fun v => S ((2 : ℝ) ^ e * v)).sum =
+      ((∑ i ∈ range n, a i) * (∑ j ∈ range n, b j) - (2 : ℝ) ^ e * l.sum) -
+        ((l.map fun v => S ((2 : ℝ) ^ e * v)).sum - (2 : ℝ) ^ e * l.sum) by ring]
+    exact (abs_sub _ _).trans (by linarith)
+  · rcases getD_map_cases l (fun v => S ((2 : ℝ) ^ e * v)) i with h | h
+    · rw [h]
+      have t := abs_sub_abs_le_abs_sub (S ((2 : ℝ) ^ e * l.getD i 0)) ((2 : ℝ) ^ e * l.getD i 0)
+      linarith [hS.err ((2 : ℝ) ^ e * l.getD i 0), hpart i]
+    · rw [h, abs_zero]
+      linarith [(abs_nonneg _).trans (hpart i)]
+  · rcases getD_map_cases l (fun v => S ((2 : ℝ) ^ e * v)) i with h | h
+    · rw [h]
+      exact hS.mem _ (F_zpow_mul p _ (h3 i))
+    · rw [h]
+      exact F_zero p
 
 /-! ## The series of `log(1 + c)` -/
 
@@ -125,27 +161,31 @@ omit [Prec_gt_0 p] in
 noncomputable def logV (C : ℝ) (q i : ℕ) : ℝ := ∑ l ∈ range (q + 1 - i), C ^ l / ((i + l : ℕ) : ℝ)
 
 /-- step (5): `y_c = c` where `e_c < -B - 13`; otherwise `h` by Horner's rule on the `F'_i` with
-`c ⊗ v = 2^{e_c}MUL(2^{-e_c}c, v)`, and `y_c = c ⊗ ADDF(c ⊗ h, 1)` -/
-noncomputable def logYc (B ec : ℤ) (c : ℕ → ℝ) (F' : ℕ → ℕ → ℝ) (q : ℕ) : ℕ → ℝ :=
+`c ⊗ v = 2^{e_c}MUL(2^{-e_c}c, v)`, its scaling back rounded by `S`, and `y_c = c ⊗ ADDF(c ⊗ h, 1)` -/
+noncomputable def logYc (S : ℝ → ℝ) (B ec : ℤ) (c : ℕ → ℝ) (F' : ℕ → ℕ → ℝ) (q : ℕ) : ℕ → ℝ :=
   if ec < -B - 13 then c else
-    pt (smulOp p n ec c (pt (addfOp p n (pt (smulOp p n ec c (hornerP p n (smulOp p n ec) c F' q (q - 2)))) 1)))
+    pt (smulOp p n S ec c (pt (addfOp p n (pt (smulOp p n S ec c (hornerP p n (smulOp p n S ec) c F' q (q - 2))))
+      1)))
 
 omit [Prec_gt_0 p] in
-/-- step (5)'s bounds: `(e_2, π^h_2)` of Lemma 33 for `z = c`, `z̄ = C`, `π^z = χ`;
-`(ε^h, ω^h) = G_MUL(χ, π^h_2; C(v_2 + e_2))`, `h̄ = C(v_2 + e_2) + ε^h`,
-`(ε^g, ω^g) = G_ADDF(ω^h, 1; 1 + h̄, 1 + h̄ + ∑_{j≥1}ω^h_j)`, `(ε^r, ω'_r) = G_MUL(χ, ω^g; C(1 + h̄ + ε^g))`,
-`ω_r = max(ω'_r, χ)` and `P = ε^r + C(ε^g + ε^h + Ce_2) + max(C^{q+1}/(q + 1), 2^{-B-13}C)/(1 - C) + E_c/(1 - C)` -/
-noncomputable def logP (χ : ℕ → ℝ) (C Ec : ℝ) (F' : ℕ → ℕ → ℝ) (φ' : ℕ → ℝ) (q : ℕ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
-  let H := hornerB p n χ C 0 0 F' φ' (logV C q) q (q - 2)
+/-- step (5)'s bounds, each `G_MUL` with `nη` added to its error and `η` to its part bounds: `(e_2, π^h_2)` of
+Lemma 33 for `z = c`, `z̄ = C`, `π^z = χ` and the loss `η`; `(ε^h, ω^h) = G_MUL(χ, π^h_2; C(v_2 + e_2))`,
+`h̄ = C(v_2 + e_2) + ε^h`, `(ε^g, ω^g) = G_ADDF(ω^h, 1; 1 + h̄, 1 + h̄ + ∑_{j≥1}ω^h_j)`,
+`(ε^r, ω'_r) = G_MUL(χ, ω^g; C(1 + h̄ + ε^g))`, `ω_r = max(ω'_r, χ)` and
+`P = ε^r + C(ε^g + ε^h + Ce_2) + max(C^{q+1}/(q + 1), 2^{-B-13}C)/(1 - C) + E_c/(1 - C)` -/
+noncomputable def logP (η : ℝ) (χ : ℕ → ℝ) (C Ec : ℝ) (F' : ℕ → ℕ → ℝ) (φ' : ℕ → ℝ) (q : ℕ) (B : ℤ) :
+    ℝ × (ℕ → ℝ) :=
+  let H := hornerB p n χ C 0 η F' φ' (logV C q) q (q - 2)
   let Zh := C * (logV C q 2 + H.1)
-  let ωh := GmulP p n χ H.2 Zh
-  let hb := Zh + GmulE p n χ H.2 Zh
+  let ωh := fun i => GmulP p n χ H.2 Zh i + η
+  let εh := GmulE p n χ H.2 Zh + n * η
+  let hb := Zh + εh
   let εg := GaddfE' p n ωh (1 + hb + ∑ j ∈ Ico 1 n, ωh j) (1 + hb)
   let ωg := GaddfP' p n ωh (1 + hb + ∑ j ∈ Ico 1 n, ωh j) (1 + hb)
   let Zr := C * (1 + hb + εg)
-  (GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1) +
+  (GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1) +
       max (C ^ (q + 1) / (q + 1)) ((2 : ℝ) ^ (-B - 13) * C) / (1 - C) + Ec / (1 - C),
-    fun i => max (GmulP p n χ ωg Zr i) (χ i))
+    fun i => max (GmulP p n χ ωg Zr i + η) (χ i))
 
 omit [Prec_gt_0 p] in
 theorem logV_nonneg {C : ℝ} (hC : 0 ≤ C) (q i : ℕ) : 0 ≤ logV C q i :=
@@ -178,25 +218,28 @@ theorem logS_eq (z : ℝ) (q : ℕ) (hq : 2 ≤ q) :
   ring
 
 /-- step (5) without the drop: `|y_c - S_q(c)| ≤ ε^r + C(ε^g + ε^h + Ce_2)` for `|c| ≤ C`, with the parts of `y_c`
-within `ω'_r` -/
-theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (c : ℕ → ℝ)
+within `ω'_r`, each scaling back moving a part by at most `η` -/
+theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {S : ℝ → ℝ}
+    (hS : Scl p η S) (c : ℕ → ℝ)
     (hc : ∀ i < n, F p (c i)) (χ : ℕ → ℝ) (hχ0 : ∀ i, 0 ≤ χ i) (hχ : ∀ i < n, |c i| ≤ χ i) (C : ℝ)
     (hcC : |∑ i ∈ range n, c i| ≤ C) (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q) (ec : ℤ) :
-    let H := hornerB p n χ C 0 0 F' φ' (logV C q) q (q - 2)
+    let H := hornerB p n χ C 0 η F' φ' (logV C q) q (q - 2)
     let Zh := C * (logV C q 2 + H.1)
-    let ωh := GmulP p n χ H.2 Zh
-    let hb := Zh + GmulE p n χ H.2 Zh
+    let ωh := fun i => GmulP p n χ H.2 Zh i + η
+    let εh := GmulE p n χ H.2 Zh + n * η
+    let hb := Zh + εh
     let εg := GaddfE' p n ωh (1 + hb + ∑ j ∈ Ico 1 n, ωh j) (1 + hb)
     let ωg := GaddfP' p n ωh (1 + hb + ∑ j ∈ Ico 1 n, ωh j) (1 + hb)
     let Zr := C * (1 + hb + εg)
-    let yc := pt (smulOp p n ec c (pt (addfOp p n (pt (smulOp p n ec c (hornerP p n (smulOp p n ec) c F' q (q - 2))))
-      1)))
+    let yc := pt (smulOp p n S ec c (pt (addfOp p n (pt (smulOp p n S ec c (hornerP p n (smulOp p n S ec) c F' q
+      (q - 2)))) 1)))
     |∑ i ∈ range n, yc i - -∑ i ∈ range q, (-∑ i ∈ range n, c i) ^ (i + 1) / ((i : ℝ) + 1)| ≤
-        GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1) ∧
-      (∀ i < n, |yc i| ≤ GmulP p n χ ωg Zr i) ∧ ∀ i < n, F p (yc i) := by
-  intro H Zh ωh hb εg ωg Zr yc
-  have hM := smulOp_within p n hp hn hA3 ec
+        GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1) ∧
+      (∀ i < n, |yc i| ≤ GmulP p n χ ωg Zr i + η) ∧ ∀ i < n, F p (yc i) := by
+  intro H Zh ωh εh hb εg ωg Zr yc
+  have hM := smulOp_within p n hp hn hA3 hS ec
+  have hη := hS.nonneg
   set cs := ∑ i ∈ range n, c i with hcsd
   have hC0 : 0 ≤ C := (abs_nonneg _).trans hcC
   have hφ0 : ∀ k, 0 ≤ φ' k := fun k => (abs_nonneg _).trans (hφ' k)
@@ -204,9 +247,9 @@ theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   obtain ⟨hh1, hh2, hh3⟩ := horner_step p n hp hn hA3 hM c hc χ hχ cs C 0 hcC le_rfl (by simp [hcsd]) F' hF' logFe
     φ' (logV C q) hφ' q 2 (fun k _ _ => logV_bound hcC q k) (q - 2) le_rfl
   rw [show q - (q - 2) = 2 by omega] at hh1
-  obtain ⟨hH0, hH20⟩ := hornerB_nonneg p n hA3 hχ0 (le_trans (abs_nonneg _) hcC) le_rfl le_rfl F' hφ0
+  obtain ⟨hH0, hH20⟩ := hornerB_nonneg p n hA3 hχ0 (le_trans (abs_nonneg _) hcC) le_rfl hη F' hφ0
     (logV_nonneg hC0 q) q (q - 2)
-  set h := hornerP p n (smulOp p n ec) c F' q (q - 2) with hhd
+  set h := hornerP p n (smulOp p n S ec) c F' q (q - 2) with hhd
   set He := hornerE logFe cs q 2 with hHe
   set Hs := ∑ i ∈ range n, h i with hHs
   have hHe2 : |He| ≤ logV C q 2 := logV_bound hcC q 2
@@ -217,8 +260,7 @@ theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hZh : |cs * Hs| ≤ Zh := by
     rw [abs_mul]; exact mul_le_mul hcC hHs (abs_nonneg _) hC0
   obtain ⟨m1, m2, m3, m4⟩ := hM c h χ H.2 Zh hc hh3 hχ hh2 hZh
-  simp only [mul_zero, add_zero] at m1 m2
-  set hh := smulOp p n ec c h with hhhd
+  set hh := smulOp p n S ec c h with hhhd
   have hhs : hh.sum = ∑ i ∈ range n, pt hh i := list_sum_getD hh n m4
   set hs := hh.sum with hsd
   have hsb : |hs| ≤ hb := by
@@ -252,17 +294,16 @@ theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hZr : |cs * ∑ i ∈ range n, pt g i| ≤ Zr := by
     rw [← hgs, abs_mul]; exact mul_le_mul hcC hGb (abs_nonneg _) hC0
   obtain ⟨r1, r2, r3, r4⟩ := hM c (pt g) χ ωg Zr hc (fun i _ => g3 i) hχ (fun i _ => g2 i) hZr
-  simp only [mul_zero, add_zero] at r1 r2
-  have hys : (smulOp p n ec c (pt g)).sum = ∑ i ∈ range n, yc i := list_sum_getD _ n r4
+  have hys : (smulOp p n S ec c (pt g)).sum = ∑ i ∈ range n, yc i := list_sum_getD _ n r4
   refine ⟨?_, fun i _ => r2 i, fun i _ => r3 i⟩
   rw [logS_eq cs q hq, ← hys]
   rw [← hgs] at r1
   rw [← hhs] at g1
-  have e : (smulOp p n ec c (pt g)).sum - (cs + cs ^ 2 * He) =
-      -(cs * g.sum - (smulOp p n ec c (pt g)).sum) - cs * (hs + 1 - g.sum) + cs * (hs - cs * Hs) +
+  have e : (smulOp p n S ec c (pt g)).sum - (cs + cs ^ 2 * He) =
+      -(cs * g.sum - (smulOp p n S ec c (pt g)).sum) - cs * (hs + 1 - g.sum) + cs * (hs - cs * Hs) +
         cs ^ 2 * (Hs - He) := by ring
   rw [e]
-  set X1 := cs * g.sum - (smulOp p n ec c (pt g)).sum
+  set X1 := cs * g.sum - (smulOp p n S ec c (pt g)).sum
   set X2 := hs + 1 - g.sum
   set X3 := hs - cs * Hs
   set X4 := Hs - He
@@ -271,27 +312,30 @@ theorem log_horner (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
       _ ≤ |-X1 - cs * X2| + |cs * X3| + |cs ^ 2 * X4| := by gcongr; exact abs_add_le _ _
       _ ≤ |-X1| + |cs * X2| + |cs * X3| + |cs ^ 2 * X4| := by gcongr; exact abs_sub _ _
       _ = |X1| + |cs| * |X2| + |cs| * |X3| + |cs| ^ 2 * |X4| := by rw [abs_neg, abs_mul, abs_mul, abs_mul, abs_pow]
-  have b1 : |X1| ≤ GmulE p n χ ωg Zr := r1
+  have b1 : |X1| ≤ GmulE p n χ ωg Zr + n * η := r1
   have b2 : |cs| * |X2| ≤ C * εg := mul_le_mul hcC g1 (abs_nonneg _) hC0
-  have b3 : |cs| * |X3| ≤ C * GmulE p n χ H.2 Zh :=
+  have b3 : |cs| * |X3| ≤ C * εh :=
     mul_le_mul hcC (by rw [abs_sub_comm]; exact m1) (abs_nonneg _) hC0
   have b4 : |cs| ^ 2 * |X4| ≤ C ^ 2 * H.1 :=
     mul_le_mul (pow_le_pow_left₀ (abs_nonneg _) hcC 2) hh1 (abs_nonneg _) (by positivity)
   calc _ ≤ |X1| + |cs| * |X2| + |cs| * |X3| + |cs| ^ 2 * |X4| := t
-    _ ≤ GmulE p n χ ωg Zr + C * εg + C * GmulE p n χ H.2 Zh + C ^ 2 * H.1 := by linarith
-    _ = GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1) := by ring
+    _ ≤ GmulE p n χ ωg Zr + n * η + C * εg + C * εh + C ^ 2 * H.1 := by linarith
+    _ = GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1) := by ring
 
 /-- step (5): for `c` within `E_c` of `c*`, `|c*| ≤ c̄*` and `C = c̄* + E_c < 1`, `y_c` is within `P` of `log(1 + c*)`,
 with parts within `ω_r` -/
-theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (c : ℕ → ℝ)
+theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {Sc : ℝ → ℝ}
+    (hSc : Scl p η Sc) (c : ℕ → ℝ)
     (hc : ∀ i < n, F p (c i)) (χ : ℕ → ℝ) (hχ0 : ∀ i, 0 ≤ χ i) (hχ : ∀ i < n, |c i| ≤ χ i) (cs cb Ec : ℝ)
     (hcs : |cs| ≤ cb) (hEc : |∑ i ∈ range n, c i - cs| ≤ Ec) (hC : cb + Ec < 1) (F' : ℕ → ℕ → ℝ)
     (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ) (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k)
     (q : ℕ) (hq : 2 ≤ q) (B ec : ℤ) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
     (hU : expU p n γ c < (2 : ℝ) ^ (ec + 1)) :
-    |∑ i ∈ range n, logYc p n B ec c F' q i - Real.log (1 + cs)| ≤ (logP p n χ (cb + Ec) Ec F' φ' q B).1 ∧
-      (∀ i < n, |logYc p n B ec c F' q i| ≤ (logP p n χ (cb + Ec) Ec F' φ' q B).2 i) ∧
-      ∀ i < n, F p (logYc p n B ec c F' q i) := by
+    |∑ i ∈ range n, logYc p n Sc B ec c F' q i - Real.log (1 + cs)| ≤ (logP p n η χ (cb + Ec) Ec F' φ' q B).1 ∧
+      (∀ i < n, |logYc p n Sc B ec c F' q i| ≤ (logP p n η χ (cb + Ec) Ec F' φ' q B).2 i) ∧
+      ∀ i < n, F p (logYc p n Sc B ec c F' q i) := by
+  have hη := hSc.nonneg
+  have hnη : (0 : ℝ) ≤ n * η := mul_nonneg (Nat.cast_nonneg n) hη
   set C := cb + Ec with hCd
   set S := ∑ i ∈ range n, c i with hSd
   have hEc0 : 0 ≤ Ec := (abs_nonneg _).trans hEc
@@ -305,13 +349,16 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
   have hlip : |Real.log (1 + S) - Real.log (1 + cs)| ≤ Ec / (1 - C) :=
     (log_lip hSC hcsC hC).trans (div_le_div_of_nonneg_right hEc hC1.le)
   have hφ0 : ∀ k, 0 ≤ φ' k := fun k => (abs_nonneg _).trans (hφ' k)
-  obtain ⟨hH0, hH20⟩ := hornerB_nonneg p n hA3 hχ0 hC0 le_rfl le_rfl F' hφ0 (logV_nonneg hC0 q) q (q - 2)
-  set H := hornerB p n χ C 0 0 F' φ' (logV C q) q (q - 2) with hHd
+  obtain ⟨hH0, hH20⟩ := hornerB_nonneg p n hA3 hχ0 hC0 le_rfl hη F' hφ0 (logV_nonneg hC0 q) q (q - 2)
+  set H := hornerB p n χ C 0 η F' φ' (logV C q) q (q - 2) with hHd
   set Zh := C * (logV C q 2 + H.1) with hZh
   have hZh0 : 0 ≤ Zh := mul_nonneg hC0 (add_nonneg (logV_nonneg hC0 q 2) hH0)
-  obtain ⟨hεh0, hωh0⟩ := Gmul_nonneg p n hA3 hχ0 hH20 hZh0
-  set ωh := GmulP p n χ H.2 Zh with hωh
-  set hb := Zh + GmulE p n χ H.2 Zh with hhb
+  obtain ⟨hεh0', hωh0'⟩ := Gmul_nonneg p n hA3 hχ0 hH20 hZh0
+  set ωh := fun i => GmulP p n χ H.2 Zh i + η with hωh
+  set εh := GmulE p n χ H.2 Zh + n * η with hεh
+  have hεh0 : 0 ≤ εh := add_nonneg hεh0' hnη
+  have hωh0 : ∀ i, 0 ≤ ωh i := fun i => add_nonneg (hωh0' i) hη
+  set hb := Zh + εh with hhb
   have hhb0 : 0 ≤ hb := by linarith
   have hlam0 : 0 ≤ 1 + hb + ∑ j ∈ Ico 1 n, ωh j := by
     have := sum_nonneg fun j (_ : j ∈ Ico 1 n) => hωh0 j
@@ -324,12 +371,12 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
   set Zr := C * (1 + hb + εg) with hZr
   obtain ⟨hεr0, -⟩ := Gmul_nonneg p n hA3 hχ0 hωg0 (Zb := Zr) (mul_nonneg hC0 (by linarith))
   set M := max (C ^ (q + 1) / (q + 1)) ((2 : ℝ) ^ (-B - 13) * C) with hM
-  have hP : (logP p n χ C Ec F' φ' q B).1 = GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1) +
+  have hP : (logP p n η χ C Ec F' φ' q B).1 = GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1) +
       M / (1 - C) + Ec / (1 - C) := rfl
-  have hP2 : (logP p n χ C Ec F' φ' q B).2 = fun i => max (GmulP p n χ ωg Zr i) (χ i) := rfl
+  have hP2 : (logP p n η χ C Ec F' φ' q B).2 = fun i => max (GmulP p n χ ωg Zr i + η) (χ i) := rfl
   rw [hP, hP2]
-  have hrest : 0 ≤ GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1) :=
-    add_nonneg hεr0 (mul_nonneg hC0 (add_nonneg (add_nonneg hεg0 hεh0) (mul_nonneg hC0 hH0)))
+  have hrest : 0 ≤ GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1) :=
+    add_nonneg (add_nonneg hεr0 hnη) (mul_nonneg hC0 (add_nonneg (add_nonneg hεg0 hεh0) (mul_nonneg hC0 hH0)))
   unfold logYc
   split_ifs with hd
   · -- `y_c = c`, with `|c| < 2^{-B-13}`
@@ -354,7 +401,7 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
           abs_sub_le _ _ _
       _ ≤ M / (1 - C) + Ec / (1 - C) := add_le_add h5 hlip
       _ ≤ _ := by linarith
-  · obtain ⟨y1, y2, y3⟩ := log_horner p n hp hn hA3 c hc χ hχ0 hχ C hSC F' hF' φ' hφ' q hq ec
+  · obtain ⟨y1, y2, y3⟩ := log_horner p n hp hn hA3 hSc c hc χ hχ0 hχ C hSC F' hF' φ' hφ' q hq ec
     refine ⟨?_, fun i hi => (y2 i hi).trans (le_max_left _ _), y3⟩
     have ht := log_tail (lt_of_le_of_lt hSC hC) q
     have h2 : |S| ^ (q + 1) / ((q + 1) * (1 - |S|)) ≤ M / (1 - C) := by
@@ -371,7 +418,7 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
           |-∑ i ∈ range q, (-S) ^ (i + 1) / ((i : ℝ) + 1) - Real.log (1 + S)| +
           |Real.log (1 + S) - Real.log (1 + cs)| := by
           refine (abs_sub_le _ _ _).trans (add_le_add (abs_sub_le _ _ _) le_rfl)
-      _ ≤ (GmulE p n χ ωg Zr + C * (εg + GmulE p n χ H.2 Zh + C * H.1)) + M / (1 - C) + Ec / (1 - C) :=
+      _ ≤ (GmulE p n χ ωg Zr + n * η + C * (εg + εh + C * H.1)) + M / (1 - C) + Ec / (1 - C) :=
           add_le_add (add_le_add y1 h5) hlip
       _ = _ := by ring
 
@@ -407,98 +454,131 @@ theorem cosh_sub_two_le (x : ℝ) : Real.exp (-x) + Real.exp x - 2 ≤ 2 * (Real
     rw [neg_neg] at this
     linarith
 
-/-- step (4)'s product `p = 2^{e_t}(2^{e_φ}MUL(2^{-e_φ}φ, 2^{-e_t}t))` is within `G_MUL(π^φ, ψ; Z̄)` of `φt` -/
-theorem pOp_bound (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (eφ et : ℤ) (φ t : ℕ → ℝ)
+/-- step (4)'s product `p = 2^{e_t}(2^{e_φ}MUL(2^{-e_φ}φ, 2^{-e_t}t))`, its scalings back rounded by `S` within `η`, is
+within `G_MUL(π^φ, ψ; Z̄)` of `φt`, with `nη` added to the error and `η` to each part bound. `S` takes the exactly
+scaled value and stands for both scalings: two in a row, each rounded by `R`, are `S = fun w => R(2^{e_t}R(2^{-e_t}w))`
+(`Scl.two_step_apply`), within `2η_0` for `e_t ≤ 0` (`Scl.two_step`) -/
+theorem pOp_bound (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {S : ℝ → ℝ}
+    (hS : Scl p η S) (eφ et : ℤ) (φ t : ℕ → ℝ)
     (hφ : ∀ i < n, F p (φ i)) (ht : ∀ i < n, F p (t i)) (πφ ψ : ℕ → ℝ) (hπφ : ∀ i < n, |φ i| ≤ πφ i)
     (hψ : ∀ i < n, |t i| ≤ ψ i) (Zb : ℝ) (hZ : |(∑ i ∈ range n, φ i) * ∑ i ∈ range n, t i| ≤ Zb) :
-    let P := fun i => (2 : ℝ) ^ et * pt (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i
-    |(∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, P i| ≤ GmulE p n πφ ψ Zb ∧
-      (∀ i, |P i| ≤ GmulP p n πφ ψ Zb i) ∧ ∀ i, F p (P i) := by
+    let P := fun i => S ((2 : ℝ) ^ et * pt (smulOp p n id eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i)
+    |(∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, P i| ≤ GmulE p n πφ ψ Zb + n * η ∧
+      (∀ i, |P i| ≤ GmulP p n πφ ψ Zb i + η) ∧ ∀ i, F p (P i) := by
   intro P
   have hc : (0 : ℝ) < (2 : ℝ) ^ (-et) := by positivity
   have hce : (2 : ℝ) ^ et * (2 : ℝ) ^ (-et) = 1 := by rw [← zpow_add₀ two_ne_zero]; simp
+  have h2e : (0 : ℝ) < (2 : ℝ) ^ et := by positivity
   have hG := Gmul_smul p n πφ ψ Zb zero_le_one hc.le
   simp only [one_mul] at hG
-  obtain ⟨m1, m2, m3, m4⟩ := smulOp_within p n hp hn hA3 eφ φ (fun i => (2 : ℝ) ^ (-et) * t i) πφ
+  obtain ⟨m1, m2, m3, m4⟩ := smulOp_within p n hp hn hA3 (Scl.id p) eφ φ (fun i => (2 : ℝ) ^ (-et) * t i) πφ
     (fun j => (2 : ℝ) ^ (-et) * ψ j) ((2 : ℝ) ^ (-et) * Zb) hφ (fun i hi => F_zpow_mul p _ (ht i hi)) hπφ
     (fun i hi => by rw [abs_mul, abs_of_pos hc]; exact mul_le_mul_of_nonneg_left (hψ i hi) hc.le)
     (by rw [← mul_sum, mul_left_comm, abs_mul, abs_of_pos hc]; exact mul_le_mul_of_nonneg_left hZ hc.le)
   simp only [mul_zero, add_zero] at m1 m2
-  rw [hG.1] at m1
-  have hs : (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i).sum =
-      ∑ i ∈ range n, pt (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i := list_sum_getD _ n m4
-  have hPs : ∑ i ∈ range n, P i = (2 : ℝ) ^ et * (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i).sum := by
-    rw [hs, mul_sum]
-  refine ⟨?_, fun i => ?_, fun i => F_zpow_mul p _ (m3 i)⟩
-  · rw [hPs, ← mul_sum, mul_left_comm] at *
-    have e1 : (∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) -
-        (2 : ℝ) ^ et * (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i).sum =
-        (2 : ℝ) ^ et * ((2 : ℝ) ^ (-et) * ((∑ i ∈ range n, φ i) * ∑ i ∈ range n, t i) -
-          (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i).sum) := by
+  rw [hG.1, ← mul_sum, mul_left_comm] at m1
+  set Q := smulOp p n id eφ φ fun i => (2 : ℝ) ^ (-et) * t i with hQ
+  have hs : Q.sum = ∑ i ∈ range n, pt Q i := list_sum_getD _ n m4
+  -- the exact scalings back
+  have hex : |(∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, (2 : ℝ) ^ et * pt Q i| ≤
+      GmulE p n πφ ψ Zb := by
+    rw [← mul_sum, ← hs]
+    have e1 : (∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - (2 : ℝ) ^ et * Q.sum =
+        (2 : ℝ) ^ et * ((2 : ℝ) ^ (-et) * ((∑ i ∈ range n, φ i) * ∑ i ∈ range n, t i) - Q.sum) := by
       rw [mul_sub, ← mul_assoc, hce, one_mul]
-    rw [e1, abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ et)]
+    rw [e1, abs_mul, abs_of_pos h2e]
     calc (2 : ℝ) ^ et * |_| ≤ (2 : ℝ) ^ et * ((2 : ℝ) ^ (-et) * GmulE p n πφ ψ Zb) :=
-          mul_le_mul_of_nonneg_left m1 (by positivity)
+          mul_le_mul_of_nonneg_left m1 h2e.le
       _ = GmulE p n πφ ψ Zb := by rw [← mul_assoc, hce, one_mul]
-  · show |(2 : ℝ) ^ et * pt _ i| ≤ _
-    rw [abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ et)]
+  have hpart : ∀ i, |(2 : ℝ) ^ et * pt Q i| ≤ GmulP p n πφ ψ Zb i := fun i => by
+    rw [abs_mul, abs_of_pos h2e]
     calc (2 : ℝ) ^ et * |_| ≤ (2 : ℝ) ^ et * ((2 : ℝ) ^ (-et) * GmulP p n πφ ψ Zb i) :=
-          mul_le_mul_of_nonneg_left ((m2 i).trans_eq (hG.2 i)) (by positivity)
+          mul_le_mul_of_nonneg_left ((m2 i).trans_eq (hG.2 i)) h2e.le
       _ = GmulP p n πφ ψ Zb i := by rw [← mul_assoc, hce, one_mul]
+  show |(∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, S ((2 : ℝ) ^ et * pt Q i)| ≤
+      GmulE p n πφ ψ Zb + n * η ∧ (∀ i, |S ((2 : ℝ) ^ et * pt Q i)| ≤ GmulP p n πφ ψ Zb i + η) ∧
+      ∀ i, F p (S ((2 : ℝ) ^ et * pt Q i))
+  refine ⟨?_, fun i => ?_, fun i => hS.mem _ (F_zpow_mul p _ (m3 i))⟩
+  · have hd : |∑ i ∈ range n, S ((2 : ℝ) ^ et * pt Q i) - ∑ i ∈ range n, (2 : ℝ) ^ et * pt Q i| ≤ n * η := by
+      rw [← sum_sub_distrib]
+      refine (abs_sum_le_sum_abs _ _).trans ((sum_le_sum fun i _ => hS.err _).trans_eq ?_)
+      rw [sum_const, card_range, nsmul_eq_mul]
+    rw [show (∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, S ((2 : ℝ) ^ et * pt Q i) =
+      ((∑ i ∈ range n, φ i) * (∑ i ∈ range n, t i) - ∑ i ∈ range n, (2 : ℝ) ^ et * pt Q i) -
+        (∑ i ∈ range n, S ((2 : ℝ) ^ et * pt Q i) - ∑ i ∈ range n, (2 : ℝ) ^ et * pt Q i) by ring]
+    exact (abs_sub _ _).trans (by linarith)
+  · have t1 := abs_sub_abs_le_abs_sub (S ((2 : ℝ) ^ et * pt Q i)) ((2 : ℝ) ^ et * pt Q i)
+    linarith [hS.err ((2 : ℝ) ^ et * pt Q i), hpart i]
 
 omit [Prec_gt_0 p] in
-/-- step (4): `c = ADD(φ, t)` where `min(e_φ, e_t) < -B - 13`; otherwise `c = ADD(ADD(φ, t), p)` -/
-noncomputable def logC (B eφ et : ℤ) (φ t : ℕ → ℝ) : ℕ → ℝ :=
+/-- step (4): `c = ADD(φ, t)` where `min(e_φ, e_t) < -B - 13`; otherwise `c = ADD(ADD(φ, t), p)`, the scalings back of
+`p` rounded by `S` -/
+noncomputable def logC (S : ℝ → ℝ) (B eφ et : ℤ) (φ t : ℕ → ℝ) : ℕ → ℝ :=
   if min eφ et < -B - 13 then pt (addOp p n φ t)
   else pt (addOp p n (pt (addOp p n φ t)) fun i =>
-    (2 : ℝ) ^ et * pt (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i)
+    S ((2 : ℝ) ^ et * pt (smulOp p n id eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i))
 
 omit [Prec_gt_0 p] in
-/-- step (4)'s bounds: `(ε_{φt}, ν) = G_MUL(π^φ, ψ; φ̄(t̄ + E_m))` with `2^{-B-12}max(φ̄, t̄ + E_m)` added to
-`ε_{φt}`, `(ε_{φ+t}, π^s) = G_ADD(π^φ, ψ; 2(e^{b̂} - 1 - b̂) + e^{b̂}(e^{E+δ} - 1) + E_m)` with `b̂ = b + δ`,
-`c̄* = e^E - 1`, `E_δ = e^E(e^δ - 1)`, `(ε_c, χ') = G_ADD(π^s, ν; c̄* + ξE_m + E_δ + ε_{φt} + ε_{φ+t})`,
-`E_c = ξE_m + E_δ + ε_{φt} + ε_{φ+t} + ε_c`, `χ'' = G_ADD(π^φ, ψ; c̄* + E_c)` and `χ = max(χ', χ'')` -/
-noncomputable def logC4 (πφ ψ : ℕ → ℝ) (φb tb Em E δ b ξ : ℝ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
+/-- step (4)'s bounds, with `D` the paper's `2nη_0` between `x'` and `2^kx` and `η` its `2η_0` for the scalings back
+of `p`: `(ε_{φt}, ν) = G_MUL(π^φ, ψ; φ̄(t̄ + E_m))` with `nη + 2^{-B-12}max(φ̄, t̄ + E_m)` added to `ε_{φt}` and `η`
+to each `ν_i`, `(ε_{φ+t}, π^s) = G_ADD(π^φ, ψ; 2(e^{b̂} - 1 - b̂) + e^{b̂}(e^{E+δ} - 1) + E_m + D)` with `b̂ = b + δ`,
+`c̄* = e^E - 1`, `E_δ = e^E(e^δ - 1) + D(1 + t̄ + E_m)`,
+`(ε_c, χ') = G_ADD(π^s, ν; c̄* + ξE_m + E_δ + ε_{φt} + ε_{φ+t})`, `E_c = ξE_m + E_δ + ε_{φt} + ε_{φ+t} + ε_c`,
+`χ'' = G_ADD(π^φ, ψ; c̄* + E_c)` and `χ = max(χ', χ'')` -/
+noncomputable def logC4 (D η : ℝ) (πφ ψ : ℕ → ℝ) (φb tb Em E δ b ξ : ℝ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
   let Zp := φb * (tb + Em)
-  let εφt := GmulE p n πφ ψ Zp + (2 : ℝ) ^ (-B - 12) * max φb (tb + Em)
-  let Zs := 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em
-  let Zc := (Real.exp E - 1) + ξ * Em + Real.exp E * (Real.exp δ - 1) + εφt + GaddE p n πφ ψ Zs
-  let Ec := ξ * Em + Real.exp E * (Real.exp δ - 1) + εφt + GaddE p n πφ ψ Zs +
-    GaddE p n (GaddP p n πφ ψ Zs) (GmulP p n πφ ψ Zp) Zc
-  (Ec, fun i => max (GaddP p n (GaddP p n πφ ψ Zs) (GmulP p n πφ ψ Zp) Zc i) (GaddP p n πφ ψ (Real.exp E - 1 + Ec) i))
+  let εφt := GmulE p n πφ ψ Zp + n * η + (2 : ℝ) ^ (-B - 12) * max φb (tb + Em)
+  let ν := fun i => GmulP p n πφ ψ Zp i + η
+  let Zs := 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em + D
+  let Eδ := Real.exp E * (Real.exp δ - 1) + D * (1 + tb + Em)
+  let Zc := (Real.exp E - 1) + ξ * Em + Eδ + εφt + GaddE p n πφ ψ Zs
+  let Ec := ξ * Em + Eδ + εφt + GaddE p n πφ ψ Zs + GaddE p n (GaddP p n πφ ψ Zs) ν Zc
+  (Ec, fun i => max (GaddP p n (GaddP p n πφ ψ Zs) ν Zc i) (GaddP p n πφ ψ (Real.exp E - 1 + Ec) i))
 
 omit [Prec_gt_0 p] in
-/-- step (4) in exact arithmetic: with `1 + φ = 2^kx = e^{-e_0 - r_e}`, `|r - r_e| ≤ δ`, `|e_0| ≤ E`, `|r| ≤ b` and `t`
-within `E_m` of `e^r - 1`: `|c*| ≤ e^E - 1` for `c* = e^{-e_0} - 1`, `|φ + t + φt - c*| ≤ ξE_m + e^E(e^δ - 1)`, and
-`|φ + t| ≤ 2(e^{b̂} - 1 - b̂) + e^{b̂}(e^{E+δ} - 1) + E_m` -/
-theorem log_c_exact {R re e0 E δ b ξ Φ T Em : ℝ} (hRre : |R - re| ≤ δ) (he0 : |e0| ≤ E) (hRb : |R| ≤ b)
-    (hΦ : Φ = Real.exp (-e0 - re) - 1) (hξ : Real.exp (-e0 - re) ≤ ξ) (hT : |T - (Real.exp R - 1)| ≤ Em) :
+/-- step (4) in exact arithmetic: with `1 + φ = x'` within `D` of `2^kx = e^{-e_0 - r_e}` and at most `ξ`,
+`|r - r_e| ≤ δ`, `|e_0| ≤ E`, `|r| ≤ b` and `t` within `E_m` of `e^r - 1`, itself within `t̄`: `|c*| ≤ e^E - 1` for
+`c* = e^{-e_0} - 1`, `|φ + t + φt - c*| ≤ ξE_m + e^E(e^δ - 1) + D(1 + t̄ + E_m)`, and
+`|φ + t| ≤ 2(e^{b̂} - 1 - b̂) + e^{b̂}(e^{E+δ} - 1) + E_m + D` -/
+theorem log_c_exact {R re e0 E δ b ξ Φ T Em D tb : ℝ} (hRre : |R - re| ≤ δ) (he0 : |e0| ≤ E) (hRb : |R| ≤ b)
+    (hΦ : |Φ + 1 - Real.exp (-e0 - re)| ≤ D) (hξ : |Φ + 1| ≤ ξ) (hT : |T - (Real.exp R - 1)| ≤ Em)
+    (htb : |Real.exp R - 1| ≤ tb) :
     |Real.exp (-e0) - 1| ≤ Real.exp E - 1 ∧
-      |Φ + T + Φ * T - (Real.exp (-e0) - 1)| ≤ ξ * Em + Real.exp E * (Real.exp δ - 1) ∧
-      |Φ + T| ≤ 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em := by
+      |Φ + T + Φ * T - (Real.exp (-e0) - 1)| ≤
+        ξ * Em + (Real.exp E * (Real.exp δ - 1) + D * (1 + tb + Em)) ∧
+      |Φ + T| ≤ 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em + D := by
   have hE0 : 0 ≤ E := (abs_nonneg _).trans he0
   have hδ0 : 0 ≤ δ := (abs_nonneg _).trans hRre
   have hb0 : 0 ≤ b := (abs_nonneg _).trans hRb
-  have hX0 : 0 < Real.exp (-e0 - re) := Real.exp_pos _
+  have hD0 : 0 ≤ D := (abs_nonneg _).trans hΦ
+  have hEm0 : 0 ≤ Em := (abs_nonneg _).trans hT
+  have hR0 := Real.exp_pos R
+  have heR : Real.exp R ≤ 1 + tb := by linarith [le_abs_self (Real.exp R - 1)]
   have he0' : Real.exp (-e0) ≤ Real.exp E := Real.exp_le_exp.mpr (by linarith [neg_abs_le e0])
   refine ⟨(abs_exp_sub_one_le _).trans (by rw [abs_neg]; linarith [Real.exp_le_exp.mpr he0]), ?_, ?_⟩
   · have e : Φ + T + Φ * T - (Real.exp (-e0) - 1) = Real.exp (-e0) * (Real.exp (R - re) - 1) +
-        Real.exp (-e0 - re) * (T - (Real.exp R - 1)) := by
-      rw [hΦ, show Real.exp (-e0 - re) = Real.exp (-e0) * Real.exp (-re) by rw [← Real.exp_add]; ring_nf,
+        (Φ + 1) * (T - (Real.exp R - 1)) + (Φ + 1 - Real.exp (-e0 - re)) * Real.exp R := by
+      rw [show Real.exp (-e0 - re) = Real.exp (-e0) * Real.exp (-re) by rw [← Real.exp_add]; ring_nf,
         show Real.exp (R - re) = Real.exp R * Real.exp (-re) by rw [← Real.exp_add]; ring_nf]
       ring
     rw [e]
     have h1 : |Real.exp (R - re) - 1| ≤ Real.exp δ - 1 :=
       (abs_exp_sub_one_le _).trans (by linarith [Real.exp_le_exp.mpr hRre])
-    calc _ ≤ |Real.exp (-e0) * (Real.exp (R - re) - 1)| + |Real.exp (-e0 - re) * (T - (Real.exp R - 1))| :=
-          abs_add_le _ _
-      _ ≤ Real.exp E * (Real.exp δ - 1) + ξ * Em := by
-          rw [abs_mul, abs_mul, abs_of_pos (Real.exp_pos _), abs_of_pos hX0]
-          exact add_le_add (mul_le_mul he0' h1 (abs_nonneg _) (Real.exp_pos _).le)
-            (mul_le_mul hξ hT (abs_nonneg _) (hX0.le.trans hξ))
-      _ = _ := by ring
-  · have e : Φ + T = (Real.exp (-e0 - re) - Real.exp (-R)) + (Real.exp (-R) + Real.exp R - 2) +
-        (T - (Real.exp R - 1)) := by rw [hΦ]; ring
+    have b1 : |Real.exp (-e0) * (Real.exp (R - re) - 1)| ≤ Real.exp E * (Real.exp δ - 1) := by
+      rw [abs_mul, abs_of_pos (Real.exp_pos _)]
+      exact mul_le_mul he0' h1 (abs_nonneg _) (Real.exp_pos _).le
+    have b2 : |(Φ + 1) * (T - (Real.exp R - 1))| ≤ ξ * Em := by
+      rw [abs_mul]
+      exact mul_le_mul hξ hT (abs_nonneg _) ((abs_nonneg _).trans hξ)
+    have b3 : |(Φ + 1 - Real.exp (-e0 - re)) * Real.exp R| ≤ D * (1 + tb + Em) := by
+      rw [abs_mul, abs_of_pos hR0]
+      exact mul_le_mul hΦ (by linarith) hR0.le hD0
+    calc _ ≤ |Real.exp (-e0) * (Real.exp (R - re) - 1)| + |(Φ + 1) * (T - (Real.exp R - 1))| +
+          |(Φ + 1 - Real.exp (-e0 - re)) * Real.exp R| :=
+          (abs_add_le _ _).trans (add_le_add (abs_add_le _ _) le_rfl)
+      _ ≤ _ := by linarith
+  · have e : Φ + T = (Φ + 1 - Real.exp (-e0 - re)) + (Real.exp (-e0 - re) - Real.exp (-R)) +
+        (Real.exp (-R) + Real.exp R - 2) + (T - (Real.exp R - 1)) := by ring
     rw [e]
     have hRb' : |R| ≤ b + δ := by linarith
     have h1 : |Real.exp (-e0 - re) - Real.exp (-R)| ≤ Real.exp (b + δ) * (Real.exp (E + δ) - 1) := by
@@ -513,22 +593,29 @@ theorem log_c_exact {R re e0 E δ b ξ Φ T Em : ℝ} (hRre : |R - re| ≤ δ) (
         linarith [Real.add_one_le_exp R, Real.add_one_le_exp (-R)]
       rw [abs_of_nonneg hlo]
       exact (cosh_sub_two_le R).trans (by linarith [expm1_sub_mono (abs_nonneg R) hRb'])
-    calc _ ≤ |Real.exp (-e0 - re) - Real.exp (-R)| + |Real.exp (-R) + Real.exp R - 2| + |T - (Real.exp R - 1)| := by
-          refine (abs_add_le _ _).trans (add_le_add (abs_add_le _ _) le_rfl)
+    calc _ ≤ |Φ + 1 - Real.exp (-e0 - re)| + |Real.exp (-e0 - re) - Real.exp (-R)| +
+          |Real.exp (-R) + Real.exp R - 2| + |T - (Real.exp R - 1)| :=
+          (abs_add_le _ _).trans (add_le_add ((abs_add_le _ _).trans (add_le_add (abs_add_le _ _) le_rfl)) le_rfl)
       _ ≤ _ := by linarith
 
-/-- step (4): `c` is within `E_c` of `c* = e^{-e_0} - 1`, with parts within `χ` -/
-theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (φ t : ℕ → ℝ)
+/-- step (4): `c` is within `E_c` of `c* = e^{-e_0} - 1`, with parts within `χ`; `1 + φ = x'` is within `D` of
+`e^{-e_0 - r_e}` and at most `ξ`, and the scalings back of `p` move each part by at most `η` -/
+theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {Sp : ℝ → ℝ}
+    (hSp : Scl p η Sp) (φ t : ℕ → ℝ)
     (hφ : ∀ i < n, F p (φ i)) (ht : ∀ i < n, F p (t i)) (πφ ψ : ℕ → ℝ) (hπφ0 : ∀ i, 0 ≤ πφ i)
     (hψ0 : ∀ i, 0 ≤ ψ i) (hπφ : ∀ i < n, |φ i| ≤ πφ i) (hψ : ∀ i < n, |t i| ≤ ψ i)
-    {R re e0 E δ b ξ φb tb Em : ℝ} (hRre : |R - re| ≤ δ) (he0 : |e0| ≤ E) (hRb : |R| ≤ b)
-    (hΦ : ∑ i ∈ range n, φ i = Real.exp (-e0 - re) - 1) (hξ : Real.exp (-e0 - re) ≤ ξ)
+    {R re e0 E δ b ξ φb tb Em D : ℝ} (hRre : |R - re| ≤ δ) (he0 : |e0| ≤ E) (hRb : |R| ≤ b)
+    (hΦ : |∑ i ∈ range n, φ i + 1 - Real.exp (-e0 - re)| ≤ D) (hξ : |∑ i ∈ range n, φ i + 1| ≤ ξ)
     (hφb : |∑ i ∈ range n, φ i| ≤ φb) (hT : |∑ i ∈ range n, t i - (Real.exp R - 1)| ≤ Em)
     (htb : |Real.exp R - 1| ≤ tb) (B eφ et : ℤ) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
     (hUφ : expU p n γ φ < (2 : ℝ) ^ (eφ + 1)) (hUt : expU p n γ t < (2 : ℝ) ^ (et + 1)) :
-    |∑ i ∈ range n, logC p n B eφ et φ t i - (Real.exp (-e0) - 1)| ≤ (logC4 p n πφ ψ φb tb Em E δ b ξ B).1 ∧
-      (∀ i < n, |logC p n B eφ et φ t i| ≤ (logC4 p n πφ ψ φb tb Em E δ b ξ B).2 i) ∧
-      (∀ i < n, F p (logC p n B eφ et φ t i)) ∧ ∀ i, 0 ≤ (logC4 p n πφ ψ φb tb Em E δ b ξ B).2 i := by
+    |∑ i ∈ range n, logC p n Sp B eφ et φ t i - (Real.exp (-e0) - 1)| ≤
+        (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).1 ∧
+      (∀ i < n, |logC p n Sp B eφ et φ t i| ≤ (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).2 i) ∧
+      (∀ i < n, F p (logC p n Sp B eφ et φ t i)) ∧ ∀ i, 0 ≤ (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).2 i := by
+  have hη := hSp.nonneg
+  have hnη : (0 : ℝ) ≤ n * η := mul_nonneg (Nat.cast_nonneg n) hη
+  have hD0 : 0 ≤ D := (abs_nonneg _).trans hΦ
   set Φ := ∑ i ∈ range n, φ i with hΦd
   set T := ∑ i ∈ range n, t i with hTd
   have hEm0 : 0 ≤ Em := (abs_nonneg _).trans hT
@@ -537,28 +624,30 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
   have hTb : |T| ≤ tb + Em := by
     have := abs_sub_abs_le_abs_sub T (Real.exp R - 1)
     linarith
-  obtain ⟨hcs, hrel, hZs⟩ := log_c_exact hRre he0 hRb hΦ hξ hT
+  obtain ⟨hcs, hrel, hZs⟩ := log_c_exact hRre he0 hRb hΦ hξ hT htb
   set cs := Real.exp (-e0) - 1 with hcsd
   set Zp := φb * (tb + Em) with hZp
-  set Zs := 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em with hZsd
+  set Zs := 2 * (Real.exp (b + δ) - 1 - (b + δ)) + Real.exp (b + δ) * (Real.exp (E + δ) - 1) + Em + D with hZsd
   have hZp' : |Φ * T| ≤ Zp := by rw [abs_mul]; exact mul_le_mul hφb hTb (abs_nonneg _) hφb0
   have hZs0 : 0 ≤ Zs := (abs_nonneg _).trans hZs
-  obtain ⟨hεφt0, hν0⟩ := Gmul_nonneg p n hA3 hπφ0 hψ0 (Zb := Zp) (mul_nonneg hφb0 (add_nonneg htb0 hEm0))
+  obtain ⟨hεφt0, hν0'⟩ := Gmul_nonneg p n hA3 hπφ0 hψ0 (Zb := Zp) (mul_nonneg hφb0 (add_nonneg htb0 hEm0))
   obtain ⟨hεs0, hπs0⟩ := Gadd_nonneg p n hA3 hπφ0 hψ0 hZs0
-  set εφt := GmulE p n πφ ψ Zp + (2 : ℝ) ^ (-B - 12) * max φb (tb + Em) with hεφt
+  set εφt := GmulE p n πφ ψ Zp + n * η + (2 : ℝ) ^ (-B - 12) * max φb (tb + Em) with hεφt
   set εs := GaddE p n πφ ψ Zs with hεs
   set πs := GaddP p n πφ ψ Zs with hπs
-  set ν := GmulP p n πφ ψ Zp with hν
-  set Eδ := Real.exp E * (Real.exp δ - 1) with hEδ
+  set ν := fun i => GmulP p n πφ ψ Zp i + η with hν
+  have hν0 : ∀ i, 0 ≤ ν i := fun i => add_nonneg (hν0' i) hη
+  set Eδ := Real.exp E * (Real.exp δ - 1) + D * (1 + tb + Em) with hEδ
   set cb := Real.exp E - 1 with hcb
   set Zc := cb + ξ * Em + Eδ + εφt + εs with hZc
   have hcb0 : 0 ≤ cb := (abs_nonneg _).trans hcs
   have hmax0 : 0 ≤ (2 : ℝ) ^ (-B - 12) * max φb (tb + Em) :=
     mul_nonneg (by positivity) (le_max_of_le_left hφb0)
-  have hεφt0' : 0 ≤ εφt := add_nonneg hεφt0 hmax0
-  have hξ0 : 0 ≤ ξ := (Real.exp_pos _).le.trans hξ
+  have hεφt0' : 0 ≤ εφt := add_nonneg (add_nonneg hεφt0 hnη) hmax0
+  have hξ0 : 0 ≤ ξ := (abs_nonneg _).trans hξ
   have hδ0 : 0 ≤ δ := (abs_nonneg _).trans hRre
-  have hEδ0 : 0 ≤ Eδ := mul_nonneg (Real.exp_pos _).le (by linarith [Real.add_one_le_exp δ])
+  have hEδ0 : 0 ≤ Eδ := add_nonneg (mul_nonneg (Real.exp_pos _).le (by linarith [Real.add_one_le_exp δ]))
+    (mul_nonneg hD0 (by linarith))
   have hZc0 : 0 ≤ Zc :=
     add_nonneg (add_nonneg (add_nonneg (add_nonneg hcb0 (mul_nonneg hξ0 hEm0)) hEδ0) hεφt0') hεs0
   obtain ⟨hεc0, hχ'0⟩ := Gadd_nonneg p n hA3 hπs0 hν0 hZc0
@@ -566,9 +655,9 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
   have hEc0 : 0 ≤ Ec :=
     add_nonneg (add_nonneg (add_nonneg (add_nonneg (mul_nonneg hξ0 hEm0) hEδ0) hεφt0') hεs0) hεc0
   obtain ⟨-, hχ''0⟩ := Gadd_nonneg p n hA3 hπφ0 hψ0 (Zb := cb + Ec) (add_nonneg hcb0 hEc0)
-  have hL : (logC4 p n πφ ψ φb tb Em E δ b ξ B).1 = Ec := rfl
-  have hL2 : (logC4 p n πφ ψ φb tb Em E δ b ξ B).2 = fun i => max (GaddP p n πs ν Zc i) (GaddP p n πφ ψ (cb + Ec) i) :=
-    rfl
+  have hL : (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).1 = Ec := rfl
+  have hL2 : (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).2 =
+      fun i => max (GaddP p n πs ν Zc i) (GaddP p n πφ ψ (cb + Ec) i) := rfl
   rw [hL, hL2]
   refine ?_
   -- `s = ADD(φ, t)`
@@ -614,9 +703,9 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
       _ ≤ εs + (Ec - εs - GaddE p n πs ν Zc) := add_le_add s1 hmain
       _ ≤ Ec := by linarith
   · -- `c = ADD(s, p)`
-    obtain ⟨q1, q2, q3⟩ := pOp_bound p n hp hn hA3 eφ et φ t hφ ht πφ ψ hπφ hψ Zp hZp'
+    obtain ⟨q1, q2, q3⟩ := pOp_bound p n hp hn hA3 hSp eφ et φ t hφ ht πφ ψ hπφ hψ Zp hZp'
     rw [← hΦd, ← hTd] at q1
-    set P := fun i => (2 : ℝ) ^ et * pt (smulOp p n eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i with hPd
+    set P := fun i => Sp ((2 : ℝ) ^ et * pt (smulOp p n id eφ φ fun i => (2 : ℝ) ^ (-et) * t i) i) with hPd
     set Ps := ∑ i ∈ range n, P i with hPs
     have hZc' : |∑ i ∈ range n, pt S i + Ps| ≤ Zc := by
       rw [← hSs]
@@ -652,45 +741,56 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
 /-! ## The theorem -/
 
 omit [Prec_gt_0 p] in
-/-- step (3): `x' = 2^kx`, exact as the exponent range is unbounded, and `φ = ADDF(x', -1)` -/
-noncomputable def logPhi (k : ℤ) (x : ℕ → ℝ) : ℕ → ℝ := pt (addfOp p n (fun i => (2 : ℝ) ^ k * x i) (-1))
+/-- step (3): `x' = 2^kx`, each part rounded by `S`, and `φ = ADDF(x', -1)` -/
+noncomputable def logPhi (S : ℝ → ℝ) (k : ℤ) (x : ℕ → ℝ) : ℕ → ℝ :=
+  pt (addfOp p n (fun i => S ((2 : ℝ) ^ k * x i)) (-1))
 
 omit [Prec_gt_0 p] in
-/-- LOG after its start `y_0`, with `t` from EXP's core on `-y_0`: `ADD(y_0, y_c)` -/
-noncomputable def logOp (y0 x : ℕ → ℝ) (k : ℤ) (t : ℕ → ℝ) (B eφ et ec : ℤ) (F' : ℕ → ℕ → ℝ) (q : ℕ) : List ℝ :=
-  addOp p n y0 (logYc p n B ec (logC p n B eφ et (logPhi p n k x) t) F' q)
+/-- LOG after its start `y_0`, with `t` from EXP's core on `-y_0`: `ADD(y_0, y_c)`; `S_x`, `S_p` and `S_c` round the
+scalings of steps (3), (4) and (5) -/
+noncomputable def logOp (Sx Sp Sc : ℝ → ℝ) (y0 x : ℕ → ℝ) (k : ℤ) (t : ℕ → ℝ) (B eφ et ec : ℤ)
+    (F' : ℕ → ℕ → ℝ) (q : ℕ) : List ℝ :=
+  addOp p n y0 (logYc p n Sc B ec (logC p n Sp B eφ et (logPhi p n Sx k x) t) F' q)
 
 omit [Prec_gt_0 p] in
-/-- `ξ = e^{E+δ-a}` for `r ≥ 0` and `e^{E+b+δ}` for `r ≤ 0` -/
-noncomputable def logXi (pos : Bool) (E a b δ : ℝ) : ℝ := if pos then Real.exp (E + δ - a) else Real.exp (E + b + δ)
+/-- `ξ = e^{E+δ-a} + D` for `r ≥ 0` and `e^{E+b+δ} + D` for `r ≤ 0`, with `D` the paper's `2nη_0` -/
+noncomputable def logXi (D : ℝ) (pos : Bool) (E a b δ : ℝ) : ℝ :=
+  (if pos then Real.exp (E + δ - a) else Real.exp (E + b + δ)) + D
 
 omit [Prec_gt_0 p] in
-/-- `φ̄ = max(ξ - 1, 1 - e^{-(E+b+δ)})` -/
-noncomputable def logPhiB (pos : Bool) (E a b δ : ℝ) : ℝ := max (logXi pos E a b δ - 1) (1 - Real.exp (-(E + b + δ)))
+/-- `φ̄ = max(ξ - 1, 1 - e^{-(E+b+δ)} + D)` -/
+noncomputable def logPhiB (D : ℝ) (pos : Bool) (E a b δ : ℝ) : ℝ :=
+  max (logXi D pos E a b δ - 1) (1 - Real.exp (-(E + b + δ)) + D)
 
 omit [Prec_gt_0 p] in
 /-- step (4)'s bounds for a case, from `π^φ = G_ADDF(π^x, 1; φ̄, φ̄ + ∑_{i≥1}π^x_i)` and Lemma 39's `(E_m, ψ_m)`, with
-`ψ_m` taken nonnegative -/
-noncomputable def logCase4 (E : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b δ : ℝ) (π : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ)
-    (φF : ℕ → ℝ) (d' : ℕ) (πx : ℕ → ℝ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
-  logC4 p n (GaddfP' p n πx (logPhiB pos E a b δ + ∑ i ∈ Ico 1 n, πx i) (logPhiB pos E a b δ))
-    (fun i => max ((coreBound p n 0 0 pos e m a b π Fk φF d').2 i) 0) (logPhiB pos E a b δ)
-    (coreT pos (coreBp n e m b 0) m) (coreBound p n 0 0 pos e m a b π Fk φF d').1 E δ b (logXi pos E a b δ) B
+`ψ_m` taken nonnegative and `D = nη_x` -/
+noncomputable def logCase4 (η₁ η₂ ηx ηp E : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b δ : ℝ) (π : ℕ → ℝ)
+    (Fk : ℕ → ℕ → ℝ) (φF : ℕ → ℝ) (d' : ℕ) (πx : ℕ → ℝ) (B : ℤ) : ℝ × (ℕ → ℝ) :=
+  logC4 p n (n * ηx) ηp
+    (GaddfP' p n πx (logPhiB (n * ηx) pos E a b δ + ∑ i ∈ Ico 1 n, πx i) (logPhiB (n * ηx) pos E a b δ))
+    (fun i => max ((coreBound p n η₁ η₂ pos e m a b π Fk φF d').2 i) 0) (logPhiB (n * ηx) pos E a b δ)
+    (coreT pos (coreBp n e m b η₁) m) (coreBound p n η₁ η₂ pos e m a b π Fk φF d').1 E δ b
+    (logXi (n * ηx) pos E a b δ) B
 
 omit [Prec_gt_0 p] in
 /-- `𝓔(ℓ) = ε_y + P` with `(ε_y, ·) = G_ADD(π^y, ω_r; ℓ + P)`, `C = e^E - 1 + E_c` -/
-noncomputable def logBound (ℓ E : ℝ) (πy : ℕ → ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b δ : ℝ) (π : ℕ → ℝ)
-    (Fk : ℕ → ℕ → ℝ) (φF : ℕ → ℝ) (d' : ℕ) (πx : ℕ → ℝ) (F' : ℕ → ℕ → ℝ) (φ' : ℕ → ℝ) (q : ℕ) (B : ℤ) : ℝ :=
-  let c4 := logCase4 p n E pos e m a b δ π Fk φF d' πx B
-  let P := logP p n c4.2 (Real.exp E - 1 + c4.1) c4.1 F' φ' q B
+noncomputable def logBound (η₁ η₂ ηx ηp ηc ℓ E : ℝ) (πy : ℕ → ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b δ : ℝ)
+    (π : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (φF : ℕ → ℝ) (d' : ℕ) (πx : ℕ → ℝ) (F' : ℕ → ℕ → ℝ) (φ' : ℕ → ℝ) (q : ℕ)
+    (B : ℤ) : ℝ :=
+  let c4 := logCase4 p n η₁ η₂ ηx ηp E pos e m a b δ π Fk φF d' πx B
+  let P := logP p n ηc c4.2 (Real.exp E - 1 + c4.1) c4.1 F' φ' q B
   GaddE p n πy P.2 (ℓ + P.1) + P.1
 
-/-- Theorem 42 (`thm:log`) with an unbounded exponent range, so `η_0 = 0`, for a case, with `x > 0` and `(n² + n)u < 1`:
-with the start `y_0` within `E` of `ln x` and `ℓ ≥ |ln x|`; EXP's reduction of `-y_0` to `r` within `δ` of
-`r_e = -y_0 - k ln 2`, with `a ≤ |r| ≤ b` and the case's sign; its core run with `U < 2^{e+1}`, `m` squarings and degree
-`d'`; `x' = 2^kx` with parts within `π^x` and `x'_0 ∈ [1/2, 2]`; the exponents `e_φ`, `e_t` and `e_c` of steps (4) and
-(5) with `U_v < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)` -/
-theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (x : ℕ → ℝ)
+/-- Theorem 42 (`thm:log`) for a case, with `x > 0` and `(n² + n)u < 1`: with the start `y_0` within `E` of `ln x` and
+`ℓ ≥ |ln x|`; EXP's reduction of `-y_0` to `r` within `δ` of `r_e = -y_0 - k ln 2`, with `a ≤ |r| ≤ b` and the case's
+sign; its core run with `U < 2^{e+1}`, `m` squarings and degree `d'`; the computed `x'`, each part of `2^kx` rounded
+within `η_x`, with parts within `π^x` and `x'_0 ∈ [1/2, 2]`; the exponents `e_φ`, `e_t` and `e_c` of steps (4) and
+(5) with `U_v < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)`. The
+scalings back of `p` are rounded within `η_p` and those of each `c ⊗ v` within `η_c` -/
+theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ ηx ηp ηc : ℝ}
+    {S₁ S₂ Sx Sp Sc : ℝ → ℝ} (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (hSx : Scl p ηx Sx) (hSp : Scl p ηp Sp)
+    (hSc : Scl p ηc Sc) (x : ℕ → ℝ)
     (hx : ∀ i < n, F p (x i)) (hX0 : 0 < ∑ i ∈ range n, x i) (y0 : ℕ → ℝ) (hy0 : ∀ i < n, F p (y0 i))
     (πy : ℕ → ℝ) (hπy : ∀ i < n, |y0 i| ≤ πy i) (ℓ E : ℝ) (hℓ : |Real.log (∑ i ∈ range n, x i)| ≤ ℓ)
     (hE : |∑ i ∈ range n, y0 i - Real.log (∑ i ∈ range n, x i)| ≤ E)
@@ -699,48 +799,53 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
     (ha : a ≤ |∑ i ∈ range n, r i|) (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
     (pos : Bool) (hsgn : if pos then 0 ≤ ∑ i ∈ range n, r i else ∑ i ∈ range n, r i ≤ 0)
     (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
-    (hd : 1 ≤ d') (hbd : coreBp n e m b 0 < d' + 2) (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
+    (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2) (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
+    (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φF : ℕ → ℝ) (hφF : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φF k)
-    (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |(2 : ℝ) ^ k * x i| ≤ πx i)
-    (hx0 : 1 / 2 ≤ (2 : ℝ) ^ k * x 0 ∧ (2 : ℝ) ^ k * x 0 ≤ 2) (B eφ et ec : ℤ)
-    (hUφ : expU p n γ (logPhi p n k x) < (2 : ℝ) ^ (eφ + 1))
-    (hUt : expU p n γ (expCore p n id id e m r Fk d') < (2 : ℝ) ^ (et + 1))
-    (hUc : expU p n γ (logC p n B eφ et (logPhi p n k x) (expCore p n id id e m r Fk d')) < (2 : ℝ) ^ (ec + 1))
+    (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |Sx ((2 : ℝ) ^ k * x i)| ≤ πx i)
+    (hx0 : 1 / 2 ≤ Sx ((2 : ℝ) ^ k * x 0) ∧ Sx ((2 : ℝ) ^ k * x 0) ≤ 2) (B eφ et ec : ℤ)
+    (hUφ : expU p n γ (logPhi p n Sx k x) < (2 : ℝ) ^ (eφ + 1))
+    (hUt : expU p n γ (expCore p n S₁ S₂ e m r Fk d') < (2 : ℝ) ^ (et + 1))
+    (hUc : expU p n γ (logC p n Sp B eφ et (logPhi p n Sx k x) (expCore p n S₁ S₂ e m r Fk d')) <
+      (2 : ℝ) ^ (ec + 1))
     (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q)
-    (hC : Real.exp E - 1 + (logCase4 p n E pos e m a b δ π Fk φF d' πx B).1 < 1) :
-    |(logOp p n y0 x k (expCore p n id id e m r Fk d') B eφ et ec F' q).sum - Real.log (∑ i ∈ range n, x i)| ≤
-      logBound p n ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B := by
+    (hC : Real.exp E - 1 + (logCase4 p n η₁ η₂ ηx ηp E pos e m a b δ π Fk φF d' πx B).1 < 1) :
+    |(logOp p n Sx Sp Sc y0 x k (expCore p n S₁ S₂ e m r Fk d') B eφ et ec F' q).sum -
+        Real.log (∑ i ∈ range n, x i)| ≤
+      logBound p n η₁ η₂ ηx ηp ηc ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B := by
   set X := ∑ i ∈ range n, x i with hXd
   set Y0 := ∑ i ∈ range n, y0 i with hY0d
   set R := ∑ i ∈ range n, r i with hRd
   have hE0 : 0 ≤ E := (abs_nonneg _).trans hE
   have hδ0 : 0 ≤ δ := (abs_nonneg _).trans hδ
   -- Lemma 39
-  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 (Scl.id p) (Scl.id p) r hr R hRd a b ha hb π hπ γ hγ e hU m d' hd
-    hbd (fun h => absurd h (lt_irrefl 0)) Fk hF φF hφF pos hsgn
-  set t := expCore p n id id e m r Fk d' with htd
-  set Em := (coreBound p n 0 0 pos e m a b π Fk φF d').1 with hEm
-  set ψ := fun i => max ((coreBound p n 0 0 pos e m a b π Fk φF d').2 i) 0 with hψd
+  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 hS₁ hS₂ r hr R hRd a b ha hb π hπ γ hγ e hU m d' hd hbd hb2 Fk hF
+    φF hφF pos hsgn
+  set t := expCore p n S₁ S₂ e m r Fk d' with htd
+  set Em := (coreBound p n η₁ η₂ pos e m a b π Fk φF d').1 with hEm
+  set ψ := fun i => max ((coreBound p n η₁ η₂ pos e m a b π Fk φF d').2 i) 0 with hψd
   have hψ0 : ∀ i, 0 ≤ ψ i := fun i => le_max_right _ _
   have hψ : ∀ i < n, |t i| ≤ ψ i := fun i hi => (c2 i hi).trans (le_max_left _ _)
-  set tb := coreT pos (coreBp n e m b 0) m with htb
+  set tb := coreT pos (coreBp n e m b η₁) m with htb
   -- `2^kx = e^{-e_0 - r_e}` with `e_0 = y_0 - ln x` and `r_e = -y_0 - k ln 2`
   set e0 := Y0 - Real.log X with he0d
   set re := -Y0 - k * Real.log 2 with hred
   have hX' : (2 : ℝ) ^ k * X = Real.exp (-e0 - re) := by
     rw [he0d, hred, show -(Y0 - Real.log X) - (-Y0 - k * Real.log 2) = Real.log X + k * Real.log 2 by ring,
       Real.exp_add, Real.exp_log hX0, exp_int_mul_log_two, mul_comm]
-  set ξ := logXi pos E a b δ with hξd
-  set φb := logPhiB pos E a b δ with hφbd
+  set D := (n : ℝ) * ηx with hDd
+  set ξ := logXi D pos E a b δ with hξd
+  set φb := logPhiB D pos E a b δ with hφbd
   have hreR : |re| ≤ b + δ := by
     have := abs_sub_abs_le_abs_sub re R
     rw [abs_sub_comm re R] at this
     linarith
-  have hξ : Real.exp (-e0 - re) ≤ ξ := by
+  have hξ : Real.exp (-e0 - re) + D ≤ ξ := by
     rw [hξd, logXi]
     have h1 := (abs_le.mp hδ)
     have h2 := (abs_le.mp hE)
+    refine add_le_add ?_ le_rfl
     cases pos with
     | true =>
       simp only [ite_true] at hsgn ⊢
@@ -752,16 +857,20 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
       exact Real.exp_le_exp.mpr (by linarith)
   have hlo : Real.exp (-(E + b + δ)) ≤ Real.exp (-e0 - re) :=
     Real.exp_le_exp.mpr (by linarith [(abs_le.mp hE).2, (abs_le.mp hreR).2])
-  -- step (3): `φ = x' - 1` exactly
-  set x' := fun i => (2 : ℝ) ^ k * x i with hx'd
-  have hx'F : ∀ i < n, F p (x' i) := fun i hi => F_zpow_mul p _ (hx i hi)
+  -- step (3): `x'` is within `D` of `2^kx`, and `φ = x' - 1` exactly
+  set x' := fun i => Sx ((2 : ℝ) ^ k * x i) with hx'd
+  have hx'F : ∀ i < n, F p (x' i) := fun i hi => hSx.mem _ (F_zpow_mul p _ (hx i hi))
   have hfx := lemma_fexact p n hp hn x' hx'F hx0.1 hx0.2
-  have hsx' : ∑ i ∈ range n, x' i = (2 : ℝ) ^ k * X := by rw [hx'd, ← mul_sum]
+  have hXp : |∑ i ∈ range n, x' i - Real.exp (-e0 - re)| ≤ D := by
+    rw [← hX', hXd, mul_sum, ← sum_sub_distrib]
+    refine (abs_sum_le_sum_abs _ _).trans ((sum_le_sum fun i _ => hSx.err _).trans_eq ?_)
+    rw [sum_const, card_range, nsmul_eq_mul]
+  have hXp' := abs_le.mp hXp
   have hφbx : |∑ i ∈ range n, x' i + -1| ≤ φb := by
-    rw [hsx', hX', ← sub_eq_add_neg, hφbd, logPhiB, ← hξd, abs_le]
+    rw [hφbd, logPhiB, ← hξd, abs_le]
     constructor
-    · linarith [le_max_right (ξ - 1) (1 - Real.exp (-(E + b + δ)))]
-    · linarith [le_max_left (ξ - 1) (1 - Real.exp (-(E + b + δ)))]
+    · linarith [le_max_right (ξ - 1) (1 - Real.exp (-(E + b + δ)) + D)]
+    · linarith [le_max_left (ξ - 1) (1 - Real.exp (-(E + b + δ)) + D)]
   have hlam : |x' 0 + -1| ≤ φb + ∑ i ∈ Ico 1 n, πx i := by
     have h0 : x' 0 + -1 = (∑ i ∈ range n, x' i + -1) - ∑ i ∈ Ico 1 n, x' i := by
       rw [range_eq_Ico, sum_eq_sum_Ico_succ_bot (by omega)]; ring
@@ -769,40 +878,46 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
     refine (abs_sub _ _).trans (add_le_add hφbx ((abs_sum_le_sum_abs _ _).trans
       (sum_le_sum fun i hi => hπx i (mem_Ico.mp hi).2)))
   obtain ⟨-, f2, f3, f4⟩ := addf_G' p n hp hn x' (-1) πx hx'F (F_neg p (F_one p)) hπx _ hlam φb hφbx
-  set φ := logPhi p n k x with hφd
-  have hφs : ∑ i ∈ range n, φ i = Real.exp (-e0 - re) - 1 := by
+  set φ := logPhi p n Sx k x with hφd
+  have hφs : ∑ i ∈ range n, φ i = ∑ i ∈ range n, x' i - 1 := by
     show ∑ i ∈ range n, (addfOp p n x' (-1)).getD i 0 = _
-    rw [← list_sum_getD _ n f4, hfx, hsx', hX']
+    rw [← list_sum_getD _ n f4, hfx]
+  have hΦ : |∑ i ∈ range n, φ i + 1 - Real.exp (-e0 - re)| ≤ D := by
+    rw [hφs, sub_add_cancel]; exact hXp
+  have hξ' : |∑ i ∈ range n, φ i + 1| ≤ ξ := by
+    rw [hφs, sub_add_cancel, abs_le]
+    constructor <;> linarith [Real.exp_pos (-e0 - re)]
   have hφb : |∑ i ∈ range n, φ i| ≤ φb := by
-    rw [hφs, ← hX', ← hsx', sub_eq_add_neg]; exact hφbx
+    rw [hφs, sub_eq_add_neg]; exact hφbx
   have hφb0 : 0 ≤ φb := (abs_nonneg _).trans hφb
   set πφ := GaddfP' p n πx (φb + ∑ i ∈ Ico 1 n, πx i) φb with hπφd
   have hπφ0 : ∀ i, 0 ≤ πφ i := gParts_nonneg p n (addfX_nonneg p n hπx0 (by
     have := sum_nonneg fun i (_ : i ∈ Ico 1 n) => hπx0 i; linarith)) hφb0 le_rfl
   -- step (4)
-  obtain ⟨d1, d2, d3, d4⟩ := log_step4 p n hp hn hA3 φ t (fun i _ => f3 i)
-    (expCore_F p n hp hn hA3 (Scl.id p) (Scl.id p) e m r hr Fk hF d')
-    πφ ψ hπφ0 hψ0 (fun i _ => f2 i) hψ hδ (show |e0| ≤ E from hE) hb hφs hξ hφb c1 c3 B eφ et γ hγ hUφ hUt
-  set c := logC p n B eφ et φ t with hcd
-  set c4 := logC4 p n πφ ψ φb tb Em E δ b ξ B with hc4
-  have hc4' : logCase4 p n E pos e m a b δ π Fk φF d' πx B = c4 := rfl
+  obtain ⟨d1, d2, d3, d4⟩ := log_step4 p n hp hn hA3 hSp φ t (fun i _ => f3 i)
+    (expCore_F p n hp hn hA3 hS₁ hS₂ e m r hr Fk hF d')
+    πφ ψ hπφ0 hψ0 (fun i _ => f2 i) hψ hδ (show |e0| ≤ E from hE) hb hΦ hξ' hφb c1 c3 B eφ et γ hγ hUφ hUt
+  set c := logC p n Sp B eφ et φ t with hcd
+  set c4 := logC4 p n D ηp πφ ψ φb tb Em E δ b ξ B with hc4
+  have hc4' : logCase4 p n η₁ η₂ ηx ηp E pos e m a b δ π Fk φF d' πx B = c4 := rfl
   rw [hc4'] at hC
   -- step (5)
   have hcs : |Real.exp (-e0) - 1| ≤ Real.exp E - 1 :=
     (abs_exp_sub_one_le _).trans (by rw [abs_neg]; linarith [Real.exp_le_exp.mpr hE])
-  obtain ⟨g1, g2, g3⟩ := log_step5 p n hp hn hA3 c d3 c4.2 d4 d2 (Real.exp (-e0) - 1) (Real.exp E - 1) c4.1 hcs d1
-    hC F' hF' φ' hφ' q hq B ec γ hγ hUc
+  obtain ⟨g1, g2, g3⟩ := log_step5 p n hp hn hA3 hSc c d3 c4.2 d4 d2 (Real.exp (-e0) - 1) (Real.exp E - 1) c4.1 hcs
+    d1 hC F' hF' φ' hφ' q hq B ec γ hγ hUc
   rw [show 1 + (Real.exp (-e0) - 1) = Real.exp (-e0) by ring, Real.log_exp] at g1
-  set yc := logYc p n B ec c F' q with hycd
-  set P := logP p n c4.2 (Real.exp E - 1 + c4.1) c4.1 F' φ' q B with hPd
+  set yc := logYc p n Sc B ec c F' q with hycd
+  set P := logP p n ηc c4.2 (Real.exp E - 1 + c4.1) c4.1 F' φ' q B with hPd
   -- the last ADD
   have hZ : |Y0 + ∑ i ∈ range n, yc i| ≤ ℓ + P.1 := by
     have e1 : Y0 + ∑ i ∈ range n, yc i = Real.log X + (∑ i ∈ range n, yc i - -e0) := by rw [he0d]; ring
     rw [e1]
     exact (abs_add_le _ _).trans (add_le_add hℓ g1)
   obtain ⟨a1, -, -, a4⟩ := add_G p n hp hn hA3 y0 yc πy P.2 hy0 g3 hπy g2 (ℓ + P.1) hZ
-  have hres : logOp p n y0 x k t B eφ et ec F' q = addOp p n y0 yc := rfl
-  have hB : logBound p n ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B = GaddE p n πy P.2 (ℓ + P.1) + P.1 := rfl
+  have hres : logOp p n Sx Sp Sc y0 x k t B eφ et ec F' q = addOp p n y0 yc := rfl
+  have hB : logBound p n η₁ η₂ ηx ηp ηc ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B =
+      GaddE p n πy P.2 (ℓ + P.1) + P.1 := rfl
   rw [hres, hB]
   calc |(addOp p n y0 yc).sum - Real.log X| ≤ |(Y0 + ∑ i ∈ range n, yc i) - (addOp p n y0 yc).sum| +
         |Y0 + ∑ i ∈ range n, yc i - Real.log X| := by
