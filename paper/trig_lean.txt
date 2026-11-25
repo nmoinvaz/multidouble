@@ -1,33 +1,37 @@
-bucket   0: K_s 41, K_c 41, delta_S 1.469589424900 u^8, delta_C 2.377694551956 u^8, C 3.163167392640 u^8
-bucket   1: K_s 37, K_c 38, delta_S 1.175821970127 u^8, delta_C 1.436304583919 u^8, C 2.175821970127 u^8
-bucket   2: K_s 33, K_c 33, delta_S 1.042246022937 u^8, delta_C 1.097279944459 u^8, C 2.042246022937 u^8
-bucket   3: K_s 29, K_c 29, delta_S 1.010473411148 u^8, delta_C 1.024428681287 u^8, C 2.010473411148 u^8
-bucket   4: K_s 26, K_c 27, delta_S 1.002633477416 u^8, delta_C 1.005872827676 u^8, C 2.002633477416 u^8
-bucket   5: K_s 24, K_c 24, delta_S 1.000651856885 u^8, delta_C 1.001467673435 u^8, C 2.000651856885 u^8
-bucket   6: K_s 22, K_c 22, delta_S 1.000162942063 u^8, delta_C 1.000366817603 u^8, C 2.000162942063 u^8
-bucket   7: K_s 20, K_c 20, delta_S 1.000041397651 u^8, delta_C 1.000118890170 u^8, C 2.000041397651 u^8
-bucket   8: K_s 19, K_c 19, delta_S 1.000010182788 u^8, delta_C 1.000022891218 u^8, C 2.000010182788 u^8
-bucket   9: K_s 17, K_c 18, delta_S 1.000034705080 u^8, delta_C 1.000005722134 u^8, C 2.000034705080 u^8
-bucket  10: K_s 16, K_c 16, delta_S 1.000002972292 u^8, delta_C 1.000078511649 u^8, C 2.000002972292 u^8
-bucket  11: K_s 15, K_c 15, delta_S 1.000002567976 u^8, delta_C 1.000075029939 u^8, C 2.000002567976 u^8
-bucket  12: K_s 14, K_c 15, delta_S 1.000035042505 u^8, delta_C 1.000000089408 u^8, C 2.000035042505 u^8
-bucket  13: K_s 14, K_c 14, delta_S 1.000000010033 u^8, delta_C 1.000000022356 u^8, C 2.000000010033 u^8
-bucket  14: K_s 13, K_c 13, delta_S 1.000000002681 u^8, delta_C 1.000000008447 u^8, C 2.000000002681 u^8
-bucket  15: K_s 12, K_c 12, delta_S 1.000001189963 u^8, delta_C 1.000029732708 u^8, C 2.000001189963 u^8
-bucket  17: K_s 11, K_c 11, delta_S 1.000000043679 u^8, delta_C 1.000001001777 u^8, C 2.000000043679 u^8
-bucket  19: K_s 10, K_c 10, delta_S 1.000000344422 u^8, delta_C 1.000007230953 u^8, C 2.000000344422 u^8
-bucket  21: K_s  9, K_c 10, delta_S 1.000578475867 u^8, delta_C 1.000000000000 u^8, C 2.000578475867 u^8
-bucket  22: K_s  9, K_c  9, delta_S 1.000000002295 u^8, delta_C 1.000000041928 u^8, C 2.000000002295 u^8
-bucket  25: K_s  8, K_c  8, delta_S 1.000000047257 u^8, delta_C 1.000000801863 u^8, C 2.000000047257 u^8
-bucket  29: K_s  7, K_c  7, delta_S 1.000000200554 u^8, delta_C 1.000003006987 u^8, C 2.000000200554 u^8
-bucket  34: K_s  6, K_c  6, delta_S 1.000010524544 u^8, delta_C 1.000136817915 u^8, C 2.000010524544 u^8
-bucket  41: K_s  5, K_c  6, delta_S 1.000410453832 u^8, delta_C 1.000000000000 u^8, C 2.000410453832 u^8
-bucket  42: K_s  5, K_c  5, delta_S 1.000000400922 u^8, delta_C 1.000004409171 u^8, C 2.000000400922 u^8
-bucket  52: K_s  4, K_c  5, delta_S 1.000705467461 u^8, delta_C 1.000000000000 u^8, C 2.000705467461 u^8
-bucket  53: K_s  4, K_c  4, delta_S 1.000002755821 u^8, delta_C 1.000024801587 u^8, C 2.000002755821 u^8
-bucket  71: K_s  3, K_c  3, delta_S 1.000049603263 u^8, delta_C 1.000347222222 u^8, C 2.000049603263 u^8
-bucket 107: K_s  2, K_c  3, delta_S 1.000520833422 u^8, delta_C 1.000000000000 u^8, C 2.000520833422 u^8
-bucket 108: K_s  2, K_c  2, delta_S 1.000032552172 u^8, delta_C 1.000162760417 u^8, C 2.000032552172 u^8
-the largest: 3.163167392640 u^8 <= 3.163167393 u^8: True
+bucket   0: K_s 41, K_c 41, delta_S 1.469589424900 u^8, delta_C 2.377694551956 u^8, C 3.163167392641 u^8, C^T 6.418350520168 u^8
+bucket   1: K_s 37, K_c 38, delta_S 1.175821970127 u^8, delta_C 1.436304583919 u^8, C 2.175821970127 u^8, C^T 4.800525567780 u^8
+bucket   2: K_s 33, K_c 33, delta_S 1.042246022938 u^8, delta_C 1.097279944460 u^8, C 2.042246022938 u^8, C^T 4.182440851772 u^8
+bucket   3: K_s 29, K_c 29, delta_S 1.010473411148 u^8, delta_C 1.024428681287 u^8, C 2.010473411148 u^8, C^T 4.045395269009 u^8
+bucket   4: K_s 26, K_c 27, delta_S 1.002633477417 u^8, delta_C 1.005872827677 u^8, C 2.002633477417 u^8, C^T 4.011115277998 u^8
+bucket   5: K_s 24, K_c 24, delta_S 1.000651856885 u^8, delta_C 1.001467673435 u^8, C 2.000651856885 u^8, C^T 4.002770920034 u^8
+bucket   6: K_s 22, K_c 22, delta_S 1.000162942064 u^8, delta_C 1.000366817604 u^8, C 2.000162942064 u^8, C^T 4.000692589855 u^8
+bucket   7: K_s 20, K_c 20, delta_S 1.000041397651 u^8, delta_C 1.000118890170 u^8, C 2.000041397651 u^8, C^T 4.000201030310 u^8
+bucket   8: K_s 19, K_c 19, delta_S 1.000010182788 u^8, delta_C 1.000022891219 u^8, C 2.000010182788 u^8, C^T 4.000043297831 u^8
+bucket   9: K_s 17, K_c 18, delta_S 1.000034705081 u^8, delta_C 1.000005722135 u^8, C 2.000034705081 u^8, C^T 4.000043021577 u^8
+bucket  10: K_s 16, K_c 16, delta_S 1.000002972293 u^8, delta_C 1.000078511650 u^8, C 2.000002972293 u^8, C^T 4.000082170951 u^8
+bucket  11: K_s 15, K_c 15, delta_S 1.000002567976 u^8, delta_C 1.000075029940 u^8, C 2.000002567976 u^8, C^T 4.000077808087 u^8
+bucket  12: K_s 14, K_c 15, delta_S 1.000035042505 u^8, delta_C 1.000000089409 u^8, C 2.000035042505 u^8, C^T 4.000035222875 u^8
+bucket  13: K_s 14, K_c 14, delta_S 1.000000010033 u^8, delta_C 1.000000022356 u^8, C 2.000000010033 u^8, C^T 4.000000093549 u^8
+bucket  14: K_s 13, K_c 13, delta_S 1.000000002681 u^8, delta_C 1.000000008447 u^8, C 2.000000002681 u^8, C^T 4.000000064837 u^8
+bucket  15: K_s 12, K_c 12, delta_S 1.000001189963 u^8, delta_C 1.000029732708 u^8, C 2.000001189963 u^8, C^T 4.000030974517 u^8
+bucket  17: K_s 11, K_c 11, delta_S 1.000000043680 u^8, delta_C 1.000001001777 u^8, C 2.000000043680 u^8, C^T 4.000001096721 u^8
+bucket  19: K_s 10, K_c 10, delta_S 1.000000344422 u^8, delta_C 1.000007230953 u^8, C 2.000000344422 u^8, C^T 4.000007626603 u^8
+bucket  21: K_s  9, K_c 10, delta_S 1.000578475868 u^8, delta_C 1.000000000001 u^8, C 2.000578475868 u^8, C^T 4.000578527094 u^8
+bucket  22: K_s  9, K_c  9, delta_S 1.000000002296 u^8, delta_C 1.000000041928 u^8, C 2.000000002296 u^8, C^T 4.000000095449 u^8
+bucket  25: K_s  8, K_c  8, delta_S 1.000000047258 u^8, delta_C 1.000000801864 u^8, C 2.000000047258 u^8, C^T 4.000000900347 u^8
+bucket  29: K_s  7, K_c  7, delta_S 1.000000200555 u^8, delta_C 1.000003006988 u^8, C 2.000000200555 u^8, C^T 4.000003258768 u^8
+bucket  34: K_s  6, K_c  6, delta_S 1.000010524544 u^8, delta_C 1.000136817915 u^8, C 2.000010524544 u^8, C^T 4.000147393685 u^8
+bucket  41: K_s  5, K_c  6, delta_S 1.000410453833 u^8, delta_C 1.000000000001 u^8, C 2.000410453833 u^8, C^T 4.000410505059 u^8
+bucket  42: K_s  5, K_c  5, delta_S 1.000000400923 u^8, delta_C 1.000004409172 u^8, C 2.000000400923 u^8, C^T 4.000004861320 u^8
+bucket  52: K_s  4, K_c  5, delta_S 1.000705467461 u^8, delta_C 1.000000000001 u^8, C 2.000705467461 u^8, C^T 4.000705518687 u^8
+bucket  53: K_s  4, K_c  4, delta_S 1.000002755821 u^8, delta_C 1.000024801588 u^8, C 2.000002755821 u^8, C^T 4.000027608634 u^8
+bucket  71: K_s  3, K_c  3, delta_S 1.000049603264 u^8, delta_C 1.000347222223 u^8, C 2.000049603264 u^8, C^T 4.000396876712 u^8
+bucket 107: K_s  2, K_c  3, delta_S 1.000520833422 u^8, delta_C 1.000000000001 u^8, C 2.000520833422 u^8, C^T 4.000520884648 u^8
+bucket 108: K_s  2, K_c  2, delta_S 1.000032552172 u^8, delta_C 1.000162760417 u^8, C 2.000032552172 u^8, C^T 4.000195363815 u^8
+the largest: 3.163167392641 u^8 <= 3.163167393 u^8: True
+the tangent, with the computed sine and cosine on H(theta) in every bucket: 6.418350520168 u^8 <= 6.418350521 u^8: True
+kappa_DIV at theta = 1.4143 and 3.0: 103232123.93 and 461400802.01, within 103232124 and 461400803: True
+bucket 0 of the tangent agrees with trig_consts.py to 9 digits: True
 bucket 0 agrees with trig_consts.py to 50 digits: True
 control, no truncation term, falls below trig_consts.py: True
+control, the ladder H(1) in the top bucket, must not hold: True
