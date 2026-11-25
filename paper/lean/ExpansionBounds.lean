@@ -65,6 +65,8 @@ import ExpansionBounds.Trig8
 import ExpansionBounds.TanEval
 import ExpansionBounds.Tan8
 import ExpansionBounds.TrigN
+import ExpansionBounds.Trig2
+import ExpansionBounds.Trig4
 import ExpansionBounds.ExpRed8
 import ExpansionBounds.ExpEval
 import ExpansionBounds.Exp8

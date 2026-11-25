@@ -32,6 +32,10 @@ TAN_TH = (Fr(14143, 10000), Fr(3))
 TAN_KD = (Fr(103232124), Fr(461400803))
 # the bounds of the buckets from j on, for the sine and cosine and for the tangent: (j, C, C^T)
 LOW = ((1, Fr(2175822, 10 ** 6), Fr(4800526, 10 ** 6)), (5, Fr(2000706, 10 ** 6), Fr(4002771, 10 ** 6)))
+# the remark's bounds at other n, for the sine and cosine and for the tangent: (n, 10^6 C, 10^6 C^T, modules).
+# Modules are written where their number is not zero. At n = 12 a Horner step takes the kernel about 20 seconds and
+# there are about 1400 of them, so its bounds are evaluated here and not checked by the kernel.
+OTHER = ((2, 3168701, 6452138, 1), (4, 3164155, 6426155, 2), (12, 3582787311, 4929367335, 0))
 DROP = False  # the control: no truncation term
 
 
@@ -117,10 +121,19 @@ def g_add(a, b, Zb):
     return g_err(X, Zb, F), g_parts(X, Zb, F)
 
 
-AB = [(2 * U) ** i * ((1 - 2 * U) / (1 - 4 * U)) for i in range(N)]
-_ez, _zeta = g_mul(AB, AB, Fr(1))
-EZ = up(_ez)
-ZETA = [up(x) for x in _zeta]
+def set_n(n, kd=None):
+    """the number of parts, with the part bounds of r and of z = r^2 at that n and the bounds kd on kappa_DIV"""
+    global N, AB, EZ, ZETA, TAN_KD
+    N = n
+    if kd:
+        TAN_KD = kd
+    AB = [(2 * U) ** i * ((1 - 2 * U) / (1 - 4 * U)) for i in range(N)]
+    ez, zeta = g_mul(AB, AB, Fr(1))
+    EZ = up(ez)
+    ZETA = [up(x) for x in zeta]
+
+
+set_n(N)
 
 
 def rbar(j):
@@ -218,6 +231,34 @@ def tables():
         if not groups or groups[-1][1:] != pr:
             groups.append((j,) + pr)
     return F, groups
+
+
+def tables_n(n):
+    """the greedy coefficients and trig_consts.py's series lengths at n parts"""
+    ks, kc = tc.k_table(n, True), tc.k_table(n, False)
+    kmax = max(max(ks), max(kc))
+    F = {sine: [[Fr(x) for x in tc.greedy(coef(sine, k), n)] for k in range(kmax)] for sine in (True, False)}
+    groups = []
+    for j, pr in enumerate(zip(ks, kc)):
+        if not groups or groups[-1][1:] != pr:
+            groups.append((j,) + pr)
+    return F, groups
+
+
+class Names:
+    """the Lean names of a table's run: Trig8/Defs.lean at n = 8, TrigN/Defs.lean on the table `trig<n>Tab` otherwise"""
+
+    def __init__(self, n):
+        self.pre = f'trig{n}'
+        if n == 8:
+            self.run, self.init, self.cut = 'trig8Run', 'trig8Init', 'trig8Run_cut'
+            self.ok, self.group, self.fs, self.fc = 'trig8Ok', 'Trig8Group', 'trig8FsQ', 'trig8FcQ'
+        else:
+            tab = f'trig{n}Tab'
+            self.run, self.init, self.cut = f'{tab}.run', f'{tab}.init', f'TrigTab.run_cut {tab}'
+            self.ok, self.group = f'{tab}.Ok trig{n}C', f'{tab}.Group trig{n}C'
+            self.fs, self.fc = f'{tab}.FsQ', f'{tab}.FcQ'
+            self.tan = f'trig{n}Ct trig{n}Kd0 trig{n}Kd3'
 
 
 def pair(q):
@@ -362,41 +403,262 @@ def low_text(groups, states, tan):
     return t
 
 
-def group_text(F, j, Ks, Kc):
-    """the states, the kernel's checks and `Trig8Group` for bucket j"""
+def group_text(F, j, Ks, Kc, nm=None):
+    """the states, the kernel's checks and the group's theorem for bucket j, with the Lean names nm"""
+    nm = nm or Names(8)
+    q = nm.pre
     rb = rbar(j)
     o, last = [], {}
-    for sine, K, tag, C, Fq in ((True, Ks, 's', 'sinCQ', 'trig8FsQ'), (False, Kc, 'c', 'cosCQ', 'trig8FcQ')):
+    for sine, K, tag, C, Fq in ((True, Ks, 's', 'sinCQ', nm.fs), (False, Kc, 'c', 'cosCQ', nm.fc)):
         sts = horner_states(rb, sine, F[sine], K)
         d = K - 1
         for a, st in sts[1:]:
-            o.append(f'\ndef trig8_{tag}{j}_{a} : (ℤ × ℕ) × List (ℤ × ℕ) :=\n  ({pair(st[0])},\n    ['
+            o.append(f'\ndef {q}_{tag}{j}_{a} : (ℤ × ℕ) × List (ℤ × ℕ) :=\n  ({pair(st[0])},\n    ['
                      + wrap([pair(x) for x in st[1]], ', ', 5) + '])\n')
         names = []
         for (a, _), (b, _) in zip(sts, sts[1:]):
-            start = f'(trig8Init {C} {Fq} {d})' if a == 0 else f'(dySt trig8_{tag}{j}_{a})'
-            names.append((f'trig8_{tag}{j}_{a}_{b}', b - a))
-            o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem trig8_{tag}{j}_{a}_{b} :\n'
-                     f'    trig8Run {C} {Fq} {j} {d} {a} {b - a} {start} = dySt trig8_{tag}{j}_{b} := by\n'
+            start = f'({nm.init} {C} {Fq} {d})' if a == 0 else f'(dySt {q}_{tag}{j}_{a})'
+            names.append((f'{q}_{tag}{j}_{a}_{b}', b - a))
+            o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_{tag}{j}_{a}_{b} :\n'
+                     f'    {nm.run} {C} {Fq} {j} {d} {a} {b - a} {start} = dySt {q}_{tag}{j}_{b} := by\n'
                      '  decide +kernel\n')
         if K == 2:
-            last[tag] = f'(trig8Init {C} {Fq} {d})'
-            o.append(f'\ntheorem trig8_{tag}{j} : trig8Run {C} {Fq} {j} {d} 0 0 (trig8Init {C} {Fq} {d}) =\n'
-                     f'    trig8Init {C} {Fq} {d} := rfl\n')
+            last[tag] = f'({nm.init} {C} {Fq} {d})'
+            o.append(f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 0 ({nm.init} {C} {Fq} {d}) =\n'
+                     f'    {nm.init} {C} {Fq} {d} := rfl\n')
         else:
-            last[tag] = f'(dySt trig8_{tag}{j}_{K - 2})'
+            last[tag] = f'(dySt {q}_{tag}{j}_{K - 2})'
             term = names[-1][0]
             rest = names[-1][1]
-            for nm, m in reversed(names[:-1]):
-                term = f'trig8Run_cut {C} {Fq} {j} {d} _ {m} {rest} {nm}\n    ({term})'
+            for name, m in reversed(names[:-1]):
+                term = f'{nm.cut} {C} {Fq} {j} {d} _ {m} {rest} {name}\n    ({term})'
                 rest += m
-            o.append(f'\ntheorem trig8_{tag}{j} : trig8Run {C} {Fq} {j} {d} 0 {K - 2} (trig8Init {C} {Fq} {d}) =\n'
-                     f'    dySt trig8_{tag}{j}_{K - 2} :=\n  {term}\n')
+            o.append(f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 {K - 2} ({nm.init} {C} {Fq} {d}) =\n'
+                     f'    dySt {q}_{tag}{j}_{K - 2} :=\n  {term}\n')
         last[tag + 'v'], last[tag + 'p'] = tail(rb, sine, K, sts[-1][1])
-    o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem trig8_ok{j} : trig8Ok {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n'
+    o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_ok{j} : {nm.ok} {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n'
              '  decide +kernel\n')
-    o.append(f'\ntheorem trig8_g{j} : Trig8Group ({j}, {Ks}, {Kc}) :=\n  ⟨_, _, trig8_s{j}, trig8_c{j}, trig8_ok{j}⟩\n')
+    o.append(f'\ntheorem {q}_g{j} : {nm.group} ({j}, {Ks}, {Kc}) :=\n  ⟨_, _, {q}_s{j}, {q}_c{j}, {q}_ok{j}⟩\n')
     return ''.join(o), last, (last['sv'], last['cv'], last['sp'], last['cp'])
+
+
+DATA_N = '''import ExpansionBounds.TrigN.Defs
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: the tables
+
+The %N parts of the coefficients `s_k = (-1)^k/(2k + 1)!` and `c_k = (-1)^k/(2k)!` of SINR and COSR, each the greedy
+rounding to %N binary64 numbers, as dyadic pairs `(m, k)` for `m / 2 ^ k`, and the series lengths: `(j, K_s, K_c)` for
+the first bucket `j` of each run of buckets with the same lengths, bucket `j` being `2^{-(j+1)} ≤ |r_0| < 2^{-j}`.
+The lengths are those of `trig_consts.py`. This file is written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+'''
+
+RUN_N = '''import ExpansionBounds.Trig%N.Data
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: Horner's runs of the buckets FIRST
+
+Each run is checked by the kernel in pieces of at most STEP steps, from the state before a piece to the state after
+it, and then `TrigTab.Ok` and, for the tangent, `TrigTab.TanOk` on the last states. This file is written by
+`trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+'''
+
+ALL_N = '''IMPORTS
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: every bucket
+
+`TrigTab.Group` and `TrigTab.TanGroup` hold for each run of buckets with the same series lengths. This file is
+written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+
+theorem trig%N_all : ∀ g ∈ trig%NTab.groups, trig%NTab.Group trig%NC g := by
+  intro g hg
+  change g ∈ trig%NGroups at hg
+  simp only [trig%NGroups, List.mem_cons, List.not_mem_nil, or_false] at hg
+  rcases hg with CASES
+EXACTS
+
+theorem tan%N_all : ∀ g ∈ trig%NTab.groups, trig%NTab.TanGroup trig%NCt trig%NKd0 trig%NKd3 g := by
+  intro g hg
+  change g ∈ trig%NGroups at hg
+  simp only [trig%NGroups, List.mem_cons, List.not_mem_nil, or_false] at hg
+  rcases hg with CASES
+TEXACTS
+
+end ExpansionBounds
+'''
+
+TOP_N = '''import ExpansionBounds.Trig%N.All
+import ExpansionBounds.TrigN
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: the sine and the cosine within `%Cu^%N`, the tangent within `%Tu^%N`
+
+The remark after Theorem 35 at `n = %N`: SIN and COS with the coefficients and series lengths of
+`Trig%N/Data.lean`, on `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, are within `%Cu^%N` of `sin x` and
+`cos x`, relatively, plus `5E_π`, and TAN, for `x` at least `2^{%Np-1074}` away from the nonzero multiples
+of `π/2`, within `%Tu^%N + 5E_π/|sin x cos x|` of `tan x`, relatively. The kernel checks the tables,
+`κ_DIV` on the quotient's two ladders, the bounds below the last bucket and, in `Trig%N/Run0.lean` on, every
+run of buckets; `thm35_sincos_tab` and `thm35_tan_tab` do the rest. This file is written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+
+open Finset
+
+theorem trig%N_tab : trig%NTab.TabOk := by decide +kernel
+
+set_option maxHeartbeats 4000000 in
+theorem trig%N_tiny : trig%NTab.TinyOk trig%NC := by decide +kernel
+
+variable (p : ℤ) [Prec_gt_0 p]
+
+/-- the remark after Theorem 35 at `n = %N`: the sine and the cosine are within `%Cu^%N` of `sin x` and `cos x`,
+relatively, plus `5E_π` -/
+theorem thm35_sincos_%N (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < %N, F p (x i)) (hH : Htheta p %N 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
+    |∑ i ∈ range %N, sinN p %N es trig%NTab.Ks trig%NTab.Kc trig%NTab.FsR trig%NTab.FcR x i -
+          Real.sin (∑ i ∈ range %N, x i)| ≤
+        %Q * u p ^ %N * |Real.sin (∑ i ∈ range %N, x i)| +
+          5 * (|(redK p %N x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
+      |∑ i ∈ range %N, cosN p %N es trig%NTab.Ks trig%NTab.Kc trig%NTab.FsR trig%NTab.FcR x i -
+          Real.cos (∑ i ∈ range %N, x i)| ≤
+        %Q * u p ^ %N * |Real.cos (∑ i ∈ range %N, x i)| +
+          5 * (|(redK p %N x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
+  have h := thm35_sincos_tab p trig%NTab trig%NC (by decide) (by decide) ⟨_, _, rfl⟩ trig%N_tab trig%N_tiny
+    trig%N_all hp x hx hH hx0 es
+  rw [show ((trig%NC : ℚ) : ℝ) = %Q by unfold trig%NC; norm_num] at h
+  exact h
+
+omit [Prec_gt_0 p] in
+set_option maxHeartbeats 4000000 in
+theorem trig%N_kdiv : trig%NTab.KdivOk trig%NKd0 trig%NKd3 := by decide +kernel
+
+omit [Prec_gt_0 p] in
+set_option maxHeartbeats 4000000 in
+theorem tan%N_tiny : trig%NTab.TanTinyOk trig%NCt trig%NKd3 := by decide +kernel
+
+/-- the remark after Theorem 35 at `n = %N`: for `x` at least `2^{%Np-1074}` away from the nonzero multiples of `π/2`,
+the tangent is within `%Tu^%N + 5E_π/|sin x cos x|` of `tan x`, relatively -/
+theorem thm35_tan_%N (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < %N, F p (x i)) (hH : Htheta p %N 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
+    (hfar : redK p %N x ≠ 0 →
+      (2 : ℝ) ^ (p * (%N : ℕ) - 1074) ≤ |∑ i ∈ range %N, x i - redK p %N x * (Real.pi / 2)|) :
+    |∑ i ∈ range %N, tanN p %N es et trig%NTab.Ks trig%NTab.Kc trig%NTab.FsR trig%NTab.FcR x i -
+        Real.tan (∑ i ∈ range %N, x i)| ≤
+      (%R * u p ^ %N + 5 * (|(redK p %N x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        |Real.sin (∑ i ∈ range %N, x i) * Real.cos (∑ i ∈ range %N, x i)|) * |Real.tan (∑ i ∈ range %N, x i)| := by
+  have h := thm35_tan_tab p trig%NTab trig%NCt trig%NKd0 trig%NKd3 (by decide) (by decide) ⟨_, _, rfl⟩ trig%N_tab
+    trig%N_kdiv tan%N_tiny tan%N_all hp x hx hH hx0 es et hfar
+  rw [show ((trig%NCt : ℚ) : ℝ) = %R by unfold trig%NCt; norm_num] at h
+  exact h
+
+end ExpansionBounds
+'''
+
+
+CONTROLS_N = '''IMPORTS
+
+/-!
+# Controls of the remark after Theorem 35: the bounds at `n = 2` and `4`
+
+Each claim below is one of the kernel's checks of `Trig2.lean` and `Trig4.lean` with a bound one unit lower in its
+last digit, in the run of buckets where it is largest, or with a bound on `κ_DIV` one unit lower, and the kernel
+proves its negation. This file is written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+
+open Finset
+'''
+
+
+def controls_n(n, c, ct, rows, lasts):
+    """the controls of the checks at n: each bound one unit lower where it is largest, and kappa_DIV one unit lower"""
+    tab = f'trig{n}Tab'
+    jc, Ks, Kc = max(rows, key=lambda r: r[5])[:3]
+    jt, Kst, Kct = max(rows, key=lambda r: r[6])[:3]
+    sS, sC = lasts[jc]
+    head = '\nset_option maxHeartbeats 4000000 in\n'
+    return (
+        f'{head}/-- at `n = {n}`, `C` in bucket {jc} is not below `{dec_up(Fr(c - 1, 10 ** 6), 6)}u^{n}` -/\n'
+        f'example : ¬ trigCQ trig8U {n} (sinDeltaL trig8U {n} (upQ 200) trig8Ab (trig8Rb {jc}) {Ks} {sS})\n'
+        f'    (cosDeltaL trig8U {n} (upQ 200) trig8Ab (trig8Rb {jc}) {Kc} {sC}) (trig8Rb {jc}) ≤\n'
+        f'      {c - 1} / 1000000 * trig8U ^ {n} := by\n  decide +kernel\n'
+        f'{head}/-- at `n = {n}`, the tangent\'s check in bucket {jt} fails with `{dec_up(Fr(ct - 1, 10 ** 6), 6)}u^{n}` -/\n'
+        f'example : ¬ {tab}.TanOk ({ct - 1} / 1000000) trig{n}Kd0 trig{n}Kd3 {jt} {Kst} {Kct} {lasts[jt][0]}\n'
+        f'    {lasts[jt][1]} := by\n  decide +kernel\n'
+        f'{head}/-- at `n = {n}`, `κ_DIV(1.4143u)` is not within `{TAN_KD[0] - 1}` -/\n'
+        f'example : ¬ {tab}.KdivOk {TAN_KD[0] - 1} trig{n}Kd3 := by\n  decide +kernel\n'
+        f'{head}/-- at `n = {n}`, `κ_DIV(3u)` is not within `{TAN_KD[1] - 1}` -/\n'
+        f'example : ¬ {tab}.KdivOk trig{n}Kd0 {TAN_KD[1] - 1} := by\n  decide +kernel\n')
+
+
+def lean_modules_n(n, c, ct, mods):
+    """the modules of the remark's bounds c and ct, in millionths, at n: the table, Horner's runs, their union and the
+    theorems; N must be n"""
+    F, groups = tables_n(n)
+    nm = Names(n)
+    end = '\nend ExpansionBounds\n'
+    q, qt = f'{c} / 1000000', f'{ct} / 1000000'
+    cm, ctm, c, ct = c, ct, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
+    data = [DATA_N.replace('%N', str(n))]
+    for sine, name, what in ((True, f'trig{n}Fs', "SINR's"), (False, f'trig{n}Fc', "COSR's")):
+        rows = ['  [' + ', '.join(pair(x) for x in row) + ']' for row in F[sine]]
+        # elaborating a long table of long numerals passes the default limit
+        data.append(f'\nset_option maxHeartbeats 4000000 in\n/-- the parts of {what} coefficients -/\n'
+                    f'def {name} : List (List (ℤ × ℕ)) := [\n' + ',\n'.join(rows) + ']\n')
+    data.append('\n/-- `(j, K_s, K_c)` for the first bucket `j` of each run of buckets with the same series lengths -/\n'
+                f'def trig{n}Groups : List (ℕ × ℕ × ℕ) :=\n  ['
+                + wrap([f'({j}, {a}, {b})' for j, a, b in groups], ', ', 3) + ']\n')
+    data.append(f'\n/-- the table at `n = {n}` -/\ndef trig{n}Tab : TrigTab := ⟨{n}, trig{n}Fs, trig{n}Fc, trig{n}Groups⟩\n'
+                f'\n/-- the bound of the remark after Theorem 35, in units of `u^{n}` -/\ndef trig{n}C : ℚ := {q}\n'
+                f'\n/-- the tangent\'s bound in the remark, in units of `u^{n}` -/\ndef trig{n}Ct : ℚ := {qt}\n'
+                f'\n/-- a bound on `κ_DIV(1.4143u)` at `n = {n}` -/\ndef trig{n}Kd0 : ℚ := {TAN_KD[0]}\n'
+                f'\n/-- a bound on `κ_DIV(3u)` at `n = {n}` -/\ndef trig{n}Kd3 : ℚ := {TAN_KD[1]}\n')
+    files = {f'Trig{n}/Data.lean': ''.join(data) + end}
+    cost = lambda g: g[1] + g[2] + 4
+    bins = [[] for _ in range(mods)]
+    for g in sorted(groups, key=cost, reverse=True):
+        min(bins, key=lambda b: sum(cost(x) for x in b)).append(g)
+    rows, lasts = [], {}
+    for i, b in enumerate(bins):
+        b.sort()
+        body = [RUN_N.replace('%N', str(n)).replace('FIRST', ', '.join(str(g[0]) for g in b)).replace('STEP', str(STEP))]
+        for j, Ks, Kc in b:
+            text, last, (dS, dC, psS, psC) = group_text(F, j, Ks, Kc, nm)
+            body.append(text)
+            body.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem tan{n}_ok{j} :\n'
+                        f'    trig{n}Tab.TanOk {nm.tan} {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n'
+                        '  decide +kernel\n'
+                        f'\ntheorem tan{n}_g{j} : trig{n}Tab.TanGroup {nm.tan} ({j}, {Ks}, {Kc}) :=\n'
+                        f'  ⟨_, _, trig{n}_s{j}, trig{n}_c{j}, tan{n}_ok{j}⟩\n')
+            rows.append((j, Ks, Kc, dS, dC, trig_c(dS, dC, rbar(j)), tan_c(j, dS, dC, psS, psC)))
+            lasts[j] = (last['s'], last['c'])
+        files[f'Trig{n}/Run{i}.lean'] = ''.join(body) + end
+    rows.sort()
+    files[f'Trig{n}/All.lean'] = (
+        ALL_N.replace('IMPORTS', '\n'.join(f'import ExpansionBounds.Trig{n}.Run{i}' for i in range(mods)))
+        .replace('%N', str(n)).replace('CASES', wrap(['rfl'] * len(groups), ' | ', 4))
+        .replace('TEXACTS', '\n'.join(f'  · exact tan{n}_g{j}' for j, _, _ in groups))
+        .replace('EXACTS', '\n'.join(f'  · exact trig{n}_g{j}' for j, _, _ in groups)))
+    files[f'Trig{n}.lean'] = (TOP_N.replace('%N', str(n)).replace('%C', str(dec_up(c, 6))).replace('%Q', q)
+                              .replace('%T', str(dec_up(ct, 6))).replace('%R', qt))
+    return files, rows, controls_n(n, cm, ctm, rows, lasts)
+
+
+def bounds_n(n):
+    """(j, Ks, Kc, dS, dC, C, C^T) for each run of buckets at n, without the Lean text; N must be n"""
+    return bounds(*tables_n(n))
 
 
 def lean_modules(F, groups):
@@ -513,9 +775,34 @@ if __name__ == '__main__':
     print(f'control, the bounds for |r_0| < 2^-5 hold from |r_0| < 1/2 on: {low_ctl}')
     ok = (worst <= BOUND * u8 and agree and ctl < ref_c * (1 - Fr(1, 10 ** 6)) and tan_ok and kd_ok and tan_agree
           and ctl_t is None and low_ok and not low_ctl)
+    # the remark's bounds at other n, each with the control of one unit less in its last digit
+    controls = [CONTROLS_N.replace('IMPORTS', '\n'.join(f'import ExpansionBounds.Trig{n}' for n, *_, m in OTHER if m))]
+    for n, c, ct, mods in OTHER:
+        kd_n = tuple(tc.div_consts(n, P, th)['K'] for th in TAN_TH)
+        set_n(n, tuple(Fr(int(k) + 1) for k in kd_n))
+        if len(sys.argv) > 1 and mods:
+            more, rows_n, ctl_text = lean_modules_n(n, c, ct, mods)
+            files.update(more)
+            controls.append(ctl_text)
+        else:
+            rows_n = bounds_n(n)
+        un, c, ct = U ** n, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
+        worst_n = max(r[5] for r in rows_n)
+        on_ladder = all(r[6] is not None for r in rows_n)
+        tan_n = max(r[6] for r in rows_n) if on_ladder else None
+        held = worst_n <= c * un and on_ladder and tan_n <= ct * un
+        ctl_n = worst_n <= (c - Fr(1, 10 ** 6)) * un or (on_ladder and tan_n <= (ct - Fr(1, 10 ** 6)) * un)
+        print(f'n = {n}: {len(rows_n)} runs of buckets, kappa_DIV within {TAN_KD[0]} and {TAN_KD[1]}, the largest C '
+              f'{dec_up(worst_n / un, 9)} u^{n} <= {dec_up(c, 6)} u^{n} and C^T '
+              + (f'{dec_up(tan_n / un, 9)} u^{n} <= {dec_up(ct, 6)} u^{n}' if on_ladder else 'not on the ladder')
+              + f': {held}; control, either bound one unit less in its last digit: {ctl_n}')
+        ok = ok and held and not ctl_n
+    set_n(8, (Fr(103232124), Fr(461400803)))
+    if len(sys.argv) > 1:
+        files['../Controls/TrigN.lean'] = ''.join(controls) + '\nend ExpansionBounds\n'
     if len(sys.argv) > 1 and ok:
-        os.makedirs(os.path.join(sys.argv[1], 'Trig8'), exist_ok=True)
-        os.makedirs(os.path.join(sys.argv[1], 'Tan8'), exist_ok=True)
+        for folder in ['Trig8', 'Tan8', '../Controls'] + [f'Trig{n}' for n, *_, m in OTHER if m]:
+            os.makedirs(os.path.join(sys.argv[1], folder), exist_ok=True)
         for name, text in files.items():
             path = os.path.join(sys.argv[1], name)
             if os.path.exists(path) and open(path, encoding='utf-8').read() == text:
