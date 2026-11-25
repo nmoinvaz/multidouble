@@ -222,8 +222,9 @@ theorem thm40_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
 /-- `η_0[m > 0]`, with `η_0 = 2^{-1075}` -/
 noncomputable def eta0m (m : ℕ) : ℝ := if m = 0 then 0 else (2 : ℝ) ^ (-1075 : ℤ)
 
-/-- Theorem 40 (`thm:exp`), for a case, with binary64's exponent range: every scaling is rounded by `S`, which keeps a
-value or rounds one below `2^{-1022}` to a multiple of `2^{-1074}` within `η_0 = 2^{-1075}`; for `m = 0` nothing is
+/-- Theorem 40 (`thm:exp`), for a case, with binary64's subnormals and no overflow, the model having no largest finite
+value: every scaling is rounded by `S`, which keeps a value or rounds one below `2^{-1022}` to a multiple of
+`2^{-1074}` within `η_0 = 2^{-1075}`; for `m = 0` nothing is
 scaled by `2^{-m}`; and the last scaling, by `2^k`, is in two steps, `2^{k₁}` then `2^{k₂}` with `k₂ ≤ 0`. Then
 `|y - e^x| ≤ ε e^x + n 2^{-1074}`, with the terms in `η_0` of Lemma 39 in `ε` -/
 theorem thm40_case_sub (hp : p = 53) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (S : ℝ → ℝ)
