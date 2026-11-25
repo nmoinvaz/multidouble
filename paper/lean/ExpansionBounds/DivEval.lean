@@ -17,14 +17,6 @@ section Mirrors
 
 variable (uq : ℚ) (n : ℕ) (ρ : ℚ)
 
-/-- `D_m` of Lemma 11 -/
-def levDQ (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) : ℕ → ℚ
-  | 0 => A 0
-  | m + 1 => A (m + 1) + T m * uu * levDQ A T uu m / (1 - T m * uu)
-
-/-- `X_m = D_m/(1 - T_m u)` -/
-def levXQ (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) (m : ℕ) : ℚ := levDQ A T uu m / (1 - T m * uu)
-
 /-- `G_i`, the bounds on `|r_i - p_i|` -/
 def divGQ (P : ℕ → ℚ) (qb : ℚ) (i : ℕ) : ℚ :=
   if i = 0 then uq * (P 0 + qb) else P i + (1 + uq) * ρ ^ i * qb
@@ -84,15 +76,6 @@ end Mirrors
 section Casts
 
 variable (p : ℤ) (n : ℕ) {uq : ℚ} (h : (uq : ℝ) = u p) (ρ : ℚ)
-
-theorem cast_levD (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) :
-    ∀ m, ((levDQ A T uu m : ℚ) : ℝ) = levD (fun k => (A k : ℝ)) T uu m
-  | 0 => by simp [levDQ, levD]
-  | m + 1 => by simp [levDQ, levD, cast_levD A T uu m]
-
-theorem cast_levX (A : ℕ → ℚ) (T : ℕ → ℕ) (uu : ℚ) (m : ℕ) :
-    ((levXQ A T uu m : ℚ) : ℝ) = levX (fun k => (A k : ℝ)) T uu m := by
-  simp [levXQ, levX, cast_levD]
 
 include h
 
