@@ -30,6 +30,6 @@ rev = "v4.34.1"
 [[lean_lib]]
 name = "ExpansionBounds"
 
-# The axioms of every declaration of ExpansionBounds, read when this library is built.
+# The axioms of every declaration of ExpansionBounds, and the kernel's checks on wrong data: each must come out false.
 [[lean_lib]]
 name = "Controls"
