@@ -64,6 +64,7 @@ The table lists those proved so far.
 | `ExpansionBounds/TrigTan.lean` | Theorem 35 (`thm:trig`) for TAN at `p = 53`, for `x` on `H(2)` with `\|x_0\| ≤ 2^52` and `(n² + n)u < 1`: with RED's `r` and `r_e` within `r̄ ≤ 0.8`, Lemma 34's `δ_S, δ_C ∈ [0, 1/10]`, series of at least two terms, SINR's and COSR's parts on `H(θ)` with `0 ≤ θ` and `2θu < 1` through `λ_s, λ_c > 0`, `δ_D ∈ [0, 1/10]` and `\|x - kπ/2\| ≥ 2^{pn-1074}` for `k ≠ 0`, `\|TAN_n(x) - tan x\| ≤ (C^T + 5E_π/\|sin x cos x\|)\|tan x\|` with `C^T = ε(max((1 + δ_S)(1 + δ_D)/(1 - δ_C), (1 + δ_C)(1 + δ_D)/(1 - δ_S)) - 1 + εu^n 2r̄/sin₋(2r̄))` and, in this row, `ε = 1 + 2u^n`, the quotient by Theorem 19 and `r_e ≠ 0` from the irrationality of `π`; below `\|x_0\| < u^{n/2}`, for `n ≥ 2`, the returned `x` errs by at most `(tan₊(r̄_min)/r̄_min - 1)\|tan x\|` |
 | `ExpansionBounds/GMono.lean` | Lemma 13's bounds grow with their arguments: `G_MUL` and `G_ADD` grow with the part bounds of their operands and with `Z̄` (`Gmul_mono`, `Gadd_mono`), and Horner's bounds of Lemma 33 with `π^z` and `ε_z` (`hornerB_mono`); so a bound computed from values rounded up is still a bound, which the paper's scripts rely on where they round to 200 bits |
 | `ExpansionBounds/TrigEval.lean` | Lemma 34's `δ_S` and `δ_C` in rational arithmetic, rounded up: `upQ b` rounds a rational up to `b` bits; Horner's bounds are carried as a rational and a list, every value rounded (`hornerRunL`), a run can be cut (`hornerRunL_add`), and it is at least the paper's `(E_1, π^{(1)})` (`scHU_ge`); from any state above Horner's, `sinDeltaL` and `cosDeltaL` are at least `δ_S` and `δ_C`, which are nonnegative, and `sinPsiL` and `cosPsiL` at least the part bounds `ψ_s` and `ψ_c` (`sinTail_le`, `cosTail_le`), and `trigCQ` is at least `C` (`trigC_le`) |
+| `ExpansionBounds/Trig8.lean` | Theorem 35 (`thm:trig`) for SIN and COS at `n = 8` and `p = 53`, with multidouble's coefficients and series lengths: for `x` in `F p`, on `H(2)` with `\|x_0\| ≤ 2^52`, `\|SIN_8(x) - sin x\| ≤ 3.163167393u^8\|sin x\| + 5E_π`, and the same for COS; each of the 30 runs of buckets with the same series lengths takes the `r̄` of its first bucket, where the kernel checks Horner's run two steps at a time against stored states and then `C ≤ 3.163167393u^8` (`Trig8/Run0.lean` to `Run7.lean`, on the tables of `Trig8/Data.lean`, with `Trig8/Defs.lean` and `Trig8/All.lean`); below the last bucket and in the early return the bound is `u^8/6` and `u^8/2` to first order; the generated modules are written by `trig_lean.py` |
 
 From this folder:
 
@@ -72,7 +73,7 @@ From this folder:
 lake exe cache get Mathlib.Tactic Mathlib.Analysis.Real.Sqrt Mathlib.Algebra.Order.Floor.Ring \
   Mathlib.Data.Nat.Digits.Defs Mathlib.Data.Nat.Log Mathlib.Algebra.Divisibility.Basic \
   Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic
-lake build   # about 9 minutes the first time: FloatSpec, then Proposition 28's run in the kernel
+lake build   # about 15 minutes the first time: FloatSpec, then the kernel's runs for Proposition 28 and Theorem 35
 ```
 
 The build treats warnings as errors, so a proof left as `sorry` fails it. The kernel decides the longer evaluations,
