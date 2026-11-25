@@ -61,11 +61,11 @@ jobs:
             Mathlib.Data.Nat.Digits.Defs Mathlib.Data.Nat.Log Mathlib.Algebra.Divisibility.Basic \
             Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic
 
-      # Lake has no option for the number of jobs. A kernel run takes up to 4 GB and the runner has 16 GB, so three
-      # threads keep three of them within it.
+      # Lake has no option for the number of jobs. A kernel run takes up to 5 GB and the runner has 16 GB: three at
+      # once ran out of memory on the exponential's check modules, so two threads keep two of them within it.
       - name: Build
         env:
-          LEAN_NUM_THREADS: 3
+          LEAN_NUM_THREADS: 2
         run: lake build
 
       # Only main saves, so that pull requests do not fill the repository's cache with builds no other run restores.
