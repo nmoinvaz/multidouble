@@ -399,11 +399,35 @@ theorem accLevX_range (a : ℕ → ℕ → ℝ) :
     rfl
 
 omit [Prec_gt_0 p] in
+/-- the levels after `K` terms depend on the first `K` terms only -/
+theorem accLevX_congr (a b : ℕ → ℕ → ℝ) :
+    ∀ K, (∀ k, 1 ≤ k → k ≤ K → a k = b k) → accLevX p n a K = accLevX p n b K
+  | 0, _ => rfl
+  | K + 1, h => by
+    rw [accLevX_succ, accLevX_succ, accLevX_congr a b K fun k h1 h2 => h k h1 (by omega),
+      h (K + 1) (by omega) le_rfl]
+
+omit [Prec_gt_0 p] in
 theorem map_range_getD {α : Type*} (T : List α) (d : α) : (List.range T.length).map (fun j => T.getD j d) = T := by
   apply List.ext_getElem
   · simp
   · intro i h1 h2
     simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h2]
+
+/-- an entry of a list within its length is one of its members -/
+theorem getD_mem {α : Type*} (T : List α) (d : α) {j : ℕ} (h : j < T.length) : T.getD j d ∈ T := by
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h]
+  exact List.getElem_mem h
+
+/-- an entry of a list after its first is a member of its tail -/
+theorem getD_mem_tail {α : Type*} (T : List α) (d : α) {k : ℕ} (h1 : 2 ≤ k) (h2 : k ≤ T.length) :
+    T.getD (k - 1) d ∈ T.tail := by
+  obtain ⟨j, rfl⟩ : ∃ j, k = j + 2 := ⟨k - 2, by omega⟩
+  cases T with
+  | nil => simp at h2
+  | cons a T' =>
+    rw [List.tail_cons, show j + 2 - 1 = j + 1 by omega, List.getD_cons_succ]
+    exact getD_mem T' d (by simpa using h2)
 
 omit [Prec_gt_0 p] in
 theorem sum_Icc_one (g : ℕ → ℝ) (K : ℕ) : ∑ k ∈ Icc 1 K, g k = ((List.range K).map fun j => g (j + 1)).sum := by
@@ -415,6 +439,18 @@ theorem sum_Icc_one (g : ℕ → ℝ) (K : ℕ) : ∑ k ∈ Icc 1 K, g k = ((Lis
 
 /-- the terms of a list of dyadic data: term `k` is its `k`-th entry -/
 noncomputable def dyTerms (T : List (List (ℤ × ℕ))) : ℕ → ℕ → ℝ := fun k i => ((dyFn (T.getD (k - 1) []) i : ℚ) : ℝ)
+
+omit [Prec_gt_0 p] in
+/-- the exact sum of the data's terms is the cast of the data's -/
+theorem dyTerms_sum (T : List (List (ℤ × ℕ))) :
+    ∑ k ∈ Icc 1 T.length, ∑ i ∈ range n, dyTerms T k i =
+      (((T.map fun t => ∑ i ∈ range n, dyFn t i).sum : ℚ) : ℝ) := by
+  rw [sum_Icc_one]
+  conv_rhs => rw [← map_range_getD T []]
+  rw [List.map_map, Rat.cast_list_sum, List.map_map]
+  congr 1
+  refine List.map_congr_left fun j _ => ?_
+  simp only [Function.comp_apply, dyTerms, Nat.add_sub_cancel, Rat.cast_sum]
 
 /-- the accumulator on a list of dyadic terms in `F p`: FINISH's parts and the exact sum are the casts of what the
 rational run computes -/
@@ -440,12 +476,55 @@ theorem accRun_data (hp : 1 < p) (T : List (List (ℤ × ℕ))) (hF : ∀ t ∈ 
   · intro i
     rw [hlev]
     exact ((cast_finishR p n hp _ c2 n i).1).symm
-  · rw [sum_Icc_one]
-    conv_rhs => rw [← map_range_getD T []]
-    rw [List.map_map, Rat.cast_list_sum, List.map_map]
-    congr 1
-    refine List.map_congr_left fun j _ => ?_
-    simp only [Function.comp_apply, dyTerms, Nat.add_sub_cancel, Rat.cast_sum]
+  · exact dyTerms_sum n T
+
+/-- the first `K` terms of the data are the terms of its first `K` entries -/
+theorem dyTerms_take (T : List (List (ℤ × ℕ))) {K k : ℕ} (h1 : 1 ≤ k) (h2 : k ≤ K) :
+    dyTerms (T.take K) k = dyTerms T k := by
+  funext i
+  unfold dyTerms
+  rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_take_of_lt (by omega)]
+
+/-- `accRun_data` for the first `K` terms: FINISH after them and their exact sum -/
+theorem accRun_prefix (hp : 1 < p) (T : List (List (ℤ × ℕ))) (hF : ∀ t ∈ T, ∀ l, F p (dyFn t l : ℝ)) {K : ℕ}
+    (hK : K ≤ T.length) :
+    (∀ i, finishR p n (accLevX p n (dyTerms T) K) n i =
+        ((finishRQ p n (accRunQ p n ((T.take K).map dyFn) fun _ => 0) n i : ℚ) : ℝ)) ∧
+      ∑ k ∈ Icc 1 K, ∑ i ∈ range n, dyTerms T k i =
+        ((((T.take K).map fun t => ∑ i ∈ range n, dyFn t i).sum : ℚ) : ℝ) := by
+  have hlen : (T.take K).length = K := by rw [List.length_take, min_eq_left hK]
+  obtain ⟨c1, c2⟩ := accRun_data p n hp (T.take K) fun t ht l => hF t (List.mem_of_mem_take ht) l
+  rw [hlen] at c1 c2
+  constructor
+  · intro i
+    rw [← c1 i, accLevX_congr p n (dyTerms T) (dyTerms (T.take K)) K fun k h1 h2 => (dyTerms_take T h1 h2).symm]
+  · rw [← c2]
+    refine sum_congr rfl fun k hk => ?_
+    obtain ⟨h1, h2⟩ := mem_Icc.mp hk
+    rw [dyTerms_take T h1 h2]
+
+/-- `W`, the sum of the leading parts' sizes, is the cast of the data's -/
+theorem dyTerms_lead_sum (T : List (List (ℤ × ℕ))) :
+    ∑ k ∈ Icc 1 T.length, |dyTerms T k 0| = (((T.map fun t => |dyFn t 0|).sum : ℚ) : ℝ) := by
+  rw [sum_Icc_one]
+  conv_rhs => rw [← map_range_getD T []]
+  rw [List.map_map, Rat.cast_list_sum, List.map_map]
+  congr 1
+  refine List.map_congr_left fun j _ => ?_
+  simp only [Function.comp_apply, dyTerms, Nat.add_sub_cancel, Rat.cast_abs]
+
+omit [Prec_gt_0 p] in
+/-- a part of size at most `2^(magQ q - p - 1)` is within half an ulp of `q`: the `e` of `q` and the three bounds -/
+theorem half_ulp_cast {q r : ℚ} (hq : q ≠ 0) (h : |r| ≤ (2 : ℚ) ^ (magQ q - p - 1)) :
+    ∃ e : ℤ, (2 : ℝ) ^ (e - 1) ≤ |(q : ℝ)| ∧ |(q : ℝ)| < (2 : ℝ) ^ e ∧ |(r : ℝ)| ≤ (2 : ℝ) ^ (e - p - 1) := by
+  obtain ⟨lo, hi⟩ := magQ_spec hq
+  refine ⟨magQ q, ?_, ?_, ?_⟩
+  · have := (Rat.cast_le (K := ℝ)).mpr lo
+    rwa [Rat.cast_abs, Rat.cast_zpow, Rat.cast_ofNat] at this
+  · have := (Rat.cast_lt (K := ℝ)).mpr hi
+    rwa [Rat.cast_abs, Rat.cast_zpow, Rat.cast_ofNat] at this
+  · have := (Rat.cast_le (K := ℝ)).mpr h
+    rwa [Rat.cast_abs, Rat.cast_zpow, Rat.cast_ofNat] at this
 
 /-- dyadic data that `rnQ` leaves as it is lies in `F p`, as do the zeros past a term's end -/
 theorem dyF_of_all (T : List (List (ℤ × ℕ))) (h : ∀ t ∈ T, ∀ q ∈ t, rnQ p (dyQ q) = dyQ q) :
