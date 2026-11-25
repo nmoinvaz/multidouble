@@ -46,3 +46,4 @@ import ExpansionBounds.AccSum
 import ExpansionBounds.Acc8Sum
 import ExpansionBounds.Eval
 import ExpansionBounds.DivEval
+import ExpansionBounds.DivN
