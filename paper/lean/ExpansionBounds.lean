@@ -57,3 +57,5 @@ import ExpansionBounds.Prop28
 import ExpansionBounds.GMono
 import ExpansionBounds.TrigEval
 import ExpansionBounds.Trig8
+import ExpansionBounds.TanEval
+import ExpansionBounds.Tan8
