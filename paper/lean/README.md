@@ -93,4 +93,17 @@ abort at thread exit on macOS 27 ([lean4#15087](https://github.com/leanprover/le
 
 `Controls/` is a second library, built with the proofs. `Controls/Axioms.lean` reads the axioms that Lean recorded for
 every declaration of `ExpansionBounds`, the generated ones included, and fails the build on any but those three; its
-own control is a theorem that rests on an axiom declared there, which the same test must report.
+own control is a theorem that rests on an axiom declared there, which the same test must report. The other files take
+the kernel's checks with a wrong number, a wrong state or a hypothesis left out, and the kernel proves each such claim
+false:
+
+| File | Claims proved false |
+|---|---|
+| `Controls/Prop28.lean` | 23 on Proposition 28: the error one unit off at each end, for the 2048 terms and each prefix; a chunk run from the wrong levels; FINISH on the wrong levels; a narrower ladder, a quarter of an ulp, `2^{-97}` for `W` and `2^{-43}` for the leading parts; sums of the wrong terms |
+| `Controls/Trig8.lean` | 7 on Theorem 35's sine and cosine: `3.163167392u^8`, a state two steps off, the sine's steps on the cosine's coefficients, a part of 54 bits |
+| `Controls/Tan8.lean` | 5 on its tangent: `6.41835052u^8`, the ladder `H(1)` in the top bucket and `H(2)` below the last, `κ_DIV` one unit lower |
+| `Controls/ExpRed8.lean` | 8 on Lemma 38 at `n = 8`: the enclosure of `ln 2` four units tighter at each end, the next float as `c_r`, each bound one unit lower |
+| `Controls/Exp8.lean` | 8 on Theorem 40's constant: `3.660u^8`, a state two steps off, a group of the wrong degree, part bounds halved, a bin left out |
+
+A claim is written as its negation, which the kernel has to prove: a check that it could not evaluate fails in the
+same way as a false one, and would otherwise pass for a control.
