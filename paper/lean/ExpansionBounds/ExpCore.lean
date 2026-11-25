@@ -6,8 +6,10 @@ import Mathlib.Analysis.SpecialFunctions.Exponential
 
 Under (A3), `(n² + n)u < 1`: steps (2) to (4) of EXP, where `U` bounds `∑|r_i|`, `r' = 2^{-m} r`, Horner's rule on the
 `F_j` of `1/j!` gives `q`, `w = MUL(r', q)`, `t = 2^{e'} ADD(r̂, MUL(r̂, w))` with `r̂ = 2^{-e'} r'`, and `m` passes of
-`t ← ADD(2t, MUL(t, t))`. The exponent range is unbounded, so `η_0 = 0`: the scalings are exact and the terms in `η_0`
-drop out. The paper's `n ≤ 31` with `U`'s factor `1 + 2^{-48}` is here `(1 + u)^n ≤ 1 + γ` with the factor `1 + γ`.
+`t ← ADD(2t, MUL(t, t))`. The scaling by `2^{-m}` and step (3)'s scaling back by `2^{e'}` can leave the normal range:
+they are rounded by `S₁` and `S₂`, which move a value by at most `η₁` and `η₂` (`Scl`), the paper's `η_0[m > 0]` and
+`η_0`, and zero with an unbounded exponent range. `U` is formed as with an unbounded range. The paper's `n ≤ 31` with
+`U`'s factor `1 + 2^{-48}` is here `(1 + u)^n ≤ 1 + γ` with the factor `1 + γ`.
 -/
 
 namespace ExpansionBounds
@@ -141,33 +143,156 @@ theorem expU_ge (hn : 1 ≤ n) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (r : 
         ((1 + u p) ^ k * (1 + u p)) := by field_simp
     _ ≤ absSum p r k * (1 + γ) := mul_le_mul h1 hγ (by positivity) hs0
 
+/-- a scaling's rounding where the exponent range ends: `S` moves a value by at most `η` and keeps it in `F p`. With
+an unbounded range `S` is the identity and `η = 0` (`Scl.id`); in binary64 a scaled part below `2^{-1022}` is rounded
+to a multiple of `2^{-1074}` and `η = η_0 = 2^{-1075}` (`Scl.of_grid`) -/
+structure Scl (η : ℝ) (S : ℝ → ℝ) : Prop where
+  err : ∀ v, |S v - v| ≤ η
+  mem : ∀ v, F p v → F p (S v)
+
+omit [Prec_gt_0 p] in
+/-- the exact scaling of an unbounded exponent range -/
+theorem Scl.id : Scl p 0 id := ⟨fun v => by simp, fun _ h => h⟩
+
+omit [Prec_gt_0 p] in
+theorem Scl.nonneg {η : ℝ} {S : ℝ → ℝ} (h : Scl p η S) : 0 ≤ η := (abs_nonneg _).trans (h.err 0)
+
+/-- binary64's scalings, whatever the rule at a tie: a value is kept, or it is below `2^{-1022}` and is rounded to a
+multiple of `2^{-1074}` within `η_0 = 2^{-1075}` -/
+theorem Scl.of_grid (hp : p = 53) (S : ℝ → ℝ)
+    (h : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ))) :
+    Scl p ((2 : ℝ) ^ (-1075 : ℤ)) S := by
+  refine ⟨fun v => ?_, fun v hv => ?_⟩
+  · rcases h v with h1 | ⟨-, -, h3⟩
+    · rw [h1, sub_self, abs_zero]
+      positivity
+    · exact h3
+  · rcases h v with h1 | ⟨h1, h2, h3⟩
+    · rw [h1]
+      exact hv
+    · refine F_of_mult p h1 ?_
+      have ht := abs_sub_abs_le_abs_sub (S v) v
+      have h4 : (2 : ℝ) ^ (-1022 : ℤ) + (2 : ℝ) ^ (-1075 : ℤ) < (2 : ℝ) ^ (-1074 + p) := by
+        rw [hp]
+        have e1 : (2 : ℝ) ^ (-1022 : ℤ) = (2 : ℝ) ^ (-1075 : ℤ) * 2 ^ (53 : ℕ) := by
+          rw [← zpow_natCast, ← zpow_add₀ two_ne_zero]
+          norm_num
+        have e2 : (2 : ℝ) ^ (-1074 + 53 : ℤ) = (2 : ℝ) ^ (-1075 : ℤ) * 2 ^ (54 : ℕ) := by
+          rw [← zpow_natCast, ← zpow_add₀ two_ne_zero]
+          norm_num
+        have hpos : (0 : ℝ) < (2 : ℝ) ^ (-1075 : ℤ) := by positivity
+        rw [e1, e2]
+        nlinarith
+      linarith
+
+/-- a rounding that meets `Scl.of_grid`'s hypothesis: below `2^{-1022}`, to a nearest multiple of `2^{-1074}` -/
+noncomputable def subRound (v : ℝ) : ℝ :=
+  if |v| < (2 : ℝ) ^ (-1022 : ℤ) then (round (v * (2 : ℝ) ^ (1074 : ℤ)) : ℝ) * (2 : ℝ) ^ (-1074 : ℤ) else v
+
+theorem subRound_grid (v : ℝ) : subRound v = v ∨
+    (Mult (-1074) (subRound v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |subRound v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)) := by
+  unfold subRound
+  split_ifs with h
+  · refine Or.inr ⟨⟨_, rfl⟩, h, ?_⟩
+    have h1 := abs_sub_round (v * (2 : ℝ) ^ (1074 : ℤ))
+    have hpos : (0 : ℝ) < (2 : ℝ) ^ (-1074 : ℤ) := by positivity
+    have hcC : (2 : ℝ) ^ (-1074 : ℤ) * (2 : ℝ) ^ (1074 : ℤ) = 1 := by
+      rw [← zpow_add₀ two_ne_zero, show (-1074 : ℤ) + 1074 = 0 by norm_num, zpow_zero]
+    have e : (round (v * (2 : ℝ) ^ (1074 : ℤ)) : ℝ) * (2 : ℝ) ^ (-1074 : ℤ) - v =
+        (2 : ℝ) ^ (-1074 : ℤ) * ((round (v * (2 : ℝ) ^ (1074 : ℤ)) : ℝ) - v * (2 : ℝ) ^ (1074 : ℤ)) := by
+      linear_combination v * hcC
+    rw [e, abs_mul, abs_of_pos hpos, abs_sub_comm]
+    calc (2 : ℝ) ^ (-1074 : ℤ) * |v * (2 : ℝ) ^ (1074 : ℤ) - round (v * (2 : ℝ) ^ (1074 : ℤ))| ≤
+          (2 : ℝ) ^ (-1074 : ℤ) * (1 / 2) := mul_le_mul_of_nonneg_left h1 hpos.le
+      _ = (2 : ℝ) ^ (-1075 : ℤ) := by
+          rw [show (-1074 : ℤ) = -1075 + 1 by norm_num, zpow_add₀ two_ne_zero, zpow_one]; ring
+  · exact Or.inl rfl
+
+/-- a scaling in two steps, the second by `2^j` with `j ≤ 0`, moves a value by at most `2η` -/
+theorem Scl.two_step {η : ℝ} {S : ℝ → ℝ} (h : Scl p η S) {j : ℤ} (hj : j ≤ 0) :
+    Scl p (2 * η) fun v => S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ (-j) * v)) := by
+  have hj1 : (2 : ℝ) ^ j ≤ 1 := zpow_le_one_of_nonpos₀ (by norm_num) hj
+  have hj0 : (0 : ℝ) < (2 : ℝ) ^ j := by positivity
+  refine ⟨fun v => ?_, fun v hv => h.mem _ (F_zpow_mul p _ (h.mem _ (F_zpow_mul p _ hv)))⟩
+  show |S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ (-j) * v)) - v| ≤ 2 * η
+  obtain ⟨w, hw⟩ : ∃ w, w = S ((2 : ℝ) ^ (-j) * v) := ⟨_, rfl⟩
+  have h1 := h.err ((2 : ℝ) ^ j * w)
+  have h2 := h.err ((2 : ℝ) ^ (-j) * v)
+  rw [← hw] at h2 ⊢
+  have h3 : (2 : ℝ) ^ j * w - v = (2 : ℝ) ^ j * (w - (2 : ℝ) ^ (-j) * v) := by
+    rw [mul_sub, ← mul_assoc, ← zpow_add₀ two_ne_zero, add_neg_cancel, zpow_zero, one_mul]
+  have h4 : |(2 : ℝ) ^ j * w - v| ≤ η := by
+    rw [h3, abs_mul, abs_of_pos hj0]
+    calc _ ≤ 1 * η := mul_le_mul hj1 h2 (abs_nonneg _) zero_le_one
+      _ = η := one_mul η
+  calc |S ((2 : ℝ) ^ j * w) - v| = |(S ((2 : ℝ) ^ j * w) - (2 : ℝ) ^ j * w) + ((2 : ℝ) ^ j * w - v)| := by ring_nf
+    _ ≤ η + η := (abs_add_le _ _).trans (add_le_add h1 h4)
+    _ = 2 * η := by ring
+
+/-- two scalings in a row, by `2^i` and then by `2^j`, each rounded by `S`, are the rounding of `Scl.two_step` applied
+to the exactly scaled `2^j(2^i v)`: the pair is one rounding of that value -/
+theorem Scl.two_step_apply (S : ℝ → ℝ) (i j : ℤ) (v : ℝ) :
+    (fun w => S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ (-j) * w))) ((2 : ℝ) ^ j * ((2 : ℝ) ^ i * v)) =
+      S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ i * v)) := by
+  show S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ (-j) * ((2 : ℝ) ^ j * ((2 : ℝ) ^ i * v)))) = _
+  rw [← mul_assoc ((2 : ℝ) ^ (-j)), ← zpow_add₀ two_ne_zero, neg_add_cancel, zpow_zero, one_mul]
+
+/-- so two scalings in a row, the second by `2^j` with `j ≤ 0`, move the exactly scaled value by at most `2η` -/
+theorem Scl.two_back {η : ℝ} {S : ℝ → ℝ} (h : Scl p η S) {j : ℤ} (hj : j ≤ 0) (i : ℤ) (v : ℝ) :
+    |S ((2 : ℝ) ^ j * S ((2 : ℝ) ^ i * v)) - (2 : ℝ) ^ j * ((2 : ℝ) ^ i * v)| ≤ 2 * η := by
+  rw [← Scl.two_step_apply S i j v]
+  exact (h.two_step p hj).err _
+
+/-- `|e^x - e^y| ≤ e^B |x - y|` for `x, y ≤ B` -/
+theorem abs_exp_sub_exp_le {x y B : ℝ} (hx : x ≤ B) (hy : y ≤ B) :
+    |Real.exp x - Real.exp y| ≤ Real.exp B * |x - y| := by
+  have key : ∀ s t : ℝ, s ≤ t → t ≤ B → |Real.exp s - Real.exp t| ≤ Real.exp B * |s - t| := by
+    intro s t hst ht
+    have h1 : Real.exp s ≤ Real.exp t := Real.exp_le_exp.mpr hst
+    have h2 := Real.add_one_le_exp (s - t)
+    have h3 : Real.exp s = Real.exp t * Real.exp (s - t) := by rw [← Real.exp_add]; ring_nf
+    have h4 : Real.exp t ≤ Real.exp B := Real.exp_le_exp.mpr ht
+    have ht0 := Real.exp_pos t
+    rw [abs_of_nonpos (by linarith), abs_of_nonpos (by linarith)]
+    calc -(Real.exp s - Real.exp t) = Real.exp t * (1 - Real.exp (s - t)) := by rw [h3]; ring
+      _ ≤ Real.exp t * (t - s) := mul_le_mul_of_nonneg_left (by linarith) ht0.le
+      _ ≤ Real.exp B * (t - s) := mul_le_mul_of_nonneg_right h4 (by linarith)
+      _ = Real.exp B * -(s - t) := by ring
+  rcases le_total x y with h | h
+  · exact key x y h hy
+  · rw [abs_sub_comm, abs_sub_comm x y]
+    exact key y x h hx
+
 /-- step (3): `t = r'` for `d' = 1`; otherwise `q = p_2` by Horner's rule on the `F_j`, `w = MUL(r', q)`,
-`r̂ = 2^{-e'} r'` and `t = 2^{e'} ADD(r̂, MUL(r̂, w))` -/
-noncomputable def expT0 (e' : ℤ) (r' : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (d' : ℕ) : ℕ → ℝ :=
-  if d' = 1 then r' else fun i => (2 : ℝ) ^ e' * pt (addOp p n (fun i => (2 : ℝ) ^ (-e') * r' i)
+`r̂ = 2^{-e'} r'` and `t = 2^{e'} ADD(r̂, MUL(r̂, w))`, the scaling back rounded by `S` -/
+noncomputable def expT0 (S : ℝ → ℝ) (e' : ℤ) (r' : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (d' : ℕ) : ℕ → ℝ :=
+  if d' = 1 then r' else fun i => S ((2 : ℝ) ^ e' * pt (addOp p n (fun i => (2 : ℝ) ^ (-e') * r' i)
     (pt (mulOp p n (fun i => (2 : ℝ) ^ (-e') * r' i)
-      (pt (mulOp p n r' (hornerP p n (mulOp p n) r' Fk d' (d' - 2))))))) i
+      (pt (mulOp p n r' (hornerP p n (mulOp p n) r' Fk d' (d' - 2))))))) i)
 
 /-- one pass of step (4): `t ← ADD(2t, MUL(t, t))` -/
 noncomputable def expSq (t : ℕ → ℝ) : ℕ → ℝ := pt (addOp p n (fun i => 2 * t i) (pt (mulOp p n t t)))
 
-/-- steps (3) and (4) after step (2) chose `e`, `m` and `d'`: `r' = 2^{-m} r`, `e' = e - m` -/
-noncomputable def expCore (e : ℤ) (m : ℕ) (r : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (d' : ℕ) : ℕ → ℝ :=
-  (expSq p n)^[m] (expT0 p n (e - m) (fun i => (2 : ℝ) ^ (-(m : ℤ)) * r i) Fk d')
+/-- steps (3) and (4) after step (2) chose `e`, `m` and `d'`: `r' = 2^{-m} r` rounded by `S₁`, `e' = e - m`, and
+step (3)'s scaling back rounded by `S₂` -/
+noncomputable def expCore (S₁ S₂ : ℝ → ℝ) (e : ℤ) (m : ℕ) (r : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (d' : ℕ) : ℕ → ℝ :=
+  (expSq p n)^[m] (expT0 p n S₂ (e - m) (fun i => S₁ ((2 : ℝ) ^ (-(m : ℤ)) * r i)) Fk d')
 
 omit [Prec_gt_0 p] in
 /-- `(E_0, ψ_0)` for `t̄_0 = T0`: `e_2, π^q_2` of Lemma 33, `(ε', ω') = G_MUL(π', π^q_2; b'(v_2 + e_2))`,
-`(ε'', ω) = G_MUL(π', ω'; b'(b'(v_2 + e_2) + ε'))`, `E^- = ε'' + b'(ε' + b'e_2) + E^tr_{d'}`,
-`(ε''', ψ^-) = G_ADD(π', ω; t̄_0 + E^-)`, `E_0 = E^- + ε'''`; for `d' = 1`, `(E^tr_1, π')` -/
-noncomputable def core0 (T0 : ℝ) (π' : ℕ → ℝ) (b' : ℝ) (Fk : ℕ → ℕ → ℝ) (φ : ℕ → ℝ) (d' : ℕ) : ℝ × (ℕ → ℝ) :=
-  if d' = 1 then (eTr b' 1, π') else
+`(ε'', ω) = G_MUL(π', ω'; b'(b'(v_2 + e_2) + ε'))`, `E^- = ε'' + b'(ε' + b'e_2) + E^tr_{d'} + D`, with `D` the
+paper's `2nη_0[m > 0]`, `(ε''', ψ^-) = G_ADD(π', ω; t̄_0 + E^-)`, `E_0 = E^- + ε''' + nη` and `ψ_{0,i} = ψ^-_i + η`;
+for `d' = 1`, `(E^tr_1 + D, π')` -/
+noncomputable def core0 (T0 D η : ℝ) (π' : ℕ → ℝ) (b' : ℝ) (Fk : ℕ → ℕ → ℝ) (φ : ℕ → ℝ) (d' : ℕ) :
+    ℝ × (ℕ → ℝ) :=
+  if d' = 1 then (eTr b' 1 + D, π') else
     let H := hornerB p n π' b' 0 0 Fk φ (coreV b' d') d' (d' - 2)
     let Zw := b' * (coreV b' d' 2 + H.1)
     let ε1 := GmulE p n π' H.2 Zw
     let Zy := b' * (Zw + ε1)
     let ω := GmulP p n π' (GmulP p n π' H.2 Zw) Zy
-    let Em := GmulE p n π' (GmulP p n π' H.2 Zw) Zy + b' * (ε1 + b' * H.1) + eTr b' d'
-    (Em + GaddE p n π' ω (T0 + Em), GaddP p n π' ω (T0 + Em))
+    let Em := GmulE p n π' (GmulP p n π' H.2 Zw) Zy + b' * (ε1 + b' * H.1) + eTr b' d' + D
+    (Em + GaddE p n π' ω (T0 + Em) + n * η, fun i => GaddP p n π' ω (T0 + Em) i + η)
 
 omit [Prec_gt_0 p] in
 /-- one squaring's bounds: `(ε^m, ν) = G_MUL(ψ, ψ; (T + E)²)`, `(ε^s, ψ') = G_ADD(2ψ, ν; T' + 2E(1 + T) + E² + ε^m)`
@@ -296,16 +421,17 @@ theorem core_sq (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
     _ ≤ _ := add_le_add (add_le_add (add_le_add a1 h4) hgE) hh2'
     _ = _ := by ring
 
-/-- step (3): `t` within `E_0` of `e^{R'} - 1` with parts at most `ψ_0`, for `|R'| ≤ b' < d' + 2` and
-`|e^{R'} - 1| ≤ t̄_0` -/
-theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (r' : ℕ → ℝ)
+/-- step (3): `t` within `E_0` of `e^{R*} - 1` with parts at most `ψ_0`, for `|R'| ≤ b' < d' + 2`, `e^{R'}` within `D`
+of `e^{R*}` and `|e^{R*} - 1| ≤ t̄_0`, the scaling back by `2^{e'}` moving each part by at most `η` -/
+theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η : ℝ} {S : ℝ → ℝ}
+    (hS : Scl p η S) (r' : ℕ → ℝ)
     (hr : ∀ i < n, F p (r' i)) (π' : ℕ → ℝ) (hπ : ∀ i < n, |r' i| ≤ π' i) (R' b' : ℝ)
     (hR : R' = ∑ i ∈ range n, r' i) (hb : |R'| ≤ b') (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φ : ℕ → ℝ) (hφ : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φ k) (d' : ℕ) (hd : 1 ≤ d') (hbd : b' < d' + 2)
-    (e' : ℤ) (T0 : ℝ) (hT0 : |Real.exp R' - 1| ≤ T0) :
-    |∑ i ∈ range n, expT0 p n e' r' Fk d' i - (Real.exp R' - 1)| ≤ (core0 p n T0 π' b' Fk φ d').1 ∧
-      (∀ i < n, |expT0 p n e' r' Fk d' i| ≤ (core0 p n T0 π' b' Fk φ d').2 i) ∧
-      ∀ i < n, F p (expT0 p n e' r' Fk d' i) := by
+    (e' : ℤ) (Rs T0 D : ℝ) (hD : |Real.exp R' - Real.exp Rs| ≤ D) (hT0 : |Real.exp Rs - 1| ≤ T0) :
+    |∑ i ∈ range n, expT0 p n S e' r' Fk d' i - (Real.exp Rs - 1)| ≤ (core0 p n T0 D η π' b' Fk φ d').1 ∧
+      (∀ i < n, |expT0 p n S e' r' Fk d' i| ≤ (core0 p n T0 D η π' b' Fk φ d').2 i) ∧
+      ∀ i < n, F p (expT0 p n S e' r' Fk d' i) := by
   have hb0 : 0 ≤ b' := (abs_nonneg _).trans hb
   rcases eq_or_lt_of_le hd with h1 | h2
   · -- `d' = 1`: `t = r'`
@@ -318,8 +444,8 @@ theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
       rw [sum_range_succ, sum_range_one]
       simp
     rw [hs] at h
-    rw [show R' - (Real.exp R' - 1) = -(Real.exp R' - (1 + R')) by ring, abs_neg]
-    exact h
+    rw [show R' - (Real.exp Rs - 1) = -(Real.exp R' - (1 + R')) + (Real.exp R' - Real.exp Rs) by ring]
+    exact (abs_add_le _ _).trans (add_le_add (by rw [abs_neg]; exact h) hD)
   have hd1 : d' ≠ 1 := by omega
   have hd2 : 2 ≤ d' := h2
   -- `q = p_2` by Lemma 33, with `z = r'`, `ε_z = 0`, `z̄ = b'` and `π^z = π'`
@@ -395,7 +521,10 @@ theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
   have hYs : (mulOp p n rh w).sum = ∑ i ∈ range n, Y i := by rw [hY]; exact list_sum_getD _ n y4
   rw [hrhs, ← hW, hYs] at y1
   -- `ADD(r̂, Y)`
-  obtain ⟨Em, hEm⟩ : ∃ Em, Em = ε2 + b' * (ε1 + b' * H.1) + eTr b' d' := ⟨_, rfl⟩
+  obtain ⟨Em, hEm⟩ : ∃ Em, Em = ε2 + b' * (ε1 + b' * H.1) + eTr b' d' + D := ⟨_, rfl⟩
+  have hT0' : |Real.exp R' - 1| ≤ T0 + D := by
+    rw [show Real.exp R' - 1 = (Real.exp Rs - 1) + (Real.exp R' - Real.exp Rs) by ring]
+    exact (abs_add_le _ _).trans (add_le_add hT0 hD)
   have htr : |R' + R' * W - (Real.exp R' - 1)| ≤ b' * (ε1 + b' * H.1) + eTr b' d' := by
     have he := eTr_bound R' b' hb d' hbd
     have hx := exp_horner R' d' hd2
@@ -408,7 +537,7 @@ theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
       _ ≤ eTr b' d' + b' * (ε1 + b' * H.1) := (abs_add_le _ _).trans (by rw [abs_neg]; exact add_le_add he hm)
       _ = _ := by ring
   have hZ0 : |∑ i ∈ range n, rh i + ∑ i ∈ range n, Y i| ≤ c * (T0 + Em) := by
-    have h1 : |c * (R' + R' * W)| ≤ c * (T0 + b' * (ε1 + b' * H.1) + eTr b' d') := by
+    have h1 : |c * (R' + R' * W)| ≤ c * (T0 + D + b' * (ε1 + b' * H.1) + eTr b' d') := by
       rw [abs_mul, abs_of_pos hc0]
       refine mul_le_mul_of_nonneg_left ?_ hc0.le
       have := abs_sub_abs_le_abs_sub (R' + R' * W) (Real.exp R' - 1)
@@ -416,26 +545,32 @@ theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
     have h2 : |∑ i ∈ range n, Y i - c * R' * W| ≤ c * 1 * ε2 := by rw [abs_sub_comm]; exact y1
     rw [hrhs, show c * R' + ∑ i ∈ range n, Y i = c * (R' + R' * W) + (∑ i ∈ range n, Y i - c * R' * W) by ring]
     calc _ ≤ |c * (R' + R' * W)| + |∑ i ∈ range n, Y i - c * R' * W| := abs_add_le _ _
-      _ ≤ c * (T0 + b' * (ε1 + b' * H.1) + eTr b' d') + c * 1 * ε2 := add_le_add h1 h2
+      _ ≤ c * (T0 + D + b' * (ε1 + b' * H.1) + eTr b' d') + c * 1 * ε2 := add_le_add h1 h2
       _ = c * (T0 + Em) := by rw [hEm]; ring
   obtain ⟨a1, a2, a3, a4⟩ := add_G p n hp hn hA3 rh Y (fun i => c * π' i) (fun j => c * ω j) hrhF
     (fun j _ => by rw [hY]; exact y3 j) hrhπ (fun j _ => by rw [hY]; exact (y2 j).trans_eq (by ring)) _ hZ0
   obtain ⟨ga1, ga2⟩ := Gadd_smul p n π' ω (T0 + Em) hc0.le
   rw [ga1] at a1
   simp only [ga2] at a2
-  have hT : expT0 p n e' r' Fk d' = fun i => (2 : ℝ) ^ e' * pt (addOp p n rh Y) i := by
+  have hT : expT0 p n S e' r' Fk d' = fun i => S ((2 : ℝ) ^ e' * pt (addOp p n rh Y) i) := by
     simp only [expT0, hd1, ↓reduceIte]
     rw [hY, hw, hq, hrh, hc]
-  have hts : ∑ i ∈ range n, expT0 p n e' r' Fk d' i = (2 : ℝ) ^ e' * (addOp p n rh Y).sum := by
-    rw [hT, ← mul_sum, list_sum_getD _ n a4]
-    rfl
-  have hcore : core0 p n T0 π' b' Fk φ d' = (Em + GaddE p n π' ω (T0 + Em), GaddP p n π' ω (T0 + Em)) := by
+  -- the scaling back moves each part by at most `η`
+  have hts : |∑ i ∈ range n, expT0 p n S e' r' Fk d' i - (2 : ℝ) ^ e' * (addOp p n rh Y).sum| ≤ n * η := by
+    rw [hT, list_sum_getD _ n a4, mul_sum, ← sum_sub_distrib]
+    refine (abs_sum_le_sum_abs _ _).trans ((sum_le_sum fun i _ => hS.err _).trans_eq ?_)
+    rw [sum_const, card_range, nsmul_eq_mul]
+  have hcore : core0 p n T0 D η π' b' Fk φ d' =
+      (Em + GaddE p n π' ω (T0 + Em) + n * η, fun i => GaddP p n π' ω (T0 + Em) i + η) := by
     simp only [core0, hd1, ↓reduceIte]
     rw [hEm, hε2, hω, hZy, hε1, hω1, hZw, hH]
   rw [hcore]
   have h2e : (0 : ℝ) < 2 ^ e' := by positivity
   refine ⟨?_, fun i _ => ?_, fun i _ => ?_⟩
-  · rw [hts]
+  · rw [show ∑ i ∈ range n, expT0 p n S e' r' Fk d' i - (Real.exp Rs - 1) =
+      (∑ i ∈ range n, expT0 p n S e' r' Fk d' i - (2 : ℝ) ^ e' * (addOp p n rh Y).sum) +
+        ((2 : ℝ) ^ e' * (addOp p n rh Y).sum - (Real.exp R' - 1)) + (Real.exp R' - Real.exp Rs) by ring]
+    refine ((abs_add_le _ _).trans (add_le_add ((abs_add_le _ _).trans (add_le_add hts le_rfl)) hD)).trans ?_
     have hsplit : (2 : ℝ) ^ e' * (addOp p n rh Y).sum - (Real.exp R' - 1) =
         -((2 : ℝ) ^ e' * ((∑ i ∈ range n, rh i + ∑ i ∈ range n, Y i) - (addOp p n rh Y).sum)) +
           (2 : ℝ) ^ e' * (∑ i ∈ range n, Y i - c * R' * W) + (R' + R' * W - (Real.exp R' - 1)) := by
@@ -450,85 +585,130 @@ theorem core_t0 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1
       rw [abs_mul, abs_of_pos h2e, abs_sub_comm]
       calc _ ≤ (2 : ℝ) ^ e' * (c * 1 * ε2) := mul_le_mul_of_nonneg_left y1 h2e.le
         _ = _ := by rw [mul_one, ← mul_assoc, hcc, one_mul]
-    rw [hsplit]
-    calc _ ≤ GaddE p n π' ω (T0 + Em) + ε2 + (b' * (ε1 + b' * H.1) + eTr b' d') :=
-          (abs_add_le _ _).trans (add_le_add ((abs_add_le _ _).trans (add_le_add (by rw [abs_neg]; exact hb1) hb2))
-            htr)
-      _ = _ := by rw [hEm]; ring
+    have hmid : |(2 : ℝ) ^ e' * (addOp p n rh Y).sum - (Real.exp R' - 1)| ≤
+        GaddE p n π' ω (T0 + Em) + ε2 + (b' * (ε1 + b' * H.1) + eTr b' d') := by
+      rw [hsplit]
+      exact (abs_add_le _ _).trans (add_le_add ((abs_add_le _ _).trans
+        (add_le_add (by rw [abs_neg]; exact hb1) hb2)) htr)
+    show _ ≤ Em + GaddE p n π' ω (T0 + Em) + n * η
+    linarith
   · rw [hT]
-    show |(2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0| ≤ _
-    rw [abs_mul, abs_of_pos h2e]
-    calc _ ≤ (2 : ℝ) ^ e' * (c * GaddP p n π' ω (T0 + Em) i) := mul_le_mul_of_nonneg_left (a2 i) h2e.le
-      _ = _ := by rw [← mul_assoc, hcc, one_mul]
+    show |S ((2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0)| ≤ GaddP p n π' ω (T0 + Em) i + η
+    have h1 := abs_sub_abs_le_abs_sub (S ((2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0))
+      ((2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0)
+    have h2 := hS.err ((2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0)
+    have h3 : |(2 : ℝ) ^ e' * (addOp p n rh Y).getD i 0| ≤ GaddP p n π' ω (T0 + Em) i := by
+      rw [abs_mul, abs_of_pos h2e]
+      calc _ ≤ (2 : ℝ) ^ e' * (c * GaddP p n π' ω (T0 + Em) i) := mul_le_mul_of_nonneg_left (a2 i) h2e.le
+        _ = _ := by rw [← mul_assoc, hcc, one_mul]
+    linarith
   · rw [hT]
-    exact F_zpow_mul p e' (a3 i)
+    exact hS.mem _ (F_zpow_mul p e' (a3 i))
 
-/-- `b' = 2^{-m} min(b, c̄)`, with `c̄ = 2^{e+1}` -/
-noncomputable def coreBp (e : ℤ) (m : ℕ) (b : ℝ) : ℝ := (2 : ℝ) ^ (-(m : ℤ)) * min b ((2 : ℝ) ^ (e + 1))
+/-- `b' = 2^{-m} min(b, c̄) + nη`, with `c̄ = 2^{e+1}` and `η` the paper's `η_0[m > 0]` -/
+noncomputable def coreBp (e : ℤ) (m : ℕ) (b η : ℝ) : ℝ := (2 : ℝ) ^ (-(m : ℤ)) * min b ((2 : ℝ) ^ (e + 1)) + n * η
 
-/-- `π'_i = 2^{-m} min(π_i, c̄)` -/
-noncomputable def corePi (e : ℤ) (m : ℕ) (π : ℕ → ℝ) : ℕ → ℝ :=
-  fun i => (2 : ℝ) ^ (-(m : ℤ)) * min (π i) ((2 : ℝ) ^ (e + 1))
+/-- `π'_i = 2^{-m} min(π_i, c̄) + η` -/
+noncomputable def corePi (e : ℤ) (m : ℕ) (π : ℕ → ℝ) (η : ℝ) : ℕ → ℝ :=
+  fun i => (2 : ℝ) ^ (-(m : ℤ)) * min (π i) ((2 : ℝ) ^ (e + 1)) + η
 
 omit [Prec_gt_0 p] in
-/-- `(E_m, ψ_m)` of Lemma 39 -/
-noncomputable def coreBound (pos : Bool) (e : ℤ) (m : ℕ) (a b : ℝ) (π : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ) (φ : ℕ → ℝ)
-    (d' : ℕ) : ℝ × (ℕ → ℝ) :=
-  coreE p n (coreT pos (coreBp e m b)) (coreG pos ((2 : ℝ) ^ (-(m : ℤ)) * a) (coreBp e m b))
-    (core0 p n (coreT pos (coreBp e m b) 0) (corePi e m π) (coreBp e m b) Fk φ d').1
-    (core0 p n (coreT pos (coreBp e m b) 0) (corePi e m π) (coreBp e m b) Fk φ d').2 m
+/-- `(E_m, ψ_m)` of Lemma 39, the scaling by `2^{-m}` moving each part by at most `η₁` and step (3)'s scaling back by
+at most `η₂` -/
+noncomputable def coreBound (η₁ η₂ : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a b : ℝ) (π : ℕ → ℝ) (Fk : ℕ → ℕ → ℝ)
+    (φ : ℕ → ℝ) (d' : ℕ) : ℝ × (ℕ → ℝ) :=
+  coreE p n (coreT pos (coreBp n e m b η₁)) (coreG pos ((2 : ℝ) ^ (-(m : ℤ)) * a) (coreBp n e m b η₁))
+    (core0 p n (coreT pos (coreBp n e m b η₁) 0) (2 * n * η₁) η₂ (corePi e m π η₁) (coreBp n e m b η₁) Fk φ d').1
+    (core0 p n (coreT pos (coreBp n e m b η₁) 0) (2 * n * η₁) η₂ (corePi e m π η₁) (coreBp n e m b η₁) Fk φ d').2 m
 
 /-- Lemma 39 (`lem:core`): steps (2) to (4) of EXP on `r` with `a ≤ |r| ≤ b` and `|r_i| ≤ π_i`, with `m` squarings,
-degree `d'` and `U < c̄ = 2^{e+1}`, give `|t - (e^r - 1)| ≤ E_m` and `|t_i| ≤ ψ_{m,i}`, and `|e^r - 1| ≤ t̄_m` -/
-theorem lemma_core (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (r : ℕ → ℝ)
+degree `d'` and `U < c̄ = 2^{e+1}`, give `|t - (e^r - 1)| ≤ E_m` and `|t_i| ≤ ψ_{m,i}`, and `|e^r - 1| ≤ t̄_m`. The
+scaling by `2^{-m}` moves each part by at most `η₁`, the paper's `η_0[m > 0]`, and step (3)'s scaling back by at most
+`η₂`; where the first can lose, `e^{b'} ≤ 2`, as `b'` is near `2^{-s}` -/
+theorem lemma_core (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ : ℝ} {S₁ S₂ : ℝ → ℝ}
+    (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (r : ℕ → ℝ)
     (hr : ∀ i < n, F p (r i)) (R : ℝ) (hR : R = ∑ i ∈ range n, r i) (a b : ℝ) (ha : a ≤ |R|) (hb : |R| ≤ b)
     (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ)
-    (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp e m b < d' + 2)
+    (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2)
+    (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i)) (φ : ℕ → ℝ)
     (hφ : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φ k) (pos : Bool) (hsgn : if pos then 0 ≤ R else R ≤ 0) :
-    |∑ i ∈ range n, expCore p n e m r Fk d' i - (Real.exp R - 1)| ≤ (coreBound p n pos e m a b π Fk φ d').1 ∧
-      (∀ i < n, |expCore p n e m r Fk d' i| ≤ (coreBound p n pos e m a b π Fk φ d').2 i) ∧
-      |Real.exp R - 1| ≤ coreT pos (coreBp e m b) m := by
+    |∑ i ∈ range n, expCore p n S₁ S₂ e m r Fk d' i - (Real.exp R - 1)| ≤
+        (coreBound p n η₁ η₂ pos e m a b π Fk φ d').1 ∧
+      (∀ i < n, |expCore p n S₁ S₂ e m r Fk d' i| ≤ (coreBound p n η₁ η₂ pos e m a b π Fk φ d').2 i) ∧
+      |Real.exp R - 1| ≤ coreT pos (coreBp n e m b η₁) m := by
+  have hη₁ := hS₁.nonneg
+  have hnη : (0 : ℝ) ≤ n * η₁ := mul_nonneg (Nat.cast_nonneg n) hη₁
   -- `∑|r_i| ≤ U < c̄`
   have hS := (expU_ge p n hn γ hγ r).trans_lt hU
   have hRc : |R| < (2 : ℝ) ^ (e + 1) := by rw [hR]; exact (abs_sum_le_sum_abs _ _).trans_lt hS
   have hric : ∀ i < n, |r i| < (2 : ℝ) ^ (e + 1) := fun i hi =>
     (single_le_sum (f := fun i => |r i|) (fun _ _ => abs_nonneg _) (mem_range.mpr hi)).trans_lt hS
-  -- `r' = 2^{-m} r`
+  -- `r' = 2^{-m} r` rounded, and the exact `r* = 2^{-m} r`
   obtain ⟨c, hc⟩ : ∃ c, c = (2 : ℝ) ^ (-(m : ℤ)) := ⟨_, rfl⟩
   have hc0 : 0 < c := by rw [hc]; positivity
-  obtain ⟨r', hr'⟩ : ∃ r' : ℕ → ℝ, r' = fun i => c * r i := ⟨_, rfl⟩
-  have hr'F : ∀ i < n, F p (r' i) := fun i hi => by rw [hr', hc]; exact F_zpow_mul p _ (hr i hi)
-  obtain ⟨R', hR'⟩ : ∃ R', R' = c * R := ⟨_, rfl⟩
-  have hR's : R' = ∑ i ∈ range n, r' i := by rw [hR', hR, hr', mul_sum]
-  have hR'b : |R'| ≤ coreBp e m b := by
-    rw [hR', coreBp, ← hc, abs_mul, abs_of_pos hc0]
-    exact mul_le_mul_of_nonneg_left (le_min hb hRc.le) hc0.le
-  have hr'π : ∀ i < n, |r' i| ≤ corePi e m π i := fun i hi => by
-    rw [hr', corePi, ← hc, abs_mul, abs_of_pos hc0]
-    exact mul_le_mul_of_nonneg_left (le_min (hπ i hi) (hric i hi).le) hc0.le
-  have hR'a : c * a ≤ |R'| := by
-    rw [hR', abs_mul, abs_of_pos hc0]
+  obtain ⟨r', hr'⟩ : ∃ r' : ℕ → ℝ, r' = fun i => S₁ (c * r i) := ⟨_, rfl⟩
+  have hr'F : ∀ i < n, F p (r' i) := fun i hi => by
+    rw [hr', hc]; exact hS₁.mem _ (F_zpow_mul p _ (hr i hi))
+  obtain ⟨Rs, hRs⟩ : ∃ Rs, Rs = c * R := ⟨_, rfl⟩
+  obtain ⟨R', hR's⟩ : ∃ R', R' = ∑ i ∈ range n, r' i := ⟨_, rfl⟩
+  obtain ⟨bp, hbp⟩ : ∃ bp, bp = coreBp n e m b η₁ := ⟨_, rfl⟩
+  rw [← hbp] at hbd hb2
+  have hRR : |R' - Rs| ≤ n * η₁ := by
+    rw [hR's, hRs, hR, hr', mul_sum, ← sum_sub_distrib]
+    refine (abs_sum_le_sum_abs _ _).trans ((sum_le_sum fun i _ => hS₁.err _).trans_eq ?_)
+    rw [sum_const, card_range, nsmul_eq_mul]
+  have hRsb : |Rs| ≤ bp := by
+    rw [hRs, hbp, coreBp, ← hc, abs_mul, abs_of_pos hc0]
+    linarith [mul_le_mul_of_nonneg_left (le_min hb hRc.le) hc0.le]
+  have hR'b : |R'| ≤ bp := by
+    have h1 := abs_sub_abs_le_abs_sub R' Rs
+    have h2 : |Rs| ≤ c * min b ((2 : ℝ) ^ (e + 1)) := by
+      rw [hRs, abs_mul, abs_of_pos hc0]
+      exact mul_le_mul_of_nonneg_left (le_min hb hRc.le) hc0.le
+    rw [hbp, coreBp, ← hc]
+    linarith
+  have hr'π : ∀ i < n, |r' i| ≤ corePi e m π η₁ i := fun i hi => by
+    have h1 := abs_sub_abs_le_abs_sub (S₁ (c * r i)) (c * r i)
+    have h2 := hS₁.err (c * r i)
+    have h3 : |c * r i| ≤ c * min (π i) ((2 : ℝ) ^ (e + 1)) := by
+      rw [abs_mul, abs_of_pos hc0]
+      exact mul_le_mul_of_nonneg_left (le_min (hπ i hi) (hric i hi).le) hc0.le
+    rw [hr']
+    show |S₁ (c * r i)| ≤ (2 : ℝ) ^ (-(m : ℤ)) * min (π i) ((2 : ℝ) ^ (e + 1)) + η₁
+    rw [← hc]
+    linarith
+  -- `|e^{r'} - e^{r*}| ≤ 2nη₁`
+  have hD : |Real.exp R' - Real.exp Rs| ≤ 2 * n * η₁ := by
+    rcases hη₁.eq_or_lt with h0 | h0
+    · rw [← h0, mul_zero] at hRR ⊢
+      rw [sub_eq_zero.mp (abs_nonpos_iff.mp hRR), sub_self, abs_zero]
+    · have h1 := abs_exp_sub_exp_le ((le_abs_self R').trans hR'b) ((le_abs_self Rs).trans hRsb)
+      have h2 : Real.exp bp * |R' - Rs| ≤ 2 * (n * η₁) :=
+        mul_le_mul (hb2 h0) hRR (abs_nonneg _) (by norm_num)
+      linarith
+  have hRsa : c * a ≤ |Rs| := by
+    rw [hRs, abs_mul, abs_of_pos hc0]
     exact mul_le_mul_of_nonneg_left ha hc0.le
-  have hsgn' : if pos then 0 ≤ R' else R' ≤ 0 := by
-    cases pos <;> simp only [Bool.false_eq_true, ite_true, ite_false] at hsgn ⊢ <;> rw [hR']
+  have hsgn' : if pos then 0 ≤ Rs else Rs ≤ 0 := by
+    cases pos <;> simp only [Bool.false_eq_true, ite_true, ite_false] at hsgn ⊢ <;> rw [hRs]
     · exact mul_nonpos_of_nonneg_of_nonpos hc0.le hsgn
     · exact mul_nonneg hc0.le hsgn
-  have hts := tstar_bound pos R' (c * a) (coreBp e m b) hR'b hR'a hsgn'
+  have hts := tstar_bound pos Rs (c * a) bp hRsb hRsa hsgn'
   -- `t*_{j+1} = 2t*_j + t*_j²`
-  have hrec : ∀ j : ℕ, Real.exp (2 ^ (j + 1) * R') - 1 =
-      2 * (Real.exp (2 ^ j * R') - 1) + (Real.exp (2 ^ j * R') - 1) ^ 2 := fun j => by
-    rw [pow_succ, show (2 : ℝ) ^ j * 2 * R' = 2 ^ j * R' + 2 ^ j * R' by ring, Real.exp_add]
+  have hrec : ∀ j : ℕ, Real.exp (2 ^ (j + 1) * Rs) - 1 =
+      2 * (Real.exp (2 ^ j * Rs) - 1) + (Real.exp (2 ^ j * Rs) - 1) ^ 2 := fun j => by
+    rw [pow_succ, show (2 : ℝ) ^ j * 2 * Rs = 2 ^ j * Rs + 2 ^ j * Rs by ring, Real.exp_add]
     ring
-  obtain ⟨T, hT⟩ : ∃ T, T = coreT pos (coreBp e m b) := ⟨_, rfl⟩
-  obtain ⟨g, hg⟩ : ∃ g, g = coreG pos (c * a) (coreBp e m b) := ⟨_, rfl⟩
-  obtain ⟨B0, hB0⟩ : ∃ B0, B0 = core0 p n (T 0) (corePi e m π) (coreBp e m b) Fk φ d' := ⟨_, rfl⟩
-  obtain ⟨t0, ht0d⟩ : ∃ t0, t0 = expT0 p n (e - m) r' Fk d' := ⟨_, rfl⟩
-  have h0 := core_t0 p n hp hn hA3 r' hr'F _ hr'π R' (coreBp e m b) hR's hR'b Fk hF φ hφ d' hd hbd (e - m) (T 0)
-    (by rw [hT]; simpa using (hts 0).1)
+  obtain ⟨T, hT⟩ : ∃ T, T = coreT pos bp := ⟨_, rfl⟩
+  obtain ⟨g, hg⟩ : ∃ g, g = coreG pos (c * a) bp := ⟨_, rfl⟩
+  obtain ⟨B0, hB0⟩ : ∃ B0, B0 = core0 p n (T 0) (2 * n * η₁) η₂ (corePi e m π η₁) bp Fk φ d' := ⟨_, rfl⟩
+  obtain ⟨t0, ht0d⟩ : ∃ t0, t0 = expT0 p n S₂ (e - m) r' Fk d' := ⟨_, rfl⟩
+  have h0 := core_t0 p n hp hn hA3 hS₂ r' hr'F _ hr'π R' bp hR's hR'b Fk hF φ hφ d' hd hbd (e - m) Rs (T 0)
+    (2 * n * η₁) hD (by rw [hT]; simpa using (hts 0).1)
   rw [← hB0, ← ht0d] at h0
   -- the squarings
-  have hind : ∀ j, |∑ i ∈ range n, (expSq p n)^[j] t0 i - (Real.exp (2 ^ j * R') - 1)| ≤
+  have hind : ∀ j, |∑ i ∈ range n, (expSq p n)^[j] t0 i - (Real.exp (2 ^ j * Rs) - 1)| ≤
       (coreE p n T g B0.1 B0.2 j).1 ∧ (∀ i < n, |(expSq p n)^[j] t0 i| ≤ (coreE p n T g B0.1 B0.2 j).2 i) ∧
       ∀ i < n, F p ((expSq p n)^[j] t0 i) := by
     intro j
@@ -539,19 +719,19 @@ theorem lemma_core (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
     | succ j ih =>
       obtain ⟨i1, i2, i3⟩ := ih
       rw [Function.iterate_succ_apply', hrec j]
-      have hsq := core_sq p n hp hn hA3 _ i3 _ i2 (Real.exp (2 ^ j * R') - 1) _ (T j) (T (j + 1)) (g j) i1
+      have hsq := core_sq p n hp hn hA3 _ i3 _ i2 (Real.exp (2 ^ j * Rs) - 1) _ (T j) (T (j + 1)) (g j) i1
         (by rw [hT]; exact (hts j).1) (by rw [← hrec j, hT]; exact (hts (j + 1)).1) (by rw [hg]; exact (hts j).2)
       exact hsq
   obtain ⟨f1, f2, -⟩ := hind m
-  have hm : (2 : ℝ) ^ m * R' = R := by
-    rw [hR', hc, ← mul_assoc, ← zpow_natCast, ← zpow_add₀ two_ne_zero, add_neg_cancel, zpow_zero, one_mul]
+  have hm : (2 : ℝ) ^ m * Rs = R := by
+    rw [hRs, hc, ← mul_assoc, ← zpow_natCast, ← zpow_add₀ two_ne_zero, add_neg_cancel, zpow_zero, one_mul]
   rw [hm] at f1
   have hexp := (hts m).1
-  rw [hm] at hexp
-  have hcb : coreBound p n pos e m a b π Fk φ d' = coreE p n T g B0.1 B0.2 m := by
-    rw [coreBound, hB0, hT, hg, hc]
+  rw [hm, hbp] at hexp
+  have hcb : coreBound p n η₁ η₂ pos e m a b π Fk φ d' = coreE p n T g B0.1 B0.2 m := by
+    rw [coreBound, hB0, hT, hg, hc, hbp]
   rw [hcb]
-  have hcore : expCore p n e m r Fk d' = (expSq p n)^[m] t0 := by rw [expCore, ht0d, hr', hc]
+  have hcore : expCore p n S₁ S₂ e m r Fk d' = (expSq p n)^[m] t0 := by rw [expCore, ht0d, hr', hc]
   rw [hcore]
   exact ⟨f1, f2, hexp⟩
 
