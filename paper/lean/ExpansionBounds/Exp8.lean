@@ -5,7 +5,8 @@ import ExpansionBounds.Trig8
 # Theorem 40 (`thm:exp`) at `n = 8` and `p = 53`
 
 `EXP_{8,6,43}` with multidouble's constants: for `x` in `F` on `H(2)` with `|x_0| ≤ 745.2`, the result is within
-`3.661u^8 e^x + 8·2^{-1074}` of `e^x`. A run falls in a group of exponents `e` of step (2), which share `m` and the
+`3.661u^8 e^x + 8·2^{-1074}` of `e^x`. The scalings round below `2^{-1022}` as binary64 does. The model has no largest
+finite value, so nothing overflows: the bound is the paper's, which takes a finite result. A run falls in a group of exponents `e` of step (2), which share `m` and the
 degree `d'`, and in an interval `[a, b]` of `|r|`; the kernel checked the bound of each (`Exp8/Run0.lean` to
 `Run11.lean`), and `expEps_cert` carries it to the paper's `ε`.
 -/
@@ -313,7 +314,8 @@ theorem exp8Pi_nonneg (k0 : Bool) {hi : ℚ} (hhi : 0 ≤ hi) (i : ℕ) : 0 ≤ 
     exact_mod_cast hg
 
 /-- Theorem 40 (`thm:exp`) at `n = 8` and `p = 53`, for `EXP_{8,6,43}` with multidouble's constants and binary64's
-exponent range: for `x` in `F` on `H(2)` with `|x_0| ≤ 745.2`, with `e` the exponent of step (2)'s `U` (`-1023` where
+subnormals, without overflow (the model has no largest finite value, and the paper's theorem takes a finite result):
+for `x` in `F` on `H(2)` with `|x_0| ≤ 745.2`, with `e` the exponent of step (2)'s `U` (`-1023` where
 `U < 2^{-1022}`), `m = max(0, e + 7)` and the degree `d'` of step (3), every scaling rounded by `S`, which keeps a
 value or rounds one below `2^{-1022}` to a multiple of `2^{-1074}`, and the last scaling in two steps, `2^{k₁}` then
 `2^{k₂}` with `k₂ ≤ 0`: `|y - e^x| ≤ 3.661u^8 e^x + 8·2^{-1074}` -/
