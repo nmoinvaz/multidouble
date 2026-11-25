@@ -139,15 +139,15 @@ theorem thm42_case_ladder (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n)
     (ha : a ≤ |∑ i ∈ range n, r i|) (hb : |∑ i ∈ range n, r i| ≤ b) (hc : b + E + δ ≤ 3 / 5)
     (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
     (pos : Bool) (hsgn : if pos then 0 ≤ ∑ i ∈ range n, r i else ∑ i ∈ range n, r i ≤ 0)
-    (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
+    (e : ℤ) (hU : ∑ i ∈ range n, |r i| < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
     (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2) (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φF : ℕ → ℝ) (hφF : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φF k)
     (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |Sx ((2 : ℝ) ^ k * x i)| ≤ πx i)
     (hSx0 : Sx ((2 : ℝ) ^ k * x 0) = (2 : ℝ) ^ k * x 0) (B eφ et ec : ℤ)
-    (hUφ : expU p n γ (logPhi p n Sx k x) < (2 : ℝ) ^ (eφ + 1))
-    (hUt : expU p n γ (expCore p n S₁ S₂ e m r Fk d') < (2 : ℝ) ^ (et + 1))
-    (hUc : expU p n γ (logC p n Sp B eφ et (logPhi p n Sx k x) (expCore p n S₁ S₂ e m r Fk d')) <
+    (hUφ : ∑ i ∈ range n, |logPhi p n Sx k x i| < (2 : ℝ) ^ (eφ + 1))
+    (hUt : ∑ i ∈ range n, |expCore p n S₁ S₂ e m r Fk d' i| < (2 : ℝ) ^ (et + 1))
+    (hUc : ∑ i ∈ range n, |logC p n Sp B eφ et (logPhi p n Sx k x) (expCore p n S₁ S₂ e m r Fk d') i| <
       (2 : ℝ) ^ (ec + 1))
     (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q)
@@ -155,8 +155,8 @@ theorem thm42_case_ladder (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n)
     |(logOp p n Sx Sp Sc y0 x k (expCore p n S₁ S₂ e m r Fk d') B eφ et ec F' q).sum -
         Real.log (∑ i ∈ range n, x i)| ≤
       logBound p n η₁ η₂ ηx ηp ηc ℓ E πy pos e m a b δ π Fk φF d' πx F' φ' q B :=
-  thm42_case p n hp hn hA3 hS₁ hS₂ hSx hSp hSc x hx hX0 y0 hy0 πy hπy ℓ E hℓ hE r hr k δ hδ a b ha hb π hπ pos hsgn γ
-    hγ e hU m d' hd hbd hb2 Fk hF φF hφF πx hπx0 hπx
+  thm42_case p n hp hn hA3 hS₁ hS₂ hSx hSp hSc x hx hX0 y0 hy0 πy hπy ℓ E hℓ hE r hr k δ hδ a b ha hb π hπ pos hsgn
+    e hU m d' hd hbd hb2 Fk hF φF hφF πx hπx0 hπx
     (by rw [hSx0]; exact log_range_half_two p n hn θ hθ hρ x hH hX0 _ _ k E δ b hE hδ hb hc) B eφ et ec hUφ hUt
     hUc F' hF' φ' hφ' q hq hC
 

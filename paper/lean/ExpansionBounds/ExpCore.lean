@@ -8,7 +8,8 @@ Under (A3), `(n² + n)u < 1`: steps (2) to (4) of EXP, where `U` bounds `∑|r_i
 `F_j` of `1/j!` gives `q`, `w = MUL(r', q)`, `t = 2^{e'} ADD(r̂, MUL(r̂, w))` with `r̂ = 2^{-e'} r'`, and `m` passes of
 `t ← ADD(2t, MUL(t, t))`. The scaling by `2^{-m}` and step (3)'s scaling back by `2^{e'}` can leave the normal range:
 they are rounded by `S₁` and `S₂`, which move a value by at most `η₁` and `η₂` (`Scl`), the paper's `η_0[m > 0]` and
-`η_0`, and zero with an unbounded exponent range. `U` is formed as with an unbounded range. The paper's `n ≤ 31` with
+`η_0`, and zero with an unbounded exponent range. Lemma 39 asks `∑|r_i| < 2^{e+1}`, which `U < 2^{e+1}` gives
+(`sum_abs_lt_of_expU`) and which also holds where the product that forms `U` underflows. The paper's `n ≤ 31` with
 `U`'s factor `1 + 2^{-48}` is here `(1 + u)^n ≤ 1 + γ` with the factor `1 + γ`.
 -/
 
@@ -262,6 +263,12 @@ theorem abs_exp_sub_exp_le {x y B : ℝ} (hx : x ≤ B) (hy : y ≤ B) :
   · exact key x y h hy
   · rw [abs_sub_comm, abs_sub_comm x y]
     exact key y x h hx
+
+/-- `U < c` gives `∑|r_i| < c`. Where the product that forms `U` underflows, the paper has
+`∑|r_i| < 2^{-1022} ≤ 2^{e+1}` with `e = -1023`, so the results below ask `∑|r_i| < 2^{e+1}` in place of `U < 2^{e+1}` -/
+theorem sum_abs_lt_of_expU (hn : 1 ≤ n) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (r : ℕ → ℝ) {c : ℝ}
+    (hU : expU p n γ r < c) : ∑ i ∈ range n, |r i| < c :=
+  (expU_ge p n hn γ hγ r).trans_lt hU
 
 /-- step (3): `t = r'` for `d' = 1`; otherwise `q = p_2` by Horner's rule on the `F_j`, `w = MUL(r', q)`,
 `r̂ = 2^{-e'} r'` and `t = 2^{e'} ADD(r̂, MUL(r̂, w))`, the scaling back rounded by `S` -/
@@ -622,14 +629,14 @@ noncomputable def coreBound (η₁ η₂ : ℝ) (pos : Bool) (e : ℤ) (m : ℕ)
     (core0 p n (coreT pos (coreBp n e m b η₁) 0) (2 * n * η₁) η₂ (corePi e m π η₁) (coreBp n e m b η₁) Fk φ d').2 m
 
 /-- Lemma 39 (`lem:core`): steps (2) to (4) of EXP on `r` with `a ≤ |r| ≤ b` and `|r_i| ≤ π_i`, with `m` squarings,
-degree `d'` and `U < c̄ = 2^{e+1}`, give `|t - (e^r - 1)| ≤ E_m` and `|t_i| ≤ ψ_{m,i}`, and `|e^r - 1| ≤ t̄_m`. The
+degree `d'` and `∑|r_i| < c̄ = 2^{e+1}`, give `|t - (e^r - 1)| ≤ E_m` and `|t_i| ≤ ψ_{m,i}`, and `|e^r - 1| ≤ t̄_m`. The
 scaling by `2^{-m}` moves each part by at most `η₁`, the paper's `η_0[m > 0]`, and step (3)'s scaling back by at most
 `η₂`; where the first can lose, `e^{b'} ≤ 2`, as `b'` is near `2^{-s}` -/
 theorem lemma_core (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ : ℝ} {S₁ S₂ : ℝ → ℝ}
     (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (r : ℕ → ℝ)
     (hr : ∀ i < n, F p (r i)) (R : ℝ) (hR : R = ∑ i ∈ range n, r i) (a b : ℝ) (ha : a ≤ |R|) (hb : |R| ≤ b)
-    (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ)
-    (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2)
+    (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i) (e : ℤ)
+    (hU : ∑ i ∈ range n, |r i| < (2 : ℝ) ^ (e + 1)) (m d' : ℕ) (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2)
     (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i)) (φ : ℕ → ℝ)
     (hφ : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φ k) (pos : Bool) (hsgn : if pos then 0 ≤ R else R ≤ 0) :
@@ -639,8 +646,7 @@ theorem lemma_core (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
       |Real.exp R - 1| ≤ coreT pos (coreBp n e m b η₁) m := by
   have hη₁ := hS₁.nonneg
   have hnη : (0 : ℝ) ≤ n * η₁ := mul_nonneg (Nat.cast_nonneg n) hη₁
-  -- `∑|r_i| ≤ U < c̄`
-  have hS := (expU_ge p n hn γ hγ r).trans_lt hU
+  have hS := hU
   have hRc : |R| < (2 : ℝ) ^ (e + 1) := by rw [hR]; exact (abs_sum_le_sum_abs _ _).trans_lt hS
   have hric : ∀ i < n, |r i| < (2 : ℝ) ^ (e + 1) := fun i hi =>
     (single_le_sum (f := fun i => |r i|) (fun _ _ => abs_nonneg _) (mem_range.mpr hi)).trans_lt hS

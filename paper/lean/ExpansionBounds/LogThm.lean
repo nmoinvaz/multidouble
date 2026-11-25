@@ -329,8 +329,7 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
     (hc : ∀ i < n, F p (c i)) (χ : ℕ → ℝ) (hχ0 : ∀ i, 0 ≤ χ i) (hχ : ∀ i < n, |c i| ≤ χ i) (cs cb Ec : ℝ)
     (hcs : |cs| ≤ cb) (hEc : |∑ i ∈ range n, c i - cs| ≤ Ec) (hC : cb + Ec < 1) (F' : ℕ → ℕ → ℝ)
     (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ) (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k)
-    (q : ℕ) (hq : 2 ≤ q) (B ec : ℤ) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
-    (hU : expU p n γ c < (2 : ℝ) ^ (ec + 1)) :
+    (q : ℕ) (hq : 2 ≤ q) (B ec : ℤ) (hU : ∑ i ∈ range n, |c i| < (2 : ℝ) ^ (ec + 1)) :
     |∑ i ∈ range n, logYc p n Sc B ec c F' q i - Real.log (1 + cs)| ≤ (logP p n η χ (cb + Ec) Ec F' φ' q B).1 ∧
       (∀ i < n, |logYc p n Sc B ec c F' q i| ≤ (logP p n η χ (cb + Ec) Ec F' φ' q B).2 i) ∧
       ∀ i < n, F p (logYc p n Sc B ec c F' q i) := by
@@ -382,7 +381,7 @@ theorem log_step5 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
   · -- `y_c = c`, with `|c| < 2^{-B-13}`
     refine ⟨?_, fun i hi => (hχ i hi).trans (le_max_right _ _), hc⟩
     have hSs : |S| ≤ (2 : ℝ) ^ (-B - 13) := by
-      have h1 := (abs_sum_le_sum_abs _ _).trans ((expU_ge p n hn γ hγ c).trans hU.le)
+      have h1 := (abs_sum_le_sum_abs _ _).trans hU.le
       exact h1.trans (zpow_le_zpow_right₀ (by norm_num) (by omega))
     have ht := log_tail (lt_of_le_of_lt hSC hC) 1
     simp only [range_one, sum_singleton, Nat.cast_zero, Nat.cast_one, zero_add, pow_one, div_one] at ht
@@ -607,8 +606,8 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
     {R re e0 E δ b ξ φb tb Em D : ℝ} (hRre : |R - re| ≤ δ) (he0 : |e0| ≤ E) (hRb : |R| ≤ b)
     (hΦ : |∑ i ∈ range n, φ i + 1 - Real.exp (-e0 - re)| ≤ D) (hξ : |∑ i ∈ range n, φ i + 1| ≤ ξ)
     (hφb : |∑ i ∈ range n, φ i| ≤ φb) (hT : |∑ i ∈ range n, t i - (Real.exp R - 1)| ≤ Em)
-    (htb : |Real.exp R - 1| ≤ tb) (B eφ et : ℤ) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ)
-    (hUφ : expU p n γ φ < (2 : ℝ) ^ (eφ + 1)) (hUt : expU p n γ t < (2 : ℝ) ^ (et + 1)) :
+    (htb : |Real.exp R - 1| ≤ tb) (B eφ et : ℤ)
+    (hUφ : ∑ i ∈ range n, |φ i| < (2 : ℝ) ^ (eφ + 1)) (hUt : ∑ i ∈ range n, |t i| < (2 : ℝ) ^ (et + 1)) :
     |∑ i ∈ range n, logC p n Sp B eφ et φ t i - (Real.exp (-e0) - 1)| ≤
         (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).1 ∧
       (∀ i < n, |logC p n Sp B eφ et φ t i| ≤ (logC4 p n D η πφ ψ φb tb Em E δ b ξ B).2 i) ∧
@@ -671,14 +670,14 @@ theorem log_step4 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p <
     have hsmall : |Φ * T| ≤ (2 : ℝ) ^ (-B - 12) * max φb (tb + Em) := by
       have hB : (2 : ℝ) ^ (-B - 13) ≤ (2 : ℝ) ^ (-B - 12) := zpow_le_zpow_right₀ (by norm_num) (by omega)
       rcases min_lt_iff.mp hd with h | h
-      · have h1 : |Φ| ≤ (2 : ℝ) ^ (-B - 13) := ((abs_sum_le_sum_abs _ _).trans
-          ((expU_ge p n hn γ hγ φ).trans hUφ.le)).trans (zpow_le_zpow_right₀ (by norm_num) (by omega))
+      · have h1 : |Φ| ≤ (2 : ℝ) ^ (-B - 13) :=
+          ((abs_sum_le_sum_abs _ _).trans hUφ.le).trans (zpow_le_zpow_right₀ (by norm_num) (by omega))
         rw [abs_mul]
         calc |Φ| * |T| ≤ (2 : ℝ) ^ (-B - 12) * (tb + Em) :=
               mul_le_mul (h1.trans hB) hTb (abs_nonneg _) (by positivity)
           _ ≤ _ := mul_le_mul_of_nonneg_left (le_max_right _ _) (by positivity)
-      · have h1 : |T| ≤ (2 : ℝ) ^ (-B - 13) := ((abs_sum_le_sum_abs _ _).trans
-          ((expU_ge p n hn γ hγ t).trans hUt.le)).trans (zpow_le_zpow_right₀ (by norm_num) (by omega))
+      · have h1 : |T| ≤ (2 : ℝ) ^ (-B - 13) :=
+          ((abs_sum_le_sum_abs _ _).trans hUt.le).trans (zpow_le_zpow_right₀ (by norm_num) (by omega))
         rw [abs_mul, mul_comm]
         calc |T| * |Φ| ≤ (2 : ℝ) ^ (-B - 12) * φb :=
               mul_le_mul (h1.trans hB) hφb (abs_nonneg _) (by positivity)
@@ -784,9 +783,9 @@ noncomputable def logBound (η₁ η₂ ηx ηp ηc ℓ E : ℝ) (πy : ℕ → 
 
 /-- Theorem 42 (`thm:log`) for a case, with `x > 0` and `(n² + n)u < 1`: with the start `y_0` within `E` of `ln x` and
 `ℓ ≥ |ln x|`; EXP's reduction of `-y_0` to `r` within `δ` of `r_e = -y_0 - k ln 2`, with `a ≤ |r| ≤ b` and the case's
-sign; its core run with `U < 2^{e+1}`, `m` squarings and degree `d'`; the computed `x'`, each part of `2^kx` rounded
+sign; its core run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`; the computed `x'`, each part of `2^kx` rounded
 within `η_x`, with parts within `π^x` and `x'_0 ∈ [1/2, 2]`; the exponents `e_φ`, `e_t` and `e_c` of steps (4) and
-(5) with `U_v < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)`. The
+(5) with `∑|v_i| < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)`. The
 scalings back of `p` are rounded within `η_p` and those of each `c ⊗ v` within `η_c` -/
 theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ ηx ηp ηc : ℝ}
     {S₁ S₂ Sx Sp Sc : ℝ → ℝ} (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (hSx : Scl p ηx Sx) (hSp : Scl p ηp Sp)
@@ -798,15 +797,15 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
     (hδ : |∑ i ∈ range n, r i - (-∑ i ∈ range n, y0 i - k * Real.log 2)| ≤ δ) (a b : ℝ)
     (ha : a ≤ |∑ i ∈ range n, r i|) (hb : |∑ i ∈ range n, r i| ≤ b) (π : ℕ → ℝ) (hπ : ∀ i < n, |r i| ≤ π i)
     (pos : Bool) (hsgn : if pos then 0 ≤ ∑ i ∈ range n, r i else ∑ i ∈ range n, r i ≤ 0)
-    (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (e : ℤ) (hU : expU p n γ r < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
+    (e : ℤ) (hU : ∑ i ∈ range n, |r i| < (2 : ℝ) ^ (e + 1)) (m d' : ℕ)
     (hd : 1 ≤ d') (hbd : coreBp n e m b η₁ < d' + 2) (hb2 : 0 < η₁ → Real.exp (coreBp n e m b η₁) ≤ 2)
     (Fk : ℕ → ℕ → ℝ) (hF : ∀ k, ∀ i < n, F p (Fk k i))
     (φF : ℕ → ℝ) (hφF : ∀ k, |∑ i ∈ range n, Fk k i - invF k| ≤ φF k)
     (πx : ℕ → ℝ) (hπx0 : ∀ i, 0 ≤ πx i) (hπx : ∀ i < n, |Sx ((2 : ℝ) ^ k * x i)| ≤ πx i)
     (hx0 : 1 / 2 ≤ Sx ((2 : ℝ) ^ k * x 0) ∧ Sx ((2 : ℝ) ^ k * x 0) ≤ 2) (B eφ et ec : ℤ)
-    (hUφ : expU p n γ (logPhi p n Sx k x) < (2 : ℝ) ^ (eφ + 1))
-    (hUt : expU p n γ (expCore p n S₁ S₂ e m r Fk d') < (2 : ℝ) ^ (et + 1))
-    (hUc : expU p n γ (logC p n Sp B eφ et (logPhi p n Sx k x) (expCore p n S₁ S₂ e m r Fk d')) <
+    (hUφ : ∑ i ∈ range n, |logPhi p n Sx k x i| < (2 : ℝ) ^ (eφ + 1))
+    (hUt : ∑ i ∈ range n, |expCore p n S₁ S₂ e m r Fk d' i| < (2 : ℝ) ^ (et + 1))
+    (hUc : ∑ i ∈ range n, |logC p n Sp B eφ et (logPhi p n Sx k x) (expCore p n S₁ S₂ e m r Fk d') i| <
       (2 : ℝ) ^ (ec + 1))
     (F' : ℕ → ℕ → ℝ) (hF' : ∀ k, ∀ i < n, F p (F' k i)) (φ' : ℕ → ℝ)
     (hφ' : ∀ k, |∑ i ∈ range n, F' k i - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q)
@@ -820,7 +819,7 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hE0 : 0 ≤ E := (abs_nonneg _).trans hE
   have hδ0 : 0 ≤ δ := (abs_nonneg _).trans hδ
   -- Lemma 39
-  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 hS₁ hS₂ r hr R hRd a b ha hb π hπ γ hγ e hU m d' hd hbd hb2 Fk hF
+  obtain ⟨c1, c2, c3⟩ := lemma_core p n hp hn hA3 hS₁ hS₂ r hr R hRd a b ha hb π hπ e hU m d' hd hbd hb2 Fk hF
     φF hφF pos hsgn
   set t := expCore p n S₁ S₂ e m r Fk d' with htd
   set Em := (coreBound p n η₁ η₂ pos e m a b π Fk φF d').1 with hEm
@@ -896,7 +895,7 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   -- step (4)
   obtain ⟨d1, d2, d3, d4⟩ := log_step4 p n hp hn hA3 hSp φ t (fun i _ => f3 i)
     (expCore_F p n hp hn hA3 hS₁ hS₂ e m r hr Fk hF d')
-    πφ ψ hπφ0 hψ0 (fun i _ => f2 i) hψ hδ (show |e0| ≤ E from hE) hb hΦ hξ' hφb c1 c3 B eφ et γ hγ hUφ hUt
+    πφ ψ hπφ0 hψ0 (fun i _ => f2 i) hψ hδ (show |e0| ≤ E from hE) hb hΦ hξ' hφb c1 c3 B eφ et hUφ hUt
   set c := logC p n Sp B eφ et φ t with hcd
   set c4 := logC4 p n D ηp πφ ψ φb tb Em E δ b ξ B with hc4
   have hc4' : logCase4 p n η₁ η₂ ηx ηp E pos e m a b δ π Fk φF d' πx B = c4 := rfl
@@ -905,7 +904,7 @@ theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p 
   have hcs : |Real.exp (-e0) - 1| ≤ Real.exp E - 1 :=
     (abs_exp_sub_one_le _).trans (by rw [abs_neg]; linarith [Real.exp_le_exp.mpr hE])
   obtain ⟨g1, g2, g3⟩ := log_step5 p n hp hn hA3 hSc c d3 c4.2 d4 d2 (Real.exp (-e0) - 1) (Real.exp E - 1) c4.1 hcs
-    d1 hC F' hF' φ' hφ' q hq B ec γ hγ hUc
+    d1 hC F' hF' φ' hφ' q hq B ec hUc
   rw [show 1 + (Real.exp (-e0) - 1) = Real.exp (-e0) by ring, Real.log_exp] at g1
   set yc := logYc p n Sc B ec c F' q with hycd
   set P := logP p n ηc c4.2 (Real.exp E - 1 + c4.1) c4.1 F' φ' q B with hPd
