@@ -59,21 +59,17 @@
 
 \begin{abstract}
 \mdseries A floating-point expansion stores a number as an unevaluated sum of $n$ machine numbers, which gives about $n$ times
-the precision of the hardware format. The quad-double library of Hida, Li and Bailey adds, multiplies, divides and
-takes square roots of four-part sums by a scheme of levels that extends to any $n$. Bounds were known for other
-generalizations of it to any $n$, with leading constants that grow like $2^n$. We analyze a scheme of this style that
-uses the error-free TwoSum throughout, which at $n = 8$ is the octo-double arithmetic of the multidouble library. We
-prove that its sum and its product of two $n$-part expansions err by at most $u^n$ times the exact result, where $u$
-is the unit roundoff of the hardware format. This is the bound of rounding to a format with $n$ times the precision. A
-second, much smaller term is added, at most $2^{-15}$ of the first at eight parts in binary64, and measured against
-the operands' size for sums. Division has the same bound. Simple inputs reach it for the sum, the product and the
-quotient, so lowering its leading constant raises the second term by about as much. The square root's bound is three times it at eight parts. For
-sums of $K$ products accumulated in levels, as dot-product kernels do, the second term grows like $(Ku)^{n+1}$ times
-the products' total size, and constructed inputs show that this growth is real. The same analysis, with a bound on
-each part carried through every step, covers a cheaper multiplication without the last level, within
-$2^{31.93}u^8$ of the product, and the sine, cosine, tangent, exponential and logarithm built on these operations,
-with relative constants from $3.17$ to $9.926$ at eight parts. The proofs rest on an analysis of renormalization that
-allows its input terms in any order.
+the precision of the hardware format. The quad-double library of Hida, Li and Bailey computes with four-part sums by a
+scheme of levels that extends to any $n$. Bounds were known for other generalizations of it, with leading constants
+that grow like $2^n$. We analyze a scheme of this style that uses the error-free TwoSum throughout, which at $n = 8$ is
+the octo-double arithmetic of the multidouble library. Its sum, product and quotient err by at most $u^n$ times the
+exact result, where $u$ is the unit roundoff. This is the bound of rounding to a format with $n$ times the precision.
+A second term is added, at most $2^{-15}$ of the first at eight parts in binary64, and measured against the operands'
+size for sums. Simple inputs reach the bound, so lowering its leading constant raises the second term by about as
+much. For sums of $K$ products accumulated in levels, the second term grows like $(Ku)^{n+1}$, and constructed inputs
+show that this growth is real. At eight parts the square root's bound is three times $u^n$, and the sine, cosine,
+tangent, exponential and logarithm built on these operations have relative constants from $3.17$ to $9.926$. The
+proofs rest on an analysis of renormalization that allows its input terms in any order.
 \end{abstract}
 
 \section{Introduction}
