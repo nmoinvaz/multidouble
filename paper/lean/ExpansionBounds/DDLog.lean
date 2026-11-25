@@ -4,10 +4,11 @@ import ExpansionBounds.LogThm
 /-!
 # Proposition 44 (`prop:ddexplog`): the start of `DD::ln`
 
-`DD::ln` starts from `y_0 = RN(ln_b(x_h) + RN(x_l/x_h))` for a double word `x = x_h + x_l` with `|x_l/x_h| ≤ u`. With
-Lemma 43's `η_b = 5.915u` and `δ_1 = u/(1 - u)`, `|y_0 - ln x| ≤ E(ℓ)` for `ℓ ≥ |ln x|`, the proposition's
-`E(ℓ) = (η_b + u(1 + η_b))ℓ + η_bδ_1 + u² + u²/(2(1 - u)) + u((1 + η_b)δ_1 + u(1 + u))` with `η_0 = 0`, as the
-exponent range is unbounded.
+`DD::ln` starts from `y_0 = RN(ln_b(x_h) + w)` for a double word `x = x_h + x_l` with `|x_l/x_h| ≤ u`, where `w` is
+the computed quotient `x_l/x_h`, within `u|x_l/x_h| + η_0` of it: `η_0 = 2^{-1075}` where it underflows in binary64,
+and `η_0 = 0` for `w = RN(x_l/x_h)` with an unbounded exponent range. With Lemma 43's `η_b = 5.915u` and
+`δ_1 = u/(1 - u)`, `|y_0 - ln x| ≤ E(ℓ)` for `ℓ ≥ |ln x|`, the proposition's
+`E(ℓ) = (η_b + u(1 + η_b))ℓ + η_bδ_1 + u² + η_0 + u²/(2(1 - u)) + u((1 + η_b)δ_1 + u(1 + u) + η_0)`.
 -/
 
 namespace ExpansionBounds
@@ -16,14 +17,14 @@ open Finset
 
 variable (p : ℤ) [Prec_gt_0 p]
 
-/-- Proposition 44's start, with an unbounded exponent range so `η_0 = 0`: for positive `x_h ∈ F`, `|x_l/x_h| ≤ u` and
-`ℓ ≥ |ln x|`, `|RN(ln_b(x_h) + RN(x_l/x_h)) - ln x| ≤ E(ℓ)` -/
-theorem prop44_start (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxh0 : 0 < xh) (hv : |xl / xh| ≤ u p)
-    (hℓ : |Real.log (xh + xl)| ≤ ℓ) :
-    |RN p (lnB p xh + RN p (xl / xh)) - Real.log (xh + xl)| ≤
+/-- Proposition 44's start: for positive `x_h ∈ F`, `|x_l/x_h| ≤ u`, the computed quotient `w` within
+`u|x_l/x_h| + η_0` of `x_l/x_h`, and `ℓ ≥ |ln x|`, `|RN(ln_b(x_h) + w) - ln x| ≤ E(ℓ)` -/
+theorem prop44_start (hp : p = 53) {xh xl ℓ w η₀ : ℝ} (hxh : F p xh) (hxh0 : 0 < xh) (hv : |xl / xh| ≤ u p)
+    (hw0 : |w - xl / xh| ≤ u p * |xl / xh| + η₀) (hℓ : |Real.log (xh + xl)| ≤ ℓ) :
+    |RN p (lnB p xh + w) - Real.log (xh + xl)| ≤
       (5915 / 1000 * u p + u p * (1 + 5915 / 1000 * u p)) * ℓ + 5915 / 1000 * u p * (u p / (1 - u p)) +
-        u p ^ 2 + u p ^ 2 / (2 * (1 - u p)) +
-        u p * ((1 + 5915 / 1000 * u p) * (u p / (1 - u p)) + u p * (1 + u p)) := by
+        u p ^ 2 + η₀ + u p ^ 2 / (2 * (1 - u p)) +
+        u p * ((1 + 5915 / 1000 * u p) * (u p / (1 - u p)) + u p * (1 + u p) + η₀) := by
   have hu := u_pos p
   have hu53 : u p = 1 / 9007199254740992 := by rw [hp]; unfold u; norm_num
   have hu1 : u p < 1 := by rw [hu53]; norm_num
@@ -49,9 +50,8 @@ theorem prop44_start (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxh0 : 0 < 
   -- the three errors: `ln_b`, `RN(v)` and `ln(1 + v) ≈ v`
   have hL := (lemma43 p hp).2 xh hxh0 hxh
   set L := lnB p xh with hLd
-  set w := RN p v with hwd
-  have hw : |w - v| ≤ u p * u p :=
-    (abs_RN_sub_le_us p v).trans (mul_le_mul hus hv (abs_nonneg _) hu.le)
+  have hw : |w - v| ≤ u p * u p + η₀ :=
+    hw0.trans (add_le_add (mul_le_mul_of_nonneg_left hv hu.le) le_rfl)
   have ht := log_tail (c := v) hv1 1
   simp only [range_one, sum_singleton, Nat.cast_zero, Nat.cast_one, zero_add, pow_one, div_one] at ht
   have hvl : |v - Real.log (1 + v)| ≤ u p ^ 2 / (2 * (1 - u p)) := by
@@ -60,17 +60,17 @@ theorem prop44_start (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxh0 : 0 < 
     rw [show |v| ^ (1 + 1) = |v| ^ 2 by norm_num, show ((1 : ℝ) + 1) = 2 by norm_num]
     exact div_le_div₀ (by positivity) (pow_le_pow_left₀ (abs_nonneg _) hv 2) (by nlinarith)
       (mul_le_mul_of_nonneg_left (by linarith) (by norm_num))
-  -- `|L + w| ≤ (1 + η)(ℓ + δ_1) + u(1 + u)`
-  have hLw : |L + w| ≤ (1 + η) * (ℓ + δ1) + u p * (1 + u p) := by
+  -- `|L + w| ≤ (1 + η)(ℓ + δ_1) + u(1 + u) + η_0`
+  have hLw : |L + w| ≤ (1 + η) * (ℓ + δ1) + (u p * (1 + u p) + η₀) := by
     have h1 : |L| ≤ (1 + η) * |Real.log xh| := by
       have := abs_sub_abs_le_abs_sub L (Real.log xh)
       rw [hη]
       linarith
-    have h2 : |w| ≤ u p * (1 + u p) := by
+    have h2 : |w| ≤ u p * (1 + u p) + η₀ := by
       have := abs_sub_abs_le_abs_sub w v
       nlinarith
     calc |L + w| ≤ |L| + |w| := abs_add_le _ _
-      _ ≤ (1 + η) * (ℓ + δ1) + u p * (1 + u p) :=
+      _ ≤ (1 + η) * (ℓ + δ1) + (u p * (1 + u p) + η₀) :=
           add_le_add (h1.trans (mul_le_mul_of_nonneg_left hlxh (by linarith))) h2
   have hR := (abs_RN_sub_le_us p (L + w)).trans (mul_le_mul hus hLw (abs_nonneg _) hu.le)
   rw [hlx]
@@ -81,9 +81,22 @@ theorem prop44_start (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxh0 : 0 < 
   calc _ ≤ |RN p (L + w) - (L + w)| + |L - Real.log xh| + |w - v| + |v - Real.log (1 + v)| := by
         refine (abs_add_le _ _).trans (add_le_add ((abs_add_le _ _).trans (add_le_add (abs_add_le _ _) le_rfl))
           le_rfl)
-    _ ≤ u p * ((1 + η) * (ℓ + δ1) + u p * (1 + u p)) + η * (ℓ + δ1) + u p * u p + u p ^ 2 / (2 * (1 - u p)) := by
+    _ ≤ u p * ((1 + η) * (ℓ + δ1) + (u p * (1 + u p) + η₀)) + η * (ℓ + δ1) + (u p * u p + η₀) +
+          u p ^ 2 / (2 * (1 - u p)) := by
         linarith
     _ = _ := by ring
+
+/-- Proposition 44's start with an unbounded exponent range, where the quotient is `RN(x_l/x_h)` and `η_0 = 0` -/
+theorem prop44_start_exact (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxh0 : 0 < xh) (hv : |xl / xh| ≤ u p)
+    (hℓ : |Real.log (xh + xl)| ≤ ℓ) :
+    |RN p (lnB p xh + RN p (xl / xh)) - Real.log (xh + xl)| ≤
+      (5915 / 1000 * u p + u p * (1 + 5915 / 1000 * u p)) * ℓ + 5915 / 1000 * u p * (u p / (1 - u p)) +
+        u p ^ 2 + u p ^ 2 / (2 * (1 - u p)) +
+        u p * ((1 + 5915 / 1000 * u p) * (u p / (1 - u p)) + u p * (1 + u p)) := by
+  have h := prop44_start p hp (w := RN p (xl / xh)) (η₀ := 0) hxh hxh0 hv
+    ((abs_RN_sub_le_us p _).trans (by
+      rw [add_zero]; exact mul_le_mul_of_nonneg_right (us_le_u p) (abs_nonneg _))) hℓ
+  simpa using h
 
 omit [Prec_gt_0 p] in
 /-- a float other than 1 is at least `u` from 1, at `p = 53` -/
@@ -106,8 +119,8 @@ theorem F_ne_one_far (hp : p = 53) {h : ℝ} (hF : F p h) (h1 : h ≠ 1) : u p �
     rw [abs_one, abs_sub_comm] at this
     linarith
 
-/-- Proposition 44's start, with an unbounded exponent range, for `ℓ < u(1 - u)/2`, `ℓ ≥ |ln x|`, `x_h, x_l ∈ F` and
-`x > 0`: when `x_h = RN(x_h + x_l)`, as `FastTwoSum` returns, `x_h = 1`, `y_0 = x_l` and
+/-- Proposition 44's start for `ℓ < u(1 - u)/2`, `ℓ ≥ |ln x|`, `x_h, x_l ∈ F` and `x > 0`: when
+`x_h = RN(x_h + x_l)`, as `FastTwoSum` returns, `x_h = 1`, the quotient `x_l/1` is exact, `y_0 = x_l` and
 `|y_0 - ln x| ≤ ℓ(u(1 + ℓ) + ℓ)` -/
 theorem prop44_start_small (hp : p = 53) {xh xl ℓ : ℝ} (hxh : F p xh) (hxl : F p xl)
     (hr : RN p (xh + xl) = xh) (hxpos : 0 < xh + xl) (hℓ : |Real.log (xh + xl)| ≤ ℓ)
