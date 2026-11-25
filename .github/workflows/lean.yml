@@ -1,15 +1,19 @@
 name: Lean
 # The proofs of paper/lean. The build fails on a proof left as sorry, on any warning, and on a kernel check that
-# does not hold.
+# does not hold. The paper's table of the proofs is checked against the sources.
 on:
   pull_request:
     paths:
       - paper/lean/**
+      - paper/lean_refs.py
+      - paper/expansion-error-bounds-lean.tex
       - .github/workflows/lean.yml
   push:
     branches: [main]
     paths:
       - paper/lean/**
+      - paper/lean_refs.py
+      - paper/expansion-error-bounds-lean.tex
       - .github/workflows/lean.yml
   workflow_dispatch:
 permissions:
@@ -75,3 +79,19 @@ jobs:
         with:
           path: paper/lean/.lake
           key: ${{ steps.restore.outputs.cache-primary-key }}
+
+  refs:
+    name: Lean references
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Every Lean file is named in the paper's table, and every theorem it names is declared in its files
+      - name: Check the paper's table
+        run: python3 paper/lean_refs.py check

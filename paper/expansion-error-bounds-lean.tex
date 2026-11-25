@@ -1,0 +1,100 @@
+% The Lean proofs of the appendices: for each statement, its files of paper/lean/ExpansionBounds and its theorems.
+% \input after the exponential's section of expansion-error-bounds.tex, whose labels it uses. lean_refs.py checks
+% the table against the Lean sources.
+
+\section{The proofs in Lean}\label{sec:lean}
+
+The statements of these appendices are proved in Lean~4~\cite{Lean4} with Mathlib~\cite{Mathlib}, on
+FloatSpec~\cite{FloatSpec}, a port of Flocq~\cite{BM11} that supplies the rounding and the theorems of $\TwoSum$ and
+$\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md}. Table~\ref{tab:lean} gives the
+files of \texttt{ExpansionBounds/} and the theorems for each statement.
+\begin{itemize}
+\item The proofs hold for every precision $p \ge 2$. Lemmas~\ref{lem:red} and~\ref{lem:lnb}, Theorem~\ref{thm:trig}
+and the constants at $n = 8$ are stated at $p = 53$.
+\item A constant is evaluated by Lean's kernel on a copy of its recursion over the rationals, which a lemma equates
+with the recursion over the reals (\texttt{Eval.lean}, \texttt{DivEval.lean}, \texttt{SqrtEval.lean}). Where exact
+values grow too long the copy rounds up, which the bounds of Lemma~\ref{lem:g} allow because they grow with their
+arguments (\texttt{GMono.lean}, \texttt{TrigEval.lean}, \texttt{ExpEval.lean}). The longest runs are cut into steps
+that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/} and \texttt{Exp8/},
+written by \texttt{acc\_lean.py}, \texttt{trig\_lean.py} and \texttt{exp\_lean.py}).
+\item No declaration depends on an axiom other than \texttt{propext}, \texttt{Classical.choice} and
+\texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
+kernel's checks has controls, the same check on a wrong number, a wrong state or a narrower hypothesis, which the
+kernel proves false (\texttt{Controls/}).
+\item Three statements are proved in part. Theorem~\ref{thm:t8} takes the published bounds on its double-word
+start~\cite{JMP17,LLMPR23,MR22} as hypotheses. Theorem~\ref{thm:log} is proved for each case, and its constant at
+$n = 8$ is computed (\texttt{explog\_consts.py}). Proposition~\ref{prop:ddexplog} is proved for its start.
+\end{itemize}
+
+\begin{table*}[tp]
+\centering
+\caption{The Lean proof of each statement: files of \texttt{paper/lean/ExpansionBounds/} and their theorems.}
+\label{tab:lean}
+\footnotesize
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{8.6cm}@{}}
+\toprule
+statement & files & theorems \\
+\midrule
+Assumption~\ref{as:fp} & \texttt{Model.lean}, \texttt{Rounding.lean}, \texttt{Bridge.lean} &
+  \texttt{abs\_RN\_sub\_le\_us}, \texttt{abs\_RN\_sub\_le\_u\_RN}, \texttt{RN\_mult} \\
+Lemma~\ref{lem:facts} & \texttt{Facts.lean} & \texttt{facts\_a}, \texttt{facts\_b}, \texttt{facts\_c} \\
+Theorem~\ref{thm:t1} & \texttt{Renorm.lean}, \texttt{RenormSharp.lean} &
+  \texttt{ren\_exact}, \texttt{renErr\_le}, \texttt{ren\_sharp}, \texttt{vecSum\_bounds}, \texttt{renErr\_le\_scaled} \\
+Lemma~\ref{lem:l} & \texttt{Levels.lean} & \texttt{levels} \\
+Lemma~\ref{lem:o} & \texttt{Parts.lean} & \texttt{ren\_parts} \\
+Lemma~\ref{lem:g} & \texttt{OpBounds.lean}, \texttt{Ops.lean}, \texttt{MulOps.lean}, \texttt{GScale.lean},
+  \texttt{GMono.lean} & \texttt{ren\_of\_levels}, \texttt{lemma13\_add}, \texttt{lemma13\_mulf},
+  \texttt{lemma13\_addf}, \texttt{lemma13\_mul}, \texttt{Gmul\_smul}, \texttt{Gadd\_smul}, \texttt{Gmul\_mono},
+  \texttt{Gadd\_mono} \\
+Theorems~\ref{thm:t2} and~\ref{thm:t3} & \texttt{Closed.lean} & \texttt{thm14\_mul}, \texttt{thm14\_add},
+  \texttt{thm14\_mulf}, \texttt{thm14\_addf}, \texttt{thm15\_mul}, \texttt{thm15\_add}, \texttt{thm15\_mulf},
+  \texttt{thm15\_addf} \\
+Tables~\ref{tab:main} and~\ref{tab:kappa} & \texttt{Eval.lean}, \texttt{KappaN.lean}, \texttt{Kappa8.lean} &
+  \texttt{cast\_levX}, \texttt{table2\_mul}, \texttt{table2\_pair}, \texttt{table2\_addf}, \texttt{table4\_mul},
+  \texttt{table4\_add}, \texttt{table4\_mulf}, \texttt{table4\_addf} \\
+Theorem~\ref{thm:t5} & \texttt{Closure.lean} & \texttt{thm17\_mul}, \texttt{thm17\_add}, \texttt{thm17\_mulf},
+  \texttt{thm17\_addf} \\
+Corollary~\ref{cor:closure} & \texttt{Cor18.lean} & \texttt{cor18\_mul}, \texttt{cor18\_add}, \texttt{cor18\_mulf},
+  \texttt{cor18\_addf} \\
+Theorem~\ref{thm:t6} & \texttt{Div.lean}, \texttt{DivEval.lean}, \texttt{Div8.lean}, \texttt{DivN.lean} &
+  \texttt{thm19}, \texttt{cast\_kdiv}, \texttt{div8}, \texttt{div\_le\_two} \\
+Theorem~\ref{thm:t7} & \texttt{Sqrt.lean}, \texttt{SqrtEval.lean}, \texttt{Sqrt8.lean} & \texttt{thm21},
+  \texttt{cast\_sqrtDelta}, \texttt{sqrt8} \\
+Theorem~\ref{thm:t8} & \texttt{SqrtDD.lean}, \texttt{SqrtDD8.lean}, \texttt{SqrtDD8Delta.lean} & \texttt{thm22},
+  \texttt{ddE0\_8}, \texttt{sqrtdd8} \\
+Proposition~\ref{prop:sharp} & \texttt{Sharp.lean}, \texttt{SharpMul.lean}, \texttt{SharpDiv.lean} &
+  \texttt{prop24\_mul}, \texttt{prop24\_add}, \texttt{prop24\_addf}, \texttt{prop24\_mulf\_odd},
+  \texttt{prop24\_mulf\_even}, \texttt{prop24\_div} \\
+Lemma~\ref{lem:acc} & \texttt{Acc.lean} & \texttt{lemma\_acc} \\
+Theorem~\ref{thm:acc}, Table~\ref{tab:dot} & \texttt{AccThm.lean}, \texttt{AccK.lean}, \texttt{AccSum.lean},
+  \texttt{Acc8.lean}, \texttt{Acc8Sum.lean} & \texttt{thm27}, \texttt{thm27\_scaled}, \texttt{thm27\_addx},
+  \texttt{table3}, \texttt{acc8}, \texttt{acc8\_sum} \\
+Proposition~\ref{prop:acc-low} & \texttt{Prop28.lean}, \texttt{AccRun.lean}, \texttt{RoundEval.lean},
+  \texttt{Dyadic.lean} & \texttt{prop28}, \texttt{prop28\_terms}, \texttt{prop28\_W}, \texttt{prop28\_256},
+  \texttt{prop28\_512}, \texttt{prop28\_1024}, \texttt{accRun\_prefix}, \texttt{cast\_rn}, \texttt{dyF\_of\_all} \\
+Theorem~\ref{thm:sloppy} & \texttt{Sloppy.lean}, \texttt{Sloppy8.lean} & \texttt{thm30a}, \texttt{thm30b},
+  \texttt{thm30c}, \texttt{sloppy8\_mul} \\
+Lemma~\ref{lem:red} & \texttt{Red.lean} & \texttt{lemma32\_k}, \texttt{lemma32\_r}, \texttt{lemma32\_re},
+  \texttt{lemma32\_bucket}, \texttt{lemma32\_H1}, \texttt{lemma32\_parts} \\
+Lemma~\ref{lem:horner} & \texttt{Horner.lean} & \texttt{lemma\_horner} \\
+Lemma~\ref{lem:sincosr} & \texttt{SinCos.lean}, \texttt{Taylor.lean} & \texttt{lemma34\_sin}, \texttt{lemma34\_cos},
+  \texttt{sin\_taylor}, \texttt{cos\_taylor} \\
+Theorem~\ref{thm:trig} & \texttt{Trig.lean}, \texttt{TrigTan.lean}, \texttt{TrigEval.lean}, \texttt{TanEval.lean},
+  \texttt{Trig8.lean}, \texttt{Tan8.lean} & \texttt{thm35\_sincos}, \texttt{thm35\_small}, \texttt{thm35\_tan},
+  \texttt{thm35\_tan\_small}, \texttt{sinTail\_le}, \texttt{cosTail\_le}, \texttt{tanCT\_le},
+  \texttt{thm35\_sincos\_8}, \texttt{thm35\_tan\_8} \\
+Lemma~\ref{lem:expred} & \texttt{ExpRed.lean}, \texttt{ExpRed8.lean} & \texttt{lemma\_expred\_a},
+  \texttt{lemma\_expred\_b}, \texttt{lemma38\_8} \\
+Lemma~\ref{lem:core} & \texttt{ExpCore.lean} & \texttt{lemma\_core} \\
+Theorem~\ref{thm:exp} & \texttt{ExpThm.lean}, \texttt{ExpEval.lean}, \texttt{Exp8.lean} & \texttt{thm40\_case},
+  \texttt{thm40\_case\_sub}, \texttt{expEps\_cert}, \texttt{thm40\_8} \\
+Lemma~\ref{lem:fexact} & \texttt{FExact.lean}, \texttt{LogRange.lean} & \texttt{lemma\_fexact},
+  \texttt{log\_range\_half\_two} \\
+Theorem~\ref{thm:log} & \texttt{LogThm.lean}, \texttt{LogRange.lean} & \texttt{thm42\_case},
+  \texttt{thm42\_case\_ladder} \\
+Lemma~\ref{lem:lnb} & \texttt{LnB.lean} & \texttt{lemma43} \\
+Proposition~\ref{prop:ddexplog} & \texttt{DDLog.lean} & \texttt{prop44\_start}, \texttt{prop44\_start\_exact},
+  \texttt{prop44\_start\_small} \\
+\bottomrule
+\end{tabular}
+\end{table*}

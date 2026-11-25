@@ -15,7 +15,7 @@ constant is computed by a script of this folder from a proved recursion and prin
 
 | File | Contents |
 |---|---|
-| `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex`, `expansion-error-bounds-sloppy.tex`, `expansion-error-bounds-trig.tex`, `expansion-error-bounds-explog.tex` | the source; the appendix holds the proofs, the accumulator file those for sums of products, the sloppy file that of the sloppy multiply, the trig file those of the sine, cosine and tangent, and the explog file those of exp and ln |
+| `expansion-error-bounds.tex`, `expansion-error-bounds-appendix.tex`, `expansion-error-bounds-accumulator.tex`, `expansion-error-bounds-sloppy.tex`, `expansion-error-bounds-trig.tex`, `expansion-error-bounds-explog.tex`, `expansion-error-bounds-lean.tex` | the source; the appendix holds the proofs, the accumulator file those for sums of products, the sloppy file that of the sloppy multiply, the trig file those of the sine, cosine and tangent, the explog file those of exp and ln, and the lean file the table of each statement's Lean proof |
 | `constants.py`, `div_consts.py`, `sqrt_consts.py` | the constants of Theorems 14 and 15, 19, and 21 and 22 in exact rational arithmetic; their outputs are the `.txt` files |
 | `trig_consts.py` | the bounds of the sine, cosine and tangent, Theorem 35, in exact rational arithmetic, for the octo-double functions (Lemma 13 at every step, at n = 2, 4, 8 and 12) and the double-double ones (the published double-word bounds); it checks that its series lengths and constants are those of `src/trig/tables.rs`, and `check` adds controls that must raise the bound; its output is `trig_consts.txt` |
 | `trig_lean.py` | Theorem 35's bounds for the octo-double sine, cosine and tangent as the Lean definitions compute them, in exact rationals rounded up to 200 bits where they round, by run of buckets with the same series lengths; in the top bucket the larger of the sine's and the cosine's bounds agrees with `trig_consts.py` to 50 digits and the tangent's, on its own ladders `H(θ)`, to 9, and the other buckets are not compared; its controls (no truncation term, and the ladder `H(1)` in the top bucket) must fail, and with a folder it writes the modules `lean/ExpansionBounds/Trig8/` and `Tan8/` that the kernel checks; its output is `trig_lean.txt` |
@@ -23,6 +23,7 @@ constant is computed by a script of this folder from a proved recursion and prin
 | `sloppy_consts.py` | the bound of the opt-in sloppy multiply (`OD::sloppy_mul`) and of sums of its products, Theorem 30, in exact rational arithmetic, with a walk of the algorithm's deposits that checks its two-sum and rounding counts; its output is `sloppy_consts.txt`, and `check` is its control |
 | `sloppy_emu.py` | the sloppy multiply on `fpemu.py`, written from its description: hill climbs against `sloppy_consts.py`'s bound at p = 6 to 53 and n = 3 to 8, the crate's worst found pair bit for bit, and a control that must fire |
 | `rounding.py` | the directed rounding of every printed bound: an upper bound is printed rounded up and a lower bound down, at the digits shown; run alone it checks itself and prints PASS |
+| `lean_refs.py` | the paper's table of Lean proofs against `lean/ExpansionBounds/`: every Lean file at the top of that folder is named in a row, every file a row names exists, and every theorem a row names is declared in one of its files, outside any comment; the modules in the folders under it, the kernel's checks and their data, are not read; TeX comments in the table and the contents of Lean strings are left out; its controls, a theorem and a file that do not exist, a file left out, a theorem inside a comment, a nested one or a string, and a row that TeX comments out, must each be reported, and a theorem after a string that holds a comment's opening must still be found |
 | `fpemu.py` | an emulator of the algorithms in exact arithmetic at any precision and number of parts, written from `src/od.rs` |
 | `campaign.py` | the tests of Theorems 9, 15 and 19, Corollary 18 and Proposition 24 on `fpemu.py`: `bits` compares ADD, ADDF, MULF, MUL and DIV with multidouble bit for bit on 10,000 inputs each (through `accumulator/acc_check`) and checks each error against its bound; `small` runs Theorem 9 on every tuple of a family of terms at precision 3 and Theorems 15 and 19 on families of ladders at precisions 5 and 7; `sharp` runs the inputs of Proposition 24; each has controls that must fire; its outputs are in `campaign/` |
 | `example_n3.py` | the worked example of Section IV on `fpemu.py`, with a control that must fail |
@@ -39,6 +40,7 @@ From this folder:
 
 ```sh
 python3 rounding.py      # prints PASS
+python3 lean_refs.py check   # prints PASS
 python3 constants.py     # prints constants.txt
 python3 div_consts.py    # prints div_consts.txt
 python3 sqrt_consts.py   # prints sqrt_consts.txt
