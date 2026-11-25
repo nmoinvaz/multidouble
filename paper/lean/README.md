@@ -76,7 +76,8 @@ lake build   # about 9 minutes the first time: FloatSpec, then Proposition 28's 
 The build treats warnings as errors, so a proof left as `sorry` fails it. The kernel decides the longer evaluations,
 on the rational mirrors of `Eval.lean`, and adds no axiom: `decide +kernel` reduces the comparison of two rationals to
 `true`. Each theorem depends only on Lean's axioms `propext`, `Classical.choice` and `Quot.sound`, which
-`#print axioms` shows.
+`#print axioms` shows. CI runs the build on every pull request that changes this folder
+(`.github/workflows/lean.yml`).
 
 Lean is pinned to v4.34.1, and Mathlib and cslib to their v4.34.1 tags. FloatSpec pins v4.34.0-rc2, whose executables
 abort at thread exit on macOS 27 ([lean4#15087](https://github.com/leanprover/lean4/issues/15087)).

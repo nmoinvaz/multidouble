@@ -1,0 +1,77 @@
+name: Lean
+# The proofs of paper/lean. The build fails on a proof left as sorry, on any warning, and on a kernel check that
+# does not hold.
+on:
+  pull_request:
+    paths:
+      - paper/lean/**
+      - .github/workflows/lean.yml
+  push:
+    branches: [main]
+    paths:
+      - paper/lean/**
+      - .github/workflows/lean.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  build:
+    name: Lean proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: bash
+        working-directory: paper/lean
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # elan reads the toolchain from paper/lean/lean-toolchain on the first lake command
+      - name: Install elan
+        run: |
+          curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # A build can start from any earlier one with the same toolchain and dependencies
+      - name: Set cache key
+        run: |
+          deps=$(cat lean-toolchain lake-manifest.json | sha256sum | cut -c1-16)
+          echo "CACHE_KEY=lean-${{ runner.os }}-${{ runner.arch }}-$deps" >> "$GITHUB_ENV"
+
+      # Lake rebuilds a module only when it or one of its imports changed, so a restored build of main leaves a pull
+      # request its own modules to build.
+      - name: Restore build
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          path: paper/lean/.lake
+          key: ${{ env.CACHE_KEY }}-${{ github.sha }}
+          restore-keys: ${{ env.CACHE_KEY }}-
+
+      # Mathlib's prebuilt files for the modules FloatSpec imports
+      - name: Fetch Mathlib cache
+        run: |
+          lake exe cache get Mathlib.Tactic Mathlib.Analysis.Real.Sqrt Mathlib.Algebra.Order.Floor.Ring \
+            Mathlib.Data.Nat.Digits.Defs Mathlib.Data.Nat.Log Mathlib.Algebra.Divisibility.Basic \
+            Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic
+
+      # Lake has no option for the number of jobs. A kernel run takes up to 4 GB and the runner has 16 GB, so three
+      # threads keep three of them within it.
+      - name: Build
+        env:
+          LEAN_NUM_THREADS: 3
+        run: lake build
+
+      # Only main saves, so that pull requests do not fill the repository's cache with builds no other run restores.
+      - name: Save build
+        if: github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: paper/lean/.lake
+          key: ${{ steps.restore.outputs.cache-primary-key }}
