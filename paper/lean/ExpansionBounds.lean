@@ -54,6 +54,7 @@ import ExpansionBounds.LogRange
 import ExpansionBounds.RoundEval
 import ExpansionBounds.Dyadic
 import ExpansionBounds.DWord
+import ExpansionBounds.DWDiv
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono
