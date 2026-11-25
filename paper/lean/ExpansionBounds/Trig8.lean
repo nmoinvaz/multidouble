@@ -1,4 +1,4 @@
-import ExpansionBounds.Trig8.All
+import ExpansionBounds.Trig8.Low
 import ExpansionBounds.Kappa8
 
 /-!
@@ -12,7 +12,9 @@ The octo-double SIN and COS, with multidouble's coefficients and series lengths 
 `E_π = |k| 2^{-1217}`. Each bucket of `|r_0|` takes the `r̄` of the first bucket with its series lengths: `0.78541` in
 the top bucket (Lemma 32) and `2^{-j}(1 + 2^{-50})` below. The kernel evaluates Lemma 34's bounds there, rounded up to
 200 bits (`Trig8/Run0.lean` to `Run7.lean`), and `C = ε max(δ_S + εu^8, δ_C + εu^8 r̄ tan₊ r̄)` is at most
-`3.163167393u^8` in every one of them, the largest in the top bucket.
+`3.163167393u^8` in every one of them, the largest in the top bucket. Below the top bucket it is smaller
+(`Trig8/Low.lean`), which gives the remark after the theorem: `2.175822u^8` for `|r_0| < 1/2` and `2.000706u^8` for
+`|r_0| < 2^{-5}` (`thm35_sincos_8_half`, `thm35_sincos_8_32`).
 -/
 
 namespace ExpansionBounds
@@ -77,13 +79,14 @@ theorem trig8_tables : (∀ t ∈ trig8Fs, t.length ≤ 8) ∧ (∀ t ∈ trig8F
 /-- `r̄` below the last bucket: `u^4(1 + 2^{-50})` -/
 def trig8T : ℚ := trig8U ^ 4 * (1 + 1 / 2 ^ 50)
 
-/-- below the last bucket SINR returns `r` and COSR `1`, within `r̄²/(6 - r̄²)` and `r̄²/(2cos₋ r̄)` -/
+/-- below the last bucket SINR returns `r` and COSR `1`, within `r̄²/(6 - r̄²)` and `r̄²/(2cos₋ r̄)`, which with `C`
+there are below the least of the bounds, `2.000706u^8` -/
 theorem trig8_tiny : trig8T ≤ 8 / 10 ∧ trig8T ^ 2 < 6 ∧ 0 < cosLoQ trig8T ∧ trig8T ^ 2 / (6 - trig8T ^ 2) ≤ 1 / 2 ∧
     trig8T ^ 2 / (2 * cosLoQ trig8T) ≤ 1 / 2 ∧
     trigCQ trig8U 8 (trig8T ^ 2 / (6 - trig8T ^ 2)) (trig8T ^ 2 / (2 * cosLoQ trig8T)) trig8T ≤
-      3163167393 / 1000000000 * trig8U ^ 8 ∧
-    trig8T ^ 2 / (6 - trig8T ^ 2) ≤ 3163167393 / 1000000000 * trig8U ^ 8 ∧
-    trig8T ^ 2 / (2 * cosLoQ trig8T) ≤ 3163167393 / 1000000000 * trig8U ^ 8 := by
+      2000706 / 1000000 * trig8U ^ 8 ∧
+    trig8T ^ 2 / (6 - trig8T ^ 2) ≤ 2000706 / 1000000 * trig8U ^ 8 ∧
+    trig8T ^ 2 / (2 * cosLoQ trig8T) ≤ 2000706 / 1000000 * trig8U ^ 8 := by
   decide +kernel
 
 variable (p : ℤ) [Prec_gt_0 p]
@@ -102,16 +105,46 @@ theorem dyFn_getD_F (T : List (List (ℤ × ℕ))) (hF : ∀ t ∈ T, ∀ l, F p
     rw [e, dyFn_of_le [] (Nat.zero_le i), Rat.cast_zero]
     exact F_zero p
 
-/-- Theorem 35 (`thm:trig`) for SIN and COS at `n = 8` and `p = 53`, with multidouble's coefficients and series
-lengths: for `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, the sine and the cosine are within `3.163167393u^8` of
-`sin x` and `cos x`, relatively, plus `5E_π` -/
-theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
-    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
+/-- the runs of buckets follow each other: their first buckets increase -/
+theorem trig8_sorted : trig8Groups.Pairwise fun a b => a.1 < b.1 := by decide
+
+/-- `t < 2^{-j}`, for `j` the first bucket of a run, falls in that run or in a later one -/
+theorem trig8G_ge (t : ℝ) {g0 : ℕ × ℕ × ℕ} (h0 : g0 ∈ trig8Groups) (ht : t < (2 : ℝ) ^ (-(g0.1 : ℤ))) :
+    g0.1 ≤ (trig8G t).1 := by
+  unfold trig8G
+  have hm0 : g0 ∈ trig8Groups.filter fun g => decide (t < (2 : ℝ) ^ (-(g.1 : ℤ))) :=
+    List.mem_filter.mpr ⟨h0, decide_eq_true ht⟩
+  generalize hl : (trig8Groups.filter fun g => decide (t < (2 : ℝ) ^ (-(g.1 : ℤ)))).getLast? = o
+  rcases o with _ | g
+  · rw [List.getLast?_eq_none_iff] at hl
+    rw [hl] at hm0
+    simp at hm0
+  · obtain ⟨ys, hys⟩ := List.getLast?_eq_some_iff.mp hl
+    have hp : (ys ++ [g]).Pairwise fun a b => a.1 < b.1 := by
+      rw [← hys]
+      exact trig8_sorted.filter _
+    rw [hys] at hm0
+    show g0.1 ≤ g.1
+    rcases List.mem_append.mp hm0 with h | h
+    · exact ((List.pairwise_append.mp hp).2.2 _ h g (by simp)).le
+    · rw [List.mem_singleton.mp h]
+
+/-- `C ≤ c u^8` on the last states of Horner's runs in the run of buckets `g` -/
+def Trig8GroupLe (c : ℚ) (g : ℕ × ℕ × ℕ) : Prop :=
+  ∀ sS sC, trig8Run sinCQ trig8FsQ g.1 (g.2.1 - 1) 0 (g.2.1 - 2) (trig8Init sinCQ trig8FsQ (g.2.1 - 1)) = sS →
+    trig8Run cosCQ trig8FcQ g.1 (g.2.2 - 1) 0 (g.2.2 - 2) (trig8Init cosCQ trig8FcQ (g.2.2 - 1)) = sC →
+    trig8CLe c g.1 g.2.1 g.2.2 sS sC
+
+/-- Theorem 35 (`thm:trig`) for SIN and COS at `n = 8` and `p = 53` with the bound `c u^8`, for a `c ≥ 2.000706` that
+bounds `C` in the run of buckets of `|r_0|` -/
+theorem thm35_sincos_8_c (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) (c : ℚ) (hc : 2000706 / 1000000 ≤ c)
+    (hcg : Trig8GroupLe c (trig8G |redR p 8 x 0|)) :
     |∑ i ∈ range 8, sinN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
-        3163167393 / 1000000000 * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+        (c : ℝ) * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
           5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
       |∑ i ∈ range 8, cosN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
-        3163167393 / 1000000000 * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+        (c : ℝ) * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
           5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
   subst hp
   have htu : ((trig8U : ℚ) : ℝ) = u (53 : ℤ) := by
@@ -141,13 +174,14 @@ theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i
   have hcT : (0 : ℝ) < cosLo ((trig8T : ℚ) : ℝ) := by
     rw [← cast_cosLo]
     exact_mod_cast t3
-  have c7 : ((trig8T : ℚ) : ℝ) ^ 2 / (6 - ((trig8T : ℚ) : ℝ) ^ 2) ≤ 3163167393 / 1000000000 * u (53 : ℤ) ^ 8 := by
-    have := (Rat.cast_le (K := ℝ)).mpr t7
+  have hu8 : (0 : ℚ) ≤ trig8U ^ 8 := by unfold trig8U; positivity
+  have c7 : ((trig8T : ℚ) : ℝ) ^ 2 / (6 - ((trig8T : ℚ) : ℝ) ^ 2) ≤ (c : ℝ) * u (53 : ℤ) ^ 8 := by
+    have := (Rat.cast_le (K := ℝ)).mpr (t7.trans (mul_le_mul_of_nonneg_right hc hu8))
     push_cast at this
     rwa [htu] at this
   have c8 : ((trig8T : ℚ) : ℝ) ^ 2 / (2 * cosLo ((trig8T : ℚ) : ℝ)) ≤
-      3163167393 / 1000000000 * u (53 : ℤ) ^ 8 := by
-    have := (Rat.cast_le (K := ℝ)).mpr t8
+      (c : ℝ) * u (53 : ℤ) ^ 8 := by
+    have := (Rat.cast_le (K := ℝ)).mpr (t8.trans (mul_le_mul_of_nonneg_right hc hu8))
     push_cast at this
     rwa [htu, cast_cosLo] at this
   by_cases hsmall : |x 0| < u (53 : ℤ) ^ (8 / 2)
@@ -170,12 +204,12 @@ theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i
       trigDC 53 8 (redR 53 8 x 0) rb trig8FcR (trig8Kc |redR 53 8 x 0|) ≤ 1 / 2 →
       trigC 53 8 (trigDS 53 8 (redR 53 8 x 0) rb trig8FsR (trig8Ks |redR 53 8 x 0|))
         (trigDC 53 8 (redR 53 8 x 0) rb trig8FcR (trig8Kc |redR 53 8 x 0|)) rb ≤
-          3163167393 / 1000000000 * u (53 : ℤ) ^ 8 →
+          (c : ℝ) * u (53 : ℤ) ^ 8 →
       |∑ i ∈ range 8, sinN 53 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
-          3163167393 / 1000000000 * u (53 : ℤ) ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+          (c : ℝ) * u (53 : ℤ) ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
             5 * (|(redK 53 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
         |∑ i ∈ range 8, cosN 53 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
-          3163167393 / 1000000000 * u (53 : ℤ) ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+          (c : ℝ) * u (53 : ℤ) ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
             5 * (|(redK 53 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
     intro rb hrb hr hre a1 a2 a3 a4 hC
     obtain ⟨ks, kc⟩ := thm35_sincos 53 8 rfl (by norm_num) hA3 x hx hH hx0 hsmall es trig8Ks trig8Kc trig8FsR
@@ -209,11 +243,16 @@ theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i
     · rw [eC]; exact ((Rat.cast_le (K := ℝ)).mpr t5).trans_eq (by norm_num)
     · rw [eS, eC]
       refine (trigC_le 53 8 htu trig8T le_rfl le_rfl).trans ?_
-      have := (Rat.cast_le (K := ℝ)).mpr t6
+      have := (Rat.cast_le (K := ℝ)).mpr (t6.trans (mul_le_mul_of_nonneg_right hc hu8))
       push_cast at this
       rwa [htu] at this
   -- a bucket: Lemma 34's bounds, evaluated by the kernel
-  obtain ⟨sS, sC, hS, hC, ok1, ok2, ok3, ok4, ok5⟩ := trig8_all _ hmem
+  obtain ⟨sS, sC, hS, hC, ok1, ok2, -, ok4, ok5⟩ := trig8_all _ hmem
+  have ok3 : trigCQ trig8U 8
+      (sinDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb (trig8G |redR 53 8 x 0|).1) (trig8G |redR 53 8 x 0|).2.1 sS)
+      (cosDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb (trig8G |redR 53 8 x 0|).1) (trig8G |redR 53 8 x 0|).2.2 sC)
+      (trig8Rb (trig8G |redR 53 8 x 0|).1) ≤ c * trig8U ^ 8 := hcg sS sC hS hC
+  clear hcg
   have eKs : trig8Ks |redR 53 8 x 0| = (trig8G |redR 53 8 x 0|).2.1 := rfl
   have eKc : trig8Kc |redR 53 8 x 0| = (trig8G |redR 53 8 x 0|).2.2 := rfl
   generalize trig8G |redR 53 8 x 0| = g at *
@@ -277,5 +316,86 @@ theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i
   · rw [eDC]; exact dC1.trans o2
   · rw [eDS, eDC]
     exact (trigC_le 53 8 htu (trig8Rb g.1) dS1 dC1).trans o3
+
+
+/-- Theorem 35 (`thm:trig`) for SIN and COS at `n = 8` and `p = 53`, with multidouble's coefficients and series
+lengths: for `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, the sine and the cosine are within `3.163167393u^8` of
+`sin x` and `cos x`, relatively, plus `5E_π` -/
+theorem thm35_sincos_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
+    |∑ i ∈ range 8, sinN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
+        3163167393 / 1000000000 * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
+      |∑ i ∈ range 8, cosN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
+        3163167393 / 1000000000 * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
+  have h := thm35_sincos_8_c p hp x hx hH hx0 es (3163167393 / 1000000000) (by norm_num) (by
+    unfold Trig8GroupLe
+    intro sS sC hS hC
+    subst hS hC
+    obtain ⟨sS', sC', hS', hC', -, -, ok3, -, -⟩ := trig8_all _ (trig8G_spec |redR p 8 x 0|).1
+    rw [hS', hC']
+    exact ok3)
+  rw [show ((3163167393 / 1000000000 : ℚ) : ℝ) = 3163167393 / 1000000000 by norm_num] at h
+  exact h
+
+/-- the remark after Theorem 35: where `|r_0| < 2^{-J}`, for `J = 1` and `J = 5`, the sine and the cosine are within
+`trig8Low J u^8`, `2.175822u^8` and `2.000706u^8` -/
+theorem thm35_sincos_8_low (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) {J : ℕ} (hJ : J = 1 ∨ J = 5)
+    (hr : |redR p 8 x 0| < (2 : ℝ) ^ (-(J : ℤ))) :
+    |∑ i ∈ range 8, sinN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
+        (trig8Low J : ℝ) * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
+      |∑ i ∈ range 8, cosN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
+        (trig8Low J : ℝ) * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
+  obtain ⟨g0, hg0, rfl⟩ : ∃ g0 ∈ trig8Groups, g0.1 = J := by rcases hJ with rfl | rfl <;> decide
+  have hge := trig8G_ge |redR p 8 x 0| hg0 hr
+  have h1 : 1 ≤ (trig8G |redR p 8 x 0|).1 := by rcases hJ with h | h <;> omega
+  refine thm35_sincos_8_c p hp x hx hH hx0 es (trig8Low g0.1) (by unfold trig8Low; split_ifs <;> norm_num) ?_
+  unfold Trig8GroupLe
+  intro sS sC hS hC
+  subst hS hC
+  obtain ⟨sS', sC', hS', hC', ok⟩ := trig8_low _ (trig8G_spec |redR p 8 x 0|).1 h1
+  rw [hS', hC']
+  unfold trig8CLe at ok ⊢
+  refine ok.trans (mul_le_mul_of_nonneg_right ?_ (by unfold trig8U; positivity))
+  unfold trig8Low
+  by_cases h5 : (trig8G |redR p 8 x 0|).1 < 5
+  · have h5' : g0.1 < 5 := lt_of_le_of_lt hge h5
+    simp only [h5, h5', ↓reduceIte, le_refl]
+  · simp only [h5, ↓reduceIte]
+    split_ifs <;> norm_num
+
+/-- the remark after Theorem 35 for `|r_0| < 1/2`: the sine and the cosine are within `2.175822u^8` -/
+theorem thm35_sincos_8_half (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) (hr : |redR p 8 x 0| < 1 / 2) :
+    |∑ i ∈ range 8, sinN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
+        2175822 / 1000000 * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
+      |∑ i ∈ range 8, cosN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
+        2175822 / 1000000 * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
+  have h := thm35_sincos_8_low p hp x hx hH hx0 es (J := 1) (Or.inl rfl) (by
+    rw [show (2 : ℝ) ^ (-((1 : ℕ) : ℤ)) = 1 / 2 by norm_num]
+    exact hr)
+  rw [show ((trig8Low 1 : ℚ) : ℝ) = 2175822 / 1000000 by unfold trig8Low; norm_num] at h
+  exact h
+
+/-- the remark after Theorem 35 for `|r_0| < 2^{-5}`: the sine and the cosine are within `2.000706u^8` -/
+theorem thm35_sincos_8_32 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) (hr : |redR p 8 x 0| < 1 / 32) :
+    |∑ i ∈ range 8, sinN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.sin (∑ i ∈ range 8, x i)| ≤
+        2000706 / 1000000 * u p ^ 8 * |Real.sin (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) ∧
+      |∑ i ∈ range 8, cosN p 8 es trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.cos (∑ i ∈ range 8, x i)| ≤
+        2000706 / 1000000 * u p ^ 8 * |Real.cos (∑ i ∈ range 8, x i)| +
+          5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) := by
+  have h := thm35_sincos_8_low p hp x hx hH hx0 es (J := 5) (Or.inr rfl) (by
+    rw [show (2 : ℝ) ^ (-((5 : ℕ) : ℤ)) = 1 / 32 by norm_num]
+    exact hr)
+  rw [show ((trig8Low 5 : ℚ) : ℝ) = 2000706 / 1000000 by unfold trig8Low; norm_num] at h
+  exact h
 
 end ExpansionBounds

@@ -4,14 +4,16 @@ them: Trig8/Data.lean (the coefficients of the series and their lengths by bucke
 Trig8/Run0.lean to Run7.lean (Horner's run of every bucket with its own series lengths, in pieces of a few steps
 checked by the kernel against the states stored there), Trig8/All.lean (the buckets together), and for the tangent
 Tan8/Run0.lean to Run3.lean and Tan8/All.lean (the ladders of the computed sine and cosine and the bound of each
-bucket, on the same states).
+bucket, on the same states). Trig8/Low.lean and Tan8/Low.lean hold the smaller bounds of the buckets below the top
+one, for |r_0| < 1/2 and for |r_0| < 2^-5 (the remark after Theorem 35).
 
 The states must be the ones the Lean definitions compute, bit for bit, or the modules do not build. The bound of a
 bucket is compared with trig_consts.py, which rounds at other places and agrees to more than 50 digits.
 
 usage: trig_lean.py [lean/ExpansionBounds]
        prints the bound of each run of buckets and the largest; with an argument it writes the Lean modules there.
-       The control drops the truncation term and must fall below trig_consts.py."""
+       The control drops the truncation term and must fall below trig_consts.py; the bounds for |r_0| < 2^-5 must
+       not hold from |r_0| < 1/2 on."""
 import os
 import sys
 from fractions import Fraction as Fr
@@ -28,6 +30,8 @@ TAN_MODS = 4
 # the quotient's ladder H(theta) and a bound on kappa_DIV(theta u), in the top bucket and below (Lean's tan8Th, tan8Kd)
 TAN_TH = (Fr(14143, 10000), Fr(3))
 TAN_KD = (Fr(103232124), Fr(461400803))
+# the bounds of the buckets from j on, for the sine and cosine and for the tangent: (j, C, C^T)
+LOW = ((1, Fr(2175822, 10 ** 6), Fr(4800526, 10 ** 6)), (5, Fr(2000706, 10 ** 6), Fr(4002771, 10 ** 6)))
 DROP = False  # the control: no truncation term
 
 
@@ -295,6 +299,69 @@ end ExpansionBounds
 '''
 
 
+LOW_T = '''import ExpansionBounds.%WHAT8.All
+
+/-!
+# Theorem 35 %TITLE at `n = 8` and `p = 53`: the buckets below the top one
+
+`%SYM` is at most `%D1u^8` in the runs of buckets with `|r_0| < 1/2` and at most `%D5u^8` in those with
+`|r_0| < 2^{-5}`, on the last states of Horner's runs, which `Trig8/Run0.lean` to `Run7.lean` check. This file is
+written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+
+/-- `%SYM ≤ c u^8` in bucket `j`, from the last states of Horner's runs for the sine and the cosine -/
+def %LE (c : ℚ) (j Ks Kc : ℕ) (sS sC : ℚ × List ℚ) : Prop :=
+  %BODY ≤ c * trig8U ^ 8
+
+instance (c : ℚ) (j Ks Kc : ℕ) (sS sC : ℚ × List ℚ) : Decidable (%LE c j Ks Kc sS sC) := by
+  unfold %LE
+  infer_instance
+
+/-- the bound of a run of buckets that starts at `j ≥ 1`: `%D1` below `j = 5` and `%D5` from there on -/
+def %LOWF (j : ℕ) : ℚ := if j < 5 then %Q1 else %Q5
+
+/-- a run of buckets from `j ≥ 1`: Horner's runs end in states on which `%SYM ≤ %LOWF j u^8` -/
+def %GROUP (g : ℕ × ℕ × ℕ) : Prop :=
+  ∃ sS sC, trig8Run sinCQ trig8FsQ g.1 (g.2.1 - 1) 0 (g.2.1 - 2) (trig8Init sinCQ trig8FsQ (g.2.1 - 1)) = sS ∧
+    trig8Run cosCQ trig8FcQ g.1 (g.2.2 - 1) 0 (g.2.2 - 2) (trig8Init cosCQ trig8FcQ (g.2.2 - 1)) = sC ∧
+    %LE (%LOWF g.1) g.1 g.2.1 g.2.2 sS sC
+%CHECKS
+/-- every run of buckets from `j = 1` on -/
+theorem %ALLNAME : ∀ g ∈ trig8Groups, 1 ≤ g.1 → %GROUP g := by
+  intro g hg h1
+  simp only [trig8Groups, List.mem_cons, List.not_mem_nil, or_false] at hg
+  rcases hg with %CASES
+%EXACTS
+
+end ExpansionBounds
+'''
+
+
+def low_text(groups, states, tan):
+    """Trig8/Low.lean or Tan8/Low.lean: the kernel's check of the smaller bound in each run of buckets from 1 on"""
+    le, lowf, pre = ('tan8CtLe', 'tan8Low', 'tan8') if tan else ('trig8CLe', 'trig8Low', 'trig8')
+    deltas = ('(sinDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb j) Ks sS)\n'
+              '    (cosDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb j) Kc sC)')
+    body = (f'tanCTQ trig8U 8 {deltas} (trig8U ^ 8 + tan8Kd j * trig8U ^ 9)\n    (trig8Rb j)' if tan
+            else f'trigCQ trig8U 8 {deltas} (trig8Rb j)')
+    c1, c5 = (LOW[0][2], LOW[1][2]) if tan else (LOW[0][1], LOW[1][1])
+    checks = ''.join(f'\nset_option maxHeartbeats 4000000 in\ntheorem {pre}_low{j} : {le} ({lowf} {j}) {j} {Ks} {Kc} '
+                     f'{states[j][0]}\n    {states[j][1]} := by\n  decide +kernel\n' for j, Ks, Kc in groups if j >= 1)
+    exacts = '\n'.join('  · exact absurd h1 (by decide)' if j == 0 else
+                       f'  · exact ⟨_, _, trig8_s{j}, trig8_c{j}, {pre}_low{j}⟩' for j, _, _ in groups)
+    fill = {'%WHAT': 'Tan' if tan else 'Trig', '%TITLE': 'for the tangent' if tan else 'for the sine and the cosine',
+            '%SYM': 'C^T' if tan else 'C', '%LE': le, '%LOWF': lowf, '%GROUP': 'Tan8Low' if tan else 'Trig8Low',
+            '%ALLNAME': f'{pre}_low', '%BODY': body, '%CHECKS': checks, '%EXACTS': exacts,
+            '%CASES': wrap(['rfl'] * len(groups), ' | ', 4), '%D1': dec_up(c1, 6), '%D5': dec_up(c5, 6),
+            '%Q1': f'{int(c1 * 10 ** 6)} / 1000000', '%Q5': f'{int(c5 * 10 ** 6)} / 1000000'}
+    t = LOW_T
+    for k, v in fill.items():
+        t = t.replace(k, v)
+    return t
+
+
 def group_text(F, j, Ks, Kc):
     """the states, the kernel's checks and `Trig8Group` for bucket j"""
     rb = rbar(j)
@@ -380,6 +447,8 @@ def lean_modules(F, groups):
         .replace('`Trig8Group`', '`Tan8Group`').replace('trig8_all', 'tan8_all').replace('Trig8Group g', 'Tan8Group g')
         .replace('CASES', wrap(['rfl'] * len(groups), ' | ', 4))
         .replace('EXACTS', '\n'.join(f'  · exact tan8_g{j}' for j, _, _ in groups)))
+    files['Trig8/Low.lean'] = low_text(groups, states, False)
+    files['Tan8/Low.lean'] = low_text(groups, states, True)
     return files, rows
 
 
@@ -433,8 +502,17 @@ if __name__ == '__main__':
     ctl_t = bounds(F, groups[:1])[0][6]
     TAN_TH = (Fr(14143, 10000), Fr(3))
     print(f'control, the ladder H(1) in the top bucket, must not hold: {ctl_t is None}')
+    low_ok = True
+    for (j0, c, ct), what in zip(LOW, ('1/2', '2^-5')):
+        mc, mt = max(r[5] for r in rows if r[0] >= j0), max(r[6] for r in rows if r[0] >= j0)
+        low_ok = low_ok and mc <= c * u8 and mt <= ct * u8
+        print(f'|r_0| < {what}: C {dec_up(mc / u8, 9)} u^8 <= {dec_up(c, 6)} u^8 and C^T {dec_up(mt / u8, 9)} u^8 <= '
+              f'{dec_up(ct, 6)} u^8: {mc <= c * u8 and mt <= ct * u8}')
+    low_ctl = (max(r[5] for r in rows if r[0] >= LOW[0][0]) <= LOW[1][1] * u8
+               or max(r[6] for r in rows if r[0] >= LOW[0][0]) <= LOW[1][2] * u8)
+    print(f'control, the bounds for |r_0| < 2^-5 hold from |r_0| < 1/2 on: {low_ctl}')
     ok = (worst <= BOUND * u8 and agree and ctl < ref_c * (1 - Fr(1, 10 ** 6)) and tan_ok and kd_ok and tan_agree
-          and ctl_t is None)
+          and ctl_t is None and low_ok and not low_ctl)
     if len(sys.argv) > 1 and ok:
         os.makedirs(os.path.join(sys.argv[1], 'Trig8'), exist_ok=True)
         os.makedirs(os.path.join(sys.argv[1], 'Tan8'), exist_ok=True)

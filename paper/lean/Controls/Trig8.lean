@@ -44,4 +44,26 @@ example : ¬ rnQ 53 (dyQ (9007199254740993, 60)) = dyQ (9007199254740993, 60) :=
 example : ¬ ∀ g ∈ trig8Groups, 3 ≤ g.2.1 := by
   decide +kernel
 
+/-! ### The buckets below the top one -/
+
+set_option maxHeartbeats 4000000 in
+/-- the top bucket's `C` is not within the bound of the buckets with `|r_0| < 1/2` -/
+example : ¬ trig8CLe (trig8Low 1) 0 41 41 (dySt trig8_s0_39) (dySt trig8_c0_39) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- `C` of the bucket from `1/4` to `1/2` is not below `2.175821u^8` -/
+example : ¬ trig8CLe (2175821 / 1000000) 1 37 38 (dySt trig8_s1_35) (dySt trig8_c1_36) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- nor within the bound of the buckets with `|r_0| < 2^{-5}` -/
+example : ¬ trig8CLe (trig8Low 5) 1 37 38 (dySt trig8_s1_35) (dySt trig8_c1_36) := by
+  decide +kernel
+
+set_option maxHeartbeats 4000000 in
+/-- `C` of bucket 52 is not below `2.000705u^8` -/
+example : ¬ trig8CLe (2000705 / 1000000) 52 4 5 (dySt trig8_s52_2) (dySt trig8_c52_3) := by
+  decide +kernel
+
 end ExpansionBounds

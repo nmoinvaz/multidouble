@@ -1,5 +1,5 @@
 import ExpansionBounds.Div8
-import ExpansionBounds.Tan8.All
+import ExpansionBounds.Tan8.Low
 import ExpansionBounds.Trig8
 
 /-!
@@ -12,30 +12,41 @@ on `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, and at least `2^{8p-1074}` a
 
 In each bucket the kernel checks, on the states of Horner's runs, that the computed sine and cosine are on `H(θ)`
 (`θ = 1.4143` in the top bucket and `3` below, where Lemma 34's part bounds leave room) and that `C^T` with
-`δ_D = u^8 + κ_DIV(θu)u^9` is at most `6.418350521u^8` (`Tan8/Run0.lean` to `Run3.lean`).
+`δ_D = u^8 + κ_DIV(θu)u^9` is at most `6.418350521u^8` (`Tan8/Run0.lean` to `Run3.lean`). Below the top bucket it is
+smaller (`Tan8/Low.lean`), which gives the remark after the theorem: `4.800526u^8` for `|r_0| < 1/2` and `4.002771u^8`
+for `|r_0| < 2^{-5}` (`thm35_tan_8_half`, `thm35_tan_8_32`).
 -/
 
 namespace ExpansionBounds
 
 open Finset
 
-/-- below the last bucket: `r` itself over `1`, on `H(3)`, and the early return within `tan₊ r̄/r̄ - 1` -/
+/-- below the last bucket: `r` itself over `1`, on `H(3)`, and the early return within `tan₊ r̄/r̄ - 1`; `C^T` and the
+early return's bound are below the least of the bounds, `4.002771u^8` -/
 theorem tan8_tiny : tan8Chk trig8T (trig8T ^ 2 / (6 - trig8T ^ 2)) (trig8T ^ 2 / (2 * cosLoQ trig8T))
       (fun i => if i < 8 then trig8Ab i else 0) (fun i => if i = 0 then 1 else 0) 3 461400803 ∧
-    tanHiQ trig8T / trig8T - 1 ≤ 6418350521 / 1000000000 * trig8U ^ 8 := by
+    tanCTQ trig8U 8 (trig8T ^ 2 / (6 - trig8T ^ 2)) (trig8T ^ 2 / (2 * cosLoQ trig8T))
+      (trig8U ^ 8 + 461400803 * trig8U ^ 9) trig8T ≤ 4002771 / 1000000 * trig8U ^ 8 ∧
+    tanHiQ trig8T / trig8T - 1 ≤ 4002771 / 1000000 * trig8U ^ 8 := by
   decide +kernel
 
 variable (p : ℤ) [Prec_gt_0 p]
 
-/-- Theorem 35 (`thm:trig`) for TAN at `n = 8` and `p = 53`, with multidouble's coefficients and series lengths:
-for `x` in `F`, on `H(2)`, with `|x_0| ≤ 2^52` and at least `2^{8p-1074}` away from the nonzero multiples of `π/2`,
-the tangent is within `6.418350521u^8 + 5E_π/|sin x cos x|` of `tan x`, relatively -/
-theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+/-- `C^T ≤ c u^8` on the last states of Horner's runs in the run of buckets `g` -/
+def Tan8GroupLe (c : ℚ) (g : ℕ × ℕ × ℕ) : Prop :=
+  ∀ sS sC, trig8Run sinCQ trig8FsQ g.1 (g.2.1 - 1) 0 (g.2.1 - 2) (trig8Init sinCQ trig8FsQ (g.2.1 - 1)) = sS →
+    trig8Run cosCQ trig8FcQ g.1 (g.2.2 - 1) 0 (g.2.2 - 2) (trig8Init cosCQ trig8FcQ (g.2.2 - 1)) = sC →
+    tan8CtLe c g.1 g.2.1 g.2.2 sS sC
+
+/-- Theorem 35 (`thm:trig`) for TAN at `n = 8` and `p = 53` with the bound `c u^8`, for a `c ≥ 4.002771` that bounds
+`C^T` in the run of buckets of `|r_0|` -/
+theorem thm35_tan_8_c (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
     (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
     (hfar : redK p 8 x ≠ 0 →
-      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|) :
+      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|)
+    (c : ℚ) (hc : 4002771 / 1000000 ≤ c) (hcg : Tan8GroupLe c (trig8G |redR p 8 x 0|)) :
     |∑ i ∈ range 8, tanN p 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
-      (6418350521 / 1000000000 * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+      ((c : ℝ) * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
         |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) * |Real.tan (∑ i ∈ range 8, x i)| := by
   subst hp
   have htu : ((trig8U : ℚ) : ℝ) = u (53 : ℤ) := by
@@ -52,7 +63,8 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
       |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)| := by positivity
   obtain ⟨hl1, hl2, hr1, hr2, hK⟩ := trig8_tables
   obtain ⟨t1, t2, t3, -, -, -, -, -⟩ := trig8_tiny
-  obtain ⟨tchk, tsmall⟩ := tan8_tiny
+  obtain ⟨tchk, tct, tsmall⟩ := tan8_tiny
+  have hu8 : (0 : ℚ) ≤ trig8U ^ 8 := by unfold trig8U; positivity
   obtain ⟨⟨kd0a, kd0b⟩, ⟨kd3a, kd3b⟩, kd10⟩ := tan8_kdiv
   have hFs : ∀ k, ∀ i < 8, F 53 (trig8FsR k i) := fun k i _ =>
     dyFn_getD_F 53 trig8Fs (dyF_of_all 53 trig8Fs hr1) k i
@@ -66,11 +78,11 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
   · -- the early return
     have hs := thm35_tan_small 53 8 rfl (by norm_num) x hH hsmall es et trig8Ks trig8Kc trig8FsR trig8FcR
     rw [← hT] at hs
-    have c : tanHi ((trig8T : ℚ) : ℝ) / ((trig8T : ℚ) : ℝ) - 1 ≤ 6418350521 / 1000000000 * u (53 : ℤ) ^ 8 := by
-      have := (Rat.cast_le (K := ℝ)).mpr tsmall
+    have ce : tanHi ((trig8T : ℚ) : ℝ) / ((trig8T : ℚ) : ℝ) - 1 ≤ (c : ℝ) * u (53 : ℤ) ^ 8 := by
+      have := (Rat.cast_le (K := ℝ)).mpr (tsmall.trans (mul_le_mul_of_nonneg_right hc hu8))
       push_cast at this
       rwa [htu, cast_tanHi] at this
-    exact hs.trans (mul_le_mul_of_nonneg_right (le_add_of_le_of_nonneg c hE) (abs_nonneg _))
+    exact hs.trans (mul_le_mul_of_nonneg_right (le_add_of_le_of_nonneg ce hE) (abs_nonneg _))
   obtain ⟨hmem, hlt⟩ := trig8G_spec |redR 53 8 x 0|
   obtain ⟨hKs, hKc⟩ := hK _ hmem
   -- `tan8Chk` on bounds of `δ_S`, `δ_C`, `ψ_s` and `ψ_c` gives the theorem
@@ -85,12 +97,13 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
       (∀ i, tanPc 53 8 (redR 53 8 x 0) ((rb : ℚ) : ℝ) trig8FcR (trig8Kc |redR 53 8 x 0|) i ≤ ((ψcq i : ℚ) : ℝ)) →
       0 ≤ θ → θ ≤ 3 → 0 ≤ kdivQ trig8U 8 (θ * trig8U) → kdivQ trig8U 8 (θ * trig8U) ≤ Kd → Kd ≤ 461400803 →
       tan8Chk rb dSq dCq ψsq ψcq θ Kd →
+      tanCTQ trig8U 8 dSq dCq (trig8U ^ 8 + Kd * trig8U ^ 9) rb ≤ c * trig8U ^ 8 →
       |∑ i ∈ range 8, tanN 53 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
-        (6418350521 / 1000000000 * u (53 : ℤ) ^ 8 + 5 * (|(redK 53 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        ((c : ℝ) * u (53 : ℤ) ^ 8 + 5 * (|(redK 53 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
           |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) *
             |Real.tan (∑ i ∈ range 8, x i)| := by
     intro rb dSq dCq ψsq ψcq θ Kd hrb0 hr hre a1 a2 c1 c2 hps hpc hθ0 hθ3 hk0 hk1 hKd
-      ⟨k1, k2, k3, k4, k5, k6, k7, k8, k9⟩
+      ⟨k1, k2, k3, k4, k5, k6, k7, k8, _⟩ kc
     have hrb0' : (0 : ℝ) ≤ ((rb : ℚ) : ℝ) := by exact_mod_cast hrb0
     have hrb' : ((rb : ℚ) : ℝ) ≤ 8 / 10 := ((Rat.cast_le (K := ℝ)).mpr k1).trans_eq (by norm_num)
     have hθ0' : (0 : ℝ) ≤ ((θ : ℚ) : ℝ) := by exact_mod_cast hθ0
@@ -123,7 +136,7 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
     have o4 := (Rat.cast_le (K := ℝ)).mpr k4
     have o5 := (Rat.cast_lt (K := ℝ)).mpr k5
     have o7 := (Rat.cast_lt (K := ℝ)).mpr k7
-    have o9 := (Rat.cast_le (K := ℝ)).mpr k9
+    have o9 := (Rat.cast_le (K := ℝ)).mpr kc
     push_cast at o3 o4 o5 o7 o9
     rw [cast_cosLo] at o7
     rw [htu] at o9
@@ -191,7 +204,7 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
       rw [htu]
     refine fin trig8T _ _ _ _ 3 461400803 hT0 hr hre (by rw [eS]; exact_mod_cast h6) (by rw [eS])
       (by rw [eC]; exact_mod_cast h7) (by rw [eC]) (fun i => ?_) (fun i => ?_) (by norm_num) le_rfl kd3a kd3b
-      le_rfl tchk
+      le_rfl tchk (tct.trans (mul_le_mul_of_nonneg_right hc hu8))
     · simp only [tanPs, htiny, ↓reduceIte]
       split_ifs
       · exact (hab i).le
@@ -200,6 +213,12 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
       split_ifs <;> simp
   -- a bucket: Lemma 34's bounds and the ladders, evaluated by the kernel
   obtain ⟨sS, sC, hS, hC, tok⟩ := tan8_all _ hmem
+  have tcg : tanCTQ trig8U 8
+      (sinDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb (trig8G |redR 53 8 x 0|).1) (trig8G |redR 53 8 x 0|).2.1 sS)
+      (cosDeltaL trig8U 8 (upQ 200) trig8Ab (trig8Rb (trig8G |redR 53 8 x 0|).1) (trig8G |redR 53 8 x 0|).2.2 sC)
+      (trig8U ^ 8 + tan8Kd (trig8G |redR 53 8 x 0|).1 * trig8U ^ 9) (trig8Rb (trig8G |redR 53 8 x 0|).1) ≤
+        c * trig8U ^ 8 := hcg sS sC hS hC
+  clear hcg
   have eKs : trig8Ks |redR 53 8 x 0| = (trig8G |redR 53 8 x 0|).2.1 := rfl
   have eKc : trig8Kc |redR 53 8 x 0| = (trig8G |redR 53 8 x 0|).2.2 := rfl
   generalize trig8G |redR 53 8 x 0| = g at *
@@ -274,6 +293,85 @@ theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) 
   obtain ⟨hk1, hk2, hk3, hk4, hk5⟩ := hk
   exact fin (trig8Rb g.1) _ _ _ _ (tan8Th g.1) (tan8Kd g.1) hrb0 hr.1 hr.2 (by rw [eDS]; exact dS0)
     (by rw [eDS]; exact dS1) (by rw [eDC]; exact dC0) (by rw [eDC]; exact dC1)
-    (fun i => by rw [ePS]; exact pS i) (fun i => by rw [ePC]; exact pC i) hk1 hk2 hk3 hk4 hk5 tok
+    (fun i => by rw [ePS]; exact pS i) (fun i => by rw [ePC]; exact pC i) hk1 hk2 hk3 hk4 hk5 tok tcg
+
+
+/-- Theorem 35 (`thm:trig`) for TAN at `n = 8` and `p = 53`, with multidouble's coefficients and series lengths:
+for `x` in `F`, on `H(2)`, with `|x_0| ≤ 2^52` and at least `2^{8p-1074}` away from the nonzero multiples of `π/2`,
+the tangent is within `6.418350521u^8 + 5E_π/|sin x cos x|` of `tan x`, relatively -/
+theorem thm35_tan_8 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
+    (hfar : redK p 8 x ≠ 0 →
+      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|) :
+    |∑ i ∈ range 8, tanN p 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
+      (6418350521 / 1000000000 * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) * |Real.tan (∑ i ∈ range 8, x i)| := by
+  have h := thm35_tan_8_c p hp x hx hH hx0 es et hfar (6418350521 / 1000000000) (by norm_num) (by
+    unfold Tan8GroupLe
+    intro sS sC hS hC
+    subst hS hC
+    obtain ⟨sS', sC', hS', hC', tok⟩ := tan8_all _ (trig8G_spec |redR p 8 x 0|).1
+    rw [hS', hC']
+    exact tok.2.2.2.2.2.2.2.2)
+  rw [show ((6418350521 / 1000000000 : ℚ) : ℝ) = 6418350521 / 1000000000 by norm_num] at h
+  exact h
+
+/-- the remark after Theorem 35: where `|r_0| < 2^{-J}`, for `J = 1` and `J = 5`, the tangent is within
+`tan8Low J u^8`, `4.800526u^8` and `4.002771u^8`, plus the term in `E_π` -/
+theorem thm35_tan_8_low (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
+    (hfar : redK p 8 x ≠ 0 →
+      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|)
+    {J : ℕ} (hJ : J = 1 ∨ J = 5) (hr : |redR p 8 x 0| < (2 : ℝ) ^ (-(J : ℤ))) :
+    |∑ i ∈ range 8, tanN p 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
+      ((tan8Low J : ℝ) * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) * |Real.tan (∑ i ∈ range 8, x i)| := by
+  obtain ⟨g0, hg0, rfl⟩ : ∃ g0 ∈ trig8Groups, g0.1 = J := by rcases hJ with rfl | rfl <;> decide
+  have hge := trig8G_ge |redR p 8 x 0| hg0 hr
+  have h1 : 1 ≤ (trig8G |redR p 8 x 0|).1 := by rcases hJ with h | h <;> omega
+  refine thm35_tan_8_c p hp x hx hH hx0 es et hfar (tan8Low g0.1) (by unfold tan8Low; split_ifs <;> norm_num) ?_
+  unfold Tan8GroupLe
+  intro sS sC hS hC
+  subst hS hC
+  obtain ⟨sS', sC', hS', hC', ok⟩ := tan8_low _ (trig8G_spec |redR p 8 x 0|).1 h1
+  rw [hS', hC']
+  unfold tan8CtLe at ok ⊢
+  refine ok.trans (mul_le_mul_of_nonneg_right ?_ (by unfold trig8U; positivity))
+  unfold tan8Low
+  by_cases h5 : (trig8G |redR p 8 x 0|).1 < 5
+  · have h5' : g0.1 < 5 := lt_of_le_of_lt hge h5
+    simp only [h5, h5', ↓reduceIte, le_refl]
+  · simp only [h5, ↓reduceIte]
+    split_ifs <;> norm_num
+
+/-- the remark after Theorem 35 for `|r_0| < 1/2`: the tangent is within `4.800526u^8`, plus the term in `E_π` -/
+theorem thm35_tan_8_half (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
+    (hfar : redK p 8 x ≠ 0 →
+      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|)
+    (hr : |redR p 8 x 0| < 1 / 2) :
+    |∑ i ∈ range 8, tanN p 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
+      (4800526 / 1000000 * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) * |Real.tan (∑ i ∈ range 8, x i)| := by
+  have h := thm35_tan_8_low p hp x hx hH hx0 es et hfar (J := 1) (Or.inl rfl) (by
+    rw [show (2 : ℝ) ^ (-((1 : ℕ) : ℤ)) = 1 / 2 by norm_num]
+    exact hr)
+  rw [show ((tan8Low 1 : ℚ) : ℝ) = 4800526 / 1000000 by unfold tan8Low; norm_num] at h
+  exact h
+
+/-- the remark after Theorem 35 for `|r_0| < 2^{-5}`: the tangent is within `4.002771u^8`, plus the term in `E_π` -/
+theorem thm35_tan_8_32 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x)
+    (hx0 : |x 0| ≤ 2 ^ 52) (es et : ℝ → ℤ)
+    (hfar : redK p 8 x ≠ 0 →
+      (2 : ℝ) ^ (p * (8 : ℕ) - 1074) ≤ |∑ i ∈ range 8, x i - redK p 8 x * (Real.pi / 2)|)
+    (hr : |redR p 8 x 0| < 1 / 32) :
+    |∑ i ∈ range 8, tanN p 8 es et trig8Ks trig8Kc trig8FsR trig8FcR x i - Real.tan (∑ i ∈ range 8, x i)| ≤
+      (4002771 / 1000000 * u p ^ 8 + 5 * (|(redK p 8 x : ℝ)| * (2 : ℝ) ^ (-1217 : ℤ)) /
+        |Real.sin (∑ i ∈ range 8, x i) * Real.cos (∑ i ∈ range 8, x i)|) * |Real.tan (∑ i ∈ range 8, x i)| := by
+  have h := thm35_tan_8_low p hp x hx hH hx0 es et hfar (J := 5) (Or.inr rfl) (by
+    rw [show (2 : ℝ) ^ (-((5 : ℕ) : ℤ)) = 1 / 32 by norm_num]
+    exact hr)
+  rw [show ((tan8Low 5 : ℚ) : ℝ) = 4002771 / 1000000 by unfold tan8Low; norm_num] at h
+  exact h
 
 end ExpansionBounds
