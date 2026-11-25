@@ -55,6 +55,7 @@ import ExpansionBounds.RoundEval
 import ExpansionBounds.Dyadic
 import ExpansionBounds.DWord
 import ExpansionBounds.DWDiv
+import ExpansionBounds.DWSqrt
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono
