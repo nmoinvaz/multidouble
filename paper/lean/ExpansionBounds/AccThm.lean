@@ -286,6 +286,72 @@ omit [Prec_gt_0 p] in
 noncomputable def accSK (θ : ℝ) (prod : ℕ → Bool) (a b : ℕ → ℕ → ℝ) (K : ℕ) (m : ℕ) : ℝ :=
   accSclosed (accTau p n θ) (∑ j ∈ Icc 1 K, accMu prod a b j) (1 / (1 - ((n : ℝ) + 1) * K * u p)) (u p) m K
 
+/-- the accumulator's lemma followed by FINISH: `K` deposits, the `k`-th within `τ_l μ_k` at level `l` and summing to
+`Z_k` up to `Cμ_k`, give `|∑ Z_k - x| ≤ u^n|∑ Z_k| + (1 + u^n)(Ē_lev + CW) + Φ`, with `W = ∑ μ_k` and `Φ` from the
+bounds `S_m(K)` along FINISH -/
+theorem acc_finish (hp : 1 < p) (hn : 1 ≤ n) (K : ℕ) (hK1 : 1 ≤ K) (hK : ((n : ℝ) + 1) * K * u p < 1)
+    (t : ℕ → ℕ → ℝ) (top : ℕ → Bool) (τ μ : ℕ → ℝ) (hτ0 : ∀ l, 0 ≤ τ l) (hμ0 : ∀ k, 0 ≤ μ k)
+    (ht : ∀ k ∈ Icc 1 K, ∀ l < n, F p (t k l) ∧ |t k l| ≤ τ l * μ k)
+    (htop : ∀ k ∈ Icc 1 K, top k = true → |t k n| ≤ τ n * μ k) (Zt : ℕ → ℝ) (C : ℝ)
+    (hterm : ∀ k ∈ Icc 1 K, |Zt k - (∑ l ∈ range n, t k l + if top k then t k n else 0)| ≤ C * μ k)
+    (W : ℝ) (hW : W = ∑ j ∈ Icc 1 K, μ j) (S : ℕ → ℝ)
+    (hSd : ∀ m, S m = accSclosed τ W (1 / (1 - ((n : ℝ) + 1) * K * u p)) (u p) m K) :
+    |∑ k ∈ Icc 1 K, Zt k - ∑ i ∈ range n, finishR p n (runOps p n (accOps n t top K) LState.init).2.s n i| ≤
+      u p ^ n * |∑ k ∈ Icc 1 K, Zt k| +
+        (1 + u p ^ n) * (accE τ W (1 / (1 - ((n : ℝ) + 1) * K * u p)) (u p) n K + C * W) +
+        GaddfE p n (finishP p n S (n - 1)) (S n) 0 := by
+  have hu := u_pos p
+  subst hW
+  obtain ⟨A1, A2, A3⟩ := lemma_acc p n hp t top K τ μ hτ0 hμ0 ht htop hK
+  -- the levels, their bounds `S_m(K)` and their sum
+  obtain ⟨s, hsd⟩ : ∃ s, s = (runOps p n (accOps n t top K) LState.init).2.s := ⟨_, rfl⟩
+  have hS : ∀ m ≤ n, |s m| ≤ S m := fun m hm => by
+    rw [hsd, hSd]
+    exact A1 K (mem_Icc.mpr ⟨hK1, le_rfl⟩) _ (runOps_last_mem' p n _ _) m hm
+  have hsF : ∀ m ≤ n, F p (s m) := fun m _ => by
+    rw [hsd]
+    exact runOps_F_noassign p n _ (accOps_noassign n t top K) _ (fun j => F_zero p) m
+  obtain ⟨W, hWd⟩ : ∃ W, W = ∑ j ∈ Icc 1 K, μ j := ⟨_, rfl⟩
+  obtain ⟨E, hEd⟩ : ∃ E, E = accE τ W (1 / (1 - ((n : ℝ) + 1) * K * u p)) (u p) n K := ⟨_, rfl⟩
+  obtain ⟨Z, hZd⟩ : ∃ Z, Z = ∑ k ∈ Icc 1 K, Zt k := ⟨_, rfl⟩
+  -- `|Z - S| ≤ Ē + CW`
+  have hZS : |Z - ∑ m ∈ range (n + 1), s m| ≤ E + C * W := by
+    rw [hZd, hsd, A2, hEd, hWd]
+    rw [show ∀ (X Y : ℕ → ℝ) (r : ℝ), ∑ k ∈ Icc 1 K, X k - (∑ k ∈ Icc 1 K, Y k - r) =
+      ∑ k ∈ Icc 1 K, (X k - Y k) + r from fun X Y r => by rw [sum_sub_distrib]; ring]
+    refine (abs_add_le _ _).trans ?_
+    rw [mul_sum, add_comm]
+    exact add_le_add A3 ((abs_sum_le_sum_abs _ _).trans (sum_le_sum hterm))
+  -- FINISH
+  obtain ⟨f1, -, f3, f4⟩ := finish_exact p n hp hn s hsF S hS (n - 1) le_rfl
+  obtain ⟨r, hrd⟩ : ∃ r, r = finishR p n s (n - 1) := ⟨_, rfl⟩
+  rw [← hrd] at f1 f3 f4
+  rw [Nat.sub_add_cancel hn] at f3
+  have hfin : finishR p n s n = pt (addfOp p n r (s n)) := by
+    have h : ∀ k', finishR p n s (k' + 1) = pt (addfOp p n (finishR p n s k') (s (k' + 1))) := fun _ => rfl
+    have := h (n - 1)
+    rw [Nat.sub_add_cancel hn] at this
+    rw [this, hrd]
+  obtain ⟨SS, hSS⟩ : ∃ SS, SS = ∑ m ∈ range (n + 1), s m := ⟨_, rfl⟩
+  rw [← hSS] at hZS
+  have hZr : |∑ i ∈ range n, r i + s n| ≤ |SS| := by rw [f3, ← sum_range_succ, hSS]
+  obtain ⟨g1, -, -, g4⟩ := addf_G p n hp hn r (s n) (finishP p n S (n - 1)) (S n) f1 (hsF n le_rfl)
+    (fun i _ => f4 i) (hS n le_rfl) _ hZr
+  rw [gaddfE_split, f3, ← sum_range_succ, ← hSS] at g1
+  have hxs : ∑ i ∈ range n, finishR p n s n i = (addfOp p n r (s n)).sum := by
+    rw [hfin]; exact (list_sum_getD _ n g4).symm
+  rw [← hsd, hxs, ← hWd, ← hEd, ← hZd]
+  -- assemble
+  have hSZ : |SS| ≤ |Z| + (E + C * W) := by
+    have := abs_sub_abs_le_abs_sub SS Z
+    rw [abs_sub_comm] at hZS
+    linarith
+  have h2 := mul_le_mul_of_nonneg_left hSZ (pow_nonneg hu.le n)
+  calc |Z - (addfOp p n r (s n)).sum|
+      ≤ |Z - SS| + |SS - (addfOp p n r (s n)).sum| := abs_sub_le _ _ _
+    _ ≤ (E + C * W) + (u p ^ n * |SS| + GaddfE p n (finishP p n S (n - 1)) (S n) 0) := add_le_add hZS g1
+    _ ≤ _ := by nlinarith
+
 /-- Theorem 27 (`thm:acc`): `K` terms, each ADDPROD or ADDX of operands on `H(θ)`, then FINISH, give
 `|Z - x| ≤ u^n|Z| + (1 + u^n)(Ē_lev + E_prod) + Φ` -/
 theorem thm27 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) (θ : ℝ) (hθ : 0 < θ) (K : ℕ)
@@ -335,76 +401,28 @@ theorem thm27 (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) 
       rw [hτd]; exact le_max_right _ _
   have htop : ∀ k ∈ Icc 1 K, prod k = true → |t k n| ≤ τ n * μ k := fun k hk hpk =>
     ((hprod k hk hpk).1 n le_rfl).trans (mul_le_mul_of_nonneg_right (by rw [hτd]; exact le_max_left _ _) (hμ0 k))
-  obtain ⟨A1, A2, A3⟩ := lemma_acc p n hp t prod K τ μ hτ0 hμ0 ht htop hK
-  -- the levels, their bounds `S_m(K)` and their sum
-  obtain ⟨s, hsd⟩ : ∃ s, s = accLev p n prod a b K := ⟨_, rfl⟩
-  have hsrun : s = (runOps p n (accOps n t prod K) LState.init).2.s := by rw [hsd, htd]; rfl
-  obtain ⟨S, hSd⟩ : ∃ S, S = accSK p n θ prod a b K := ⟨_, rfl⟩
-  have hS : ∀ m ≤ n, |s m| ≤ S m := fun m hm => by
-    have := A1 K (mem_Icc.mpr ⟨hK1, le_rfl⟩) _ (runOps_last_mem' p n _ _) m hm
-    rw [hsrun, hSd]
-    unfold accSK
-    rw [← hτd, ← hμd]
-    exact this
-  have hsF : ∀ m ≤ n, F p (s m) := fun m _ => by
-    rw [hsrun]
-    exact runOps_F_noassign p n _ (accOps_noassign n t prod K) _ (fun j => F_zero p) m
-  obtain ⟨W, hWd⟩ : ∃ W, W = ∑ j ∈ Icc 1 K, μ j := ⟨_, rfl⟩
+  -- each term sums to its deposit up to `E_prod`'s share
   obtain ⟨C, hCd⟩ : ∃ C, C = (((n ^ 2 + n - 1 : ℕ) : ℝ) * mulL p n θ n + thmDelta p n θ) * u p ^ (n + 1) := ⟨_, rfl⟩
   have hC0 : 0 ≤ C := by
     rw [hCd]
     exact mul_nonneg (add_nonneg (mul_nonneg (Nat.cast_nonneg _) (hL0 n)) (thmDelta_nonneg p n θ hθ.le))
       (by positivity)
-  -- `|Z - S| ≤ Ē + E_prod`
-  obtain ⟨E, hEd⟩ : ∃ E, E = accE τ W (1 / (1 - ((n : ℝ) + 1) * K * u p)) (u p) n K := ⟨_, rfl⟩
-  have hZS : |accZ n prod a b K - ∑ m ∈ range (n + 1), s m| ≤ E + C * W := by
-    rw [hsrun, A2, accZ, hEd, hWd]
-    have hterm : ∀ k ∈ Icc 1 K, |(if prod k then (∑ i ∈ range n, a k i) * ∑ j ∈ range n, b k j
-        else ∑ i ∈ range n, a k i) - (∑ l ∈ range n, t k l + if prod k then t k n else 0)| ≤ C * μ k := by
-      intro k hk
-      cases hpk : prod k with
-      | true =>
-        simp only [ite_true]
-        rw [← sum_range_succ, hCd]
-        exact (hprod k hk hpk).2.2
-      | false =>
-        simp only [Bool.false_eq_true, ite_false, add_zero]
-        rw [(hx k hk hpk).1, sub_self, abs_zero]
-        exact mul_nonneg hC0 (hμ0 k)
-    rw [show ∀ (X Y : ℕ → ℝ) (r : ℝ), ∑ k ∈ Icc 1 K, X k - (∑ k ∈ Icc 1 K, Y k - r) =
-      ∑ k ∈ Icc 1 K, (X k - Y k) + r from fun X Y r => by rw [sum_sub_distrib]; ring]
-    refine (abs_add_le _ _).trans ?_
-    rw [mul_sum, add_comm]
-    exact add_le_add A3 ((abs_sum_le_sum_abs _ _).trans (sum_le_sum hterm))
-  -- FINISH
-  obtain ⟨f1, -, f3, f4⟩ := finish_exact p n hp hn s hsF S hS (n - 1) le_rfl
-  obtain ⟨r, hrd⟩ : ∃ r, r = finishR p n s (n - 1) := ⟨_, rfl⟩
-  rw [← hrd] at f1 f3 f4
-  rw [Nat.sub_add_cancel hn] at f3
-  have hfin : finishR p n s n = pt (addfOp p n r (s n)) := by
-    have h : ∀ k', finishR p n s (k' + 1) = pt (addfOp p n (finishR p n s k') (s (k' + 1))) := fun _ => rfl
-    have := h (n - 1)
-    rw [Nat.sub_add_cancel hn] at this
-    rw [this, hrd]
-  obtain ⟨SS, hSS⟩ : ∃ SS, SS = ∑ m ∈ range (n + 1), s m := ⟨_, rfl⟩
-  rw [← hSS] at hZS
-  have hZr : |∑ i ∈ range n, r i + s n| ≤ |SS| := by rw [f3, ← sum_range_succ, hSS]
-  obtain ⟨g1, -, -, g4⟩ := addf_G p n hp hn r (s n) (finishP p n S (n - 1)) (S n) f1 (hsF n le_rfl)
-    (fun i _ => f4 i) (hS n le_rfl) _ hZr
-  rw [gaddfE_split, f3, ← sum_range_succ, ← hSS] at g1
-  have hxs : ∑ i ∈ range n, finishR p n s n i = (addfOp p n r (s n)).sum := by
-    rw [hfin]; exact (list_sum_getD _ n g4).symm
-  rw [← hsd, hxs, ← hSd, ← hτd, ← hμd, ← hWd, ← hEd]
-  -- assemble
-  have hSZ : |SS| ≤ |accZ n prod a b K| + (E + C * W) := by
-    have := abs_sub_abs_le_abs_sub SS (accZ n prod a b K)
-    rw [abs_sub_comm] at hZS
-    linarith
-  have h2 := mul_le_mul_of_nonneg_left hSZ (pow_nonneg hu.le n)
-  rw [← hCd]
-  calc |accZ n prod a b K - (addfOp p n r (s n)).sum|
-      ≤ |accZ n prod a b K - SS| + |SS - (addfOp p n r (s n)).sum| := abs_sub_le _ _ _
-    _ ≤ (E + C * W) + (u p ^ n * |SS| + GaddfE p n (finishP p n S (n - 1)) (S n) 0) := add_le_add hZS g1
-    _ ≤ _ := by nlinarith
+  have hterm : ∀ k ∈ Icc 1 K, |(if prod k then (∑ i ∈ range n, a k i) * ∑ j ∈ range n, b k j
+      else ∑ i ∈ range n, a k i) - (∑ l ∈ range n, t k l + if prod k then t k n else 0)| ≤ C * μ k := by
+    intro k hk
+    cases hpk : prod k with
+    | true =>
+      simp only [ite_true]
+      rw [← sum_range_succ, hCd]
+      exact (hprod k hk hpk).2.2
+    | false =>
+      simp only [Bool.false_eq_true, ite_false, add_zero]
+      rw [(hx k hk hpk).1, sub_self, abs_zero]
+      exact mul_nonneg hC0 (hμ0 k)
+  -- the accumulator's lemma and FINISH
+  have h := acc_finish p n hp hn K hK1 hK t prod τ μ hτ0 hμ0 ht htop _ C hterm _ rfl (accSK p n θ prod a b K)
+    (fun m => by rw [hτd, hμd]; rfl)
+  rw [htd, hτd, hμd, hCd] at h
+  exact h
 
 end ExpansionBounds
