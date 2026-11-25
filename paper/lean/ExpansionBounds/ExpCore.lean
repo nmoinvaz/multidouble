@@ -9,7 +9,8 @@ Under (A3), `(n² + n)u < 1`: steps (2) to (4) of EXP, where `U` bounds `∑|r_i
 `t ← ADD(2t, MUL(t, t))`. The scaling by `2^{-m}` and step (3)'s scaling back by `2^{e'}` can leave the normal range:
 they are rounded by `S₁` and `S₂`, which move a value by at most `η₁` and `η₂` (`Scl`), the paper's `η_0[m > 0]` and
 `η_0`, and zero with an unbounded exponent range. Lemma 39 asks `∑|r_i| < 2^{e+1}`, which `U < 2^{e+1}` gives
-(`sum_abs_lt_of_expU`) and which also holds where the product that forms `U` underflows. The paper's `n ≤ 31` with
+(`sum_abs_lt_of_expU`) and which also holds where the product that forms `U` underflows; `2^e ≤ U` bounds `|r|` from
+below (`abs_ge_of_expU`), which gives the `|r|` that select `e`. The paper's `n ≤ 31` with
 `U`'s factor `1 + 2^{-48}` is here `(1 + u)^n ≤ 1 + γ` with the factor `1 + γ`.
 -/
 
@@ -264,8 +265,71 @@ theorem abs_exp_sub_exp_le {x y B : ℝ} (hx : x ≤ B) (hy : y ≤ B) :
   · rw [abs_sub_comm, abs_sub_comm x y]
     exact key y x h hx
 
+theorem absSum_nonneg (r : ℕ → ℝ) (i : ℕ) : 0 ≤ absSum p r i := by
+  have hu := u_pos p
+  have hq0 : 0 < (1 + u p) ^ i := by positivity
+  exact le_trans (div_nonneg (sum_nonneg fun l _ => abs_nonneg _) hq0.le) (absSum_ge p r i)
+
+/-- `RN(∑|r_i|) ≤ (1 + u)^i ∑_{l ≤ i} |r_l|` -/
+theorem absSum_le (r : ℕ → ℝ) : ∀ i, absSum p r i ≤ (1 + u p) ^ i * ∑ l ∈ range (i + 1), |r l| := by
+  have hu := u_pos p
+  intro i
+  induction i with
+  | zero => simp [absSum]
+  | succ i ih =>
+    have hq : 1 ≤ (1 + u p) ^ i := one_le_pow₀ (by linarith)
+    have hs0 := absSum_nonneg p r i
+    have hz : 0 ≤ absSum p r i + |r (i + 1)| := add_nonneg hs0 (abs_nonneg _)
+    have h := (le_abs_self _).trans (abs_RN_le p (absSum p r i + |r (i + 1)|))
+    rw [abs_of_nonneg hz] at h
+    simp only [absSum]
+    refine h.trans ?_
+    rw [sum_range_succ, pow_succ, mul_add]
+    have h1 : |r (i + 1)| ≤ (1 + u p) ^ i * |r (i + 1)| := le_mul_of_one_le_left (abs_nonneg _) hq
+    nlinarith [mul_le_mul_of_nonneg_left (add_le_add ih h1) (by linarith : (0 : ℝ) ≤ 1 + u p)]
+
+/-- `U ≤ (1 + u)^n (1 + γ) ∑|r_i|` -/
+theorem expU_le (hn : 1 ≤ n) (γ : ℝ) (hγ : 0 ≤ 1 + γ) (r : ℕ → ℝ) :
+    expU p n γ r ≤ (1 + u p) ^ n * (1 + γ) * ∑ i ∈ range n, |r i| := by
+  have hu := u_pos p
+  obtain ⟨k, rfl⟩ : ∃ k, n = k + 1 := ⟨n - 1, by omega⟩
+  have hs0 := absSum_nonneg p r k
+  have hz : 0 ≤ absSum p r k * (1 + γ) := mul_nonneg hs0 hγ
+  have h := (le_abs_self _).trans (abs_RN_le p (absSum p r k * (1 + γ)))
+  rw [abs_of_nonneg hz] at h
+  unfold expU
+  rw [show k + 1 - 1 = k by omega]
+  refine h.trans ?_
+  have h1 := mul_le_mul_of_nonneg_right (absSum_le p r k) hγ
+  calc (1 + u p) * (absSum p r k * (1 + γ)) ≤
+        (1 + u p) * ((1 + u p) ^ k * (∑ l ∈ range (k + 1), |r l|) * (1 + γ)) :=
+        mul_le_mul_of_nonneg_left h1 (by linarith)
+    _ = (1 + u p) ^ (k + 1) * (1 + γ) * ∑ i ∈ range (k + 1), |r i| := by rw [pow_succ]; ring
+
+/-- the `|r|` that select `e` in step (2): `2^e ≤ U` gives `|r| ≥ 2^e/((1 + u)^n (1 + γ)) - 2 ∑_{i ≥ 1} π_i` -/
+theorem abs_ge_of_expU (hn : 1 ≤ n) (γ : ℝ) (hγ : 0 < 1 + γ) (r : ℕ → ℝ) (π : ℕ → ℝ)
+    (hπ : ∀ i < n, |r i| ≤ π i) (e : ℤ) (hU : (2 : ℝ) ^ e ≤ expU p n γ r) :
+    (2 : ℝ) ^ e / ((1 + u p) ^ n * (1 + γ)) - 2 * ∑ i ∈ Ico 1 n, π i ≤ |∑ i ∈ range n, r i| := by
+  have hu := u_pos p
+  have hc : 0 < (1 + u p) ^ n * (1 + γ) := by positivity
+  have h1 : (2 : ℝ) ^ e / ((1 + u p) ^ n * (1 + γ)) ≤ ∑ i ∈ range n, |r i| := by
+    rw [div_le_iff₀ hc, mul_comm]
+    exact hU.trans (expU_le p n hn γ hγ.le r)
+  have hs : ∑ i ∈ range n, |r i| = |r 0| + ∑ i ∈ Ico 1 n, |r i| := by
+    rw [range_eq_Ico, sum_eq_sum_Ico_succ_bot (by omega)]
+  have hr : ∑ i ∈ range n, r i = r 0 + ∑ i ∈ Ico 1 n, r i := by
+    rw [range_eq_Ico, sum_eq_sum_Ico_succ_bot (by omega)]
+  have h2 : |∑ i ∈ Ico 1 n, r i| ≤ ∑ i ∈ Ico 1 n, |r i| := abs_sum_le_sum_abs _ _
+  have h3 : ∑ i ∈ Ico 1 n, |r i| ≤ ∑ i ∈ Ico 1 n, π i := sum_le_sum fun i hi => hπ i (mem_Ico.mp hi).2
+  have h4 : |r 0| - |∑ i ∈ Ico 1 n, r i| ≤ |r 0 + ∑ i ∈ Ico 1 n, r i| := by
+    have := abs_sub_abs_le_abs_sub (r 0) (-∑ i ∈ Ico 1 n, r i)
+    rwa [abs_neg, sub_neg_eq_add] at this
+  rw [hr]
+  linarith
+
 /-- `U < c` gives `∑|r_i| < c`. Where the product that forms `U` underflows, the paper has
-`∑|r_i| < 2^{-1022} ≤ 2^{e+1}` with `e = -1023`, so the results below ask `∑|r_i| < 2^{e+1}` in place of `U < 2^{e+1}` -/
+`∑|r_i| < 2^{-1022} ≤ 2^{e+1}` with `e = -1023`, so the results below ask `∑|r_i| < 2^{e+1}` in place of
+`U < 2^{e+1}` -/
 theorem sum_abs_lt_of_expU (hn : 1 ≤ n) (γ : ℝ) (hγ : (1 + u p) ^ n ≤ 1 + γ) (r : ℕ → ℝ) {c : ℝ}
     (hU : expU p n γ r < c) : ∑ i ∈ range n, |r i| < c :=
   (expU_ge p n hn γ hγ r).trans_lt hU
