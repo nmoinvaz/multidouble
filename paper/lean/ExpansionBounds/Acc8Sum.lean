@@ -7,8 +7,8 @@ import ExpansionBounds.AccSum
 After Theorem 27 the appendix quotes the largest `K` whose second term is at most `u^8W/8` and at most `u^8W`: `38`
 and `50` for products on `H(2)` (`Acc8.lean`), `40` and `52` on `H(1)`, and for sums of octo-doubles `41` and `53` on
 `H(2)` and `42` and `54` on `H(1)`, as `acc_bound.py` finds them. Each is proved here for every `K` up to it, with
-the next `K` above the threshold. `Φ` on `H(1)` is evaluated once, at `K = 1024`, and the sums take the `Φ` of
-products, which is at least theirs.
+the next `K` above the threshold. `Φ` on `H(1)` is evaluated once, at `K = 1024`, by the kernel on its rational
+mirror, and the sums take the `Φ` of products, which is at least theirs.
 -/
 
 namespace ExpansionBounds
@@ -17,14 +17,14 @@ open Finset
 
 variable (p : ℤ)
 
-set_option maxHeartbeats 40000000 in
-/-- `Φ ≤ 2^{-47}u^8` at `K = 1024` on `H(1)` -/
+/-- `Φ ≤ 2^{-47}u^8` at `K = 1024` on `H(1)`, by the kernel on `accPhiQ` -/
 theorem accPhi8_one_1024 (hp : p = 53) : accPhi p 8 1 1024 ≤ u p ^ 8 / 2 ^ 47 := by
-  have hu := u_53 p hp
-  norm_num (config := { maxSteps := 40000000 }) [accPhi, accS1, accGamma, GaddfE, GaddfP, finishP, gErr, gParts,
-    addfX, addfEps, Vb, sigmaX, us, accSclosed, accTau, mulL, thmL, thmD, hatAmul, mulT, rise, hu,
-    ← Finset.Ico_add_one_add_one_eq_Ioc, sum_Ico_eq_sum_range, sum_range_succ, prod_range_succ, min_def, max_def,
-    Nat.choose]
+  have h := u_53_rat p hp
+  have hq : accPhiQ (1 / 9007199254740992) 8 1 1024 ≤ (1 / 9007199254740992) ^ 8 / 2 ^ 47 := by decide +kernel
+  have hc := cast_accPhi p 8 h 1 1024
+  push_cast at hc
+  rw [← h, ← hc]
+  exact_mod_cast hq
 
 /-- `Φ ≤ 2^{-47}u^8` for `K ≤ 1024` on `H(1)` -/
 theorem accPhi8_one (hp : p = 53) {K : ℕ} (hK : K ≤ 1024) : accPhi p 8 1 K ≤ u p ^ 8 / 2 ^ 47 :=

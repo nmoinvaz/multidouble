@@ -1,4 +1,4 @@
-import ExpansionBounds.AccK
+import ExpansionBounds.Eval
 import ExpansionBounds.KappaN
 
 /-!
@@ -8,8 +8,9 @@ Theorem 27's second term `c_K W` for terms on `H(2)`, evaluated in rational arit
 `c_K ≤ 2^{-14.9}u^8`, `2^{-14.2}u^8`, `2^{-10.5}u^8`, `2^{-4.7}u^8`, `2^{2.7}u^8`, `2^{10.9}u^8` and `2^{37.2}u^8` at
 `K = 1`, `4`, `16`, `32`, `64`, `128` and `1024`. It is at most `u^8/8` for every `K ≤ 38` and above it at `K = 39`,
 and at most `u^8` for every `K ≤ 50` and above it at `K = 51`. `Φ`, the bound of FINISH's last ADDF, is evaluated
-once, at `K = 1024`, where it is at most `2^{-47}u^8`; it grows with `K`, as `c_K` does, so the value serves every
-smaller `K`. Each power of two is bounded below through `c^{10} ≤ 2^{10x}`.
+once, at `K = 1024`, where it is at most `2^{-47}u^8`, by the kernel on its rational mirror (`Eval.lean`); it grows
+with `K`, as `c_K` does, so the value serves every smaller `K`. Each power of two is bounded below through
+`c^{10} ≤ 2^{10x}`.
 -/
 
 namespace ExpansionBounds
@@ -38,14 +39,19 @@ theorem le_two_rpow_u8 (hp : p = 53) {c x : ℝ} {m d N K : ℕ} (hd : 0 < d) (h
     _ = (m : ℝ) / d * u p * u p ^ 8 := by ring
     _ ≤ (2 : ℝ) ^ x * u p ^ 8 := mul_le_mul_of_nonneg_right h1 (pow_nonneg (u_pos p).le 8)
 
-set_option maxHeartbeats 40000000 in
-/-- `Φ ≤ 2^{-47}u^8` at `K = 1024` on `H(2)` -/
+/-- `u = 2^{-53}` as the cast of a rational -/
+theorem u_53_rat (hp : p = 53) : ((1 / 9007199254740992 : ℚ) : ℝ) = u p := by
+  rw [u_53 p hp]
+  norm_num
+
+/-- `Φ ≤ 2^{-47}u^8` at `K = 1024` on `H(2)`: the kernel evaluates the rational mirror `accPhiQ` -/
 theorem accPhi8_1024 (hp : p = 53) : accPhi p 8 2 1024 ≤ u p ^ 8 / 2 ^ 47 := by
-  have hu := u_53 p hp
-  norm_num (config := { maxSteps := 40000000 }) [accPhi, accS1, accGamma, GaddfE, GaddfP, finishP, gErr, gParts,
-    addfX, addfEps, Vb, sigmaX, us, accSclosed, accTau, mulL, thmL, thmD, hatAmul, mulT, rise, hu,
-    ← Finset.Ico_add_one_add_one_eq_Ioc, sum_Ico_eq_sum_range, sum_range_succ, prod_range_succ, min_def, max_def,
-    Nat.choose]
+  have h := u_53_rat p hp
+  have hq : accPhiQ (1 / 9007199254740992) 8 2 1024 ≤ (1 / 9007199254740992) ^ 8 / 2 ^ 47 := by decide +kernel
+  have hc := cast_accPhi p 8 h 2 1024
+  push_cast at hc
+  rw [← h, ← hc]
+  exact_mod_cast hq
 
 /-- `Φ ≤ 2^{-47}u^8` for `K ≤ 1024` on `H(2)`, as `Φ` grows with `K` -/
 theorem accPhi8 (hp : p = 53) {K : ℕ} (hK : K ≤ 1024) : accPhi p 8 2 K ≤ u p ^ 8 / 2 ^ 47 :=
