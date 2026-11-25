@@ -90,10 +90,28 @@ the levels that the last ADDF renormalizes grow with $K$.
 
 At $n = 8$, $p = 53$ and $\theta = 2$ the second term, in units of $u^8W$, is at most $2^{-14.9}$ for $K = 1$ (the
 product's $E_{\rm prod} \le 2^{-15.1}$ and the levels' $2^{-17.8}$), $2^{-10.5}$ for $K = 16$, $2^{-4.7}$ for $K = 32$,
-$2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.2}$ for $K = 1024$ (\texttt{acc\_bound.py}). The second term is at most $u^8W/8$ for $K \le 38$ products and at most $u^8W$
-for $K \le 50$ ($\theta = 2$; $40$ and $52$ for $\theta = 1$; for sums of octo-doubles $41$ and $53$, and $42$ and $54$ for $\theta =
-1$). Beyond, the bound
-grows like $(Ku)^{9}W$, and the growth is real.
+$2^{2.7}$ for $K = 64$, $2^{10.9}$ for $K = 128$ and $2^{37.2}$ for $K = 1024$ (\texttt{acc\_bound.py}).
+Table~\ref{tab:acc-k} gives the largest $K$ for which it is at most $u^8W/8$ and at most $u^8W$.
+
+\nopagebreak
+\begin{table}[H]
+\centering
+\caption{The largest $K$ for which the second term of Theorem~\ref{thm:acc} is at most $u^8W/8$ and at most $u^8W$, at
+$n = 8$ and $p = 53$ (\texttt{acc\_bound.py}).}
+\label{tab:acc-k}
+\begin{tabular}{llcc}
+\toprule
+terms & operands & $u^8W/8$ & $u^8W$ \\
+\midrule
+products & on $H(2)$ & 38 & 50 \\
+products & on $H(1)$ & 40 & 52 \\
+sums of octo-doubles & on $H(2)$ & 41 & 53 \\
+sums of octo-doubles & on $H(1)$ & 42 & 54 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Beyond those $K$ the bound grows like $(Ku)^{9}W$, and the growth is real.
 
 \begin{proposition}\label{prop:acc-low}
 At $p = 53$ and $n = 8$ there are $K = 2048$ terms, $1$ and $2047$ positive octo-doubles of size about $u$ with
