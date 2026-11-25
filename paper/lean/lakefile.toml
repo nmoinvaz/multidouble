@@ -1,5 +1,5 @@
 name = "ExpansionBounds"
-defaultTargets = ["ExpansionBounds"]
+defaultTargets = ["ExpansionBounds", "Controls"]
 
 [leanOptions]
 autoImplicit = false
@@ -29,3 +29,7 @@ rev = "v4.34.1"
 
 [[lean_lib]]
 name = "ExpansionBounds"
+
+# The axioms of every declaration of ExpansionBounds, read when this library is built.
+[[lean_lib]]
+name = "Controls"
