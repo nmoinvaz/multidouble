@@ -1,0 +1,4 @@
+the run gives the stored emulator's result: True
+control, ties away from zero, gives it: False
+|Z - x| / (u^8 |Z|) = 14675797.392; W/|Z| - 1 = -1.262e-29
+every part in F: True ; leading parts positive: True ; |a_(i+1)| <= u |a_i|: True

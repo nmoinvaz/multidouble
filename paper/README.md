@@ -30,8 +30,8 @@ constant is computed by a script of this folder from a proved recursion and prin
 | `sqrt_bits.py` | `fpemu.py`'s square root against multidouble's `OD::sqrt`, bit for bit, with controls that skip its last step and its two-sum of the leading parts |
 | `trig_bits.py` | the sine, cosine and tangent of the trig appendix on `fpemu.py`, at eight parts and with the double-word algorithms at two, against multidouble's `OD` and `DD` functions, bit for bit, with controls that halve the sine series and skip the reduction's correction of k; `a2` scans every bucket of the reduced argument from 2^-212 to 1 for results outside binary64 (Remark 37), with the unscaled steps as its control; its output is `trig_bits_a2.txt` |
 | `table1_inputs.py` | the inputs of Table V for the square root, sine, cosine, tangent, exponential and logarithm: the emulator's results on them, the exact values enclosed by code of its own (an integer square root, fixed-point Taylor series, Python's decimal exp and ln), the errors as multiples of u^8\|Z\|, and multidouble's bits on the same inputs; `ties_away` and `perturb` are its controls |
-| `accumulator/` | the accumulator of Theorems 5 and 27 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`) and the error recomputed without the emulator (`acc_crate_err.py`); outputs in `accumulator/out/` |
-| `lean/` | Assumption 6, the bounds on rounding after it, Lemma 8, Theorem 9, Lemmas 11 to 13, Theorems 14, 15 (with Tables II and IV), 17, 19 (with its constants at `n = 8`, and `κ_DIV u < 1` for `n ≤ 13`), 21 (with its constants at `n = 8`) and 22 (given the published bounds on its double-word start, with its constants at `n = 8`), Corollary 18, the accumulator's lemma and Theorem 27 (its second term `c_K W`, growing with `K`, with Table III, its form for sums alone, and its thresholds at `n = 8`), Theorem 30 (with its constants at `n = 8`), Lemmas 32, 33, 34, 38, 39 and 43, Theorem 35, Theorems 40 and 42 for each case, Proposition 24, the start of Proposition 44, and Lemma 41 with the range of `x'_0` it rests on, proved in Lean 4 on FloatSpec, a port of Flocq; `lake build` fails on a proof left as `sorry`; its README gives the steps |
+| `accumulator/` | the accumulator of Theorems 5 and 27 on `fpemu.py` (`acc.py`), its bound in exact rationals (`acc_bound.py`), the constructed and random inputs (`acc_construct.py`, `acc_greedy.py`), their checks with controls (`acc_check.py`), multidouble's `OdAcc` on the constructed inputs (`acc_check/`), the error recomputed without the emulator (`acc_crate_err.py`) and the Lean modules of Proposition 28 (`acc_lean.py`); outputs in `accumulator/out/` |
+| `lean/` | Assumption 6, the bounds on rounding after it, Lemma 8, Theorem 9, Lemmas 11 to 13, Theorems 14, 15 (with Tables II and IV), 17, 19 (with its constants at `n = 8`, and `κ_DIV u < 1` for `n ≤ 13`), 21 (with its constants at `n = 8`) and 22 (given the published bounds on its double-word start, with its constants at `n = 8`), Corollary 18, the accumulator's lemma and Theorem 27 (its second term `c_K W`, growing with `K`, with Table III, its form for sums alone, and its thresholds at `n = 8`), Proposition 28, Theorem 30 (with its constants at `n = 8`), Lemmas 32, 33, 34, 38, 39 and 43, Theorem 35, Theorems 40 and 42 for each case, Proposition 24, the start of Proposition 44, and Lemma 41 with the range of `x'_0` it rests on, proved in Lean 4 on FloatSpec, a port of Flocq; `lake build` fails on a proof left as `sorry`; its README gives the steps |
 
 From this folder:
 
@@ -72,7 +72,7 @@ python3 sloppy_emu.py bound     # prints PASS; also bits and control
 python3 table1_inputs.py        # six inputs, their errors as multiples of u^8|Z|, prints PASS (about 10 seconds)
 python3 table1_inputs.py ties_away   # ties rounded away from zero: 6 of 6 below their quoted ratios (control)
 python3 table1_inputs.py perturb     # each leading part one ulp up: 6 of 6 below their quoted ratios (control)
-(cd lean && lake build)   # Build completed successfully (about 5 minutes the first time); lean/README.md fetches Mathlib
+(cd lean && lake build)   # Build completed successfully (about 9 minutes the first time); lean/README.md fetches Mathlib
 tectonic -X compile expansion-error-bounds.tex
 ```
 
@@ -89,4 +89,5 @@ python3 acc_construct.py 53 8 2048 none terms.txt   # out/acc_construct_p53_n8_K
 for f in 1 0; do python3 acc_greedy.py 53 8 2048 1 11 err $f | tail -1; done   # out/acc_random_p53_n8_K2048.txt
 cargo run --release --manifest-path acc_check/Cargo.toml -- acc out/acc_p53_n8_K2048_terms.txt   # out/acc_crate_result_K2048.txt
 python3 acc_crate_err.py out/acc_p53_n8_K2048_terms.txt "$(head -1 out/acc_crate_result_K2048.txt)"   # out/acc_crate_err_K2048.txt
+python3 acc_lean.py out/acc_p53_n8_K2048_terms.txt out/acc_p53_n8_K2048_emu_result.txt   # prints out/acc_lean_K2048.txt; with ../lean/ExpansionBounds as a third argument it also writes lean/ExpansionBounds/Prop28.lean and Prop28/
 ```
