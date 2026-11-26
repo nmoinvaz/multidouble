@@ -2,7 +2,7 @@ import ExpansionBounds.Trig4.All
 import ExpansionBounds.TrigN
 
 /-!
-# Theorem 35 at `n = 4` and `p = 53`: the sine and the cosine within `3.164155u^4`, the tangent within `6.426155u^4`
+# Theorem 35 at `n = 4` and `p = 53`: sine and cosine within `3.164155u^4`, tangent within `6.426155u^4`
 
 The remark after Theorem 35 at `n = 4`: SIN and COS with the coefficients and series lengths of
 `Trig4/Data.lean`, on `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, are within `3.164155u^4` of `sin x` and
@@ -23,8 +23,8 @@ theorem trig4_tiny : trig4Tab.TinyOk trig4C := by decide +kernel
 
 variable (p : ℤ) [Prec_gt_0 p]
 
-/-- the remark after Theorem 35 at `n = 4`: the sine and the cosine are within `3.164155u^4` of `sin x` and `cos x`,
-relatively, plus `5E_π` -/
+/-- the remark after Theorem 35 at `n = 4`: the sine and the cosine are within `3.164155u^4` of `sin x` and
+`cos x`, relatively, plus `5E_π` -/
 theorem thm35_sincos_4 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 4, F p (x i)) (hH : Htheta p 4 2 x)
     (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
     |∑ i ∈ range 4, sinN p 4 es trig4Tab.Ks trig4Tab.Kc trig4Tab.FsR trig4Tab.FcR x i -

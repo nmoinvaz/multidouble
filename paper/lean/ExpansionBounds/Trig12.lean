@@ -2,7 +2,7 @@ import ExpansionBounds.Trig12.All
 import ExpansionBounds.TrigN
 
 /-!
-# Theorem 35 at `n = 12` and `p = 53`: the sine and the cosine within `3582.787311u^12`, the tangent within `4929.367335u^12`
+# Theorem 35 at `n = 12` and `p = 53`: sine and cosine within `3582.787311u^12`, tangent within `4929.367335u^12`
 
 The remark after Theorem 35 at `n = 12`: SIN and COS with the coefficients and series lengths of
 `Trig12/Data.lean`, on `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, are within `3582.787311u^12` of `sin x` and
@@ -23,8 +23,8 @@ theorem trig12_tiny : trig12Tab.TinyOk trig12C := by decide +kernel
 
 variable (p : ℤ) [Prec_gt_0 p]
 
-/-- the remark after Theorem 35 at `n = 12`: the sine and the cosine are within `3582.787311u^12` of `sin x` and `cos x`,
-relatively, plus `5E_π` -/
+/-- the remark after Theorem 35 at `n = 12`: the sine and the cosine are within `3582.787311u^12` of `sin x` and
+`cos x`, relatively, plus `5E_π` -/
 theorem thm35_sincos_12 (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < 12, F p (x i)) (hH : Htheta p 12 2 x)
     (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
     |∑ i ∈ range 12, sinN p 12 es trig12Tab.Ks trig12Tab.Kc trig12Tab.FsR trig12Tab.FcR x i -
