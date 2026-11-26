@@ -57,10 +57,10 @@ fn pow2(e: i64) -> f64 {
     f64::from_bits(((e + 1023) as u64) << 52)
 }
 
-/// p/q in eight parts by greedy round-to-nearest (ties to even), for any p and 1 <= q < 2^60 (it panics otherwise). The value left is
-/// (-1)^neg n / (q 2^e) with n an integer; each part is RN(n 2^s / q) 2^-(e + s) for the s that puts n 2^s / q in
-/// [2^52, 2^53), formed by one u128 division, and n becomes the exact remainder. After the first part |n| <= q / 2. The
-/// parts after an exact ratio are zero.
+/// p/q in eight parts by greedy round-to-nearest (ties to even), for any p and 1 <= q < 2^60 (it panics otherwise). The
+/// value left is (-1)^neg n / (q 2^e) with n an integer; each part is RN(n 2^s / q) 2^-(e + s) for the s that puts n
+/// 2^s / q in [2^52, 2^53), formed by one u128 division, and n becomes the exact remainder. After the first part |n| <=
+/// q / 2. The parts after an exact ratio are zero.
 pub fn ratio_parts(p: i64, q: u64) -> [f64; 8] {
     assert!((1..1u64 << 60).contains(&q), "ratio_parts: q = {q}, not in [1, 2^60)");
     let d = q as u128;
