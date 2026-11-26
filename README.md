@@ -264,10 +264,11 @@ A proven bound holds for every input that meets its hypotheses: for the octo-dou
 Theorem 3.1 of Joldes, Muller and Popescu (2017) [[1]](#ref-jmp17), `fast_div`'s is their Theorem 7.1, which Muller and
 Rideau (2022) [[2]](#ref-mr22) proved formally, the square root's is Theorem 3.5 of Lefèvre, Louvet, Muller, Picot and
 Rideau (2023) [[3]](#ref-llmpr23), and the elementary functions' follow from the published bounds of the double-word
-operations they use. The octo-double bounds are proved in [the paper](paper/expansion-error-bounds.pdf), where the add,
-multiply, divide and square root each have a second term at most 2⁻¹⁵ of the first. The quad-double bounds are the
-thresholds the tests check, for the default `+`, `*` and `/`; `ieee_add`, `accurate_mul` and `accurate_div` keep 8 u⁴, 8
-u⁴ and 16 u⁴.
+operations they use. The double-double multiply's 5 u² is the tested threshold; the paper proves (6 + 2u)u²/(1 − u)²,
+about 6 u², for every pair of double-words, and `mul_recip`'s 7 u² and 2.00003 u⁸ for the double- and octo-double. The
+octo-double bounds are proved in [the paper](paper/expansion-error-bounds.pdf), where the add, multiply, divide and
+square root each have a second term at most 2⁻¹⁵ of the first. The quad-double bounds are the thresholds the tests
+check, for the default `+`, `*` and `/`; `ieee_add`, `accurate_mul` and `accurate_div` keep 8 u⁴, 8 u⁴ and 16 u⁴.
 
 The elementary functions' bounds also have a range and an absolute term. The absolute term exceeds the relative one only
 for exp below eˣ = 2⁻⁶⁴⁸ (2⁻⁹⁶⁹ for the double-double) and for ln where |ln x| < 2⁻⁸⁸ (2⁻⁹⁶⁸), and the ln bound is
