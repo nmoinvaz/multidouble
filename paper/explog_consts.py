@@ -743,6 +743,14 @@ def od_start(n, eps_dd, fl_dd, theta=2):
     return up(eps_dd + alpha_a), up(delta * (1 + eps_dd) + fl_dd + alpha_a + eta_l + Fr(1, 2 ** 2000)), delta
 
 
+def dd_quoted():
+    """the double-word logarithm's bounds as Proposition 44 quotes them, eps_DW = 15.351 u^2 and Phi_DW = 2^-1071:
+    the E(l) of the expansion's logarithm is defined with these, not with dd_log's unrounded values"""
+    u = Fr(1, 2 ** 53)
+    rdd, fdd, _ = dd_log()
+    return Fr(ceil3(rdd / u ** 2)) * u ** 2, Fr(2) ** int(lg2_up(fdd, 0))
+
+
 def od_log(n, s, d, q, eps_dd, fl_dd, theta=2, verbose=False):
     M = Expansion(n, 53, convex=True)
     E = Exp(M, s, d, theta)
@@ -786,7 +794,7 @@ def check():
     sample od_log's own setting, every k = 0 case at nine points and four k != 0 cases at 22, and fire on a concave
     function (the control)"""
     u = Fr(1, 2 ** 53)
-    rdd, fdd, _ = dd_log()
+    rdd, fdd = dd_quoted()
     n, (s, d, q) = 8, OD_PARAMS
     M = Expansion(n, 53, convex=True)
     E = Exp(M, s, d)
@@ -843,7 +851,8 @@ if __name__ == '__main__':
           f'worst at {"k = 0" if info["k0"] else "k != 0"}, m {info["m"]}, d {info["d"]}, sign {info["sigma"]}, '
           f'|r| in '
           f'[{float(info["a"]):.4f}, {float(info["b"]):.4f}]; reduction {fmt(red["dr"], u, 8)} u^8')
-    rel, floor, rows, (e1, e0, delta) = od_log(8, s, d, q, rdd, fdd)
+    qdd, qfl = dd_quoted()
+    rel, floor, rows, (e1, e0, delta) = od_log(8, s, d, q, qdd, qfl)
     print(f'OD log <= {fmt(rel, u, 8)} u^8 |ln x| + 2^{lg2_up(floor)} (quoted {ceil3(rel / u ** 8)} u^8 and '
           f'2^{lg2_up(floor, 0)}); start within {fmt(e1, u, 2)} u^2 |ln x| + 2^{lg2_up(e0)} of ln x on either branch '
           f'(the DD log of to_dd(x), |ln x - ln to_dd(x)| <= 2^{lg2_up(delta)}, or for x_0 >= 2^1023 that of x/2 '
@@ -865,8 +874,8 @@ if __name__ == '__main__':
     print('the theorems at other n (theta = 2, s = 6, d and q the least that serve)')
     for n in (4, 12):
         s = 6
-        d, q = degree(n, s), order(n, rdd)
+        d, q = degree(n, s), order(n, qdd)
         w, _, _ = od_exp(n, s, d)
-        rel, floor, _, _ = od_log(n, s, d, q, rdd, fdd)
+        rel, floor, _, _ = od_log(n, s, d, q, qdd, qfl)
         print(f'n={n:2d} d={d} q={q}: exp <= {fmt(w, u, n)} u^n e^x + {n} 2^-1074, log <= {fmt(rel, u, n)} u^n '
               f'|ln x| + 2^{lg2_up(floor)}')
