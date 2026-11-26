@@ -997,6 +997,10 @@ fn special_values() {
         assert_eq!(f(709.8).exp().parts(), f(f64::INFINITY).parts());
         assert!(hi(f(709.78).exp()).is_finite());
         assert_eq!(hi(f(-745.21).exp()).to_bits(), 0);
+        // fl(-745.2) < -745.2 lies below the range: +0 in every part, whatever the low part
+        let zero = |x: T| x.parts().iter().all(|p| p.to_bits() == 0);
+        let low = [-745.2, -1.0 / (1u64 << 45) as f64, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        assert!(zero(f(-745.2).exp()) && zero(T::from_parts(&low[..T::N]).exp()));
         assert!(hi(f(-745.0).exp()) > 0.0, "e^-745 rounds to the least subnormal");
         assert!(hi(f(f64::NAN).ln()).is_nan());
         assert!(hi(f(-1.0).ln()).is_nan());
