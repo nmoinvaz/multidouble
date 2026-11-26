@@ -316,9 +316,14 @@ theorem exp8Pi_nonneg (k0 : Bool) {hi : ℚ} (hhi : 0 ≤ hi) (i : ℕ) : 0 ≤ 
 /-- Theorem 40 (`thm:exp`) at `n = 8` and `p = 53`, for `EXP_{8,6,43}` with multidouble's constants and binary64's
 subnormals, without overflow (the model has no largest finite value, and the paper's theorem takes a finite result):
 for `x` in `F` on `H(2)` with `|x_0| ≤ 745.2`, with `e` the exponent of step (2)'s `U` (`-1023` where
-`U < 2^{-1022}`), `m = max(0, e + 7)` and the degree `d'` of step (3), every scaling rounded by `S`, which keeps a
-value or rounds one below `2^{-1022}` to a multiple of `2^{-1074}`, and the last scaling in two steps, `2^{k₁}` then
-`2^{k₂}` with `k₂ ≤ 0`: `|y - e^x| ≤ 3.661u^8 e^x + 8·2^{-1074}` -/
+`U < 2^{-1022}`), `m = max(0, e + 7)` and the degree `d'` of step (3), the core's scaling of `r' = 2^{-m}r` up by
+`2^{m-e}` exact, as in Lemma 33, and the scaling by `2^{-m}`, the scaling back and the last scaling rounded by `S`,
+which keeps a value or rounds one below `2^{-1022}` to a multiple of `2^{-1074}`, the last in two steps, `2^{k₁}` then
+`2^{k₂}` with `k₂ ≤ 0`: `|y - e^x| ≤ 3.661u^8 e^x + 8·2^{-1074}`. multidouble takes `k₁ = k/2`, rounded toward zero, so
+`k₂ > 0` where `k > 0`; both steps then scale up, which binary64 does exactly, and the value is that of the split
+`(k, 0)`. For binary64 the run must also meet the paper's (A2′): every product, fused multiply-add and quotient returns
+what it would with an unbounded exponent range, as in the model, but those that only select `k` or an exponent, which
+the paper exempts -/
 theorem thm40_8 (hp : p = 53) (S : ℝ → ℝ)
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x) (hx0 : |x 0| ≤ 7452 / 10) (k₁ k₂ : ℤ)
