@@ -1,0 +1,38 @@
+k = 0   d = 27  l in [3.124e-02, 3.466e-01]  ratio <= 13.350675 u^2
+k = 0   d = 24  l in [1.562e-02, 3.126e-02]  ratio <= 5.561862 u^2
+k = 0   d = 20  l in [7.812e-03, 1.563e-02]  ratio <= 5.277147 u^2
+k = 0   d = 17  l in [3.906e-03, 7.813e-03]  ratio <= 5.137642 u^2
+k = 0   d = 15  l in [1.953e-03, 3.907e-03]  ratio <= 5.068590 u^2
+k = 0   d = 14  l in [9.765e-04, 1.954e-03]  ratio <= 5.034238 u^2
+k = 0   d = 12  l in [4.882e-04, 9.766e-04]  ratio <= 5.017105 u^2
+k = 0   d = 11  l in [2.441e-04, 4.883e-04]  ratio <= 5.008549 u^2
+k = 0   d = 10  l in [6.103e-05, 2.442e-04]  ratio <= 5.004274 u^2
+k = 0   d =  9  l in [3.051e-05, 6.104e-05]  ratio <= 5.001069 u^2
+k = 0   d =  8  l in [7.629e-06, 3.052e-05]  ratio <= 5.000535 u^2
+k = 0   d =  7  l in [9.536e-07, 7.630e-06]  ratio <= 5.000134 u^2
+k = 0   d =  6  l in [5.960e-08, 9.537e-07]  ratio <= 5.000017 u^2
+k = 0   d =  5  l in [9.313e-10, 5.961e-08]  ratio <= 5.000002 u^2
+k = 0   d =  4  l in [9.094e-13, 9.314e-10]  ratio <= 5.000001 u^2
+k = 0   d =  3  l in [1.734e-18, 9.095e-13]  ratio <= 5.000003 u^2
+k = 0   d =  2  l in [0, 1.735e-18]  E(0) <= 0.7501 2^-1071  slope <= 5.000041 u^2
+k = 0   d =  1  l in [0, 1.161e-31]  E(0) <= 0.6251 2^-1071  slope <= 6.707623 u^2
+k != 0  d = 27  4 intervals  ratio <= 15.350675 u^2
+k != 0  d = 24  4 intervals  ratio <= 2.501505 u^2
+k != 0  d = 20  4 intervals  ratio <= 2.237917 u^2
+k != 0  d = 17  4 intervals  ratio <= 2.115814 u^2
+k != 0  d = 15  4 intervals  ratio <= 2.057129 u^2
+k != 0  d = 14  4 intervals  ratio <= 2.028371 u^2
+k != 0  d = 12  4 intervals  ratio <= 2.014138 u^2
+k != 0  d = 11  4 intervals  ratio <= 2.007057 u^2
+k != 0  d = 10  1 intervals  ratio <= 2.003526 u^2
+k != 0  d =  9  1 intervals  ratio <= 2.000881 u^2
+k != 0  d =  8  1 intervals  ratio <= 2.000441 u^2
+k != 0  d =  7  1 intervals  ratio <= 2.000111 u^2
+k != 0  d =  6  1 intervals  ratio <= 2.000014 u^2
+k != 0  d =  5  1 intervals  ratio <= 2.000001 u^2
+k != 0  d =  4  1 intervals  ratio <= 2.000001 u^2
+k != 0  d =  3  1 intervals  ratio <= 2.000001 u^2
+k != 0  d =  2  1 intervals  ratio <= 2.000001 u^2
+k != 0  d =  1  1 intervals  ratio <= 2.000001 u^2
+72 + 168 = 240 evaluations at the ends; largest ratio 15.350675 u^2, largest slope from E(0) 6.707623 u^2 (bound 15.351); E(0) <= 0.7501 2^-1071
+control: the largest ratio is above 15.350 u^2, as it must be

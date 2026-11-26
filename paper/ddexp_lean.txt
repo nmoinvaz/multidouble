@@ -1,0 +1,19 @@
+d = 27  e in [-5, -2]  8 intervals  eps <= 5.464021 u^2
+d = 24  e in [-6, -6]  8 intervals  eps <= 2.800234 u^2
+d = 20  e in [-7, -7]  8 intervals  eps <= 2.744612 u^2
+d = 17  e in [-8, -8]  8 intervals  eps <= 2.718376 u^2
+d = 15  e in [-9, -9]  8 intervals  eps <= 2.705638 u^2
+d = 14  e in [-10, -10]  8 intervals  eps <= 2.699362 u^2
+d = 12  e in [-11, -11]  8 intervals  eps <= 2.696247 u^2
+d = 11  e in [-12, -12]  8 intervals  eps <= 2.694695 u^2
+d = 10  e in [-14, -13]  1 intervals  eps <= 2.694247 u^2
+d =  9  e in [-15, -15]  1 intervals  eps <= 2.693392 u^2
+d =  8  e in [-17, -16]  1 intervals  eps <= 2.693285 u^2
+d =  7  e in [-20, -18]  1 intervals  eps <= 2.693184 u^2
+d =  6  e in [-24, -21]  1 intervals  eps <= 2.693152 u^2
+d =  5  e in [-30, -25]  1 intervals  eps <= 2.693148 u^2
+d =  4  e in [-40, -31]  1 intervals  eps <= 2.693148 u^2
+d =  3  e in [-59, -41]  1 intervals  eps <= 2.693148 u^2
+d =  2  e in [-118, -60]  1 intervals  eps <= 2.693148 u^2
+d =  1  e <= -119  1 intervals  eps <= 2.693148 u^2
+delta* <= 0.693148 u^2, |r| <= 0.346573590281, 148 cases, largest 5.464021 u^2

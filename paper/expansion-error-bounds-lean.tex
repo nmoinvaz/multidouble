@@ -9,15 +9,17 @@ FloatSpec~\cite{FloatSpec}, a port of Flocq~\cite{BM11} that supplies the roundi
 $\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md}. Table~\ref{tab:lean} gives the
 files of \texttt{ExpansionBounds/} and the theorems for each statement.
 \begin{itemize}
-\item The proofs hold for every precision $p \ge 2$. Lemmas~\ref{lem:red} and~\ref{lem:lnb}, Theorem~\ref{thm:trig}
-and the constants at $n = 8$ are stated at $p = 53$.
+\item The proofs hold for every precision $p \ge 2$, except that Lemmas~\ref{lem:red} and~\ref{lem:lnb},
+Theorem~\ref{thm:trig}, Proposition~\ref{prop:ddexplog} and the constants at $n = 8$ are stated at $p = 53$, and
+each published double-word theorem from its own precision, 3 to 7.
 \item A constant is evaluated by Lean's kernel on a copy of its recursion over the rationals, which a lemma equates
 with the recursion over the reals (\texttt{Eval.lean}, \texttt{DivEval.lean}, \texttt{SqrtEval.lean}). Where exact
 values grow too long the copy rounds up, which the bounds of Lemma~\ref{lem:g} allow because they grow with their
 arguments (\texttt{GMono.lean}, \texttt{TrigEval.lean}, \texttt{ExpEval.lean}). The longest runs are cut into steps
 that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/}, \texttt{Exp8/},
-and \texttt{Trig2/} and \texttt{Trig4/} for the remark after Theorem~\ref{thm:trig}, written by
-\texttt{acc\_lean.py}, \texttt{trig\_lean.py} and \texttt{exp\_lean.py}). That remark's bounds at $n = 12$ are computed
+\texttt{DDExp2/}, \texttt{DDLog2/}, and \texttt{Trig2/} and \texttt{Trig4/} for the remark after
+Theorem~\ref{thm:trig}, written by \texttt{acc\_lean.py}, \texttt{trig\_lean.py}, \texttt{exp\_lean.py},
+\texttt{ddexp\_lean.py} and \texttt{ddlog\_lean.py}). That remark's bounds at $n = 12$ are computed
 (\texttt{trig\_lean.py}), not proved: the kernel would need some eight hours for them.
 \item No declaration depends on an axiom other than \texttt{propext}, \texttt{Classical.choice} and
 \texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
@@ -27,9 +29,10 @@ kernel proves false (\texttt{Controls/}).
 Proposition~\ref{prop:ddexplog} are proved as well: Theorems~2.2, 3.1, 4.1, 4.3 and~7.1 of~\cite{JMP17}, which
 \cite{MR22} proved in Coq, Theorem~2.7 of~\cite{MR22} and Theorem~3.5 of~\cite{LLMPR23} (\texttt{DWord.lean},
 \texttt{DWDiv.lean}, \texttt{DWSqrt.lean}, \texttt{DWPlusFP.lean}, \texttt{DWTimesFP3.lean},
-\texttt{AccDWPlusDW.lean}, \texttt{DWTimesDW2.lean}).
-\item Two statements are proved in part. Theorem~\ref{thm:log} is proved for each case, and its constant at
-$n = 8$ is computed (\texttt{explog\_consts.py}). Proposition~\ref{prop:ddexplog} is proved for its start.
+\texttt{AccDWPlusDW.lean}, \texttt{DWTimesDW2.lean}). Proposition~\ref{prop:ddexplog} is proved on those algorithms;
+the quotient $x_l/x_h$ of the logarithm's start enters by its bound $u|x_l/x_h| + \eta_0$, exact for $x_h = 1$.
+\item One statement is proved in part: Theorem~\ref{thm:log} is proved for each case, and its constant at $n = 8$
+is computed (\texttt{explog\_consts.py}).
 \end{itemize}
 
 \begin{table*}[tp]
@@ -109,8 +112,16 @@ Proposition~\ref{prop:ddexplog}, its operations & \texttt{DDOps.lean}, \texttt{D
   \texttt{DWPlusFP.lean}, \texttt{DWTimesFP3.lean}, \texttt{AccDWPlusDW.lean}, \texttt{DWTimesDW2.lean} &
   \texttt{dd\_horner\_step}, \texttt{dwPlusFP\_good}, \texttt{dwPlusFP\_sub\_one}, \texttt{dwTimesFP3\_good},
   \texttt{accDWPlusDW\_good}, \texttt{dwTimesDW2\_good} \\
-Proposition~\ref{prop:ddexplog} & \texttt{DDLog.lean} & \texttt{prop44\_start}, \texttt{prop44\_start\_exact},
-  \texttt{prop44\_start\_small} \\
+Proposition~\ref{prop:ddexplog}, \texttt{DD::exp} & \texttt{DDExpRed.lean}, \texttt{DDExpCore.lean},
+  \texttt{DDExp.lean}, \texttt{DDExpEval.lean}, \texttt{DDExp2.lean} & \texttt{dd\_expred\_b}, \texttt{dd\_core},
+  \texttt{dd\_thm40\_case\_sub}, \texttt{ddExpEps\_le}, \texttt{prop44\_exp} \\
+Proposition~\ref{prop:ddexplog}, \texttt{DD::ln} & \texttt{DDLog.lean}, \texttt{DDLogThm.lean},
+  \texttt{DDLogSub.lean}, \texttt{Convex.lean}, \texttt{DDLogCvx.lean}, \texttt{DDLogEval.lean},
+  \texttt{DDLogChord.lean}, \texttt{DDLogCase.lean}, \texttt{DDLogAt.lean}, \texttt{DDLogDW.lean},
+  \texttt{DDLog2.lean}, \texttt{DDLn.lean}, \texttt{DDSpec.lean} & \texttt{prop44\_start},
+  \texttt{prop44\_start\_exact}, \texttt{prop44\_start\_small}, \texttt{dd\_thm42\_case\_sub}, \texttt{chord\_le\_mul},
+  \texttt{cvx\_ddLogBoundC}, \texttt{dd\_log\_chord\_cert}, \texttt{ddl\_core}, \texttt{prop44\_ln},
+  \texttt{ddOps\_spec}, \texttt{prop44\_exp\_dd}, \texttt{prop44\_ln\_dd}, \texttt{prop44\_ln\_dd\_dw} \\
 \bottomrule
 \end{tabular}
 \end{table*}
