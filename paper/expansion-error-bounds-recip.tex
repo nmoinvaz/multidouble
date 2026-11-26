@@ -1,11 +1,12 @@
-% Ratios of integers and multidouble's double-double product.
+% Ratios of integers, multidouble's double-double product, and the squares of the relaxed series product.
 % \input after the exponential's section of expansion-error-bounds.tex.
 
-\section{Ratios of integers}\label{sec:recip}
+\section{Ratios of integers and products of series}\label{sec:recip}
 
 A precision-generic power series needs constants such as $1/k$ in its own rounding: \texttt{DD::ONE / k} widened to
 eight parts keeps an error of $2^{-106}$. multidouble's \texttt{recip::ratio\_parts(p, q)} forms $p/q$ as its greedy
-expansion by integer arithmetic, and \texttt{mul\_recip(k)} multiplies by it.
+expansion by integer arithmetic, and \texttt{mul\_recip(k)} multiplies by it. Its \texttt{series::Relaxed} sums the
+Cauchy products of a recurrence in van der Hoeven's squares~\cite{vdH02}.
 
 \begin{lemma}\label{lem:greedy}
 Let $x$ be real, $r_0 = \RN(x)$ and $r_i = \RN(x - r_0 - \dots - r_{i-1})$. Then $|r_{i+1}| \le u|r_i|$, so $r_0,
@@ -76,3 +77,22 @@ A product within $\varepsilon$ of $xc$, by a constant within $\delta$ of $1/k$, 
 \delta$ of $x/k$, relatively; $\varepsilon$ is Proposition~\ref{prop:ddmul}'s and Theorem~\ref{thm:t3}'s for MUL on
 $H(2)$, $\delta$ Lemma~\ref{lem:greedy}'s.
 \end{proof}
+
+\begin{proposition}\label{prop:relaxed}
+Let $s_0 = 2^a$ be the least side. At step $e$, \texttt{Relaxed} forms for each side $s = 2^j \ge s_0$ with $(m + 1)s =
+e - 1$, $m \ge 1$, the square of the terms $x_iy_j$ with $i \in [ms + 1, (m + 1)s]$ and $j \in [s + 1, 2s]$, and for $m
+\ge 2$ its transpose. Each term with $i, j \ge s_0 + 1$ lies in exactly one square of one step, which takes
+coefficients below $e$ and gives orders $e + 1$ and above. At order $k \ge 2d$, $d = s_0 + 1$, the terms with $i < d$
+or $k - i < d$ are summed directly, once each.
+\end{proposition}
+
+\begin{proof}
+With $i' = i - 1$ and $j' = j - 1$, the term lies in the square of side $2^{\lfloor\log_2 j'\rfloor}$ with $m =
+\lfloor i'/s\rfloor$ where $\lfloor\log_2 i'\rfloor \ge \lfloor\log_2 j'\rfloor$, and otherwise in the transpose of
+side $2^{\lfloor\log_2 i'\rfloor}$, with $m \ge 2$; a square's $j' \in [s, 2s)$ fixes $s$, and $i' \in [ms, (m+1)s)$
+fixes $m$, so no other square holds it. The square of $(s, m)$ belongs to step $(m + 1)s + 1$ alone.
+\end{proof}
+
+The bound of \texttt{series::mullow}, each block pair within $2^{-\mathrm{prec}}$ of its smallest term, is tested, not
+proved; the integer convolution is exact by its check at run time, and the coefficients' rounding and the dropped
+digit weights are what a proof would bound.

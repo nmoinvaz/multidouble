@@ -113,3 +113,4 @@ import ExpansionBounds.RatioParts
 import ExpansionBounds.RatioBounds
 import ExpansionBounds.DDMul
 import ExpansionBounds.MulRecip
+import ExpansionBounds.Relaxed
