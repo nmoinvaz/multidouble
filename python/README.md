@@ -22,6 +22,8 @@ print(md.isa())                           # the SIMD backend in use, detected at
   (n / 8 + 12) 2^-106 of sum |x_i y_i|; returns (hi, lo) as floats.
 - `dd_matvec(Ah, Al, vh, vl)`: A v in double-double, A as (n, m) row-major hi and lo arrays, each row of the result
   a `dd_dot`.
+- `dd_matmul(Ah, Al, Bh, Bl)`: A B in double-double, A as (n, m) and B as (m, k) hi and lo arrays, each entry a
+  `dd_dot` of a row of A and a column of B, so column j is bitwise `dd_matvec(A, B[:, j])`.
 - `dd_horner(ch, cl, a)`: sum_k c_k a^k by Horner's rule in double-double at a float a, the coefficients c_0, ..., c_N
   as sequences of N + 1 hi and lo arrays of one length n or as (N + 1, n) arrays, each step `dd_add(c_k, dd_scale(p,
   a))` bit for bit, 8 values at a time; returns the (hi, lo) arrays of the n sums. Float64 powers a**k would carry
