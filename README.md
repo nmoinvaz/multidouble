@@ -37,8 +37,12 @@ divisions instead of three, within a proven 15 u² + 56 u³ barring underflow an
 about 1/1.35 of the time of `*` and gives up 7 to 9 of the 424 bits. An octo-double meets a double-double through
 `OD::mul_dd`, `OD::add_dd` and `OdAcc::add_prod_dd`, which skip the zero parts' products and give the promoted
 operation's bits, a NaN's sign and payload aside. `DD::new`, `QD::new` and `OD::new` (and `OV::new` on each lane) take
-parts in any order and return their exact sum, largest part first, each part at most the ulp of the one before. The API
-documentation lists the rest, such as division by a shared divisor and conversion to arrays of parts.
+parts in any order and return their exact sum, largest part first, each part at most the ulp of the one before.
+`DD::recip_int(k)`, `QD::recip_int(k)` and `OD::recip_int(k)` are 1/k, and `from_ratio(p, q)` is p/q, rounded to the
+type's parts by exact integer arithmetic (`recip::ratio_parts`): constants that a precision-generic series needs in its
+own rounding, where `DD::ONE / k` widened to quad- or octo-double keeps a 2^-106 error. The lanes have `recip_int` and
+`mul_recip(k)`. The API documentation lists the rest, such as division by a shared divisor and conversion to arrays of
+parts.
 
 ### Packed storage
 
