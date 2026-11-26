@@ -110,6 +110,7 @@ The table lists them by file.
 | `ExpansionBounds/RatioBounds.lean` | Proposition 47 (`prop:ratio`): for `\|p\| ≤ 2^63` and `1 ≤ q < 2^60`, what is left below `2^63`, `q 2^11` and `q/2` before the first, second and later parts (`rpState_inv`), so shifts in `[-11, 112]`, dividends and products below `2^127`, divisors below `2^72` and normal scales (`rp_bounds`) |
 | `ExpansionBounds/DDMul.lean` | Proposition 48 (`prop:ddmul`): multidouble's double-double product, TwoProd and two fused multiply-adds, a double word within `(6 + 2u)u²/(1 - u)²` of `xy`, relatively, for `p ≥ 3` (`ddMul_good`) |
 | `ExpansionBounds/MulRecip.lean` | Corollary 49 (`cor:mulrecip`): `DD::mul_recip` within `ε_P(1 + u²(1 + u)) + u²(1 + u)` and `OD::mul_recip` on `H(2)` within `ε_8(1 + u^8(1 + u)) + u^8(1 + u)`, `ε_8 = u^8 + 2^37.93 u^9((1 - 2u)/(1 - 4u))²`, of `xr` for any real `r` (`dd_mul_greedy`, `od_mul_greedy`) |
+| `ExpansionBounds/Relaxed.lean` | Proposition 50 (`prop:relaxed`): the squares of `series::Relaxed` (`relStep`) cover each term with both indices at least `s_0 + 1` exactly once (`relaxed_cover`), from coefficients below their step for orders above it (`relStep_terms`), and the direct terms of `Relaxed::sum` are each summed once (`relaxed_direct`) |
 
 From this folder:
 
@@ -154,7 +155,7 @@ false:
 | `Controls/Log8DD.lean` | 2 on the start: the double-double `ln 2` with a larger trailing part, `δ_0` against `2^-104` |
 | `Controls/ExpRed8.lean` | 8 on Lemma 38 at `n = 8`: the enclosure of `ln 2` four units tighter at each end, the next float as `c_r`, each bound one unit lower |
 | `Controls/Exp8.lean` | 8 on Theorem 40's constant: `3.660u^8`, a state two steps off, a group of the wrong degree, part bounds halved, a bin left out |
-| `Controls/Recip.lean` | 1: the greedy pair of `1/191516586041457763` is no double word |
+| `Controls/Recip.lean` | 3: the greedy pair of `1/191516586041457763` is no double word; without the transposes the squares miss the term `(2, 5)`, which the full squares hold |
 
 A claim is written as its negation, which the kernel has to prove: a check that it could not evaluate fails in the
 same way as a false one, and would otherwise pass for a control.
