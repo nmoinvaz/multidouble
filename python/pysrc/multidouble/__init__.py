@@ -10,7 +10,8 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``dd_matvec``: A v in double-double, each row a ``dd_dot``;
 - ``dd_horner``: sum_k c_k a^k by Horner's rule in double-double at a float a, each step ``dd_add(c_k, dd_scale(p,
   a))`` bit for bit;
-- ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double;
+- ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double; ``DDLu`` factors A once for
+  several solves (and solves with A^T, several right-hand sides at once), or factors a float64 matrix in f64;
 - ``qd_solve``: x with A x = b by LU with partial pivoting in quad-double, A and b as four float64 part arrays each,
   to about cond(A) 2^-209; ``QDLu`` factors A once for several solves (and solves with A^T);
 - ``dd_logdet``, ``qd_logdet``: the sign and ln|det A| of a real square matrix by the LU of ``dd_solve`` or
@@ -42,8 +43,8 @@ import numpy as np
 from . import _multidouble as _md
 from ._multidouble import isa
 
-__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "qd_solve", "QDLu", "qd_add_dd",
-           "qd_axpy", "isa", "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot",
+__all__ = ["add", "sub", "mul", "div", "dd_op", "dd_matvec", "dd_horner", "dd_solve", "DDLu", "qd_solve", "QDLu",
+           "qd_add_dd", "qd_axpy", "isa", "two_sum", "two_prod", "dd_add", "dd_scale", "dd_axpy", "dd_norm", "dd_from_mp", "dd_dot",
            "gcr", "dd_logdet", "qd_logdet"]
 
 
@@ -130,6 +131,41 @@ def dd_solve(ah, al, bh, bl):
     """x with A x = b in double-double, by LU with partial pivoting: A as (n, n) hi and lo arrays, b as hi and lo
     arrays of length n. Returns the (hi, lo) arrays of x. Raises ValueError if A is singular."""
     return _md.dd_solve(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+class DDLu:
+    """The double-double LU of A with partial pivoting (the Rust crate's DDLu), factored once for several solves:
+    DDLu(ah, al) with A as (n, n) hi and lo arrays, each entry the exact sum of its two parts, or DDLu.factor_f64(a),
+    the f64 LU of a float64 matrix, e.g. the preconditioner of a mixed-precision solve. par: update the trailing
+    columns on rayon's threads (RAYON_NUM_THREADS sets how many), with the same bits. The factorization costs about
+    n^3 / 3 double-double multiply-adds (f64 ones for factor_f64) and each solve about n^2. Raises ValueError if A is
+    singular (an exactly zero pivot) or has an entry that is not finite."""
+
+    def __init__(self, ah, al, par=False):
+        self._lu = _md.DDLu(_f64(ah, "ah"), _f64(al, "al"), bool(par))
+
+    @classmethod
+    def factor_f64(cls, a, par=False):
+        """the LU of a float64 matrix A ((n, n)) in plain f64 (backward stable, L U = P (A + E) with |E| of the order
+        of n 2^-53 |L| |U|), its factors stored with zero lo parts, so that solve runs in double-double on them: x to
+        about cond(A) 2^-53 relative"""
+        self = cls.__new__(cls)
+        self._lu = _md.DDLu.factor_f64(_f64(a, "a"), bool(par))
+        return self
+
+    @property
+    def n(self):
+        """the order of A"""
+        return self._lu.n
+
+    def solve(self, bh, bl, transpose=False, par=False):
+        """x with A x = b in double-double, or A^T x = b when transpose: b as hi and lo arrays of shape (n,) or (n, k)
+        (k right-hand sides, the columns of b), each entry the exact sum of its two parts. k columns run eight to a
+        lane vector (and the groups of eight on rayon's threads when par), each column bitwise its own solve of shape
+        (n,). With the factors of DDLu(ah, al) (not factor_f64) and normalized parts (hi the float64 nearest hi + lo),
+        A x = b gives the bits of dd_solve. Returns the (hi, lo) arrays of x, of b's shape. Raises ValueError if b has
+        an entry that is not finite or the wrong shape."""
+        return self._lu.solve(_f64(bh, "bh"), _f64(bl, "bl"), bool(transpose), bool(par))
 
 
 def _parts(names, *v):
