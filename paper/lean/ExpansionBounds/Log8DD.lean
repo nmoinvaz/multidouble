@@ -72,8 +72,10 @@ theorem pairExp_dw {v : ℝ × ℝ} (hv : DW p v) :
     simp only [show i ≠ 0 by omega, show i ≠ 1 by omega, ↓reduceIte]
 
 /-- Theorem 42 (`thm:log`) at `n = 8` and `p = 53` with the start computed: for `x > 0` in `F` on `H(2)` with
-`|ln x| ≤ 745.1`, and `y_0` the double-double logarithm of step (1)'s double word (plus the double-double `ln 2`
-where `x_0 ≥ 2^{1023}`), `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`. What remains assumed: binary64's rounding `S`
+`|ln x| ≤ X - δ_0`, `X = 745.2`, and `y_0` the double-double logarithm of step (1)'s double word (plus the
+double-double `ln 2` where `x_0 ≥ 2^{1023}`), `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`. Proposition 44 is applied to
+step (1)'s double word `x̃`, whose logarithm is within `δ_0` of `ln x`, which is why the range ends `δ_0` below `X`;
+a positive `x` with binary64 parts has `|ln x| ≤ 1074 ln 2 < 744.5`. What remains assumed: binary64's rounding `S`
 of a scaling; the quotient `w` of `DD::ln`'s start within `u|x_l/x_h| + 2^{-1075}` and exact for `x_h = 1`; the
 exponents that the two runs select (`hrun` for `DD::ln`, `hsel` for LOG); and no overflow, the model having no
 largest number. Each run scales by its `2^k` in two steps, with `k₂ ≤ 0`; multidouble takes `k₁ = k/2`, rounded toward
@@ -84,7 +86,7 @@ whose error a hypothesis bounds, and those that only select `k`, an exponent or 
 theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x) (hX0 : 0 < ∑ i ∈ range 8, x i)
-    (hX : |Real.log (∑ i ∈ range 8, x i)| ≤ 7451 / 10) (w : ℝ)
+    (hX : |Real.log (∑ i ∈ range 8, x i)| ≤ 7452 / 10 - ((log8D0 : ℚ) : ℝ)) (w : ℝ)
     (hw0 : |w - (ln8Xs p S x).2 / (ln8Xs p S x).1| ≤
       u p * |(ln8Xs p S x).2 / (ln8Xs p S x).1| + (2 : ℝ) ^ (-1075 : ℤ))
     (hw1 : (ln8Xs p S x).1 = 1 → w = (ln8Xs p S x).2) (j₁ j₂ f fφ ft fc : ℤ)
@@ -93,7 +95,8 @@ theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
     (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
-  have hX' : |Real.log (∑ i ∈ range 8, x i)| ≤ 7452 / 10 := hX.trans (by norm_num)
+  have hD0 : (0 : ℝ) ≤ ((log8D0 : ℚ) : ℝ) := by exact_mod_cast log8_start_consts.2.2.2
+  have hX' : |Real.log (∑ i ∈ range 8, x i)| ≤ 7452 / 10 := hX.trans (by linarith)
   have hD : ((log8D0 : ℚ) : ℝ) ≤ 1 / 10 := by
     have := (Rat.cast_le (K := ℝ)).mpr ln8CL_consts.2.2.2
     push_cast at this

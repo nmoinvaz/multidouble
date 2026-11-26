@@ -240,7 +240,7 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
 
 \begin{theorem}\label{thm:log}
 Assume (A2$'$), (A3), $p = 53$ and $n \le 31$, let $x$ satisfy $H(\theta)$ with
-$x_0 > 0$ and $|\ln x| \le X$, let the result $y$ of LOG$_{n,s,d,q}$ be finite, and let $\mathcal E(\ell)$ be the bound
+$x_0 > 0$ and $|\ln x| \le X - \delta_0$, let the result $y$ of LOG$_{n,s,d,q}$ be finite, and let $\mathcal E(\ell)$ be the bound
 defined above for $\ell \ge |\ln x|$.
 Then $|y - \ln x| \le \mathcal E(\ell)$ in the case of the run. With $\varepsilon_{\ln}$ and $\Phi$ defined from
 $\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, and at $n = 8$, $s = 6$, $d = 43$, $q
@@ -250,7 +250,8 @@ $\mathcal E$ in the proof, $|y - \ln x| \le \varepsilon_{\ln}|\ln x| + \Phi$, an
 
 \begin{proof}
 \emph{The start.} Proposition~\ref{prop:ddexplog} gives $|y_0 - \ln\tilde x| \le \epsilon_{\rm DW}|\ln\tilde x| +
-\Phi_{\rm DW}$ for the double-word $\tilde x$ of step (1) where $x_0 < 2^{1023}$. Where $x_0 \ge 2^{1023}$, the same
+\Phi_{\rm DW}$ for the double-word $\tilde x$ of step (1) where $x_0 < 2^{1023}$, as $|\ln\tilde x| \le |\ln x| +
+\delta_0 \le X$ by the bound below; a positive $x$ with binary64 parts has $|\ln x| \le 1074\ln 2 < 744.5$. Where $x_0 \ge 2^{1023}$, the same
 holds for the start's first term against $\ln(x/2)$, the halving moving each part of $x$ by at most $\eta_0$, which
 changes $\ln x$ by less than $2^{-2000}$; that term is at most $\ell + 1$ in magnitude, so AccurateDWPlusDW adds at most
 $e_{\rm A}(\ell + 1)$ and $c_L$ adds $\eta_L$, and $|y_0 - \ln x|$ is again within $E(\ell)$. Its tail is the sum
