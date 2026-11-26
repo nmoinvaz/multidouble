@@ -81,10 +81,11 @@ The table lists those proved so far.
 From this folder:
 
 ```sh
-# Mathlib's prebuilt files for the modules FloatSpec imports
+# Mathlib's prebuilt files for the modules FloatSpec imports, and for the convexity that `Convex.lean` uses
 lake exe cache get Mathlib.Tactic Mathlib.Analysis.Real.Sqrt Mathlib.Algebra.Order.Floor.Ring \
   Mathlib.Data.Nat.Digits.Defs Mathlib.Data.Nat.Log Mathlib.Algebra.Divisibility.Basic \
-  Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic
+  Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic Mathlib.Analysis.Convex.Mul \
+  Mathlib.Analysis.Convex.SpecificFunctions.Basic
 lake build   # about 25 minutes the first time: FloatSpec, then the kernel's runs for Proposition 28 and Theorems 35 and 40
 ```
 
