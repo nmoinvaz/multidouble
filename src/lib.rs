@@ -85,6 +85,7 @@ pub mod pack;
 pub mod precision;
 pub mod qd;
 pub mod qv;
+pub mod series;
 pub mod simd;
 pub mod trig;
 pub mod v8;
