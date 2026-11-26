@@ -15,9 +15,6 @@ most `u³/2`, `u²`, `2u²` and `4u²`. The cases are those of the paper's secti
 `xy ≥ 2(1 - u)²`; and `x_h y_h < 2`, where `x_h + y_h ≤ 3 - 2u` (the paper's Lemma 2.10), so `|t_ℓ1 + x_ℓ y_h| ≤ 3u`
 and the last two errors are at most `3u²` together, with `xy ≥ (1 + u)²`, or `x_h` or `y_h` is `1`, `c_ℓ1 = 0`, the
 last rounding is exact, and `xy ≥ (1 - u/2)²`.
-
-`dwMul_extend` carries a bound proved on high parts in `[1, 2)` to every pair of double words, for a product that
-commutes with the scalings by powers of two and with the negations.
 -/
 
 namespace ExpansionBounds
@@ -56,11 +53,6 @@ theorem mul_rel3 (hu : 0 < u p) {η X G : ℝ} (hη : |η| ≤ G)
   rw [div_mul_eq_mul_div, le_div_iff₀ h1]
   exact (mul_le_mul_of_nonneg_right hη h1.le).trans hX
 
-/-- the conclusion of a product's theorem at `(x_h, x_ℓ)` and `(y_h, y_ℓ)`: the result of `f` is a double word within
-`c` of `xy`, relatively -/
-def DWMulWithin (f : ℝ × ℝ → ℝ × ℝ → ℝ × ℝ) (c xh xl yh yl : ℝ) : Prop :=
-  DW p (f (xh, xl) (yh, yl)) ∧ |dwVal (f (xh, xl) (yh, yl)) - (xh + xl) * (yh + yl)| ≤ c * |(xh + xl) * (yh + yl)|
-
 variable [Prec_gt_0 p]
 
 /-- DWTimesDW3 commutes with the negation of `x` -/
@@ -74,119 +66,6 @@ theorem dwTimesDW3_neg_right (x y : ℝ × ℝ) :
     dwTimesDW3 p x (-y.1, -y.2) = (-(dwTimesDW3 p x y).1, -(dwTimesDW3 p x y).2) := by
   unfold dwTimesDW3
   simp only [twoProd_neg_right, mul_neg, RN_neg, ← neg_add, fastTwoSum_neg]
-
-/-- a product `f` of pairs that commutes with the scalings by powers of two and with the negations, and is zero at a
-zero operand: a relative bound `c` with a double-word result, proved on high parts in `[1, 2)`, holds for every pair
-of double words -/
-theorem dwMul_extend {f : ℝ × ℝ → ℝ × ℝ → ℝ × ℝ} {c : ℝ}
-    (hs : ∀ (a b : ℤ) (x y : ℝ × ℝ), f ((2 : ℝ) ^ a * x.1, (2 : ℝ) ^ a * x.2) ((2 : ℝ) ^ b * y.1, (2 : ℝ) ^ b * y.2) =
-      ((2 : ℝ) ^ (a + b) * (f x y).1, (2 : ℝ) ^ (a + b) * (f x y).2))
-    (hnl : ∀ x y : ℝ × ℝ, f (-x.1, -x.2) y = (-(f x y).1, -(f x y).2))
-    (hnr : ∀ x y : ℝ × ℝ, f x (-y.1, -y.2) = (-(f x y).1, -(f x y).2))
-    (hzl : ∀ y, f (0, 0) y = (0, 0)) (hzr : ∀ x, f x (0, 0) = (0, 0))
-    (hnorm : ∀ {xh xl yh yl : ℝ}, F p xh → F p yh → RN p (xh + xl) = xh → RN p (yh + yl) = yh → 1 ≤ xh → xh < 2 →
-      1 ≤ yh → yh < 2 → DWMulWithin p f c xh xl yh yl)
-    {x y : ℝ × ℝ} (hx : DW p x) (hy : DW p y) :
-    DW p (f x y) ∧ |dwVal (f x y) - dwVal x * dwVal y| ≤ c * |dwVal x * dwVal y| := by
-  -- from operands scaled by powers of two
-  have ofScale : ∀ {xh xl yh yl : ℝ} (a b : ℤ),
-      DWMulWithin p f c ((2 : ℝ) ^ a * xh) ((2 : ℝ) ^ a * xl) ((2 : ℝ) ^ b * yh) ((2 : ℝ) ^ b * yl) →
-        DWMulWithin p f c xh xl yh yl := by
-    intro xh xl yh yl a b h
-    have hK : (0 : ℝ) < (2 : ℝ) ^ (a + b) := by positivity
-    have hs' : f ((2 : ℝ) ^ a * xh, (2 : ℝ) ^ a * xl) ((2 : ℝ) ^ b * yh, (2 : ℝ) ^ b * yl) =
-        ((2 : ℝ) ^ (a + b) * (f (xh, xl) (yh, yl)).1, (2 : ℝ) ^ (a + b) * (f (xh, xl) (yh, yl)).2) :=
-      hs a b (xh, xl) (yh, yl)
-    unfold DWMulWithin at h ⊢
-    rw [hs'] at h
-    obtain ⟨h1, h2⟩ := h
-    refine ⟨DW.of_scale p (a + b) h1, ?_⟩
-    have e1 : dwVal ((2 : ℝ) ^ (a + b) * (f (xh, xl) (yh, yl)).1, (2 : ℝ) ^ (a + b) * (f (xh, xl) (yh, yl)).2) -
-        ((2 : ℝ) ^ a * xh + (2 : ℝ) ^ a * xl) * ((2 : ℝ) ^ b * yh + (2 : ℝ) ^ b * yl) =
-          (2 : ℝ) ^ (a + b) * (dwVal (f (xh, xl) (yh, yl)) - (xh + xl) * (yh + yl)) := by
-      unfold dwVal
-      rw [zpow_add₀ two_ne_zero]; ring
-    have e2 : ((2 : ℝ) ^ a * xh + (2 : ℝ) ^ a * xl) * ((2 : ℝ) ^ b * yh + (2 : ℝ) ^ b * yl) =
-        (2 : ℝ) ^ (a + b) * ((xh + xl) * (yh + yl)) := by
-      rw [zpow_add₀ two_ne_zero]; ring
-    rw [e1, e2, abs_mul, abs_mul, abs_of_pos hK] at h2
-    exact le_of_mul_le_mul_left (by linarith) hK
-  -- from the negated `x`, and from the negated `y`
-  have ofNegL : ∀ {xh xl yh yl : ℝ}, DWMulWithin p f c (-xh) (-xl) yh yl → DWMulWithin p f c xh xl yh yl := by
-    intro xh xl yh yl h
-    have hs' : f (-xh, -xl) (yh, yl) = (-(f (xh, xl) (yh, yl)).1, -(f (xh, xl) (yh, yl)).2) :=
-      hnl (xh, xl) (yh, yl)
-    unfold DWMulWithin at h ⊢
-    rw [hs'] at h
-    obtain ⟨h1, h2⟩ := h
-    refine ⟨DW.of_neg p h1, ?_⟩
-    have e1 : dwVal (-(f (xh, xl) (yh, yl)).1, -(f (xh, xl) (yh, yl)).2) - (-xh + -xl) * (yh + yl) =
-        -(dwVal (f (xh, xl) (yh, yl)) - (xh + xl) * (yh + yl)) := by
-      unfold dwVal
-      ring
-    rw [e1, abs_neg, show (-xh + -xl) * (yh + yl) = -((xh + xl) * (yh + yl)) by ring, abs_neg] at h2
-    exact h2
-  have ofNegR : ∀ {xh xl yh yl : ℝ}, DWMulWithin p f c xh xl (-yh) (-yl) → DWMulWithin p f c xh xl yh yl := by
-    intro xh xl yh yl h
-    have hs' : f (xh, xl) (-yh, -yl) = (-(f (xh, xl) (yh, yl)).1, -(f (xh, xl) (yh, yl)).2) :=
-      hnr (xh, xl) (yh, yl)
-    unfold DWMulWithin at h ⊢
-    rw [hs'] at h
-    obtain ⟨h1, h2⟩ := h
-    refine ⟨DW.of_neg p h1, ?_⟩
-    have e1 : dwVal (-(f (xh, xl) (yh, yl)).1, -(f (xh, xl) (yh, yl)).2) - (xh + xl) * (-yh + -yl) =
-        -(dwVal (f (xh, xl) (yh, yl)) - (xh + xl) * (yh + yl)) := by
-      unfold dwVal
-      ring
-    rw [e1, abs_neg, show (xh + xl) * (-yh + -yl) = -((xh + xl) * (yh + yl)) by ring, abs_neg] at h2
-    exact h2
-  -- positive high parts: both scaled into `[1, 2)`
-  have pos : ∀ {xh xl yh yl : ℝ}, F p xh → F p yh → RN p (xh + xl) = xh → RN p (yh + yl) = yh → 0 < xh → 0 < yh →
-      DWMulWithin p f c xh xl yh yl := by
-    intro xh xl yh yl hxh hyh hdx hdy hx0 hy0
-    obtain ⟨n, hn1, hn2⟩ := exists_mem_Ico_zpow hx0 (by norm_num : (1 : ℝ) < 2)
-    obtain ⟨m, hm1, hm2⟩ := exists_mem_Ico_zpow hy0 (by norm_num : (1 : ℝ) < 2)
-    have ha : (0 : ℝ) < (2 : ℝ) ^ (-n) := by positivity
-    have hb : (0 : ℝ) < (2 : ℝ) ^ (-m) := by positivity
-    have s1 : ∀ k : ℤ, (2 : ℝ) ^ (-k) * (2 : ℝ) ^ k = 1 := fun k => by
-      rw [← zpow_add₀ two_ne_zero, neg_add_cancel, zpow_zero]
-    have s2 : ∀ k : ℤ, (2 : ℝ) ^ (-k) * (2 : ℝ) ^ (k + 1) = 2 := fun k => by
-      rw [← zpow_add₀ two_ne_zero, show -k + (k + 1) = 1 by ring, zpow_one]
-    exact ofScale (-n) (-m) (hnorm (F_zpow_mul p (-n) hxh) (F_zpow_mul p (-m) hyh)
-      (by rw [← mul_add, RN_zpow_mul, hdx]) (by rw [← mul_add, RN_zpow_mul, hdy])
-      (by have := mul_le_mul_of_nonneg_left hn1 ha.le; rwa [s1] at this)
-      (by have := mul_lt_mul_of_pos_left hn2 ha; rwa [s2] at this)
-      (by have := mul_le_mul_of_nonneg_left hm1 hb.le; rwa [s1] at this)
-      (by have := mul_lt_mul_of_pos_left hm2 hb; rwa [s2] at this))
-  obtain ⟨xh, xl⟩ := x
-  obtain ⟨yh, yl⟩ := y
-  obtain ⟨hxh, -, hdx⟩ := hx
-  obtain ⟨hyh, -, hdy⟩ := hy
-  have hxh' : F p xh := hxh
-  have hyh' : F p yh := hyh
-  have hdx' : RN p (xh + xl) = xh := hdx
-  have hdy' : RN p (yh + yl) = yh := hdy
-  show DWMulWithin p f c xh xl yh yl
-  -- a zero result
-  have zero : ∀ {xh xl yh yl : ℝ}, f (xh, xl) (yh, yl) = (0, 0) → (xh + xl) * (yh + yl) = 0 →
-      DWMulWithin p f c xh xl yh yl := by
-    intro xh xl yh yl h0 h1
-    unfold DWMulWithin
-    rw [h0, h1]
-    exact ⟨DW.of_F p (F_zero p), by simp [dwVal]⟩
-  -- a positive `y_h`, and any `x_h`
-  have key : ∀ {yh yl : ℝ}, F p yh → RN p (yh + yl) = yh → 0 < yh → DWMulWithin p f c xh xl yh yl := by
-    intro yh yl hyh hdy hy0
-    rcases lt_trichotomy xh 0 with hx | hx | hx
-    · exact ofNegL (pos (F_neg p hxh') hyh (by rw [← neg_add, RN_neg, hdx']) hdy (by linarith) hy0)
-    · have hl0 : xl = 0 := RN_eq_zero p (by rw [hx, zero_add] at hdx'; exact hdx')
-      exact zero (by rw [hx, hl0]; exact hzl _) (by rw [hx, hl0]; ring)
-    · exact pos hxh' hyh hdx' hdy hx hy0
-  rcases lt_trichotomy yh 0 with hy0 | hy0 | hy0
-  · exact ofNegR (key (F_neg p hyh') (by rw [← neg_add, RN_neg, hdy']) (by linarith))
-  · have hl0 : yl = 0 := RN_eq_zero p (by rw [hy0, zero_add] at hdy'; exact hdy')
-    exact zero (by rw [hy0, hl0]; exact hzr _) (by rw [hy0, hl0]; ring)
-  · exact key hyh' hdy' hy0
 
 /-- the steps of DWTimesDW3 on operands with high parts in `[1, 2)`: the last FastTwoSum is exact, the error is
 `ε₀ + ε₁ + ε₂ + ε₃` with the rounding errors of `t_ℓ0`, `t_ℓ1`, `c_ℓ2` and `c_ℓ3`, at most `u³/2`, `u²`, `2u²` and
