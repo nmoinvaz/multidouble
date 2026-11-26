@@ -2,6 +2,7 @@ import Controls.Axioms
 import Controls.DDExp2
 import Controls.DDLog2
 import Controls.DDSpec
+import Controls.DDTrig
 import Controls.Exp8
 import Controls.ExpRed8
 import Controls.Log8

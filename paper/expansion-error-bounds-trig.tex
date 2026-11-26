@@ -228,8 +228,10 @@ r_{\rm e}| \le 1.2u^n$. Then $|\sin r| \ge (1 - 1.2u^n)|\sin r_{\rm e}|$, a fact
 as for even $q$. For the double-double functions
 the same recursion runs with each error bound $e_{\rm op}\bar Z$ in place of Lemma~\ref{lem:g}, and with the last
 operation's $e_{\rm op}$ in place of $u^n$ in $E_{\rm S}$, $E_{\rm C}$, $\delta_{\rm S}$ and $\delta_{\rm C}$. Their
-operands are double-word numbers, since every algorithm ends with a $\FastTwoSum$, $r$ passes through one, and the
-constants are greedy.
+operands are double-word numbers: every algorithm ends with a $\FastTwoSum$, $r$ passes through one, a scaling by a
+power of two keeps a double word, and each constant's two parts round to the first, which is checked on the table,
+since a greedy rounding can end in a tie as $r$ can. The buckets go by the magnitude $|\RN(r)|$ of the leading part of
+the double word $r$, which is below $2^{-j}$ only if $|r|$ is.
 
 The values are those of \texttt{trig\_consts.py}, in rational arithmetic rounded up to 200-bit dyadic numbers. It
 evaluates one bucket per pair $(K_{\rm s}(j), K_{\rm c}(j))$, the one with the largest $\bar r_j$: every bound above holds
