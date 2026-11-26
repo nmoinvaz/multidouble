@@ -4,7 +4,7 @@
 //! against choptuik-large-d's `recip_parts` and `recip_lane` (hp/src/model.rs, copied below) for every k up to 2^20.
 //!
 //! Pass, fixed before the first run: every part equal to the reference's, bit for bit, on k = 1..=5000, on 4000 random
-//! q < 2^60 with p = 1, and on 4000 random (p, q) with |p| < 2^63, including p > q and negative p; the types'
+//! q < 2^60 with p = 1, and on 4000 random (p, q) with |p| < 2^63, including p > q and negative p, and on p = i64::MIN; the types'
 //! `recip_int` and `from_ratio` equal to those prefixes; hp's parts and lane constants equal bit for bit for
 //! k = 1..=2^20; and x k times 1/k within 2 u^P of x on each type. Control (feature `mutate`), which must fail: the last
 //! part of each type's constant one ulp up (`recip::mutate::LAST_ULP`).
@@ -86,6 +86,8 @@ fn cases() -> Vec<(i64, u64)> {
         (1, (1u64 << 60) - 1),
         (i64::MAX, 3),
         (i64::MIN + 1, (1 << 59) + 1),
+        (i64::MIN, 1),
+        (i64::MIN, 3),
         (0, 7),
         (6, 3),
         (1, 1 << 40),
@@ -219,6 +221,8 @@ fn mul_recip_inverts_multiplication() {
             ((OD::from_dd(x) * OD::from_f64(k as f64)).mul_recip(k) - OD::from_dd(x)).x[0].abs() / x.hi.abs(),
         ];
         for i in 0..3 {
+            // a NaN would be dropped by max: every error must be finite
+            assert!(e[i].is_finite(), "type {i}: k {k}, error {}", e[i]);
             worst[i] = worst[i].max(e[i]);
         }
     }
