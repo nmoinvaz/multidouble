@@ -12,8 +12,8 @@ use multidouble::simd::{self, Kernel, Simd};
 use multidouble::v8::V8;
 use numpy::ndarray::{ArrayD, Dimension};
 use numpy::{
-    IntoPyArray, IxDyn, PyArray1, PyArrayDyn, PyReadonlyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArrayDyn,
-    PyUntypedArrayMethods,
+    IntoPyArray, IxDyn, PyArray1, PyArray2, PyArrayDyn, PyReadonlyArray, PyReadonlyArray1, PyReadonlyArray2,
+    PyReadonlyArrayDyn, PyUntypedArrayMethods,
 };
 
 type Parts<'py> = (
@@ -512,6 +512,79 @@ fn dd_matvec<'py>(
         out: (&mut oh, &mut ol),
     });
     Ok((oh.into_pyarray(py), ol.into_pyarray(py)))
+}
+
+type Pair2<'py> = (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray2<f64>>);
+
+/// C = A B, each entry the dot product of `Dot` of a row of A (row-major, n rows of m) and a column of B (given as
+/// the k columns of m, contiguous); C row-major (n, k)
+struct MatMul<'a> {
+    m: usize,
+    k: usize,
+    a: (&'a [f64], &'a [f64]),
+    bt: (&'a [f64], &'a [f64]),
+    out: (&'a mut [f64], &'a mut [f64]),
+}
+
+impl Kernel for MatMul<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let (m, k) = (self.m, self.k);
+        let n = if k == 0 { 0 } else { self.out.0.len() / k };
+        for i in 0..n {
+            let row = (&self.a.0[i * m..(i + 1) * m], &self.a.1[i * m..(i + 1) * m]);
+            for j in 0..k {
+                let col = (&self.bt.0[j * m..(j + 1) * m], &self.bt.1[j * m..(j + 1) * m]);
+                let d = dot_on::<S>(row, col);
+                self.out.0[i * k + j] = d.hi;
+                self.out.1[i * k + j] = d.lo;
+            }
+        }
+    }
+}
+
+/// A B in double-double: A as (n, m) and B as (m, k) row-major hi and lo arrays; each entry of the result is the dot
+/// product of `dd_dot` of a row of A and a column of B (8 lanes at a time, then the lane sums), so column j is bitwise
+/// `dd_matvec(A, B[:, j])`, within about (m / 8 + 12) u^2 of sum_l |a_il b_lj|, u^2 = 2^-106. Returns the (hi, lo)
+/// arrays of A B, (n, k).
+#[pyfunction]
+fn dd_matmul<'py>(
+    py: Python<'py>,
+    ah: PyReadonlyArray2<'py, f64>,
+    al: PyReadonlyArray2<'py, f64>,
+    bh: PyReadonlyArray2<'py, f64>,
+    bl: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Pair2<'py>> {
+    let (n, m, mb, k) = (ah.shape()[0], ah.shape()[1], bh.shape()[0], bh.shape()[1]);
+    if mb != m || al.shape() != [n, m] || bl.shape() != [m, k] {
+        return Err(PyValueError::new_err(
+            "A must be (n, m) and B (m, k), each the same in both parts",
+        ));
+    }
+    let (ahs, als) = (rows(&ah, "ah")?, rows(&al, "al")?);
+    let (bhs, bls) = (rows(&bh, "bh")?, rows(&bl, "bl")?);
+    // B's columns, each contiguous, for the dot products
+    let (mut th, mut tl) = (vec![0.0; m * k], vec![0.0; m * k]);
+    for l in 0..m {
+        for j in 0..k {
+            th[j * m + l] = bhs[l * k + j];
+            tl[j * m + l] = bls[l * k + j];
+        }
+    }
+    let (mut oh, mut ol) = (vec![0.0; n * k], vec![0.0; n * k]);
+    // with the GIL held, as the elementwise functions: the slices borrow the input arrays
+    simd::dispatch(MatMul {
+        m,
+        k,
+        a: (ahs, als),
+        bt: (&th, &tl),
+        out: (&mut oh, &mut ol),
+    });
+    let shape = |v: Vec<f64>| {
+        numpy::ndarray::Array2::from_shape_vec((n, k), v).map_err(|e| PyValueError::new_err(e.to_string()))
+    };
+    Ok((shape(oh)?.into_pyarray(py), shape(ol)?.into_pyarray(py)))
 }
 
 /// y + a x elementwise in quad-double for quad-double arrays x and y (four float64 arrays each, the parts
@@ -1170,6 +1243,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(div, m)?)?;
     m.add_function(wrap_pyfunction!(dd_dot, m)?)?;
     m.add_function(wrap_pyfunction!(dd_matvec, m)?)?;
+    m.add_function(wrap_pyfunction!(dd_matmul, m)?)?;
     m.add_function(wrap_pyfunction!(dd_horner, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
     m.add_class::<PyDdLu>()?;

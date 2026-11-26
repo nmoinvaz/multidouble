@@ -7,7 +7,7 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``add``, ``sub``, ``mul``, ``div``: elementwise operations; ``dd_op(op, ...)`` with op 0 add, 1 mul, 2 div, 3 sub;
 - ``dd_dot``: a dot product in double-double (8 lanes at a time, then the lane sums), to about (n / 8 + 12) 2^-106 of
   sum |x_i y_i|;
-- ``dd_matvec``: A v in double-double, each row a ``dd_dot``;
+- ``dd_matvec``: A v in double-double, each row a ``dd_dot``; ``dd_matmul``: A B, each entry a ``dd_dot``;
 - ``dd_horner``: sum_k c_k a^k by Horner's rule in double-double at a float a, each step ``dd_add(c_k, dd_scale(p,
   a))`` bit for bit;
 - ``dd_solve``: x with A x = b by LU with partial pivoting, A and b in double-double; ``DDLu`` factors A once for
@@ -117,6 +117,16 @@ def dd_matvec(ah, al, vh, vl):
     """A v in double-double: A as (n, m) hi and lo arrays, v as hi and lo arrays of length m, each row of the result
     the dot product of dd_dot. Returns the (hi, lo) arrays of A v."""
     return _md.dd_matvec(_f64(ah, "ah"), _f64(al, "al"), _f64(vh, "vh"), _f64(vl, "vl"))
+
+
+def dd_matmul(ah, al, bh, bl):
+    """A B in double-double: A as (n, m) hi and lo arrays and B as (m, k) ones, each entry the dot product of dd_dot of
+    a row of A and a column of B, so column j is bitwise dd_matvec(A, B[:, j]), within about (m / 8 + 12) 2^-106 of
+    sum_l |a_il b_lj|. Returns the (hi, lo) arrays of A B, (n, k)."""
+    return _md.dd_matmul(_f64(ah, "ah"), _f64(al, "al"), _f64(bh, "bh"), _f64(bl, "bl"))
+
+
+__all__ += ["dd_matmul"]
 
 
 def dd_horner(ch, cl, a):
