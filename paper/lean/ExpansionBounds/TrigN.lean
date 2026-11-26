@@ -22,8 +22,8 @@ return and last bucket test `|x_0| < u^{⌊n/2⌋}` and `|r_0| < u^{⌊n/2⌋}`,
 (`hhead`). `G` picks the run of `|r_0|` by bucket number, so the other runs may come in any order: where they start at
 distinct buckets, as in the generated tables, every `|r_0|` gets the series lengths of its own run.
 
-The remark after Theorem 35 gives the bounds at `n = 2`, `4` and `12`; `Trig2.lean` and `Trig4.lean` prove the first
-two with these.
+The remark after Theorem 35 gives the bounds at `n = 2`, `4` and `12`; `Trig2.lean`, `Trig4.lean` and `Trig12.lean`
+prove them with these, the last outside the default build.
 -/
 
 namespace ExpansionBounds
