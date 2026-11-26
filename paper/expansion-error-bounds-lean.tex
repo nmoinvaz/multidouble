@@ -25,12 +25,11 @@ that the kernel checks against stored states, in folders of modules that the fil
 \texttt{Quot.sound}: the build reads every declaration's axioms (\texttt{Controls/Axioms.lean}). Each kernel check
 has controls, the same check on a wrong number, state or hypothesis, which the kernel proves false
 (\texttt{Controls/}).
-\item The published theorems under Theorem~\ref{thm:t8}'s double-word start, Theorem~\ref{thm:trig}'s
-double-double functions and Proposition~\ref{prop:ddexplog} are proved as well: Theorems~2.2,
-3.1, 4.1, 4.3 and~7.1 of~\cite{JMP17}, which \cite{MR22} proved in Coq, Theorems~2.7 and~2.8 of~\cite{MR22} and
-Theorem~3.5 of~\cite{LLMPR23}. Proposition~\ref{prop:ddexplog} and the double-double sine, cosine and tangent are
-proved on those algorithms; the quotient $x_l/x_h$ of the logarithm's start enters by its bound $u|x_l/x_h| +
-\eta_0$, exact for $x_h = 1$.
+\item The published bounds under Theorem~\ref{thm:t8}'s double-word start, Theorem~\ref{thm:trig}'s
+double-double functions and Proposition~\ref{prop:ddexplog} are proved as well, each for the algorithm used: those
+of Theorems~2.2, 3.1, 4.1, 4.3 and~7.1 of~\cite{JMP17}, which \cite{MR22} proved in Coq, of Theorems~2.7 and~2.8
+of~\cite{MR22} and of Theorem~3.5 of the preprint of~\cite{LLMPR23}. The quotient $x_l/x_h$ of the logarithm's start
+enters by its bound $u|x_l/x_h| + \eta_0$, exact for $x_h = 1$.
 \item The theorems at $n = 8$ on the exponential and the logarithm, and Proposition~\ref{prop:ddexplog}, take as
 hypotheses binary64's rounding of each scaling and the exponents that the algorithm selects, and no value overflows,
 the model having no largest number. The logarithm's constant is proved on the convex variant of its bound, at the
