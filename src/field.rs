@@ -13,7 +13,8 @@
 //! long jet sums (`cs_splits`), bitwise the same. The order-k sums of a series formed one jet coefficient at a time
 //! (`cs_at`, `cs_range_at`, `cs_w_at`) have the same pieces: one lane vector (`cs_lane_at`, `cs_w_lane_at`), and the
 //! lane vectors on separate threads (`cs_at_par`, `cs_range_at_par`, `cs_w_at_par`, when `cs_at_splits`, which weighs
-//! a product by its precision's cost), bitwise the same. A matrix product is `MatLane::dmat_apply`: the double-double
+//! a product by its precision's cost), bitwise the same, and several independent order-k sums at once, every lane
+//! vector of each its own task (`sums_at_par`, `SumAt`). A matrix product is `MatLane::dmat_apply`: the double-double
 //! columns through the accumulator by default, the columns' f64 copy for the f64 lanes.
 use crate::dd::DD;
 use crate::dual::{mutate, Counted, Dc, Dtn, Du, Fu, Fun, Lane, Ou, Oun, Qu, Tangents, F8};
@@ -933,6 +934,126 @@ pub fn cs_w_at_par<T: Lane, const B: usize>(
     } else {
         cs_w_at(out, x, y, j, lo, hi, w, k);
     }
+}
+
+/// One order-k Cauchy sum of `sums_at_par`: coefficient k of `sum_{i=lo..=hi} (w(i) x[i]) y[j-i]` into out, weighted
+/// only if w is given, the sum of `cs_range_at` or `cs_w_at`
+pub struct SumAt<'a, T: Lane, const B: usize> {
+    out: &'a mut Fl<T, B>,
+    x: &'a [Fl<T, B>],
+    y: &'a [Fl<T, B>],
+    j: usize,
+    lo: usize,
+    hi: usize,
+    w: Option<&'a (dyn Fn(usize) -> f64 + Sync)>,
+}
+
+impl<'a, T: Lane, const B: usize> SumAt<'a, T, B> {
+    /// `sum_{i=0..=j} x[i] y[j-i]`, the sum of `cs_at`
+    pub fn new(out: &'a mut Fl<T, B>, x: &'a [Fl<T, B>], y: &'a [Fl<T, B>], j: usize) -> Self {
+        SumAt {
+            out,
+            x,
+            y,
+            j,
+            lo: 0,
+            hi: j,
+            w: None,
+        }
+    }
+    /// the terms lo..=hi alone, the sum of `cs_range_at`
+    pub fn range(self, lo: usize, hi: usize) -> Self {
+        SumAt { lo, hi, ..self }
+    }
+    /// each term i weighted by w(i), the sum of `cs_w_at`, for a w that gives an index the same exact f64 on every call
+    /// and thread
+    pub fn weighted(self, w: &'a (dyn Fn(usize) -> f64 + Sync)) -> Self {
+        SumAt { w: Some(w), ..self }
+    }
+    /// its number of terms
+    pub fn terms(&self) -> usize {
+        (self.hi + 1).saturating_sub(self.lo)
+    }
+}
+
+/// Coefficient k of several independent order-k sums (no sum reads another's output), each bitwise its own
+/// `cs_range_at` or `cs_w_at`, for a recurrence that forms several products' order k at once. When their terms
+/// together are long enough (`cs_at_splits` of their sum), every lane vector of every sum is one task of rayon's
+/// current pool, which enters the backend's target features again (`Simd::vectorize`) and sums its terms in their
+/// order, so neither the split nor the pool's size changes a bit; otherwise the sums are formed one after another.
+/// Sums too short to split one by one (`cs_range_at_par`) then share the pool. Per-thread state stays on the caller,
+/// as for `cs_at_par`; `dual::mutate::CS_AT_SPLIT` moves the last lane vector of each split sum by an ulp.
+///
+/// ```
+/// use multidouble::dd::DD;
+/// use multidouble::dual::Lane;
+/// use multidouble::field::{cs_at, cs_range_at, sums_at_par, Fl, SumAt};
+/// use multidouble::native::OJet;
+/// // the series variable j + h at every point, so that coefficient 1 of the sums is not zero
+/// let x: Vec<Fl<OJet<4>, 2>> = (1..30).map(|j| Fl([OJet::var(DD::from_f64(j as f64)); 2])).collect();
+/// let (mut a, mut b, mut c, mut d) = (Fl::zero(), Fl::zero(), Fl::zero(), Fl::zero());
+/// cs_at(&mut a, &x, &x, 28, 1);
+/// cs_range_at(&mut b, &x, &x, 20, 3, 17, 1);
+/// sums_at_par(vec![SumAt::new(&mut c, &x, &x, 28), SumAt::new(&mut d, &x, &x, 20).range(3, 17)], 1);
+/// assert_eq!(a.coef_od(1).get(9), c.coef_od(1).get(9));
+/// assert_eq!(b.coef_od(1).get(9), d.coef_od(1).get(9));
+/// ```
+pub fn sums_at_par<T: Lane, const B: usize>(sums: Vec<SumAt<'_, T, B>>, k: usize) {
+    if !cs_at_splits::<T>(sums.iter().map(SumAt::terms).sum(), k) {
+        for SumAt {
+            out,
+            x,
+            y,
+            j,
+            lo,
+            hi,
+            w,
+        } in sums
+        {
+            match w {
+                Some(w) => cs_w_at(out, x, y, j, lo, hi, w, k),
+                None => cs_range_at(out, x, y, j, lo, hi, k),
+            }
+        }
+        return;
+    }
+    // read on the calling thread: a mutation is selected per thread, and the tasks run on rayon's workers
+    let moved = mutate::on(mutate::CS_AT_SPLIT);
+    let tasks: Vec<_> = sums
+        .into_iter()
+        .flat_map(
+            |SumAt {
+                 out,
+                 x,
+                 y,
+                 j,
+                 lo,
+                 hi,
+                 w,
+             }| {
+                out.0
+                    .iter_mut()
+                    .enumerate()
+                    .map(move |(b, o)| (o, b, x, y, j, lo, hi, w))
+            },
+        )
+        .collect();
+    tasks.into_par_iter().for_each(|(o, b, x, y, j, lo, hi, w)| {
+        T::S::vectorize(
+            #[inline(always)]
+            || {
+                match w {
+                    Some(w) => cs_w_lane_at(o, b, x, y, j, lo, hi, w, k),
+                    None => cs_lane_at(o, b, x, y, j, lo, hi, k),
+                }
+                if moved && b + 1 == B {
+                    let mut l = o.coef_od(k).lanes();
+                    l[0].x[0] = f64::from_bits(l[0].x[0].to_bits() + 1);
+                    o.set_coef_od(k, OV::from_lanes(&l));
+                }
+            },
+        )
+    });
 }
 
 /// `cs_il` into out, with the accumulators and the terms borrowed (`Lane::acc_mut`): bitwise `cs_il`
