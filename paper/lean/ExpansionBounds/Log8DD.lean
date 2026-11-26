@@ -75,13 +75,12 @@ theorem pairExp_dw {v : ℝ × ℝ} (hv : DW p v) :
 `|ln x| ≤ 745.1`, and `y_0` the double-double logarithm of step (1)'s double word (plus the double-double `ln 2`
 where `x_0 ≥ 2^{1023}`), `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`. What remains assumed: binary64's rounding `S`
 of a scaling; the quotient `w` of `DD::ln`'s start within `u|x_l/x_h| + 2^{-1075}` and exact for `x_h = 1`; the
-exponents that the two runs select (`hrun` for `DD::ln`, `hk`, `hsel`, `hUφ`, `hselt`, `hUc` for LOG); and no overflow,
-the model having no largest number. Each run scales by its `2^k` in two steps, with `k₂ ≤ 0`; multidouble takes
-`k₁ = k/2`, rounded toward zero, so `k₂ > 0` where `k > 0`; both steps then scale up, which binary64 does exactly, and
-the value is that of the split `(k, 0)`. For binary64 the runs must also meet the paper's (A2′): every product, fused
-multiply-add and quotient returns what it would with an unbounded exponent range, as in the model, but the quotient
-`x_l/x_h` of `DD::ln`'s start, whose error a hypothesis bounds, and those that only select `k`, an exponent or a branch,
-which the paper exempts -/
+exponents that the two runs select (`hrun` for `DD::ln`, `hsel` for LOG); and no overflow, the model having no
+largest number. Each run scales by its `2^k` in two steps, with `k₂ ≤ 0`; multidouble takes `k₁ = k/2`, rounded toward
+zero, so `k₂ > 0` where `k > 0`; both steps then scale up, which binary64 does exactly, and the value is that of the
+split `(k, 0)`. For binary64 the runs must also meet the paper's (A2′): every product, fused multiply-add and quotient
+returns what it would with an unbounded exponent range, as in the model, but the quotient `x_l/x_h` of `DD::ln`'s start,
+whose error a hypothesis bounds, and those that only select `k`, an exponent or a branch, which the paper exempts -/
 theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x) (hX0 : 0 < ∑ i ∈ range 8, x i)
@@ -91,15 +90,7 @@ theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
     (hw1 : (ln8Xs p S x).1 = 1 → w = (ln8Xs p S x).2) (j₁ j₂ f fφ ft fc : ℤ)
     (hrun : DDLnRun p (ddOps p) S (ln8Xs p S x) (ddLnY0 p (ln8Xs p S x) w) j₁ j₂ f fφ ft fc) (y0 : ℕ → ℝ)
     (hy : y0 = pairExp (ln8Start p S x w j₁ j₂ f fφ ft fc))
-    (k₁ k₂ : ℤ) (hk : k₁ + k₂ = expK p (-y0 0)) (hk2 : k₂ ≤ 0) (e : ℤ)
-    (hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023))
-    (eφ et ec : ℤ) (hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1))
-    (hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023))
-    (hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)) :
+    (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
   have hX' : |Real.log (∑ i ∈ range 8, x i)| ≤ 7452 / 10 := hX.trans (by norm_num)
@@ -132,8 +123,7 @@ theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
       rw [two_zpow_neg_1071] at hb
       rw [hy]
       exact hb
-    exact thm42_8_both p hp S hS x hx hH hX0 hX' y0 hy0 hyd hy2 (Or.inl ⟨hlt, hDW⟩) k₁ k₂ hk hk2 e hsel eφ et ec hUφ
-      hselt hUc
+    exact thm42_8_both p hp S hS x hx hH hX0 hX' y0 hy0 hyd hy2 (Or.inl ⟨hlt, hDW⟩) k₁ k₂ e eφ et ec hsel
   · -- the start is `DD::ln` of the halved `x̃_h`, plus the double-double `ln 2`
     have hbig : (2 : ℝ) ^ (1023 : ℤ) ≤ x 0 := not_lt.mp hlt
     have exs : ln8Xs p S x = ln8Xh p S x := by simp only [ln8Xs, hlt, ↓reduceIte]
@@ -163,8 +153,7 @@ theorem thm42_8_dd (hp : p = 53) (S : ℝ → ℝ)
     obtain ⟨hy0, hyd, hy2⟩ := pairExp_dw p hAdw
     rw [← hy] at hy0 hyd hy2
     rw [two_zpow_neg_1071] at hb
-    refine thm42_8_both p hp S hS x hx hH hX0 hX' y0 hy0 hyd hy2 (Or.inr ⟨hbig, _, _, hb, ?_⟩) k₁ k₂ hk hk2 e hsel
-      eφ et ec hUφ hselt hUc
+    refine thm42_8_both p hp S hS x hx hH hX0 hX' y0 hy0 hyd hy2 (Or.inr ⟨hbig, _, _, hb, ?_⟩) k₁ k₂ e eφ et ec hsel
     rw [hy]
     exact hAerr
 

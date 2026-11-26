@@ -60,42 +60,55 @@ theorem ln8C_eq (S : ℝ → ℝ) (eφ et : ℤ) (φ t : ℕ → ℝ) :
   unfold ln8C logC
   rw [h, show (-436 : ℤ) - 13 = -449 by norm_num]
 
+/-- the selections of a run of `LOG_{8,6,43,4}`: step (3)'s scaling in two steps, `2^k = 2^{k₁}2^{k₂}` with `k₂ ≤ 0`;
+`e` the exponent of step (2)'s `U`, or `-1023` where `U < 2^{-1022}`; `e_t` that of `U_t`, in the same way; and
+`e_φ`, `e_c` above the sums of the magnitudes of the parts of `φ` and `c`, as the exponents of `U_φ` and `U_c` are -/
+structure Ln8Sel (S : ℝ → ℝ) (y0 x : ℕ → ℝ) (k₁ k₂ e eφ et ec : ℤ) : Prop where
+  /-- step (3)'s scaling in two steps -/
+  hk : k₁ + k₂ = expK p (-y0 0)
+  /-- its second step scales down -/
+  hk2 : k₂ ≤ 0
+  /-- `e` is the exponent of step (2)'s `U` -/
+  hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
+      expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
+    (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023)
+  /-- `e_φ` is above the parts of `φ` -/
+  hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1)
+  /-- `e_t` is the exponent of `U_t` -/
+  hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
+      expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
+    (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023)
+  /-- `e_c` is above the parts of `c` -/
+  hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)
+
 /-- Theorem 42 (`thm:log`) at `n = 8`, `s = 6`, `d = 43`, `q = 4`, `θ = 2` and `p = 53`, for `LOG_{8,6,43,4}` after
 its start, with multidouble's constants and binary64's subnormals, without overflow (the model has no largest
 finite value, and the paper's theorem takes a finite result): `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`.
 
 The hypotheses, by group.
 * The scalings' rounding: `S` keeps a value or rounds one below `2^{-1022}` to a multiple of `2^{-1074}` within
-  `2^{-1075}` (`hS`), and step (3)'s scaling in two steps, `2^k = 2^{k₁}2^{k₂}`, has `k₂ ≤ 0` (`hk`, `hk2`), as in
+  `2^{-1075}` (`hS`), and step (3)'s scaling in two steps, `2^k = 2^{k₁}2^{k₂}`, has `k₂ ≤ 0` (in `hsel`), as in
   `thm40_8`. Step (4)'s two steps, `2^{e_φ}` then `2^{e_t}`, need `e_t ≤ 0`, which is proved: `∑|t_i| ≤ 1`.
 * The argument: `x` in `F` on `H(2)` (`hx`, `hH`) with `x > 0` (`hX0`) and `|ln x| ≤ X = 745.2` (`hX`).
 * The start: `y_0` in `F` (`hy0`), of two parts (`hy2`) with `|y_{0,1}| ≤ u|y_{0,0}|` (`hy1`), within
   `E(|ln x|)` of `ln x` (`hE`), where `E(ℓ) = e₀ + e₁ℓ` is the paper's `E` with the quoted `ε_DW = 15.351u²` and
   `Φ_DW = 2^{-1071}` of Proposition 44 (`log8E`).
-* The selections: `e` is the exponent of step (2)'s `U`, or `-1023` where `U < 2^{-1022}` (`hsel`); `e_t` is that
-  of `U_t`, in the same way (`hselt`); and `e_φ`, `e_c` bound the sums of the magnitudes of the parts of `φ` and
-  `c` (`hUφ`, `hUc`), which the exponents of `U_φ` and `U_c` do. -/
+* The selections (`hsel`, an `Ln8Sel`): `e` is the exponent of step (2)'s `U`, or `-1023` where `U < 2^{-1022}`;
+  `e_t` is that of `U_t`, in the same way; and `e_φ`, `e_c` bound the sums of the magnitudes of the parts of `φ`
+  and `c`, which the exponents of `U_φ` and `U_c` do. -/
 theorem thm42_8 (hp : p = 53) (S : ℝ → ℝ)
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (x : ℕ → ℝ) (hx : ∀ i < 8, F p (x i)) (hH : Htheta p 8 2 x) (hX0 : 0 < ∑ i ∈ range 8, x i)
     (hX : |Real.log (∑ i ∈ range 8, x i)| ≤ 7452 / 10) (y0 : ℕ → ℝ) (hy0 : ∀ i < 8, F p (y0 i))
     (hy1 : |y0 1| ≤ u p * |y0 0|) (hy2 : ∀ i, 2 ≤ i → y0 i = 0)
     (hE : |∑ i ∈ range 8, y0 i - Real.log (∑ i ∈ range 8, x i)| ≤ log8E |Real.log (∑ i ∈ range 8, x i)|)
-    (k₁ k₂ : ℤ) (hk : k₁ + k₂ = expK p (-y0 0)) (hk2 : k₂ ≤ 0) (e : ℤ)
-    (hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023))
-    (eφ et ec : ℤ) (hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1))
-    (hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023))
-    (hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)) :
+    (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
   subst hp
   exact log8_main (fun g hg => ⟨log8_all0 g hg, log8_psi0 g hg⟩) ⟨log8_last0, log8_psi_last0⟩
     (fun g hg => ⟨log8_all1 g hg, log8_psi1 g hg⟩) ⟨log8_last1, log8_psi_last1⟩ log8_shared S hS x hx hH hX0 hX y0
-    hy0 hy1 hy2 hE k₁ k₂ hk hk2 e hsel eφ et ec hUφ hselt hUc
+    hy0 hy1 hy2 hE k₁ k₂ hsel.hk hsel.hk2 e hsel.hsel eφ et ec hsel.hUφ hsel.hselt hsel.hUc
 
 /-- Theorem 42 (`thm:log`) at `n = 8` and `p = 53` with the start derived, for the branch of step (1) without the
 halving (`x_0 < 2^{1023}` in binary64): `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`.
@@ -111,15 +124,7 @@ theorem thm42_8_start (hp : p = 53) (S : ℝ → ℝ)
     (hyd : RN p (y0 0 + y0 1) = y0 0) (hy2 : ∀ i, 2 ≤ i → y0 i = 0)
     (hDW : |y0 0 + y0 1 - Real.log ((ln8Xt p x).1 + (ln8Xt p x).2)| ≤
       15351 / 1000 * u p ^ 2 * |Real.log ((ln8Xt p x).1 + (ln8Xt p x).2)| + 1 / 2 ^ 1071)
-    (k₁ k₂ : ℤ) (hk : k₁ + k₂ = expK p (-y0 0)) (hk2 : k₂ ≤ 0) (e : ℤ)
-    (hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023))
-    (eφ et ec : ℤ) (hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1))
-    (hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023))
-    (hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)) :
+    (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
   have hy1 : |y0 1| ≤ u p * |y0 0| := by
@@ -130,7 +135,7 @@ theorem thm42_8_start (hp : p = 53) (S : ℝ → ℝ)
       hy2 4 (by norm_num), hy2 5 (by norm_num), hy2 6 (by norm_num), hy2 7 (by norm_num)]
     ring
   exact thm42_8 p hp S hS x hx hH hX0 hX y0 hy0 hy1 hy2
-    (log8_start p hp x hx hH hX0 _ (by rw [hsum]; exact hDW)) k₁ k₂ hk hk2 e hsel eφ et ec hUφ hselt hUc
+    (log8_start p hp x hx hH hX0 _ (by rw [hsum]; exact hDW)) k₁ k₂ e eφ et ec hsel
 
 /-- Theorem 42 (`thm:log`) at `n = 8` and `p = 53` with the start derived, for the branch of step (1) with the
 halving, `x_0 ≥ 2^{1023}`: `|y - ln x| ≤ 9.926u^8|ln x| + 2^{-509}`. The model has no largest finite value, so
@@ -150,15 +155,7 @@ theorem thm42_8_half (hp : p = 53) (S : ℝ → ℝ)
       15351 / 1000 * u p ^ 2 * |Real.log ((ln8Xh p S x).1 + (ln8Xh p S x).2)| + 1 / 2 ^ 1071)
     (hA : |y0 0 + y0 1 - (w0 + w1 + (((dyQ log8CL0 : ℚ) : ℝ) + ((dyQ log8CL1 : ℚ) : ℝ)))| ≤
       3 * u p ^ 2 / (1 - 4 * u p) * |w0 + w1 + (((dyQ log8CL0 : ℚ) : ℝ) + ((dyQ log8CL1 : ℚ) : ℝ))|)
-    (k₁ k₂ : ℤ) (hk : k₁ + k₂ = expK p (-y0 0)) (hk2 : k₂ ≤ 0) (e : ℤ)
-    (hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023))
-    (eφ et ec : ℤ) (hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1))
-    (hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023))
-    (hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)) :
+    (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
   have hy1 : |y0 1| ≤ u p * |y0 0| := by
@@ -169,8 +166,7 @@ theorem thm42_8_half (hp : p = 53) (S : ℝ → ℝ)
       hy2 4 (by norm_num), hy2 5 (by norm_num), hy2 6 (by norm_num), hy2 7 (by norm_num)]
     ring
   exact thm42_8 p hp S hS x hx hH hX0 hX y0 hy0 hy1 hy2
-    (log8_start_halved p hp S hS x hx hH hX0 hX hbig (w0 + w1) _ hW (by rw [hsum]; exact hA)) k₁ k₂ hk hk2 e hsel
-    eφ et ec hUφ hselt hUc
+    (log8_start_halved p hp S hS x hx hH hX0 hX hbig (w0 + w1) _ hW (by rw [hsum]; exact hA)) k₁ k₂ e eφ et ec hsel
 
 /-- Theorem 42 (`thm:log`) at `n = 8` and `p = 53` with the start derived, for both branches of step (1), by a
 case on its test: where `x_0 < 2^{1023}`, the double-word logarithm's bound on `ln x̃` (`thm42_8_start`); where
@@ -189,20 +185,11 @@ theorem thm42_8_both (hp : p = 53) (S : ℝ → ℝ)
           15351 / 1000 * u p ^ 2 * |Real.log ((ln8Xh p S x).1 + (ln8Xh p S x).2)| + 1 / 2 ^ 1071 ∧
         |y0 0 + y0 1 - (w0 + w1 + (((dyQ log8CL0 : ℚ) : ℝ) + ((dyQ log8CL1 : ℚ) : ℝ)))| ≤
           3 * u p ^ 2 / (1 - 4 * u p) * |w0 + w1 + (((dyQ log8CL0 : ℚ) : ℝ) + ((dyQ log8CL1 : ℚ) : ℝ))|))
-    (k₁ k₂ : ℤ) (hk : k₁ + k₂ = expK p (-y0 0)) (hk2 : k₂ ≤ 0) (e : ℤ)
-    (hsel : ((2 : ℝ) ^ e ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (e + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8R p y0) < (2 : ℝ) ^ (-1022 : ℤ) ∧ e = -1023))
-    (eφ et ec : ℤ) (hUφ : ∑ i ∈ range 8, |ln8Phi p S k₁ k₂ x i| < (2 : ℝ) ^ (eφ + 1))
-    (hselt : ((2 : ℝ) ^ et ≤ expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) ∧
-        expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (et + 1)) ∨
-      (expU p 8 ((2 : ℝ) ^ (-48 : ℤ)) (ln8T p S y0 e) < (2 : ℝ) ^ (-1022 : ℤ) ∧ et = -1023))
-    (hUc : ∑ i ∈ range 8, |ln8C p S eφ et (ln8Phi p S k₁ k₂ x) (ln8T p S y0 e) i| < (2 : ℝ) ^ (ec + 1)) :
+    (k₁ k₂ e eφ et ec : ℤ) (hsel : Ln8Sel p S y0 x k₁ k₂ e eφ et ec) :
     |(ln8 p S y0 x k₁ k₂ e eφ et ec).sum - Real.log (∑ i ∈ range 8, x i)| ≤
       9926 / 1000 * u p ^ 8 * |Real.log (∑ i ∈ range 8, x i)| + 1 / 2 ^ 509 := by
   rcases hstart with ⟨-, hDW⟩ | ⟨hbig, w0, w1, hW, hA⟩
-  · exact thm42_8_start p hp S hS x hx hH hX0 hX y0 hy0 hyd hy2 hDW k₁ k₂ hk hk2 e hsel eφ et ec hUφ hselt hUc
-  · exact thm42_8_half p hp S hS x hx hH hX0 hX hbig y0 hy0 hyd hy2 w0 w1 hW hA k₁ k₂ hk hk2 e hsel eφ et ec hUφ
-      hselt hUc
+  · exact thm42_8_start p hp S hS x hx hH hX0 hX y0 hy0 hyd hy2 hDW k₁ k₂ e eφ et ec hsel
+  · exact thm42_8_half p hp S hS x hx hH hX0 hX hbig y0 hy0 hyd hy2 w0 w1 hW hA k₁ k₂ e eφ et ec hsel
 
 end ExpansionBounds
