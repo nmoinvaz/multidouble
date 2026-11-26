@@ -999,6 +999,10 @@ impl<S: Simd> QDotAcc<S> {
 /// double-double accuracy, and `val` rounds back to double-double. So this instantiation computes in quad-double with
 /// double-double data.
 impl<S: Simd> crate::dual::Lane for QV<S> {
+    const BLOCK_MIN: usize = 64;
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        crate::series::block_mul_expansion(x, y, acc)
+    }
     type S = S;
     type Acc = QDotAcc<S>;
     dd_param!();

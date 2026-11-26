@@ -169,7 +169,8 @@ pub trait Lane:
 {
     /// the backend the lanes run on
     type S: Simd;
-    type Acc: Copy;
+    /// the accumulator of sums of products (`acc`, `fin`); Send and Sync, so that sums can run on threads
+    type Acc: Copy + Send + Sync;
     const TANGENT: bool;
     /// values in plain f64 (`F8`, `Fu`, `Fun`): double-double constants and inputs enter rounded to their hi parts
     const VAL_F64: bool = false;
@@ -364,9 +365,30 @@ pub trait Lane:
     fn set_tan64(&mut self, _k: usize, _t: V8<Self::S>) {
         unreachable!("no f64 tangents")
     }
+    /// the smallest side of a square for which `block_mul` is faster than its terms one by one, a power of two; 0
+    /// where it is not, so that `crate::series::Relaxed` sums every term directly
+    const BLOCK_MIN: usize = 0;
+    /// Every product x_i y_j with i + j < acc.len() added into acc\[i + j\]: a square of a relaxed product
+    /// (`crate::series::Relaxed`). By default term by term with `acc_mut`, each index's terms in the order of x's; on
+    /// `DV`, `QV`, `crate::ov::OV` and their dual lanes `Du`, `Qu`, `Ou` by `crate::series::mullow`, accurate to the
+    /// lane's precision relative to sum |x_i| |y_j|, with other bits than the terms' sum.
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        if x.is_empty() || y.is_empty() {
+            return;
+        }
+        for (k, a) in acc.iter_mut().enumerate() {
+            for i in k.saturating_sub(y.len() - 1)..x.len().min(k + 1) {
+                Self::acc_mut(a, &x[i], &y[k - i]);
+            }
+        }
+    }
 }
 
 impl<S: Simd> Lane for DV<S> {
+    const BLOCK_MIN: usize = 512;
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        crate::series::block_mul_expansion(x, y, acc)
+    }
     type S = S;
     type Acc = DDotAcc<S>;
     dd_param!();
@@ -488,6 +510,10 @@ impl<S: Simd> Div for Du<S> {
 }
 
 impl<S: Simd> Lane for Du<S> {
+    const BLOCK_MIN: usize = 512;
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        crate::series::block_mul_dual::<S, DV<S>, Self>(x, y, acc, |u| u.split())
+    }
     type S = S;
     type Acc = (DDotAcc<S>, DDotAcc<S>);
     dd_param!();
@@ -815,6 +841,10 @@ impl<S: Simd> Div for Qu<S> {
 }
 
 impl<S: Simd> Lane for Qu<S> {
+    const BLOCK_MIN: usize = 64;
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        crate::series::block_mul_dual::<S, QV<S>, Self>(x, y, acc, |u| u.split())
+    }
     type S = S;
     type Acc = (QDotAcc<S>, QDotAcc<S>);
     dd_param!();
@@ -1008,6 +1038,10 @@ impl<S: Simd> Div for Ou<S> {
 }
 
 impl<S: Simd> Lane for Ou<S> {
+    const BLOCK_MIN: usize = 32;
+    fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
+        crate::series::block_mul_dual::<S, OV<S>, Self>(x, y, acc, |u| u.split())
+    }
     type S = S;
     type Acc = (ODotAcc<S>, ODotAcc<S>);
     dd_param!();
