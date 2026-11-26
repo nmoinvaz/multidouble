@@ -887,7 +887,7 @@ def conversion_cases():
         "dd_matvec": (Ah, Al, bh[:7], bl[:7]), "dd_solve": (Sh, Sl, bh[:6], bl[:6]),
         "qd_add_dd": (*z, bh, bl), "qd_axpy": (0.37, *z, *y), "dd_horner": (Ch, Cl, 0.4341),
         "od_add_dd": (*oz, bh, bl), "od_axpy": (0.37, *oz, *oy),
-        "qd_solve": (*Q, *[p[:6] for p in z]), "dd_logdet": (Sh, Sl, False), "qd_logdet": (*Q, False),
+        "qd_solve": (*Q, *[p[:6] for p in z]), "dd_logdet": (Sh, Sl, False, "none"), "qd_logdet": (*Q, False, "none"),
     }
 
 

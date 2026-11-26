@@ -1,6 +1,6 @@
 """Tests of dd_logdet and qd_logdet, the sign and ln|det A| of a real matrix by the double-double and the quad-double
 LU, against mpmath at 200 digits on the exact entries (about 660 bits, more than the 212 of four parts). The controls
-break the LU through the binding's control argument (no pivoting, the sign without its flips for the row interchanges,
+break the LU through the control argument (no pivoting, the sign without its flips for the row interchanges,
 the quad-double updates rounded to double-double) and feed numpy's float64 slogdet to the same checks."""
 import numpy as np
 import pytest
@@ -79,7 +79,7 @@ def test_logdet_of_random_matrices_against_mpmath():
         cases = [("dd", [rng.standard_normal((n, n)), np.zeros((n, n))]), ("dd", rand_parts(rng, n, 2)),
                  ("qd", rand_parts(rng, n, 4))]
         for kind, parts in cases:
-            f, raw = getattr(md, f"{kind}_logdet"), getattr(md._md, f"{kind}_logdet")
+            f = getattr(md, f"{kind}_logdet")
             res, ref = f(*parts), mp_logdet(parts)
             print(f"n {n} {kind}: {res[:2]}, ln error {abs(res[1] - ref[1]):.1e} of {ln_tol(n, res):.1e}")
             assert agrees(res, ref, ln_tol(n, res)), (n, kind, res, ref)
@@ -87,7 +87,7 @@ def test_logdet_of_random_matrices_against_mpmath():
                 want = mp_pivot_range(parts)
                 assert abs(res[2] - want[0]) <= 1e-14 * want[0] and abs(res[3] - want[1]) <= 1e-14 * want[1], (n, kind)
             assert f(*parts, par=True) == res, (n, kind)
-            blind = raw(*parts, False, "no_swap_sign")
+            blind = f(*parts, control="no_swap_sign")
             misses += not agrees(blind, ref, ln_tol(n, blind))
     print(f"control: the sign without the interchanges' flips misses {misses} of 18")
     assert misses > 0
@@ -186,7 +186,7 @@ def test_qd_logdet_resolves_what_dd_cannot(n, seed):
     A, ref = planted(n, 1e-45, seed, dd_sign)
     z = np.zeros_like(A)
     res, d = md.qd_logdet(A, z, z, z), md.dd_logdet(A, z)
-    bad = md._md.qd_logdet(A, z, z, z, False, "update_dd")
+    bad = md.qd_logdet(A, z, z, z, control="update_dd")
     print(f"n {n}: mpmath {ref}, qd {res[:2]}, dd {d[:2]}, qd with dd updates {bad[:2]}")
     assert agrees(res, ref, 1e-6)
     assert not agrees(d, ref, 1e-6)
@@ -206,7 +206,7 @@ def test_logdet_needs_pivoting(n):
         res = getattr(md, f"{kind}_logdet")(*parts)
         assert agrees(res, ref, ln_tol(n, res)), (kind, res, ref)
         try:
-            bad = getattr(md._md, f"{kind}_logdet")(*parts, False, "no_pivot")
+            bad = getattr(md, f"{kind}_logdet")(*parts, control="no_pivot")
         except ValueError as e:
             print(f"n {n} {kind} without pivoting: {e}")
             continue
@@ -221,9 +221,34 @@ def test_logdet_of_a_permutation_matrix():
     assert md.dd_logdet(A, z) == (-1.0, 0.0, 1.0, 1.0)
     assert md.qd_logdet(A, z, z, z) == (-1.0, 0.0, 1.0, 1.0)
     with pytest.raises(ValueError, match="singular"):
-        md._md.dd_logdet(A, z, False, "no_pivot")
+        md.dd_logdet(A, z, control="no_pivot")
     with pytest.raises(ValueError, match="singular"):
-        md._md.qd_logdet(A, z, z, z, False, "no_pivot")
+        md.qd_logdet(A, z, z, z, control="no_pivot")
+
+
+def test_logdet_wrappers_pass_control_and_par_on():
+    """dd_logdet and qd_logdet give the binding's results bit for bit for each control, with par and without, on
+    matrices where each control changes the result: a random one with a tiny entry (0, 0) and an odd number of row
+    interchanges for "no_pivot" and "no_swap_sign", and qd_logdet's planted one of test_qd_logdet_resolves_what_dd_cannot
+    for "update_dd". Control: each breakage's result differs from the default's."""
+    for seed in range(20):
+        A = np.random.default_rng(seed).standard_normal((12, 12))
+        A[0, 0] = 1.37 * 2.0**-300
+        if md.dd_logdet(A, np.zeros_like(A), control="no_swap_sign")[0] != md.dd_logdet(A, np.zeros_like(A))[0]:
+            break
+    P, _ = planted(12, 1e-45, 4, dd_sign)
+    cases = [("dd", A, 2, ("no_pivot", "no_swap_sign")), ("qd", A, 4, ("no_pivot", "no_swap_sign")),
+             ("qd", P, 4, ("update_dd",))]
+    for kind, M, k, controls in cases:
+        f, raw = getattr(md, f"{kind}_logdet"), getattr(md._md, f"{kind}_logdet")
+        parts = [M] + zeros_like(M, k - 1)
+        base = f(*parts)
+        for par in (False, True):
+            assert f(*parts, par=par) == raw(*parts, par, "none") == base, (kind, par)
+            for c in controls:
+                res = f(*parts, par=par, control=c)
+                assert res == raw(*parts, par, c), (kind, par, c)
+                assert res != base, (kind, par, c)
 
 
 def parity(p):
@@ -254,15 +279,15 @@ def test_logdet_sign_follows_row_permutations(n):
     perms = [t, c3, [(i + 1) % n for i in range(n)]] + [list(rng.permutation(n)) for _ in range(4)]
     assert {parity(p) for p in perms} == {1.0, -1.0}
     for kind, k in (("dd", 2), ("qd", 4)):
-        f, raw = getattr(md, f"{kind}_logdet"), getattr(md._md, f"{kind}_logdet")
+        f = getattr(md, f"{kind}_logdet")
         base = f(A, *zeros_like(A, k - 1))
         assert agrees(base, ref, ln_tol(n, base))
-        blind = raw(A, *zeros_like(A, k - 1), False, "no_swap_sign")
+        blind = f(A, *zeros_like(A, k - 1), control="no_swap_sign")
         for p in perms:
             PA = A[p, :]
             res = f(PA, *zeros_like(A, k - 1))
             assert res == (parity(p) * base[0], *base[1:]), (kind, p)
-            b = raw(PA, *zeros_like(A, k - 1), False, "no_swap_sign")
+            b = f(PA, *zeros_like(A, k - 1), control="no_swap_sign")
             assert (b == (parity(p) * blind[0], *blind[1:])) == (parity(p) > 0), (kind, p)
 
 
@@ -278,9 +303,9 @@ def test_logdet_errors():
         with pytest.raises(ValueError):
             md.qd_logdet(args[0], args[1], np.zeros_like(args[1]), np.zeros_like(args[1]))
     with pytest.raises(ValueError, match="unknown control"):
-        md._md.dd_logdet(np.eye(2), np.zeros((2, 2)), False, "update_dd")
+        md.dd_logdet(np.eye(2), np.zeros((2, 2)), control="update_dd")
     with pytest.raises(ValueError, match="unknown control"):
-        md._md.qd_logdet(*([np.eye(2)] + zeros_like(np.eye(2), 3)), False, "nonsense")
+        md.qd_logdet(*([np.eye(2)] + zeros_like(np.eye(2), 3)), control="nonsense")
     e = np.zeros((0, 0))
     assert md.dd_logdet(e, e) == (1.0, 0.0, np.inf, 0.0)
     assert md.qd_logdet(e, e, e, e) == (1.0, 0.0, np.inf, 0.0)

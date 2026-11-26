@@ -32,14 +32,16 @@ print(md.isa())                           # the SIMD backend in use, detected at
   its parts in any order; returns the four parts of x, of b's shape, to about cond(A) 2^-209. `QDLu(a0, a1, a2, a3)`
   factors A once, and its `solve(b0, b1, b2, b3, transpose=False)` gives the bits of `qd_solve` (or solves A^T x = b)
   without factoring again. Both raise `ValueError` for a singular A and for entries that are not finite.
-- `dd_logdet(Ah, Al, par=False)`, `qd_logdet(a0, a1, a2, a3, par=False)`: the sign and ln|det A| of a real square
+- `dd_logdet(Ah, Al, par=False, control="none")`, `qd_logdet(a0, a1, a2, a3, par=False, control="none")`: the sign and ln|det A| of a real square
   matrix by the LU of `dd_solve` or `qd_solve`, returned with the smallest and largest pivot magnitude as four floats
   `(sign, logabsdet, min_pivot, max_pivot)`. A float64 matrix `a` is `(a, zeros)` or `(a, zeros, zeros, zeros)`. The
   factors are those of a matrix within about n 2^-106 |L| |U| of A (n 2^-209 in quad-double), so the sign is that of
   det A unless A is that close to a singular matrix, against n 2^-53 |L| |U| for numpy's float64 `slogdet`. ln|det A|
   is a float64 sum of the ln|u_kk|. `par=True` updates the trailing columns on rayon's threads (`RAYON_NUM_THREADS`
-  sets how many), with the same bits. Both raise `ValueError` for a singular A (an exactly zero pivot) and for entries
-  that are not finite.
+  sets how many), with the same bits. `control` breaks the LU for tests' controls: `"no_pivot"` (no row interchanges),
+  `"no_swap_sign"` (the sign without its flip per interchange) and, for `qd_logdet`, `"update_dd"` (every trailing
+  update rounded to double-double). Both raise `ValueError` for a singular A (an exactly zero pivot), for entries that
+  are not finite and for an unknown control.
 - `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, each element the exact sum of its
   parts in any order) plus a double-double one, elementwise in quad-double; returns the four parts of the sum.
 - `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a

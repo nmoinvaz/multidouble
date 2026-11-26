@@ -174,7 +174,7 @@ class QDLu:
         return self._lu.solve(*_parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3), bool(transpose))
 
 
-def dd_logdet(ah, al, par=False):
+def dd_logdet(ah, al, par=False, control="none"):
     """(sign, ln|det A|, min |u_kk|, max |u_kk|) of a real square matrix A, by the double-double LU with partial
     pivoting of dd_solve (the Rust crate's DDLu): A as (n, n) hi and lo arrays, each entry the exact sum of its two
     parts, so a float64 matrix a is (a, np.zeros_like(a)). The sign, 1.0 or -1.0, is that of the product of the pivots
@@ -183,20 +183,23 @@ def dd_logdet(ah, al, par=False):
     pivots' leading parts. The factors are those of a matrix within about n 2^-106 |L| |U| of A entrywise (partial
     pivoting is backward stable), so the sign is that of det A unless a perturbation that small makes A singular.
     par: update the trailing columns on rayon's threads (RAYON_NUM_THREADS, read at their first use, sets how many),
-    with the same bits. The factorization costs about n^3 / 3 double-double multiply-adds. Raises ValueError if A is
-    singular (an exactly zero pivot), has an entry that is not finite, or is not square."""
-    return _md.dd_logdet(_f64(ah, "ah"), _f64(al, "al"), bool(par))
+    with the same bits. The factorization costs about n^3 / 3 double-double multiply-adds. control: "none", or a
+    breakage for tests' controls: "no_pivot" (the LU without row interchanges) or "no_swap_sign" (the sign without its
+    flip per interchange). Raises ValueError if A is singular (an exactly zero pivot), has an entry that is not finite,
+    or is not square, and for an unknown control."""
+    return _md.dd_logdet(_f64(ah, "ah"), _f64(al, "al"), bool(par), str(control))
 
 
-def qd_logdet(a0, a1, a2, a3, par=False):
+def qd_logdet(a0, a1, a2, a3, par=False, control="none"):
     """(sign, ln|det A|, min |u_kk|, max |u_kk|) of a real square matrix A, by the quad-double LU with partial
     pivoting of qd_solve (the Rust crate's QDLu): A as four (n, n) part arrays, each entry the exact sum of its parts in
     any order, so a float64 matrix a is (a, z, z, z) with z = np.zeros_like(a). The sign and ln|det A| follow the rules
     of dd_logdet, ln|det A| again a float64 sum. The factors are those of a matrix within about n 2^-209 |L| |U| of A
     entrywise, so the sign is that of det A where A is too close to a singular matrix for dd_logdet. par as for
-    dd_logdet. The factorization costs about n^3 / 3 quad-double multiply-adds. Raises ValueError if A is singular (an
-    exactly zero pivot), has an entry that is not finite, or is not square."""
-    return _md.qd_logdet(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3), bool(par))
+    dd_logdet. The factorization costs about n^3 / 3 quad-double multiply-adds. control: those of dd_logdet, and
+    "update_dd" (every trailing update rounded to double-double). Raises ValueError if A is singular (an exactly zero
+    pivot), has an entry that is not finite, or is not square, and for an unknown control."""
+    return _md.qd_logdet(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3), bool(par), str(control))
 
 
 def qd_add_dd(z0, z1, z2, z3, dh, dl):
