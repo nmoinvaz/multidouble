@@ -1,4 +1,4 @@
-% Ratios of integers.
+% Ratios of integers and multidouble's double-double product.
 % \input after the exponential's section of expansion-error-bounds.tex.
 
 \section{Ratios of integers}\label{sec:recip}
@@ -44,4 +44,35 @@ it with $q_0$ odd, is $\RN$ of $n2^s/q$, and the part is $\RN$ of what is left; 
 leaves, at most half the divisor. So $n \le 2^{63}$ before the first part, $n < q2^{11}$ before the second and $n \le
 q/2$ before the others, which gives $s \ge -11$, $s \ge 41$ and $s \ge 52$, and $e \le 112i$ before part $i$, so $e +
 s \le 896$ for the eight parts.
+\end{proof}
+
+multidouble's double-double product is not one of the published algorithms~\cite{JMP17}: it adds both cross
+products to the error of $\TwoProd$ by fused multiply-adds.
+
+\begin{proposition}\label{prop:ddmul}
+For double words $x$ and $y$ and $p \ge 3$, let $(c_h, c_\ell) = \TwoProd(x_h, y_h)$, $t_1 = \RN(x_hy_\ell + c_\ell)$,
+$t_2 = \RN(x_\ell y_h + t_1)$ and $(z_h, z_\ell) = \FastTwoSum(c_h, t_2)$. Then $z$ is a double word with $|z - xy|
+\le (6 + 2u)u^2/(1 - u)^2\,|xy|$, at most $6.000001\,u^2|xy|$ at $p = 53$.
+\end{proposition}
+
+\begin{proof}
+Write $P = |x_hy_h|$. The error is $(t_2 - (x_\ell y_h + t_1)) + (t_1 - (x_hy_\ell + c_\ell)) - x_\ell y_\ell$. With
+$|x_\ell| \le u|x_h|$, $|y_\ell| \le u|y_h|$ and $|c_\ell| \le uP$, $|x_hy_\ell + c_\ell| \le 2uP$ and $|x_\ell y_h +
+t_1| \le (3 + 2u)uP$, so the error is at most $(6 + 2u)u^2P$; and $|t_2| \le |c_h|$, so $\FastTwoSum$ is exact. As
+$|xy| \ge (1 - u)^2P$, the bound follows.
+\end{proof}
+
+multidouble's tests check the threshold $5u^2$; the bound here holds for every pair of double words.
+
+\begin{corollary}\label{cor:mulrecip}
+For a double word $x$, \texttt{DD::mul\_recip(k)} is within $(\varepsilon_{\rm P}(1 + u^2(1 + u)) + u^2(1 + u))|x/k|$
+of $x/k$, $\varepsilon_{\rm P} = (6 + 2u)u^2/(1 - u)^2$, at most $7.000001\,u^2|x/k|$ at $p = 53$. For $x$ on $H(2)$,
+\texttt{OD::mul\_recip(k)} is within $(\varepsilon_8(1 + u^8(1 + u)) + u^8(1 + u))|x/k|$, $\varepsilon_8 = u^8 +
+\kappa u^9((1 - 2u)/(1 - 4u))^2$ with Table~\ref{tab:kappa}'s $\kappa \le 2^{37.93}$, at most $2.00003\,u^8|x/k|$.
+\end{corollary}
+
+\begin{proof}
+A product within $\varepsilon$ of $xc$, by a constant within $\delta$ of $1/k$, is within $\varepsilon(1 + \delta) +
+\delta$ of $x/k$, relatively; $\varepsilon$ is Proposition~\ref{prop:ddmul}'s and Theorem~\ref{thm:t3}'s for MUL on
+$H(2)$, $\delta$ Lemma~\ref{lem:greedy}'s.
 \end{proof}

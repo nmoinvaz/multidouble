@@ -108,6 +108,8 @@ The table lists them by file.
 | `ExpansionBounds/Recip.lean` | Lemma 46 (`lem:greedy`): the greedy expansion `r_i = RN(x - r_0 - ... - r_{i-1})`, each part at most `u` times the one before, so on `H(1)`, and `n` parts within `u^n(1 + u)\|x\|` of `x` (`greedy_err`); the two-sum of the first two parts a double word that no double word is nearer `x` than (`greedy_dw_nearest`, `greedy_dd`) |
 | `ExpansionBounds/RatioParts.lean` | Proposition 47 (`prop:ratio`): a model of `recip::ratio_parts`, its state `(-1)^neg n/(q 2^e)`, its shift, split and rounding, whose parts are the greedy parts of `p/q` (`rpPart_eq`) |
 | `ExpansionBounds/RatioBounds.lean` | Proposition 47 (`prop:ratio`): for `\|p\| ≤ 2^63` and `1 ≤ q < 2^60`, what is left below `2^63`, `q 2^11` and `q/2` before the first, second and later parts (`rpState_inv`), so shifts in `[-11, 112]`, dividends and products below `2^127`, divisors below `2^72` and normal scales (`rp_bounds`) |
+| `ExpansionBounds/DDMul.lean` | Proposition 48 (`prop:ddmul`): multidouble's double-double product, TwoProd and two fused multiply-adds, a double word within `(6 + 2u)u²/(1 - u)²` of `xy`, relatively, for `p ≥ 3` (`ddMul_good`) |
+| `ExpansionBounds/MulRecip.lean` | Corollary 49 (`cor:mulrecip`): `DD::mul_recip` within `ε_P(1 + u²(1 + u)) + u²(1 + u)` and `OD::mul_recip` on `H(2)` within `ε_8(1 + u^8(1 + u)) + u^8(1 + u)`, `ε_8 = u^8 + 2^37.93 u^9((1 - 2u)/(1 - 4u))²`, of `xr` for any real `r` (`dd_mul_greedy`, `od_mul_greedy`) |
 
 From this folder:
 

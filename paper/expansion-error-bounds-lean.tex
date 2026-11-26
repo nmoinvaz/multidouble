@@ -10,8 +10,10 @@ $\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md
 and~\ref{tab:lean2} give the files of \texttt{ExpansionBounds/} and the theorems for each statement.
 \begin{itemize}
 \item The proofs hold for every precision $p \ge 2$, except that Lemmas~\ref{lem:red} and~\ref{lem:lnb},
-Theorem~\ref{thm:trig}, Propositions~\ref{prop:ddexplog} and~\ref{prop:ratio} and the constants at $n = 8$ are
-stated at $p = 53$, and each published double-word theorem from its own precision, 3 to 7.
+Theorem~\ref{thm:trig}, Propositions~\ref{prop:ddexplog} and~\ref{prop:ratio}, the octo-double part of
+Corollary~\ref{cor:mulrecip} and the constants at $n = 8$ are stated at $p = 53$, Proposition~\ref{prop:ddmul} and the
+double-double part of Corollary~\ref{cor:mulrecip} from $p = 3$, and each published double-word theorem from its own
+precision, 3 to 7.
 \item A constant is evaluated by Lean's kernel on a copy of its recursion over the rationals, which a lemma equates
 with the recursion over the reals. Where exact values grow too long the copy rounds up, which the bounds of
 Lemma~\ref{lem:g} allow because they grow with their arguments. The longest runs are cut into steps
@@ -151,6 +153,9 @@ Lemma~\ref{lem:greedy} & \texttt{Recip.lean} & \texttt{gRem\_sum}, \texttt{gPart
   \texttt{greedy\_err}, \texttt{exists\_next}, \texttt{greedy\_dw\_nearest}, \texttt{twoSum\_dw}, \texttt{greedy\_dd} \\
 Proposition~\ref{prop:ratio} & \texttt{RatioParts.lean}, \texttt{RatioBounds.lean} & \texttt{rn\_rpRound},
   \texttt{rpShift\_range}, \texttt{rpStep\_spec}, \texttt{rpPart\_eq}, \texttt{rpState\_inv}, \texttt{rp\_bounds} \\
+Proposition~\ref{prop:ddmul} & \texttt{DDMul.lean} & \texttt{ddMul\_good} \\
+Corollary~\ref{cor:mulrecip} & \texttt{MulRecip.lean} & \texttt{mul\_greedy\_err}, \texttt{dd\_mul\_greedy},
+  \texttt{od\_mul\_greedy} \\
 \bottomrule
 \end{tabular}
 \end{table*}
