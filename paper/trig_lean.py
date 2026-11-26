@@ -10,8 +10,9 @@ one, for |r_0| < 1/2 and for |r_0| < 2^-5 (the remark after Theorem 35).
 The states must be the ones the Lean definitions compute, bit for bit, or the modules do not build. The bound of a
 bucket is compared with trig_consts.py, which rounds at other places and agrees to more than 50 digits.
 
-usage: trig_lean.py [lean/ExpansionBounds]
-       prints the bound of each run of buckets and the largest; with an argument it writes the Lean modules there.
+usage: trig_lean.py [lean/ExpansionBounds [12]]
+       prints the bound of each run of buckets and the largest; with an argument it writes the Lean modules there,
+       and with 12 after it those of n = 12 too, which the default build leaves out.
        The control drops the truncation term and must fall below trig_consts.py; the bounds for |r_0| < 2^-5 must
        not hold from |r_0| < 1/2 on."""
 import os
@@ -34,8 +35,10 @@ TAN_KD = (Fr(103232124), Fr(461400803))
 LOW = ((1, Fr(2175822, 10 ** 6), Fr(4800526, 10 ** 6)), (5, Fr(2000706, 10 ** 6), Fr(4002771, 10 ** 6)))
 # the remark's bounds at other n, for the sine and cosine and for the tangent: (n, 10^6 C, 10^6 C^T, modules).
 # Modules are written where their number is not zero. At n = 12 a Horner step takes the kernel about 20 seconds and
-# there are about 1400 of them, so its bounds are evaluated here and not checked by the kernel.
+# there are about 1400 of them, so its modules are written on request only (a third argument 12), in pieces of at
+# most SPLIT[12] checks, and lake builds them on request (lake build ExpansionBounds.Trig12).
 OTHER = ((2, 3168701, 6452138, 1), (4, 3164155, 6426155, 2), (12, 3582787311, 4929367335, 0))
+SPLIT = {12: 12}
 DROP = False  # the control: no truncation term
 
 
@@ -403,28 +406,28 @@ def low_text(groups, states, tan):
     return t
 
 
-def group_text(F, j, Ks, Kc, nm=None):
-    """the states, the kernel's checks and the group's theorem for bucket j, with the Lean names nm"""
+def group_parts(F, j, Ks, Kc, nm=None):
+    """for bucket j, with the Lean names nm: for the sine and for the cosine the stored states, the kernel's checks
+    of the pieces of Horner's run and the run's theorem; then the check on the last states and the group's theorem"""
     nm = nm or Names(8)
     q = nm.pre
     rb = rbar(j)
-    o, last = [], {}
+    segs, last = [], {}
     for sine, K, tag, C, Fq in ((True, Ks, 's', 'sinCQ', nm.fs), (False, Kc, 'c', 'cosCQ', nm.fc)):
         sts = horner_states(rb, sine, F[sine], K)
         d = K - 1
-        for a, st in sts[1:]:
-            o.append(f'\ndef {q}_{tag}{j}_{a} : (ℤ × ℕ) × List (ℤ × ℕ) :=\n  ({pair(st[0])},\n    ['
-                     + wrap([pair(x) for x in st[1]], ', ', 5) + '])\n')
-        names = []
+        defs = [f'\ndef {q}_{tag}{j}_{a} : (ℤ × ℕ) × List (ℤ × ℕ) :=\n  ({pair(st[0])},\n    ['
+                + wrap([pair(x) for x in st[1]], ', ', 5) + '])\n' for a, st in sts[1:]]
+        names, pieces = [], []
         for (a, _), (b, _) in zip(sts, sts[1:]):
             start = f'({nm.init} {C} {Fq} {d})' if a == 0 else f'(dySt {q}_{tag}{j}_{a})'
             names.append((f'{q}_{tag}{j}_{a}_{b}', b - a))
-            o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_{tag}{j}_{a}_{b} :\n'
-                     f'    {nm.run} {C} {Fq} {j} {d} {a} {b - a} {start} = dySt {q}_{tag}{j}_{b} := by\n'
-                     '  decide +kernel\n')
+            pieces.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_{tag}{j}_{a}_{b} :\n'
+                          f'    {nm.run} {C} {Fq} {j} {d} {a} {b - a} {start} = dySt {q}_{tag}{j}_{b} := by\n'
+                          '  decide +kernel\n')
         if K == 2:
             last[tag] = f'({nm.init} {C} {Fq} {d})'
-            o.append(f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 0 ({nm.init} {C} {Fq} {d}) =\n'
+            chain = (f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 0 ({nm.init} {C} {Fq} {d}) =\n'
                      f'    {nm.init} {C} {Fq} {d} := rfl\n')
         else:
             last[tag] = f'(dySt {q}_{tag}{j}_{K - 2})'
@@ -433,13 +436,20 @@ def group_text(F, j, Ks, Kc, nm=None):
             for name, m in reversed(names[:-1]):
                 term = f'{nm.cut} {C} {Fq} {j} {d} _ {m} {rest} {name}\n    ({term})'
                 rest += m
-            o.append(f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 {K - 2} ({nm.init} {C} {Fq} {d}) =\n'
+            chain = (f'\ntheorem {q}_{tag}{j} : {nm.run} {C} {Fq} {j} {d} 0 {K - 2} ({nm.init} {C} {Fq} {d}) =\n'
                      f'    dySt {q}_{tag}{j}_{K - 2} :=\n  {term}\n')
+        segs.append((defs, pieces, chain))
         last[tag + 'v'], last[tag + 'p'] = tail(rb, sine, K, sts[-1][1])
-    o.append(f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_ok{j} : {nm.ok} {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n'
-             '  decide +kernel\n')
-    o.append(f'\ntheorem {q}_g{j} : {nm.group} ({j}, {Ks}, {Kc}) :=\n  ⟨_, _, {q}_s{j}, {q}_c{j}, {q}_ok{j}⟩\n')
-    return ''.join(o), last, (last['sv'], last['cv'], last['sp'], last['cp'])
+    ok = (f'\nset_option maxHeartbeats 4000000 in\ntheorem {q}_ok{j} : {nm.ok} {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n'
+          '  decide +kernel\n')
+    grp = f'\ntheorem {q}_g{j} : {nm.group} ({j}, {Ks}, {Kc}) :=\n  ⟨_, _, {q}_s{j}, {q}_c{j}, {q}_ok{j}⟩\n'
+    return segs, ok, grp, last, (last['sv'], last['cv'], last['sp'], last['cp'])
+
+
+def group_text(F, j, Ks, Kc, nm=None):
+    """the states, the kernel's checks and the group's theorem for bucket j, with the Lean names nm, as one text"""
+    segs, ok, grp, last, deltas = group_parts(F, j, Ks, Kc, nm)
+    return ''.join(''.join(d) + ''.join(pc) + ch for d, pc, ch in segs) + ok + grp, last, deltas
 
 
 DATA_N = '''import ExpansionBounds.TrigN.Defs
@@ -582,6 +592,23 @@ open Finset
 '''
 
 
+# a table outside the default build is outside its audit of axioms, so its controls repeat the audit with its modules
+AUDIT_N = '''
+open Lean Elab Command in
+run_cmd liftCoreM do
+  let decls ← Controls.proofDecls
+  unless decls.contains ``ExpansionBounds.thm35_sincos_N && decls.contains ``ExpansionBounds.thm35_tan_N do
+    throwError "the theorems at n = N are not among the declarations read"
+  let mut bad : Array (Name × Array Name) := #[]
+  for c in decls do
+    let ax ← Controls.otherAxioms c
+    unless ax.isEmpty do bad := bad.push (c, ax)
+  unless bad.isEmpty do
+    throwError "declarations with other axioms: {bad}"
+  logInfo m!"{decls.size} declarations with Trig N: no axiom other than propext, Classical.choice and Quot.sound"
+'''
+
+
 def controls_n(n, c, ct, rows, lasts):
     """the controls of the checks at n: each bound one unit lower where it is largest, and kappa_DIV one unit lower"""
     tab = f'trig{n}Tab'
@@ -603,14 +630,8 @@ def controls_n(n, c, ct, rows, lasts):
         f'example : ¬ {tab}.KdivOk trig{n}Kd0 {TAN_KD[1] - 1} := by\n  decide +kernel\n')
 
 
-def lean_modules_n(n, c, ct, mods):
-    """the modules of the remark's bounds c and ct, in millionths, at n: the table, Horner's runs, their union and the
-    theorems; N must be n"""
-    F, groups = tables_n(n)
-    nm = Names(n)
-    end = '\nend ExpansionBounds\n'
-    q, qt = f'{c} / 1000000', f'{ct} / 1000000'
-    cm, ctm, c, ct = c, ct, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
+def data_n(n, F, groups, q, qt):
+    """the text of Trig<n>/Data.lean, less its last line: the tables, the groups and the constants"""
     data = [DATA_N.replace('%N', str(n))]
     for sine, name, what in ((True, f'trig{n}Fs', "SINR's"), (False, f'trig{n}Fc', "COSR's")):
         rows = ['  [' + ', '.join(pair(x) for x in row) + ']' for row in F[sine]]
@@ -625,7 +646,18 @@ def lean_modules_n(n, c, ct, mods):
                 f'\n/-- the tangent\'s bound in the remark, in units of `u^{n}` -/\ndef trig{n}Ct : ℚ := {qt}\n'
                 f'\n/-- a bound on `κ_DIV(1.4143u)` at `n = {n}` -/\ndef trig{n}Kd0 : ℚ := {TAN_KD[0]}\n'
                 f'\n/-- a bound on `κ_DIV(3u)` at `n = {n}` -/\ndef trig{n}Kd3 : ℚ := {TAN_KD[1]}\n')
-    files = {f'Trig{n}/Data.lean': ''.join(data) + end}
+    return ''.join(data)
+
+
+def lean_modules_n(n, c, ct, mods):
+    """the modules of the remark's bounds c and ct, in millionths, at n: the table, Horner's runs, their union and the
+    theorems; N must be n"""
+    F, groups = tables_n(n)
+    nm = Names(n)
+    end = '\nend ExpansionBounds\n'
+    q, qt = f'{c} / 1000000', f'{ct} / 1000000'
+    cm, ctm, c, ct = c, ct, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
+    files = {f'Trig{n}/Data.lean': data_n(n, F, groups, q, qt) + end}
     cost = lambda g: g[1] + g[2] + 4
     bins = [[] for _ in range(mods)]
     for g in sorted(groups, key=cost, reverse=True):
@@ -652,6 +684,84 @@ def lean_modules_n(n, c, ct, mods):
         .replace('TEXACTS', '\n'.join(f'  · exact tan{n}_g{j}' for j, _, _ in groups))
         .replace('EXACTS', '\n'.join(f'  · exact trig{n}_g{j}' for j, _, _ in groups)))
     files[f'Trig{n}.lean'] = (TOP_N.replace('%N', str(n)).replace('%C', str(dec_up(c, 6))).replace('%Q', q)
+                              .replace('%T', str(dec_up(ct, 6))).replace('%R', qt))
+    return files, rows, controls_n(n, cm, ctm, rows, lasts)
+
+
+STATES_N = '''import ExpansionBounds.Trig%N.Data
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: the stored states of Horner's runs in bucket %J
+
+The states after each piece of the sine's and of the cosine's run, as dyadic pairs. This file is written by
+`trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+'''
+
+PIECES_N = '''import ExpansionBounds.Trig%N.S%J
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: pieces of Horner's runs in bucket %J
+
+Each piece of at most STEP steps is checked by the kernel, from the state before it to the state after it. A module
+holds at most %P of them: at `n = %N` a piece takes the kernel most of a minute, and its memory adds up over a
+module. This file is written by `trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+'''
+
+GROUP_N = '''IMPORTS
+
+/-!
+# Theorem 35 at `n = %N` and `p = 53`: bucket %J
+
+The pieces of Horner's runs joined, and `TrigTab.Ok` and `TrigTab.TanOk` on the last states. This file is written by
+`trig_lean.py`.
+-/
+
+namespace ExpansionBounds
+'''
+
+
+def lean_modules_split(n, c, ct, per):
+    """the modules of the remark's bounds at an n whose checks are slow: as lean_modules_n, with the states of a
+    bucket in Trig<n>/S<j>.lean, its pieces in modules Trig<n>/R<j>_<k>.lean of at most `per` checks, and its
+    theorems in Trig<n>/G<j>.lean; N must be n"""
+    F, groups = tables_n(n)
+    nm = Names(n)
+    end = '\nend ExpansionBounds\n'
+    q, qt = f'{c} / 1000000', f'{ct} / 1000000'
+    cm, ctm, c, ct = c, ct, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
+    files = {f'Trig{n}/Data.lean': data_n(n, F, groups, q, qt) + end}
+    fill = lambda t, j: t.replace('%N', str(n)).replace('%J', str(j)).replace('%P', str(per)).replace('STEP', str(STEP))
+    rows, lasts = [], {}
+    for j, Ks, Kc in groups:
+        segs, ok, grp, last, (dS, dC, psS, psC) = group_parts(F, j, Ks, Kc, nm)
+        files[f'Trig{n}/S{j}.lean'] = fill(STATES_N, j) + ''.join(''.join(d) for d, _, _ in segs) + end
+        pieces = [x for _, pc, _ in segs for x in pc]
+        chunks = [pieces[i:i + per] for i in range(0, len(pieces), per)]
+        for k, ch in enumerate(chunks):
+            files[f'Trig{n}/R{j}_{k}.lean'] = fill(PIECES_N, j) + ''.join(ch) + end
+        imports = [f'import ExpansionBounds.Trig{n}.R{j}_{k}' for k in range(len(chunks))]
+        imports = imports or [f'import ExpansionBounds.Trig{n}.S{j}']
+        files[f'Trig{n}/G{j}.lean'] = (
+            fill(GROUP_N, j).replace('IMPORTS', '\n'.join(imports)) + ''.join(ch for _, _, ch in segs) + ok + grp
+            + f'\nset_option maxHeartbeats 4000000 in\ntheorem tan{n}_ok{j} :\n'
+            f'    trig{n}Tab.TanOk {nm.tan} {j} {Ks} {Kc} {last["s"]} {last["c"]} := by\n  decide +kernel\n'
+            f'\ntheorem tan{n}_g{j} : trig{n}Tab.TanGroup {nm.tan} ({j}, {Ks}, {Kc}) :=\n'
+            f'  ⟨_, _, trig{n}_s{j}, trig{n}_c{j}, tan{n}_ok{j}⟩\n' + end)
+        rows.append((j, Ks, Kc, dS, dC, trig_c(dS, dC, rbar(j)), tan_c(j, dS, dC, psS, psC)))
+        lasts[j] = (last['s'], last['c'])
+    files[f'Trig{n}/All.lean'] = (
+        ALL_N.replace('IMPORTS', '\n'.join(f'import ExpansionBounds.Trig{n}.G{j}' for j, _, _ in groups))
+        .replace('%N', str(n)).replace('CASES', wrap(['rfl'] * len(groups), ' | ', 4))
+        .replace('TEXACTS', '\n'.join(f'  · exact tan{n}_g{j}' for j, _, _ in groups))
+        .replace('EXACTS', '\n'.join(f'  · exact trig{n}_g{j}' for j, _, _ in groups)))
+    files[f'Trig{n}.lean'] = (TOP_N.replace('`Trig%N/Run0.lean` on', '`Trig%N/G0.lean` on').replace('%N', str(n))
+                              .replace('%C', str(dec_up(c, 6))).replace('%Q', q)
                               .replace('%T', str(dec_up(ct, 6))).replace('%R', qt))
     return files, rows, controls_n(n, cm, ctm, rows, lasts)
 
@@ -784,6 +894,17 @@ if __name__ == '__main__':
             more, rows_n, ctl_text = lean_modules_n(n, c, ct, mods)
             files.update(more)
             controls.append(ctl_text)
+        elif len(sys.argv) > 2 and str(n) in sys.argv[2:] and n in SPLIT:
+            more, rows_n, ctl_text = lean_modules_split(n, c, ct, SPLIT[n])
+            files.update(more)
+            files[f'../Controls/Trig{n}.lean'] = (
+                CONTROLS_N.replace('IMPORTS', f'import ExpansionBounds.Trig{n}\nimport Controls.Axioms')
+                .replace('the bounds at `n = 2` and `4`', f'the bounds at `n = {n}`')
+                .replace('`Trig2.lean` and `Trig4.lean`', f'`Trig{n}.lean`')
+                .replace('proves its negation. This file', 'proves its negation. The table is outside the default '
+                         'build, so the audit of\n`Controls/Axioms.lean` is repeated here with its modules. This file')
+                + ctl_text + '\nend ExpansionBounds\n' + AUDIT_N.replace('_N', f'_{n}').replace('Trig N', f'Trig{n}')
+                .replace('n = N', f'n = {n}'))
         else:
             rows_n = bounds_n(n)
         un, c, ct = U ** n, Fr(c, 10 ** 6), Fr(ct, 10 ** 6)
@@ -801,7 +922,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         files['../Controls/TrigN.lean'] = ''.join(controls) + '\nend ExpansionBounds\n'
     if len(sys.argv) > 1 and ok:
-        for folder in ['Trig8', 'Tan8', '../Controls'] + [f'Trig{n}' for n, *_, m in OTHER if m]:
+        for folder in ['Trig8', 'Tan8', '../Controls'] + [f'Trig{n}' for n, *_ in OTHER]:
             os.makedirs(os.path.join(sys.argv[1], folder), exist_ok=True)
         for name, text in files.items():
             path = os.path.join(sys.argv[1], name)
