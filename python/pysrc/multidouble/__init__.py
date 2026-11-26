@@ -18,6 +18,8 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
   (a, zeros));
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double;
+- ``qd_add``, ``qd_sub``, ``qd_mul``, ``qd_div``: elementwise quad-double operations on four-part arrays; ``qd_op(op,
+  ...)`` with op 0 add, 1 mul, 2 div, 3 sub;
 - ``od_solve``: x with A x = b by LU with partial pivoting in octo-double, A and b as eight float64 part arrays each,
   to about cond(A) 2^-418; ``ODLu`` factors A once for several solves (and solves with A^T);
 - ``od_add_dd``: an octo-double array (eight float64 arrays) plus a double-double one, elementwise in octo-double;
@@ -213,6 +215,39 @@ def qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3):
     x = [_f64(v, n) for v, n in ((x0, "x0"), (x1, "x1"), (x2, "x2"), (x3, "x3"))]
     y = [_f64(v, n) for v, n in ((y0, "y0"), (y1, "y1"), (y2, "y2"), (y3, "y3"))]
     return _md.qd_axpy(a, *x, *y)
+
+
+def qd_op(op, a0, a1, a2, a3, b0, b1, b2, b3):
+    """(a0 + a1 + a2 + a3) op (b0 + b1 + b2 + b3) elementwise in quad-double, any length: op 0 add, 1 mul, 2 div, 3
+    sub, each element's four parts in any order (renormalized first, as qd_add_dd takes them), 8 elements at a time on
+    the best SIMD backend and the rest in scalar quad-double, bitwise the same per element on every backend. Returns
+    the four parts of the result, normalized."""
+    a = _parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3)
+    b = _parts(("b0", "b1", "b2", "b3"), b0, b1, b2, b3)
+    return _md.qd_op(int(op), *a, *b)
+
+
+def qd_add(a0, a1, a2, a3, b0, b1, b2, b3):
+    """a + b in quad-double, elementwise (qd_op 0): the four parts"""
+    return qd_op(0, a0, a1, a2, a3, b0, b1, b2, b3)
+
+
+def qd_sub(a0, a1, a2, a3, b0, b1, b2, b3):
+    """a - b in quad-double, elementwise (qd_op 3): the four parts"""
+    return qd_op(3, a0, a1, a2, a3, b0, b1, b2, b3)
+
+
+def qd_mul(a0, a1, a2, a3, b0, b1, b2, b3):
+    """a b in quad-double, elementwise (qd_op 1): the four parts"""
+    return qd_op(1, a0, a1, a2, a3, b0, b1, b2, b3)
+
+
+def qd_div(a0, a1, a2, a3, b0, b1, b2, b3):
+    """a / b in quad-double, elementwise (qd_op 2): the four parts"""
+    return qd_op(2, a0, a1, a2, a3, b0, b1, b2, b3)
+
+
+__all__ += ["qd_op", "qd_add", "qd_sub", "qd_mul", "qd_div"]
 
 
 def od_solve(a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7):
