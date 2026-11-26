@@ -40,6 +40,9 @@
 //!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
 //!   arithmetic of power-series methods.
+//! * [`recip`]: ratios of integers p/q correctly rounded to up to eight parts by exact integer arithmetic
+//!   ([`recip::ratio_parts`], [`recip::recip_parts`]), as `DD::recip_int`, `QD::recip_int`, `OD::recip_int` and
+//!   `from_ratio`, the lanes' `recip_int` and `mul_recip`: constants such as 1/k in each precision's own rounding.
 //! * [`series`]: products of power series of double-, quad- and octo-double lanes, the truncated product of two known
 //!   series by block scaling and exact integer convolution ([`series::mullow`]) and the relaxed product of two series
 //!   whose coefficients become known one order at a time ([`series::Relaxed`]), with the squares of earlier
@@ -89,6 +92,7 @@ pub mod pack;
 pub mod precision;
 pub mod qd;
 pub mod qv;
+pub mod recip;
 pub mod series;
 pub mod simd;
 pub mod trig;
