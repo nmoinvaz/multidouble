@@ -99,6 +99,31 @@ On Hilbert matrices, whose condition number grows like e^(3.5 n), the solves kee
 
 ![The error of Hilbert solves in f64, double-double, quad-double and octo-double as the matrix size grows, animated](docs/hilbert.svg)
 
+### Series products
+
+| Type | What it is |
+|---|---|
+| `series::mullow`, `series::mullow_naive` | the truncated product of two series of `DV`, `QV` or `OV` lanes, by block scaling and exact integer convolution, accurate to the precision relative to the sum of the terms' magnitudes; and the same product term by term |
+| `series::Relaxed` | the product of two series of fields whose coefficients become known one order at a time, as in a recurrence solved order by order |
+| `dual::Lane::block_mul`, `dual::Lane::BLOCK_MIN` | a square block of such a product, by `mullow` on `DV`, `QV`, `OV`, `Du`, `Qu` and `Ou` and term by term on the other lanes, and the side from which `mullow` is the faster |
+
+`mullow` scales each series by a power of two per index so that its coefficients have about one size, cuts it into
+blocks whose coefficients lie within a few dozen bits of each other, writes each block's coefficients as integers of
+16-bit digits, and multiplies the integers exactly by floating-point FFTs, whose results are rounded to the exact
+integers. This is van der Hoeven's stable fast multiplication [[8]](#ref-vdh08) with the blocks of Arb
+[[9]](#ref-arb17). Its results are the products' to the precision's rounding, but not bit for bit the sums of their
+terms.
+
+`Relaxed` forms the products of earlier coefficients in squares of side 2^p, each once its coefficients are known and
+before its first output is needed, and sums the terms with a recent coefficient directly when a coefficient is read: the
+relaxed multiplication of van der Hoeven [[10]](#ref-vdh02). To order n it forms about 2n/s squares of each side s from
+`BLOCK_MIN` up and about 2 `BLOCK_MIN` direct terms per order, where the sums term by term take n²/2 terms. On lanes
+without fast squares its sums are bit for bit the Cauchy sums of `field::cs_range`.
+
+`examples/series_squares.rs` times a square of each side both ways on one thread. On an Apple M5, `mullow` is the faster
+from side 512 in double-double, 64 in quad-double and 16 in octo-double, and at side 4096 it takes about 1/5, 1/30 and
+1/200 of the time of the terms one by one.
+
 ### Generic code
 
 | Type | What it is |
@@ -379,6 +404,13 @@ Jacobian at the speed of SIMD f64 code, and at large D, where rounding is amplif
 7. <a id="ref-hlb01"></a>Y. Hida, X. S. Li, D. H. Bailey, "Algorithms for quad-double precision floating point
    arithmetic", 15th IEEE Symposium on Computer Arithmetic (ARITH-15), 155–162, 2001,
    [doi:10.1109/ARITH.2001.930115](https://doi.org/10.1109/ARITH.2001.930115).
+
+8. <a id="ref-vdh08"></a>J. van der Hoeven, "Making fast multiplication of polynomials numerically stable", preprint,
+   Université Paris-Sud, 2008, [texmacs.org/joris/stablemult](https://www.texmacs.org/joris/stablemult/stablemult.html).
+9. <a id="ref-arb17"></a>F. Johansson, "Arb: efficient arbitrary-precision midpoint-radius interval arithmetic", IEEE
+   Trans. Comput. 66(8), 1281–1292, 2017, [doi:10.1109/TC.2017.2690633](https://doi.org/10.1109/TC.2017.2690633).
+10. <a id="ref-vdh02"></a>J. van der Hoeven, "Relax, but don't be too lazy", J. Symbolic Comput. 34(6), 479–542, 2002,
+    [doi:10.1006/jsco.2002.0562](https://doi.org/10.1006/jsco.2002.0562).
 
 ## Related crates
 
