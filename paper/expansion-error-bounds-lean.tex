@@ -18,7 +18,8 @@ values grow too long the copy rounds up, which the bounds of Lemma~\ref{lem:g} a
 arguments (\texttt{GMono.lean}, \texttt{TrigEval.lean}, \texttt{ExpEval.lean}). The longest runs are cut into steps
 that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/}, \texttt{Exp8/},
 \texttt{Log8/}, \texttt{DDExp2/}, \texttt{DDLog2/}, and \texttt{Trig2/} and \texttt{Trig4/} for the remark after
-Theorem~\ref{thm:trig}, written by \texttt{acc\_lean.py}, \texttt{trig\_lean.py}, \texttt{exp\_lean.py},
+Theorem~\ref{thm:trig}, on the definitions of \texttt{TrigN/}, written by \texttt{acc\_lean.py},
+\texttt{trig\_lean.py}, \texttt{exp\_lean.py},
 \texttt{log\_lean.py}, \texttt{ddexp\_lean.py} and \texttt{ddlog\_lean.py}). That remark's bounds at $n = 12$ are computed
 (\texttt{trig\_lean.py}), not proved: the kernel would need some eight hours for them.
 \item No declaration depends on an axiom other than \texttt{propext}, \texttt{Classical.choice} and
