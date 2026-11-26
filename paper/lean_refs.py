@@ -1,13 +1,15 @@
 """The paper's table of Lean proofs (expansion-error-bounds-lean.tex) against the Lean sources: every Lean file at
 the top of lean/ExpansionBounds is named in a row, every file a row names exists, and every theorem a row names is
 declared in one of that row's files, outside any comment. The modules in the folders under lean/ExpansionBounds
-are not read: they hold the kernel's checks and their data, and the files of the rows import them.
+are not read: they hold the kernel's checks and their data, and the files of the rows import them. Each of those
+folders is named in the appendix's text.
 
 usage: lean_refs.py          prints the counts and PASS, or what is wrong
        lean_refs.py check    also the controls, each of which must be reported: a theorem that no file declares, a
                              file that does not exist, a Lean file left out of the table, a theorem inside a
                              comment, one inside a nested comment, one inside a string, one after a string that
-                             holds a comment's opening, which must still be found, and a row that TeX comments out"""
+                             holds a comment's opening, which must still be found, a row that TeX comments out, and
+                             a folder that the appendix does not name"""
 import os
 import re
 import sys
@@ -73,6 +75,17 @@ def declared(folder):
             for f in sorted(os.listdir(folder)) if f.endswith(".lean")}
 
 
+def folders(folder):
+    """the folders under the folder"""
+    return sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)))
+
+
+def unnamed(tex, dirs):
+    """the folders that the appendix does not name, as lines"""
+    named = set(re.findall(r"\\texttt\{([A-Za-z0-9]+)/\}", re.sub(r"(?<!\\)%.*", "", tex)))
+    return [f"the folder {d}/ is not named" for d in dirs if d not in named]
+
+
 def faults(table, decl):
     """what is wrong with the table, as lines"""
     out = []
@@ -88,11 +101,15 @@ def faults(table, decl):
 
 
 if __name__ == "__main__":
-    table = rows(open(TEX, encoding="utf-8").read())
+    tex = open(TEX, encoding="utf-8").read()
+    table = rows(tex)
     decl = declared(LEAN)
-    bad = faults(table, decl)
-    print(f"{len(table)} statements, {len(decl)} Lean files, {sum(len(r[2]) for r in table)} theorems named")
-    print("\n".join(bad) if bad else "every file is named, and every theorem named is declared in its files")
+    dirs = folders(LEAN)
+    bad = faults(table, decl) + unnamed(tex, dirs)
+    print(f"{len(table)} statements, {len(decl)} Lean files, {len(dirs)} folders, "
+          f"{sum(len(r[2]) for r in table)} theorems named")
+    print("\n".join(bad) if bad else
+          "every file and folder is named, and every theorem named is declared in its files")
     ok = not bad
     if len(sys.argv) > 1 and sys.argv[1] == "check":
         s, f, t = table[0]
@@ -106,7 +123,6 @@ if __name__ == "__main__":
         quoted = dict(decl, **{src: names(text.replace(line, 'def s : String := "\n' + line + '\n"'))})
         after = names('def s : String := "/-"\n' + line)
         # a row of one line, commented out in the TeX source
-        tex = open(TEX, encoding="utf-8").read()
         one = next(x for x in tex[tex.index(r"\midrule"):].splitlines() if x.count("&") == 2 and x.endswith(r"\\"))
         gone = rows(tex.replace(one, "% " + one))
         ctl = [faults([(s, f, t + ["no_such_theorem"])] + table[1:], decl),
@@ -115,15 +131,17 @@ if __name__ == "__main__":
                faults(table, hidden[0]),
                faults(table, hidden[1]),
                faults(table, quoted),
-               faults(gone, decl)]
+               faults(gone, decl),
+               unnamed(tex, dirs + ["NoSuchFolder"])]
         caught = [any("no_such_theorem" in x for x in ctl[0]), any("NoSuchFile.lean" in x for x in ctl[1]),
                   any("is in no row" in x for x in ctl[2]), any(t[0] + " is not declared" in x for x in ctl[3]),
                   any(t[0] + " is not declared" in x for x in ctl[4]),
                   any(t[0] + " is not declared" in x for x in ctl[5]), t[0] in after,
-                  len(gone) == len(table) - 1 and any("is in no row" in x for x in ctl[6])]
+                  len(gone) == len(table) - 1 and any("is in no row" in x for x in ctl[6]),
+                  any("NoSuchFolder" in x for x in ctl[7])]
         print("controls, a theorem no file declares, a file that does not exist, a file left out, a theorem in a "
               "comment, in a nested comment, in a string, after a string with a comment's opening (found), a row "
-              "commented out:", caught)
+              "commented out, a folder not named:", caught)
         ok = ok and all(caught)
     print("PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
