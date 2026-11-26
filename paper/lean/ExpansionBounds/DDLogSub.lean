@@ -167,40 +167,44 @@ theorem's; the hypotheses are those of `dd_thm42_case_g`, with every floor `2^{-
 theorem dd_thm42_case_sub (hp : p = 53) {O : DWOps} (hO : DWSpec p O) (S : ℝ → ℝ)
     (hS : ∀ v, S v = v ∨ (Mult (-1074) (S v) ∧ |v| < (2 : ℝ) ^ (-1022 : ℤ) ∧ |S v - v| ≤ (2 : ℝ) ^ (-1075 : ℤ)))
     (x : ℝ × ℝ) (hx : DW p x) (hX0 : 0 < dwVal x) (y0 : ℝ) (hy0 : F p y0) (ℓ E : ℝ) (hℓ : |Real.log (dwVal x)| ≤ ℓ)
-    (hE : |y0 - Real.log (dwVal x)| ≤ E) (r : ℝ × ℝ) (hr : DW p r) (k₁ k₂ : ℤ) (hk2 : k₂ ≤ 0) (δ : ℝ) (hδ : |dwVal r -
-    (-y0 - (k₁ + k₂ : ℤ) * Real.log 2)| ≤ δ) (a b : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ |dwVal r|) (hb : |dwVal r| ≤ b) (pos :
-    Bool) (hsgn : if pos then 0 ≤ dwVal r else dwVal r ≤ 0) (e : ℤ) (d' : ℕ) (hd : 1 ≤ d') (hbd : b < d' + 2) (Fk : ℕ
-    → ℝ × ℝ) (hF : ∀ k, DW p (Fk k)) (φF : ℕ → ℝ) (hφF : ∀ k, |dwVal (Fk k) - invF k| ≤ φF k) (hlo : d' ≠ 1 → (2 : ℝ)
-    ^ (-967 : ℤ) * (1 + u p) ≤ a / (1 + a) - ddCoreE p (coreT pos b 0) 0 b φF d') (hlox : (2 : ℝ) ^ (-967 : ℤ) ≤ |(2 :
-    ℝ) ^ (k₁ + k₂) * x.1|) (hφex : dwVal (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) = dwVal (ddS2 S k₂ (dwScale (k₁ + k₂)
-    x)) - 1) (B eφ et ec : ℤ) (het : et ≤ 0) (hUφ : |(ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x).1| + |(ddLogPhi O (ddS2 S
-    k₂) (k₁ + k₂) x).2| < (2 : ℝ) ^ (eφ + 1)) (hUt : |(ddExpT O (fun v => (S v.1, S v.2)) e r Fk d').1| + |(ddExpT O
-    (fun v => (S v.1, S v.2)) e r Fk d').2| < (2 : ℝ) ^ (et + 1)) (hUc : |(ddLogC O (ddS2 S et) B eφ et (ddLogPhi O
-    (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S v.2)) e r Fk d')).1| + |(ddLogC O (ddS2 S et) B eφ et
-    (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S v.2)) e r Fk d')).2| < (2 : ℝ) ^ (ec + 1)) (F'
-    : ℕ → ℝ × ℝ) (hF' : ∀ k, DW p (F' k)) (φ' : ℕ → ℝ) (hφ' : ∀ k, |dwVal (F' k) - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤
-    q) {tb φb ξ : ℝ} (htbT : coreT pos b 0 ≤ tb) (hφbP : logPhiB (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) pos E a b δ ≤ φb)
+    (hE : |y0 - Real.log (dwVal x)| ≤ E) (r : ℝ × ℝ) (hr : DW p r) (k₁ k₂ : ℤ) (hk2 : k₂ ≤ 0) (δ : ℝ)
+    (hδ : |dwVal r - (-y0 - (k₁ + k₂ : ℤ) * Real.log 2)| ≤ δ) (a b : ℝ) (ha0 : 0 ≤ a) (ha : a ≤ |dwVal r|)
+    (hb : |dwVal r| ≤ b) (pos : Bool) (hsgn : if pos then 0 ≤ dwVal r else dwVal r ≤ 0) (e : ℤ) (d' : ℕ) (hd : 1 ≤ d')
+    (hbd : b < d' + 2) (Fk : ℕ → ℝ × ℝ) (hF : ∀ k, DW p (Fk k)) (φF : ℕ → ℝ) (hφF : ∀ k, |dwVal (Fk k) - invF k| ≤ φF k)
+    (hlo : d' ≠ 1 → (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ a / (1 + a) - ddCoreE p (coreT pos b 0) 0 b φF d')
+    (hlox : (2 : ℝ) ^ (-967 : ℤ) ≤ |(2 : ℝ) ^ (k₁ + k₂) * x.1|)
+    (hφex : dwVal (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) = dwVal (ddS2 S k₂ (dwScale (k₁ + k₂) x)) - 1) (B eφ et ec : ℤ)
+    (het : et ≤ 0)
+    (hUφ : |(ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x).1| + |(ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x).2| < (2 : ℝ) ^ (eφ + 1))
+    (hUt : |(ddExpT O (fun v => (S v.1, S v.2)) e r Fk d').1| + |(ddExpT O (fun v => (S v.1, S v.2)) e r Fk d').2| < (2
+      : ℝ) ^ (et + 1))
+    (hUc : |(ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S v.2)) e r
+      Fk d')).1| + |(ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S
+      v.2)) e r Fk d')).2| < (2 : ℝ) ^ (ec + 1)) (F' : ℕ → ℝ × ℝ) (hF' : ∀ k, DW p (F' k)) (φ' : ℕ → ℝ)
+    (hφ' : ∀ k, |dwVal (F' k) - logFe k| ≤ φ' k) (q : ℕ) (hq : 2 ≤ q) {tb φb ξ : ℝ} (htbT : coreT pos b 0 ≤ tb)
+    (hφbP : logPhiB (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) pos E a b δ ≤ φb)
     (hξX : logXi (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) pos E a b δ ≤ ξ) {lφ lt lc lv : ℝ} (hlφ0 : 0 ≤ lφ) (hlc0 : 0 ≤ lc)
-    (hfl4 : ¬ min eφ et < -B - 13 → DW p (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) → DW p (ddExpT O (fun v => (S v.1, S
-    v.2)) e r Fk d') → lφ ≤ |dwVal (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x)| ∧ lt ≤ |dwVal (ddExpT O (fun v => (S v.1, S
-    v.2)) e r Fk d')| ∧ (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ (1 - eP p) * (lφ * lt)) (hfl5 : ¬ ec < -B - 13 → DW p
-    (ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S v.2)) e r Fk d'))
-    → lc ≤ |dwVal (ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v => (S v.1, S
-    v.2)) e r Fk d'))| ∧ (∀ j, 2 ≤ j → j ≤ q → lv ≤ 1 / (j : ℝ) - (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^
-    (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) *
-    logV (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb
-    (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) q (j + 1) - ddHornerB p (Real.exp E - 1 + ddLogEc p (2 *
-    (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF
-    d') E δ b ξ B) (2 * (2 : ℝ) ^ (-1075 : ℤ)) φ' (logV (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ)))
-    (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) q) q (q - j)) ∧
-    (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ (1 - eP p) * (lc * lv) ∧ (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ (1 - eP p) * (lc *
-    ((1 - eF p) * (1 - ddLogHb p (2 * (2 : ℝ) ^ (-1075 : ℤ)) (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 :
-    ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) φ' q))))
-    (hC : Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb
-    (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B < 1) : |dwVal (ddLogOp O (ddS2 S k₂) (ddS2 S et) (fun v
-    => (S v.1, S v.2)) y0 x (k₁ + k₂) (ddExpT O (fun v => (S v.1, S v.2)) e r Fk d') B eφ et ec F' q) - Real.log
-    (dwVal x)| ≤ ddLogBoundG p ((2 : ℝ) ^ (-1075 : ℤ)) (2 * (2 : ℝ) ^ (-1075 : ℤ)) (2 * (2 : ℝ) ^ (-1075 : ℤ)) ((2 :
-    ℝ) ^ (-1075 : ℤ)) ℓ E tb φb ξ b δ φF d' φ' q B := by
+    (hfl4 : ¬ min eφ et < -B - 13 → DW p (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) → DW p (ddExpT O (fun v => (S v.1, S v.2))
+      e r Fk d') → lφ ≤ |dwVal (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x)| ∧ lt ≤ |dwVal (ddExpT O (fun v => (S v.1, S v.2)) e
+      r Fk d')| ∧ (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ (1 - eP p) * (lφ * lt))
+    (hfl5 : ¬ ec < -B - 13 → DW p (ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x) (ddExpT O (fun v =>
+      (S v.1, S v.2)) e r Fk d')) → lc ≤ |dwVal (ddLogC O (ddS2 S et) B eφ et (ddLogPhi O (ddS2 S k₂) (k₁ + k₂) x)
+      (ddExpT O (fun v => (S v.1, S v.2)) e r Fk d'))| ∧ (∀ j, 2 ≤ j → j ≤ q → lv ≤ 1 / (j : ℝ) - (Real.exp E - 1 +
+      ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^
+      (-1075 : ℤ)) b φF d') E δ b ξ B) * logV (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2
+      : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) q (j + 1) - ddHornerB p
+      (Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p
+      tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B) (2 * (2 : ℝ) ^ (-1075 : ℤ)) φ' (logV (Real.exp E - 1 + ddLogEc p (2
+      * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF
+      d') E δ b ξ B) q) q (q - j)) ∧ (2 : ℝ) ^ (-967 : ℤ) * (1 + u p) ≤ (1 - eP p) * (lc * lv) ∧ (2 : ℝ) ^ (-967 : ℤ) *
+      (1 + u p) ≤ (1 - eP p) * (lc * ((1 - eF p) * (1 - ddLogHb p (2 * (2 : ℝ) ^ (-1075 : ℤ)) (Real.exp E - 1 + ddLogEc
+      p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE p tb ((2 : ℝ) ^ (-1075 : ℤ))
+      b φF d') E δ b ξ B) φ' q))))
+    (hC : Real.exp E - 1 + ddLogEc p (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) (2 * (2 * (2 : ℝ) ^ (-1075 : ℤ))) φb tb (ddCoreE
+      p tb ((2 : ℝ) ^ (-1075 : ℤ)) b φF d') E δ b ξ B < 1) :
+    |dwVal (ddLogOp O (ddS2 S k₂) (ddS2 S et) (fun v => (S v.1, S v.2)) y0 x (k₁ + k₂) (ddExpT O (fun v => (S v.1, S
+      v.2)) e r Fk d') B eφ et ec F' q) - Real.log (dwVal x)| ≤ ddLogBoundG p ((2 : ℝ) ^ (-1075 : ℤ)) (2 * (2 : ℝ) ^
+      (-1075 : ℤ)) (2 * (2 : ℝ) ^ (-1075 : ℤ)) ((2 : ℝ) ^ (-1075 : ℤ)) ℓ E tb φb ξ b δ φF d' φ' q B := by
   have hu : 4 * u p < 1 := by
     unfold u
     rw [hp]
