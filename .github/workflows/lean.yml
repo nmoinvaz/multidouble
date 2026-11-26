@@ -63,7 +63,8 @@ jobs:
         run: |
           lake exe cache get Mathlib.Tactic Mathlib.Analysis.Real.Sqrt Mathlib.Algebra.Order.Floor.Ring \
             Mathlib.Data.Nat.Digits.Defs Mathlib.Data.Nat.Log Mathlib.Algebra.Divisibility.Basic \
-            Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic
+            Mathlib.Algebra.Order.Monoid.Unbundled.Pow Mathlib.Data.Real.Basic Mathlib.Analysis.Convex.Mul \
+            Mathlib.Analysis.Convex.SpecificFunctions.Basic
 
       # Lake has no option for the number of jobs. A kernel run takes up to 5 GB and the runner has 16 GB: three at
       # once ran out of memory on the exponential's check modules, so two threads keep two of them within it.
