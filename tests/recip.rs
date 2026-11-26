@@ -5,10 +5,12 @@
 //!
 //! Pass, fixed before the first run: every part equal to the reference's, bit for bit, on k = 1..=5000, on 4000 random
 //! q < 2^60 with p = 1, and on 4000 random (p, q) with |p| < 2^63, including p > q and negative p, and on p = i64::MIN;
-//! the types' `recip_int` and `from_ratio` equal to those prefixes; hp's parts and lane constants equal bit for bit for
-//! k = 1..=2^20; and x k times 1/k within 8 u^2, 64 u^4 and 1024 u^8 of x on DD, QD and OD (the bars of
-//! `mul_recip_inverts_multiplication`). Control (feature `mutate`), which must fail: the last part of each type's
-//! constant one ulp up (`recip::mutate::LAST_ULP`).
+//! the types' `recip_int` and `from_ratio` equal to those prefixes, a double-double's as their two-sum; every
+//! double-double constant a double word, hi = RN(hi + lo), of the prefix's value, also at the three k found whose
+//! greedy pair is a tie; hp's parts and lane constants equal bit for bit for k = 1..=2^20; and x k times 1/k within
+//! 8 u^2, 64 u^4 and 1024 u^8 of x on DD, QD and OD (the bars of `mul_recip_inverts_multiplication`). Controls
+//! (feature `mutate`), which must fail: the last part of each type's constant one ulp up (`recip::mutate::LAST_ULP`),
+//! and a double-double's parts without the two-sum (`recip::mutate::DD_GREEDY`), at the three ties.
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
@@ -69,6 +71,16 @@ fn bits(x: &[f64]) -> Vec<u64> {
     x.iter().map(|v| v.to_bits()).collect()
 }
 
+/// Knuth's two-sum: RN(a + b) and the exact error
+fn two_sum(a: f64, b: f64) -> [f64; 2] {
+    let s = a + b;
+    let bb = s - a;
+    [s, (a - (s - bb)) + (b - bb)]
+}
+
+/// the k found below 2^60 whose greedy pair is a tie, its second part half an ulp of an odd first part
+const TIES: [u64; 3] = [191516586041457763, 176007846257689259, 383033172082915526];
+
 /// the cases: (p, q) pairs of k = 1..=5000, random q with p = 1, and random (p, q) of both signs
 fn cases() -> Vec<(i64, u64)> {
     let mut r = Rng(1099);
@@ -93,6 +105,7 @@ fn cases() -> Vec<(i64, u64)> {
         (6, 3),
         (1, 1 << 40),
     ]);
+    v.extend(TIES.map(|k| (1, k)));
     v
 }
 
@@ -106,7 +119,7 @@ fn mismatches() -> usize {
         let qd = if p == 1 { QD::recip_int(q) } else { QD::from_ratio(p, q) };
         let od = if p == 1 { OD::recip_int(q) } else { OD::from_ratio(p, q) };
         if bits(&got) != bits(&want)
-            || bits(&[dd.hi, dd.lo]) != bits(&want[..2])
+            || bits(&[dd.hi, dd.lo]) != bits(&two_sum(want[0], want[1]))
             || bits(&qd.x) != bits(&want[..4])
             || bits(&od.x) != bits(&want)
         {
@@ -125,6 +138,46 @@ fn ratios_against_exact_rationals() {
     // the reference itself: the parts of an exact ratio end in zeros, and 1/3's first part is RN(1/3)
     assert_eq!(bits(&reference(6, 3)), bits(&[2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
     assert_eq!(reference(1, 3)[0], 1.0 / 3.0);
+}
+
+/// the cases whose double-double constant is not a double word, hi = RN(hi + lo), or not of the greedy pair's value
+fn dd_not_double_words() -> usize {
+    let exact = |a: f64, b: f64| Dy::from_f64(a).add(&Dy::from_f64(b));
+    let mut bad = 0;
+    for (p, q) in cases() {
+        let want = reference(p, q);
+        let dd = if p == 1 { DD::recip_int(q) } else { DD::from_ratio(p, q) };
+        if dd.hi + dd.lo != dd.hi || !exact(dd.hi, dd.lo).sub(&exact(want[0], want[1])).is_zero() {
+            bad += 1;
+        }
+    }
+    bad
+}
+
+#[test]
+fn dd_constants_are_double_words() {
+    // the ties are ties: the greedy pair's sum rounds away from its first part
+    for k in TIES {
+        let want = reference(1, k);
+        assert_ne!(want[0] + want[1], want[0], "k = {k}: the greedy pair is no tie");
+    }
+    let bad = dd_not_double_words();
+    println!(
+        "double-double constants: {bad} of {} cases not a double word of the greedy value",
+        cases().len()
+    );
+    assert_eq!(bad, 0);
+}
+
+#[cfg(feature = "mutate")]
+#[test]
+fn dd_double_words_control() {
+    use multidouble::recip::mutate;
+    mutate::set(mutate::DD_GREEDY);
+    let bad = dd_not_double_words();
+    mutate::set(0);
+    println!("control, a double-double's parts without the two-sum: {bad} cases not a double word (must be the ties)");
+    assert_eq!(bad, TIES.len(), "the control did not fire on exactly the ties");
 }
 
 #[cfg(feature = "mutate")]
