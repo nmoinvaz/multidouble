@@ -255,7 +255,9 @@ Whether the bounds are approached is not known.
 
 \begin{remark}\label{rem:a2}
 The hypothesis $|x - k\cpi/2| \ge 2^{pn-1074}$, which is $2^{-650}$ at $n = 8$ and $2^{-968}$ for the double-double
-functions, keeps every part of the reduced argument where its rounding is relative. It excludes the arguments that
+functions, keeps every part of the reduced argument where its rounding is relative. From $n = 21$ on it is at least
+$2^{39}$ and exceeds every $|x - k\cpi/2|$ with $k \ne 0$, at most $\bar r_0$ by Lemma~\ref{lem:red}, so the theorem
+covers only $k = 0$ there. It excludes the arguments that
 agree with a nonzero multiple of $\cpi/2$ to 650 binary places. Eight parts hold 424 bits, so 226 places or more would
 have to be runs of equal bits of $k\cpi/2$ that the gaps between the parts skip. No such argument is known, and no
 lower bound on $|x - k\cpi/2|$ over the $n$-part $x$ is proved here. Without the hypothesis the proof of
