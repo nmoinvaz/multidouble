@@ -108,3 +108,6 @@ import ExpansionBounds.Trig4
 import ExpansionBounds.ExpRed8
 import ExpansionBounds.ExpEval
 import ExpansionBounds.Exp8
+import ExpansionBounds.Recip
+import ExpansionBounds.RatioParts
+import ExpansionBounds.RatioBounds

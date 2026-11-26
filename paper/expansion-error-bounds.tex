@@ -114,6 +114,8 @@ $n = 4$, and Section~\ref{sec:qd} lists the differences:
 \item the sine and cosine, the tangent, the exponential and the logarithm built on these operations have relative
   bounds of $3.17$, $6.42$, $3.661$ and $9.926$ times $u^8$ at $n = 8$, each with a small absolute term
   (Theorems~\ref{thm:trig}, \ref{thm:exp} and~\ref{thm:log});
+\item multidouble's constants $p/q$ are the nearest expansions, by integer arithmetic that never overflows
+  (Proposition~\ref{prop:ratio});
 \item the renormalization is exact until its last step, whatever the order of its input terms
   (Theorem~\ref{thm:renorm}), and the other bounds rest on this.
 \end{itemize}
@@ -575,6 +577,7 @@ cited there, and the build fails on a proof left unfinished.
 \input{expansion-error-bounds-sloppy}
 \input{expansion-error-bounds-trig}
 \input{expansion-error-bounds-explog}
+\input{expansion-error-bounds-recip}
 \input{expansion-error-bounds-checks}
 \input{expansion-error-bounds-lean}
 

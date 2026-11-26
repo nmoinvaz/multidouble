@@ -1,0 +1,47 @@
+% Ratios of integers.
+% \input after the exponential's section of expansion-error-bounds.tex.
+
+\section{Ratios of integers}\label{sec:recip}
+
+A precision-generic power series needs constants such as $1/k$ in its own rounding: \texttt{DD::ONE / k} widened to
+eight parts keeps an error of $2^{-106}$. multidouble's \texttt{recip::ratio\_parts(p, q)} forms $p/q$ as its greedy
+expansion by integer arithmetic, and \texttt{mul\_recip(k)} multiplies by it.
+
+\begin{lemma}\label{lem:greedy}
+Let $x$ be real, $r_0 = \RN(x)$ and $r_i = \RN(x - r_0 - \dots - r_{i-1})$. Then $|r_{i+1}| \le u|r_i|$, so $r_0,
+\dots, r_{n-1}$ lie on $H(1)$, and $|x - \sum_{i<n} r_i| \le u^n(1 + u)|x|$ for $n \ge 1$. The $\TwoSum$ of $r_0$ and
+$r_1$ is a double word of their sum, and no double word $(h, \ell)$, $h = \RN(h + \ell)$, is nearer $x$.
+\end{lemma}
+
+\begin{proof}
+What $r_i$ leaves is at most $u|r_i|$, a float, so its rounding $r_{i+1}$ is too; and the remainder after $n$ parts
+is at most $u|r_{n-1}| \le u^n|r_0| \le u^n(1+u)|x|$. Let $t = x - r_0$. A double word with $h = r_0$ is no nearer,
+as $\ell$ is a float and $r_1 = \RN(t)$. Otherwise, say $h > r_0$: $x$ lies at or below the midpoint of $r_0$ and $h$,
+and $h + \ell$ at or above it, so $|x - h - \ell| \ge (h - r_0)/2 - t$. The next float $s > r_0$ is at most $h$, and
+$g = (s - r_0)/2$ is a float, half the spacing of the floats at $r_0$, with $t \le g$; so $|t - r_1| \le g - t \le
+|x - h - \ell|$, and for $t \le 0$ already $|t - r_1| \le |t|$. The case $h < r_0$ is its mirror.
+\end{proof}
+
+The pair $(r_0, r_1)$ itself need not be a double word: where $r_1$ is half an ulp of an odd $r_0$, $r_0 + r_1$ is a
+tie that rounds to the even neighbor. This needs $q \ge 2^{53}$ for $x = p/q$, and occurs for $q = 191516586041457763$;
+the $\TwoSum$ keeps the value and moves $r_0$.
+
+\begin{proposition}\label{prop:ratio}
+For integers $|p| \le 2^{63}$ and $1 \le q < 2^{60}$, \texttt{ratio\_parts(p, q)} returns the first eight greedy parts
+of $p/q$. Each step keeps what is left as $(-1)^\nu n/(q2^e)$ with $n$ an integer, puts $n2^s/q$ in $[2^{52}, 2^{53})$
+by a shift $s \in [-11, 112]$, rounds it to an integer, to nearest with ties to even, by one division, and scales it by
+$2^{-(e + s)}$. Its dividends stay below $2^{127}$, its divisors below $2^{72}$ and its products below $2^{127}$, so
+u128 and i128 hold them, and every scale is a normal binary64 number. So \texttt{DD::recip\_int(k)} and
+\texttt{DD::from\_ratio(p, q)}, the $\TwoSum$ of the first two parts, are the double words nearest $1/k$ and $p/q$,
+within $u^2(1 + u)$, and the quad- and octo-double constants, the first four and eight parts, lie on $H(1)$ within
+$u^4(1 + u)$ and $u^8(1 + u)$, relatively.
+\end{proposition}
+
+\begin{proof}
+With $s_0 = 52 - (\mathrm{bits}(n) - \mathrm{bits}(q))$, $n2^{s_0}/q$ lies in $(2^{51}, 2^{53})$, and the shift
+is $s_0$ or $s_0 + 1$. The rounding of the quotient $q_0$ up where the remainder exceeds half the divisor, or equals
+it with $q_0$ odd, is $\RN$ of $n2^s/q$, and the part is $\RN$ of what is left; the new remainder is what the part
+leaves, at most half the divisor. So $n \le 2^{63}$ before the first part, $n < q2^{11}$ before the second and $n \le
+q/2$ before the others, which gives $s \ge -11$, $s \ge 41$ and $s \ge 52$, and $e \le 112i$ before part $i$, so $e +
+s \le 896$ for the eight parts.
+\end{proof}

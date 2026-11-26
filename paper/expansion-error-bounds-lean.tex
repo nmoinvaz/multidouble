@@ -10,8 +10,8 @@ $\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md
 and~\ref{tab:lean2} give the files of \texttt{ExpansionBounds/} and the theorems for each statement.
 \begin{itemize}
 \item The proofs hold for every precision $p \ge 2$, except that Lemmas~\ref{lem:red} and~\ref{lem:lnb},
-Theorem~\ref{thm:trig}, Proposition~\ref{prop:ddexplog} and the constants at $n = 8$ are stated at $p = 53$, and
-each published double-word theorem from its own precision, 3 to 7.
+Theorem~\ref{thm:trig}, Propositions~\ref{prop:ddexplog} and~\ref{prop:ratio} and the constants at $n = 8$ are
+stated at $p = 53$, and each published double-word theorem from its own precision, 3 to 7.
 \item A constant is evaluated by Lean's kernel on a copy of its recursion over the rationals, which a lemma equates
 with the recursion over the reals. Where exact values grow too long the copy rounds up, which the bounds of
 Lemma~\ref{lem:g} allow because they grow with their arguments. The longest runs are cut into steps
@@ -147,6 +147,10 @@ Proposition~\ref{prop:ddexplog}, \texttt{DD::ln} & \texttt{DDLog.lean}, \texttt{
   \texttt{prop44\_start\_exact}, \texttt{prop44\_start\_small}, \texttt{dd\_thm42\_case\_sub}, \texttt{chord\_le\_mul},
   \texttt{cvx\_ddLogBoundC}, \texttt{dd\_log\_chord\_cert}, \texttt{ddl\_core}, \texttt{prop44\_ln},
   \texttt{ddOps\_spec}, \texttt{prop44\_exp\_dd}, \texttt{prop44\_ln\_dd}, \texttt{prop44\_ln\_dd\_dw} \\
+Lemma~\ref{lem:greedy} & \texttt{Recip.lean} & \texttt{gRem\_sum}, \texttt{gPart\_succ\_le}, \texttt{gPart\_H},
+  \texttt{greedy\_err}, \texttt{exists\_next}, \texttt{greedy\_dw\_nearest}, \texttt{twoSum\_dw}, \texttt{greedy\_dd} \\
+Proposition~\ref{prop:ratio} & \texttt{RatioParts.lean}, \texttt{RatioBounds.lean} & \texttt{rn\_rpRound},
+  \texttt{rpShift\_range}, \texttt{rpStep\_spec}, \texttt{rpPart\_eq}, \texttt{rpState\_inv}, \texttt{rp\_bounds} \\
 \bottomrule
 \end{tabular}
 \end{table*}
