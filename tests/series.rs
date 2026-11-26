@@ -28,8 +28,8 @@ use multidouble::field::{cs_range, Fl};
 use multidouble::native::{Du, DV, OV, QV, V8};
 use multidouble::od::OD;
 use multidouble::series::{
-    mullow, mullow_naive, mullow_pow2, Cfg, Expansion, Relaxed, Stats, MUT_DROP_PAIR, MUT_E2_PLAIN, MUT_E2_PRESCALE,
-    MUT_E2_SPLIT_ALWAYS, MUT_SLOPE, MUT_ZERO_LANE, RELAXED_MUT_DROP,
+    mullow, mullow_naive, mullow_pow2, Cfg, Expansion, Relaxed, Stats, MUT_CHUNK_TOP, MUT_DROP_PAIR, MUT_E2_PLAIN,
+    MUT_E2_PRESCALE, MUT_E2_SPLIT_ALWAYS, MUT_SLOPE, MUT_ZERO_LANE, RELAXED_MUT_DROP,
 };
 use multidouble::simd::Native;
 
@@ -318,9 +318,11 @@ fn planted<E: Expansion<Native>>(name: &str) -> bool {
     a2[17] = make(&lanes);
     let (fx2, st2) = fast(&a2, &b, 128, &cfg);
     let (r2, _, _) = compare(&fx2, &reference(&a2, &b, 128), &a2, &b);
+    // the NaN of a_17 lane 5 reaches c_17 lane 5 itself, and lane 4 stays finite
+    let reached = od_lane(&fx2[17], 5).x[0].is_nan() && od_lane(&fx2[17], 4).x.iter().all(|p| p.is_finite());
     // a NaN compares false, so each must not pass its bound
     let passes = |v: f64, b: f64| v <= b;
-    let fired = !passes(r1, tol) && !passes(st2.max_frac, 0.2499) && !passes(r2, tol);
+    let fired = !passes(r1, tol) && !passes(st2.max_frac, 0.2499) && !passes(r2, tol) && reached;
     println!(
         "{name} NaN controls: output {r1:.1e}, input max_frac {:.1e} rel {r2:.1e}: fired {fired}",
         st2.max_frac
@@ -524,6 +526,70 @@ fn mullow_edges() {
     edges_all::<OV>(true);
 }
 
+/// Products at the top of f64's range: f64::MAX times 1 at c_0, the other terms small, by the convolution route
+/// (n = 64, so that the pair is convolved): c_0 exactly f64::MAX and the rest within the bound. Control: with
+/// MUT_CHUNK_TOP the double- and quad-double outputs are read in chunks there too, and c_0 must come out wrong
+fn top_of_range<E: Expansion<Native>>(mutate: u8) -> bool {
+    let n = 64;
+    let a: Vec<E> = (0..n)
+        .map(|i| {
+            if i == 0 {
+                splat(f64::MAX)
+            } else {
+                splat((-(i as f64)).exp2())
+            }
+        })
+        .collect();
+    let b: Vec<E> = (0..n)
+        .map(|i| {
+            if i == 0 {
+                splat(1.0)
+            } else {
+                splat((-(2.0 * i as f64)).exp2())
+            }
+        })
+        .collect();
+    let (fx, st) = fast(
+        &a,
+        &b,
+        n,
+        &Cfg {
+            mutate,
+            ..Cfg::default()
+        },
+    );
+    let (ra, _, _) = compare(&fx, &reference(&a, &b, n), &a, &b);
+    let top = exact(&fx[..1], f64::MAX);
+    println!(
+        "top of range {}: c_0 exactly f64::MAX {top}, rel {ra:.1e}, pairs {} direct {}",
+        E::NP,
+        st.pairs,
+        st.direct
+    );
+    top && ra <= bound::<E>() && st.pairs > st.direct
+}
+
+#[test]
+fn mullow_top_of_range() {
+    assert!(top_of_range::<DV>(0), "DV");
+    assert!(top_of_range::<QV>(0), "QV");
+    assert!(top_of_range::<OV>(0), "OV");
+    assert!(!top_of_range::<DV>(MUT_CHUNK_TOP), "the DV chunk control did not fail");
+    assert!(!top_of_range::<QV>(MUT_CHUNK_TOP), "the QV chunk control did not fail");
+}
+
+/// A product of fields with no lane vectors steps and sums without squares or panics
+#[test]
+fn relaxed_zero_width() {
+    let x: Vec<Fl<DV, 0>> = vec![Fl([]); 8];
+    let mut p = Relaxed::<DV, 0>::with_min(8, 1);
+    for k in 0..8 {
+        let _ = p.sum(&x, &x, k, 0, k);
+        p.step(&x, &x, k);
+    }
+    assert_eq!(p.squares, 0);
+}
+
 #[test]
 fn mullow_empty() {
     let (a, _) = case::<QV>("flat", 16, 3);
@@ -622,8 +688,7 @@ fn relaxed_planted_exact() {
             relaxed_exact::<Du>(n, s[3], m),
         ]
     };
-    let own = [DV::BLOCK_MIN, QV::BLOCK_MIN, OV::BLOCK_MIN, Du::BLOCK_MIN];
-    for (n, s) in [(300usize, [4usize; 4]), (300, [16; 4]), (2100, own)] {
+    for (n, s) in [(300usize, [4usize; 4]), (300, [16; 4])] {
         let ok = run(n, s, 0);
         println!("relaxed exact n {n}, squares from {s:?}: DV QV OV Du {ok:?}");
         assert!(ok.iter().all(|&o| o), "planted solutions not recovered");
@@ -631,6 +696,28 @@ fn relaxed_planted_exact() {
         println!("  control, the first square dropped: {ctl:?} (must be all false)");
         assert!(ctl.iter().all(|&o| !o), "the dropped-square control did not fail");
     }
+    // the lanes' own smallest squares, at n with two sides or more of them: 2100 for DV and Du (512), 600 for QV (64)
+    // and OV (16)
+    let own = [
+        (
+            relaxed_exact::<DV>(2100, DV::BLOCK_MIN, 0),
+            relaxed_exact::<DV>(2100, DV::BLOCK_MIN, RELAXED_MUT_DROP),
+        ),
+        (
+            relaxed_exact::<QV>(600, QV::BLOCK_MIN, 0),
+            relaxed_exact::<QV>(600, QV::BLOCK_MIN, RELAXED_MUT_DROP),
+        ),
+        (
+            relaxed_exact::<OV>(600, OV::BLOCK_MIN, 0),
+            relaxed_exact::<OV>(600, OV::BLOCK_MIN, RELAXED_MUT_DROP),
+        ),
+        (
+            relaxed_exact::<Du>(2100, Du::BLOCK_MIN, 0),
+            relaxed_exact::<Du>(2100, Du::BLOCK_MIN, RELAXED_MUT_DROP),
+        ),
+    ];
+    println!("relaxed exact, the lanes' own squares: DV QV OV Du (recovered, control recovered) {own:?}");
+    assert!(own.iter().all(|&(o, c)| o && !c), "the lanes' own squares");
 }
 
 /// Without squares `sum` is bitwise `cs_range`, on a lane with squares (DV) and on one without (F8)

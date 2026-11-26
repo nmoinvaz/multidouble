@@ -45,9 +45,11 @@
 //! needs coefficients up to order (m + 1) 2^p, so it is formed at the end of step e = (m + 1) 2^p + 1 ([`Relaxed::step`])
 //! from orders below e, and its first term is of order e + 1. The terms with an index below d, 2d of them per order,
 //! are summed directly when the coefficient is read ([`Relaxed::sum`]), with whatever values the caller has then.
-//! The work of a product to order n is then O(s0 n) direct terms and O(log n) squares of each side, so
-//! O(M(n) log n) with M(n) the cost of an n-term product: J. van der Hoeven, "Relax, but don't be too lazy",
-//! J. Symbolic Comput. 34, 479-542 (2002), doi:10.1006/jsco.2002.0562.
+//! To order n a product forms about 2n/s squares of side s for each of the O(log n) sides s >= s0, which cost
+//! O(n M(s) / s) each with M(s) the cost of an s-term product by `mullow`, and 2d direct terms per order: O(M(n) log n)
+//! and O(s0 n) in all, where `mullow`'s pairs are convolved (pairs past its FFT tables, s > 4096, are formed term by
+//! term). J. van der Hoeven, "Relax, but don't be too lazy", J. Symbolic Comput. 34, 479-542 (2002),
+//! doi:10.1006/jsco.2002.0562.
 use crate::dual::{Du, Lane, Ou, Qu};
 use crate::dv::{DDotAcc, DV};
 use crate::field::Fl;
@@ -211,7 +213,8 @@ pub struct Cfg {
     /// the controls, 0 off: MUT_ZERO_LANE scales zero lanes as the others, MUT_E2_PLAIN scales the direct pairs' first
     /// factor by 2^e2 as one f64, MUT_E2_SPLIT_ALWAYS splits 2^e2 between the factors also at e2 = 0, MUT_E2_PRESCALE
     /// splits it between the factors by their top exponents, MUT_DROP_PAIR drops the first block pair formed by
-    /// convolution, MUT_SLOPE takes the output's scale from the slope plus one
+    /// convolution, MUT_SLOPE takes the output's scale from the slope plus one, MUT_CHUNK_TOP reads double- and
+    /// quad-double outputs in chunks also at the top of f64's range
     pub mutate: u8,
 }
 
@@ -229,6 +232,9 @@ pub const MUT_E2_PRESCALE: u8 = 5;
 pub const MUT_DROP_PAIR: u8 = 6;
 /// `Cfg::mutate`: the outputs unscaled by 2^-((s + 1) k) instead of 2^-(s k), a wrong slope
 pub const MUT_SLOPE: u8 = 7;
+/// `Cfg::mutate`: double- and quad-double outputs read in chunks also at the top of f64's range, where a balanced
+/// chunk can overflow
+pub const MUT_CHUNK_TOP: u8 = 8;
 
 impl Default for Cfg {
     fn default() -> Self {
@@ -454,6 +460,8 @@ fn mullow_pairs<S: Simd, E: Expansion<S>>(
 /// coefficients by their own exponents, so that both and their product keep the range of the term: only a term
 /// below 2^-1022 itself rounds.
 fn direct<S: Simd, E: Expansion<S>>(x: &[E], y: &[E], o: usize, nout: usize, cfg: &Cfg, e2: i32, acc: &mut [E::Acc]) {
+    // the pair's terms reach x.len() + y.len() - 1 outputs (both factors nonempty)
+    let nout = nout.min(x.len() + y.len() - 1);
     let prescale = (e2 != 0 && cfg.mutate == MUT_E2_PRESCALE) || (e2 == 0 && cfg.mutate == MUT_E2_SPLIT_ALWAYS);
     let plain = e2 != 0 && cfg.mutate == MUT_E2_PLAIN;
     if e2 != 0 && !prescale && !plain {
@@ -837,7 +845,11 @@ pub fn digits<S: Simd, E: Expansion<S>>(x: &E, k: &[i32; LN], t: usize, d: &mut 
         *dr = v.sub(hi.mul(r16));
         carry = hi;
     }
-    debug_assert!(carry.to_array().iter().all(|&c| c == 0.0), "digits: |x 2^k| too large");
+    // a coefficient scaled out of f64's range (the control MUT_ZERO_LANE) leaves NaNs, which pair's 1/4 check rejects
+    debug_assert!(
+        carry.to_array().iter().all(|&c| c == 0.0 || !c.is_finite()),
+        "digits: |x 2^k| too large"
+    );
 }
 
 /// The integer v = sum_q d\[q\]\[ln\] 2^(16 q) (balanced digits of lane ln) times 2^e as out.len() parts: |v| cut
@@ -1260,12 +1272,16 @@ fn pair<S: Simd, E: Expansion<S>>(
         let e0: [i32; LN] = std::array::from_fn(|ln| {
             xa.frame[ln] + xb.frame[ln] - 2 * w - (s[ln] + ds) * k as i32 + DB * q0 as i32 + e2
         });
-        if E::NP <= 4 {
+        // the chunks' weights 2^(48 c + e0): near the top of f64's range a balanced chunk can exceed f64::MAX where
+        // the value does not (the digits' signs differ), so there the exact cut below
+        let nc = nd.div_ceil(3);
+        let top = e0.iter().copied().max().unwrap_or(0) + 48 * nc as i32;
+        if E::NP <= 4 && (top <= 960 || cfg.mutate == MUT_CHUNK_TOP) {
             // double- and quad-double: the integer in chunks of three digits, each exact in f64 (an integer below
             // 2^48), the top chunk first, each scaled by its weight 2^(48 c + e0) and added into the accumulator, which
             // rounds the sum to the expansion's precision (2^-(53 NP) of the value, about)
             let (r16, r32) = (V8::splat(R16), V8::splat(R16 * R16));
-            for c in (0..nd.div_ceil(3)).rev() {
+            for c in (0..nc).rev() {
                 let q = 3 * c;
                 let mut v = ws.dig[q];
                 if q + 1 < nd {
@@ -1364,6 +1380,8 @@ pub struct Relaxed<T: Lane, const B: usize> {
     s0: usize,
     /// the next step to form
     next: usize,
+    /// coefficients of the product
+    len: usize,
     /// the control `RELAXED_MUT_DROP`, 0 off
     pub mutate: u8,
     /// squares formed, and their terms
@@ -1388,6 +1406,7 @@ impl<T: Lane, const B: usize> Relaxed<T, B> {
             acc,
             s0,
             next: 0,
+            len,
             mutate: 0,
             squares: 0,
             terms: 0,
@@ -1411,10 +1430,10 @@ impl<T: Lane, const B: usize> Relaxed<T, B> {
     pub fn step(&mut self, x: &[Fl<T, B>], y: &[Fl<T, B>], e: usize) {
         assert_eq!(e, self.next, "Relaxed::step: step {e} after {}", self.next);
         self.next += 1;
-        if self.s0 == 0 || e < 2 {
+        if self.s0 == 0 || e < 2 || B == 0 {
             return;
         }
-        let len = self.acc[0].len();
+        let len = self.len;
         let e1 = e - 1;
         // (i0, j0, side) of every square of this step whose first term is below len
         let mut sq: Vec<(usize, usize, usize)> = Vec::new();
