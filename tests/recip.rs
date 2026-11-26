@@ -96,7 +96,21 @@ fn cases() -> Vec<(i64, u64)> {
     v
 }
 
-/// the number of cases whose parts, or the types' prefixes, differ from the reference in any bit
+/// whether the parts are canonical: every nonzero part is unchanged when the next is added in round-to-nearest (so
+/// at most half its ulp, and a tie only toward an even part), and zeros come only at the end
+fn canonical(x: &[f64]) -> bool {
+    let n = x.iter().position(|v| *v == 0.0).unwrap_or(x.len());
+    x[n..].iter().all(|v| *v == 0.0) && x[..n].windows(2).all(|w| w[0] + w[1] == w[0])
+}
+
+/// a type's parts against the reference prefix: canonical, with the prefix's exact value, and the prefix's bits
+/// whenever the prefix is canonical itself
+fn same_canonical(x: &[f64], want: &[f64]) -> bool {
+    canonical(x) && Dy::sum(x).sub(&Dy::sum(want)).is_zero() && (!canonical(want) || bits(x) == bits(want))
+}
+
+/// the number of cases whose parts differ from the reference in any bit, or whose type prefixes are not the
+/// reference prefix's value in canonical form
 fn mismatches() -> usize {
     let mut bad = 0;
     for (p, q) in cases() {
@@ -106,9 +120,9 @@ fn mismatches() -> usize {
         let qd = if p == 1 { QD::recip_int(q) } else { QD::from_ratio(p, q) };
         let od = if p == 1 { OD::recip_int(q) } else { OD::from_ratio(p, q) };
         if bits(&got) != bits(&want)
-            || bits(&[dd.hi, dd.lo]) != bits(&want[..2])
-            || bits(&qd.x) != bits(&want[..4])
-            || bits(&od.x) != bits(&want)
+            || !same_canonical(&[dd.hi, dd.lo], &want[..2])
+            || !same_canonical(&qd.x, &want[..4])
+            || !same_canonical(&od.x, &want)
         {
             bad += 1;
         }
@@ -239,4 +253,49 @@ fn mul_recip_inverts_multiplication() {
     for i in 0..3 {
         assert!(worst[i] <= bar[i] * u[i], "type {i}: {:.2e}", worst[i]);
     }
+}
+
+/// past 2^53 the greedy parts can end in a tie, a low part exactly half an ulp of an odd high part (k =
+/// 191516586041457763 is one): the raw prefix is then not canonical, and the types' constants are, with its value.
+/// Random q in [2^53, 2^60) with p = 1 and both signs of p, and the known case.
+#[test]
+fn constructors_canonical_past_2_53() {
+    let k = 191_516_586_041_457_763u64;
+    let raw = recip_parts(k);
+    assert!(
+        !canonical(&raw[..2]),
+        "the known tie: its raw double-double prefix should not be canonical"
+    );
+    let (d, q4, o8) = (DD::recip_int(k), QD::recip_int(k), OD::recip_int(k));
+    assert!(
+        same_canonical(&[d.hi, d.lo], &raw[..2]),
+        "DD::recip_int({k}) is not the canonical nearest"
+    );
+    assert!(
+        same_canonical(&q4.x, &raw[..4]),
+        "QD::recip_int({k}) is not the canonical nearest"
+    );
+    assert!(
+        same_canonical(&o8.x, &raw),
+        "OD::recip_int({k}) is not the canonical nearest"
+    );
+    let mut r = Rng(1910);
+    let (mut ties, mut bad, mut n) = (0, 0, 0);
+    for i in 0..20_000 {
+        let q = (1u64 << 53) + r.next_u64() % ((1u64 << 60) - (1u64 << 53));
+        let p = if i % 2 == 0 {
+            1
+        } else {
+            -(1 + (r.next_u64() >> 2) as i64)
+        };
+        let raw = ratio_parts(p, q);
+        let (dd, qd, od) = (DD::from_ratio(p, q), QD::from_ratio(p, q), OD::from_ratio(p, q));
+        ties += !canonical(&raw) as usize;
+        bad += (!same_canonical(&[dd.hi, dd.lo], &raw[..2])
+            || !same_canonical(&qd.x, &raw[..4])
+            || !same_canonical(&od.x, &raw)) as usize;
+        n += 1;
+    }
+    println!("q in [2^53, 2^60): {ties} of {n} raw expansions not canonical, {bad} type constants wrong");
+    assert_eq!(bad, 0);
 }

@@ -110,23 +110,26 @@ fn prefix<const P: usize>(r: [f64; 8]) -> [f64; P] {
 }
 
 impl DD {
-    /// 1/k rounded to the nearest double-double (`recip_parts`'s first two parts)
+    /// 1/k rounded to the nearest double-double: `recip_parts`'s first two parts, made canonical by `DD::new` (for
+    /// k >= 2^53 the low part can be exactly half an ulp of an odd high part, a tie that `DD::new` moves to the even
+    /// neighbor; the value is unchanged, and a canonical pair keeps its bits)
     ///
     /// # Panics
     ///
     /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> DD {
         let [hi, lo] = prefix::<2>(recip_parts(k));
-        DD { hi, lo }
+        DD::new(hi, lo)
     }
-    /// p/q rounded to the nearest double-double (`ratio_parts`'s first two parts), for any p
+    /// p/q rounded to the nearest double-double, for any p: `ratio_parts`'s first two parts made canonical by
+    /// `DD::new`, as in `recip_int`
     ///
     /// # Panics
     ///
     /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> DD {
         let [hi, lo] = prefix::<2>(ratio_parts(p, q));
-        DD { hi, lo }
+        DD::new(hi, lo)
     }
     /// self times `DD::recip_int(k)`
     pub fn mul_recip(self, k: u64) -> DD {
@@ -135,25 +138,24 @@ impl DD {
 }
 
 impl QD {
-    /// 1/k rounded to four parts (`recip_parts`'s first four)
+    /// 1/k rounded to four parts: `recip_parts`'s first four, made canonical by `QD::new` (a tie between two parts,
+    /// possible for k >= 2^53, moves to the even neighbor; the value is unchanged)
     ///
     /// # Panics
     ///
     /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> QD {
-        QD {
-            x: prefix::<4>(recip_parts(k)),
-        }
+        let [a, b, c, d] = prefix::<4>(recip_parts(k));
+        QD::new(a, b, c, d)
     }
-    /// p/q rounded to four parts (`ratio_parts`'s first four), for any p
+    /// p/q rounded to four parts, for any p: `ratio_parts`'s first four made canonical by `QD::new`, as in `recip_int`
     ///
     /// # Panics
     ///
     /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> QD {
-        QD {
-            x: prefix::<4>(ratio_parts(p, q)),
-        }
+        let [a, b, c, d] = prefix::<4>(ratio_parts(p, q));
+        QD::new(a, b, c, d)
     }
     /// self times `QD::recip_int(k)`
     pub fn mul_recip(self, k: u64) -> QD {
@@ -162,25 +164,22 @@ impl QD {
 }
 
 impl OD {
-    /// 1/k rounded to eight parts (`recip_parts`)
+    /// 1/k rounded to eight parts: `recip_parts`, made canonical by `OD::new` (a tie between two parts, possible for
+    /// k >= 2^53, moves to the even neighbor; the value is unchanged)
     ///
     /// # Panics
     ///
     /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> OD {
-        OD {
-            x: prefix::<8>(recip_parts(k)),
-        }
+        OD::new(prefix::<8>(recip_parts(k)))
     }
-    /// p/q rounded to eight parts (`ratio_parts`), for any p
+    /// p/q rounded to eight parts, for any p: `ratio_parts` made canonical by `OD::new`, as in `recip_int`
     ///
     /// # Panics
     ///
     /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> OD {
-        OD {
-            x: prefix::<8>(ratio_parts(p, q)),
-        }
+        OD::new(prefix::<8>(ratio_parts(p, q)))
     }
     /// self times `OD::recip_int(k)`
     pub fn mul_recip(self, k: u64) -> OD {
