@@ -16,18 +16,17 @@ each published double-word theorem from its own precision, 3 to 7.
 with the recursion over the reals (\texttt{Eval.lean}, \texttt{DivEval.lean}, \texttt{SqrtEval.lean}). Where exact
 values grow too long the copy rounds up, which the bounds of Lemma~\ref{lem:g} allow because they grow with their
 arguments (\texttt{GMono.lean}, \texttt{TrigEval.lean}, \texttt{ExpEval.lean}). The longest runs are cut into steps
-that the kernel checks against stored states (\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/}, \texttt{Exp8/},
-\texttt{Log8/}, \texttt{DDExp2/}, \texttt{DDLog2/}, and \texttt{Trig2/} and \texttt{Trig4/} for the remark after
-Theorem~\ref{thm:trig}, on the definitions of \texttt{TrigN/}, written by \texttt{acc\_lean.py},
-\texttt{trig\_lean.py}, \texttt{exp\_lean.py},
-\texttt{log\_lean.py}, \texttt{ddexp\_lean.py} and \texttt{ddlog\_lean.py}). That remark's bounds at $n = 12$ are proved
-in \texttt{Trig12/}, outside the default build: the kernel takes some five hours for them.
+that the kernel checks against stored states, in folders of modules that the files of the tables import:
+\texttt{Prop28/}, \texttt{Trig8/}, \texttt{Tan8/}, \texttt{Exp8/}, \texttt{Log8/}, \texttt{DDExp2/},
+\texttt{DDLog2/} and, for the remark after Theorem~\ref{thm:trig} on the definitions of \texttt{TrigN/},
+\texttt{Trig2/}, \texttt{Trig4/} and \texttt{Trig12/}, each written by a script of \texttt{paper/}.
+\texttt{Trig12/} is outside the default build: the kernel takes some five hours for it.
 \item No declaration depends on an axiom other than \texttt{propext}, \texttt{Classical.choice} and
-\texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
-kernel's checks has controls, the same check on a wrong number, a wrong state or a narrower hypothesis, which the
-kernel proves false (\texttt{Controls/}).
-\item The published theorems under the double-word start of Theorem~\ref{thm:t8}, under the double-double
-functions of Theorem~\ref{thm:trig} and under Proposition~\ref{prop:ddexplog} are proved as well: Theorems~2.2,
+\texttt{Quot.sound}: the build reads every declaration's axioms (\texttt{Controls/Axioms.lean}). Each kernel check
+has controls, the same check on a wrong number, state or hypothesis, which the kernel proves false
+(\texttt{Controls/}).
+\item The published theorems under Theorem~\ref{thm:t8}'s double-word start, Theorem~\ref{thm:trig}'s
+double-double functions and Proposition~\ref{prop:ddexplog} are proved as well: Theorems~2.2,
 3.1, 4.1, 4.3 and~7.1 of~\cite{JMP17}, which \cite{MR22} proved in Coq, Theorems~2.7 and~2.8 of~\cite{MR22} and
 Theorem~3.5 of~\cite{LLMPR23}. Proposition~\ref{prop:ddexplog} and the double-double sine, cosine and tangent are
 proved on those algorithms; the quotient $x_l/x_h$ of the logarithm's start enters by its bound $u|x_l/x_h| +
@@ -35,7 +34,7 @@ proved on those algorithms; the quotient $x_l/x_h$ of the logarithm's start ente
 \item The theorems at $n = 8$ on the exponential and the logarithm, and Proposition~\ref{prop:ddexplog}, take as
 hypotheses binary64's rounding of each scaling and the exponents that the algorithm selects, and no value overflows,
 the model having no largest number. The logarithm's constant is proved on the convex variant of its bound, at the
-two ends of each case, with its start computed by Proposition~\ref{prop:ddexplog} (\texttt{Log8DD.lean}).
+two ends of each case, from the start that Proposition~\ref{prop:ddexplog} computes.
 \end{itemize}
 
 \begin{table*}[tp]
