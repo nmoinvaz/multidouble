@@ -56,7 +56,11 @@ print(md.isa())                           # the SIMD backend in use, detected at
   or of another numeric dtype. Each is converted to a C-contiguous float64 array (`np.ascontiguousarray`), and one that
   is already so is passed on without a copy. Complex, string, `None` and masked inputs raise `TypeError`.
 - In numpy (plain float64 expressions): `two_sum`, `two_prod` (Dekker), `dd_add`, `dd_scale` (times an f64),
-  `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|), `dd_from_mp` (from mpmath numbers; needs mpmath).
+  `dd_axpy` (y + a x), `dd_norm` (max |hi + lo|).
+- From and to mpmath numbers (needs mpmath): `parts_from_mp(v, n)`, the n part arrays of the greedy expansion, each
+  part the float64 nearest to what the parts before leave, the remainders formed exactly whatever the working
+  precision; `dd_from_mp`, `qd_from_mp` and `od_from_mp` with 2, 4 and 8 parts; `mp_from_parts(*parts)`, their exact
+  sums.
 - `gcr(apply, precond, bh, bl)`: x with A x = b in double-double by right-preconditioned GMRES in its GCR form, given
   `apply(uh, ul)`, the product A u in double-double, and `precond(rh, rl)`, an approximate solve such as an f64 LU of
   A: the refinement of a mixed-precision solve to double-double accuracy (`coef="f64"` keeps the coefficients in

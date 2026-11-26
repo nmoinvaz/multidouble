@@ -31,7 +31,10 @@ inputs give the same bits on every machine with IEEE float64 arithmetic):
 
 - ``two_sum``, ``two_prod``: the error-free transformations (``two_prod`` by Dekker's splitting, no FMA needed);
 - ``dd_add`` (the accurate double-double sum), ``dd_scale`` (times an f64 scalar), ``dd_axpy`` (y + a x);
-- ``dd_norm`` (max |hi + lo|) and ``dd_from_mp`` (from mpmath numbers; needs mpmath);
+- ``dd_norm`` (max |hi + lo|);
+- ``dd_from_mp``, ``qd_from_mp``, ``od_from_mp`` and ``parts_from_mp(v, n)``: the 2, 4, 8 or n parts of mpmath numbers,
+  each the nearest float64 to what the ones before leave, the remainders exact; ``mp_from_parts``, their exact sums
+  (needs mpmath);
 - ``gcr``: x with A x = b in double-double by preconditioned GMRES (its GCR form), given the products A u in
   double-double and a preconditioner, typically an f64 LU of A: the refinement of a mixed-precision solve.
 """
@@ -338,14 +341,67 @@ def dd_norm(h, l):
     return float(np.max(np.abs(h + l))) if len(h) else 0.0
 
 
-def dd_from_mp(v):
-    """(hi, lo) arrays from a sequence of mpmath numbers: hi the nearest f64, lo the nearest f64 to the rest"""
+def parts_from_mp(v, n):
+    """n float64 arrays from a sequence of mpmath numbers (anything else mpmath.mpf takes is converted at the working
+    precision first): the greedy expansion, part q of each value the float64 nearest (ties to even) to what parts 0,
+    ..., q - 1 leave of it, each remainder formed exactly (mpmath's fsub with exact=True), so that neither the working
+    precision nor the value's own number of bits changes a part. Each part is then at most half an ulp of the one
+    before, and the value is their sum to within half an ulp of the last part. Where a part is exactly half an ulp of
+    an odd one before it, a tie that needs a value with more bits than the parts hold, the two are not a double word
+    (hi = RN(hi + lo)); the constructors of the Rust types (QD, OD) renormalize them to the same sum. A part below
+    2^-1022 (subnormal) can be rounded twice, and one past the float64 range is infinite. Needs mpmath."""
     import mpmath as mp
+    from mpmath.libmp import from_float, to_float
 
-    v = list(v)
-    hi = np.array([float(x) for x in v])
-    lo = np.array([float(x - mp.mpf(h)) for x, h in zip(v, hi)])
+    v = [x if isinstance(x, mp.mpf) else mp.mpf(x) for x in v]
+    out = [np.zeros(len(v)) for _ in range(n)]
+    for i, r in enumerate(v):
+        for q in range(n):
+            f = to_float(r._mpf_, rnd="n")
+            out[q][i] = f
+            if f == 0.0 or not np.isfinite(f):
+                break
+            r = mp.fsub(r, mp.mp.make_mpf(from_float(f)), exact=True)
+    return out
+
+
+def mp_from_parts(*parts):
+    """the exact sums of equally long part arrays (two, four, eight or any number), entry by entry, as a list of mpmath
+    numbers carrying every bit of the sum whatever the working precision (mpmath's fadd with exact=True); the inverse
+    of parts_from_mp. Needs mpmath."""
+    import mpmath as mp
+    from mpmath.libmp import from_float
+
+    P = [np.asarray(p, dtype=np.float64).ravel() for p in parts]
+    if any(len(p) != len(P[0]) for p in P):
+        raise ValueError("the part arrays must have the same length")
+    out = []
+    for i in range(len(P[0]) if P else 0):
+        s = mp.mpf(0)
+        for p in P:
+            s = mp.fadd(s, mp.mp.make_mpf(from_float(float(p[i]))), exact=True)
+        out.append(s)
+    return out
+
+
+def dd_from_mp(v):
+    """(hi, lo) arrays from a sequence of mpmath numbers: hi the nearest f64, lo the nearest f64 to the rest, formed
+    exactly (parts_from_mp(v, 2))"""
+    hi, lo = parts_from_mp(v, 2)
     return hi, lo
+
+
+def qd_from_mp(v):
+    """the four part arrays of a quad-double array from a sequence of mpmath numbers (parts_from_mp(v, 4))"""
+    return tuple(parts_from_mp(v, 4))
+
+
+def od_from_mp(v):
+    """the eight part arrays of an octo-double array from a sequence of mpmath numbers (parts_from_mp(v, 8))"""
+    return tuple(parts_from_mp(v, 8))
+
+
+__all__ += ["qd_from_mp", "od_from_mp", "parts_from_mp", "mp_from_parts"]
 
 
 def dd_dot(xh, xl, yh, yl):
