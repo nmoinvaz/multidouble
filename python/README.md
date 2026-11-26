@@ -50,6 +50,11 @@ print(md.isa())                           # the SIMD backend in use, detected at
   `"no_swap_sign"` (the sign without its flip per interchange) and, for `qd_logdet`, `"update_dd"` (every trailing
   update rounded to double-double). Both raise `ValueError` for a singular A (an exactly zero pivot), for entries that
   are not finite and for an unknown control.
+- `ruiz_pow2(a, iters=40)`: integer row and column scalings r, c by Ruiz's iteration in the max norm, powers of two
+  chosen without libm (np.frexp), so that diag(2^r) A diag(2^c) has max norm in [1/2, 2) in every nonzero row and
+  column; `scale_pow2(r, c, *parts)` applies them to every part of a matrix exactly (raising `ValueError` where an
+  entry would overflow or lose bits). Before `dd_logdet` or `qd_logdet` of the scaled matrix S,
+  ln|det A| = ln|det S| - (sum r + sum c) ln 2.
 - `qd_add_dd(z0, z1, z2, z3, dh, dl)`: a quad-double array (four float64 arrays, each element the exact sum of its
   parts in any order) plus a double-double one, elementwise in quad-double; returns the four parts of the sum.
 - `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a

@@ -17,6 +17,8 @@ Backed by the Rust crate multidouble, on the best SIMD backend the CPU has (``is
 - ``dd_logdet``, ``qd_logdet``: the sign and ln|det A| of a real square matrix by the LU of ``dd_solve`` or
   ``qd_solve``, with the smallest and largest pivot, A as two or four float64 part arrays (a float64 matrix a is
   (a, zeros));
+- ``ruiz_pow2``, ``scale_pow2``: power-of-two row and column scalings of a matrix by Ruiz's iteration, and their
+  exact application to every part of it, e.g. before ``dd_logdet`` or ``qd_logdet``;
 - ``qd_add_dd``: a quad-double array (four float64 arrays) plus a double-double one, elementwise in quad-double;
 - ``qd_axpy``: y + a x for quad-double arrays x, y and a float a, elementwise in quad-double;
 - ``qd_add``, ``qd_sub``, ``qd_mul``, ``qd_div``: elementwise quad-double operations on four-part arrays; ``qd_op(op,
@@ -251,6 +253,70 @@ def qd_logdet(a0, a1, a2, a3, par=False, control="none"):
     "update_dd" (every trailing update rounded to double-double). Raises ValueError if A is singular (an exactly zero
     pivot), has an entry that is not finite, or is not square, and for an unknown control."""
     return _md.qd_logdet(*_parts(("a0", "a1", "a2", "a3"), a0, a1, a2, a3), bool(par), str(control))
+
+
+def ruiz_pow2(a, iters=40):
+    """Power-of-two row and column scalings of a real matrix A by Ruiz's iteration in the max norm (D. Ruiz, "A scaling
+    algorithm to equilibrate both rows and columns norms in matrices", RAL-TR-2001-034, 2001): integer arrays r and c
+    with diag(2^r) A diag(2^c) of max norm in [1/2, 2) in every row and column that is not zero, once the iteration has
+    converged (at most iters sweeps). Each sweep scales every row by 2^-floor(e/2), e the exponent of its max norm m
+    (m = f 2^e, 1/2 <= f < 1, by np.frexp), and then every column the same way: a power of two near 1/sqrt(m), with no
+    libm call, so the scalings are the same on every machine. A is a float64 matrix, e.g. the hi parts or the sum of
+    the parts of a double- or quad-double one; scale_pow2 applies the scalings to every part exactly. Before an LU,
+    for dd_logdet or qd_logdet of the scaled matrix S: ln|det A| = ln|det S| - (sum r + sum c) ln 2, and sign det A =
+    sign det S. Returns (r, c) as int64 arrays."""
+    B = np.abs(_f64(a, "a"))
+    if B.ndim != 2:
+        raise ValueError("a must be a matrix")
+    r = np.zeros(B.shape[0], dtype=np.int64)
+    c = np.zeros(B.shape[1], dtype=np.int64)
+    if B.size == 0:
+        return r, c
+    for _ in range(int(iters)):
+        # frexp gives the exponent 0 for zero, inf and nan: such a row or column is left alone; np.intc, as
+        # NumPy 1.21 has ldexp loops for C int and long only (long is 32 bits on Windows)
+        dr = -(np.frexp(B.max(axis=1))[1].astype(np.intc) // 2)
+        B = np.ldexp(B, dr[:, None])
+        dc = -(np.frexp(B.max(axis=0))[1].astype(np.intc) // 2)
+        B = np.ldexp(B, dc[None, :])
+        r += dr
+        c += dc
+        if not (dr.any() or dc.any()):
+            break
+    return r, c
+
+
+def scale_pow2(r, c, *parts):
+    """diag(2^r) A diag(2^c) for A given as part arrays (one float64 matrix, or the two, four or eight parts of a
+    double-, quad- or octo-double one), each part scaled by the same powers of two (np.ldexp), so that their sum is
+    scaled exactly. Raises ValueError if a scaled finite entry is not exact (it would overflow, or lose bits below
+    2^-1022), naming the entry. Returns the scaled parts, C-contiguous."""
+    r = np.asarray(r, dtype=np.int64)
+    c = np.asarray(c, dtype=np.int64)
+    rn, cn = r[:, None] < 0, c[None, :] < 0
+    e = r[:, None] + c[None, :]
+    # an int64 sum that wraps has the sign opposite to its terms', and its exponent is beyond the range of any finite
+    # entry; 2^+-4096 overflows or underflows every finite nonzero float64, so the clamp changes no result, and it
+    # keeps e in np.intc for ldexp
+    wrapped = (rn == cn) & ((e < 0) != rn)
+    e = np.where(wrapped, np.where(rn, -4096, 4096), np.clip(e, -4096, 4096)).astype(np.intc)
+    out = []
+    for q, p in enumerate(parts):
+        p = _f64(p, f"part {q}")
+        if p.shape != e.shape:
+            raise ValueError(f"part {q} has shape {p.shape}, not ({len(r)}, {len(c)})")
+        # an overflow or a loss of bits shows in the round trip below, which raises
+        with np.errstate(over="ignore", under="ignore"):
+            s = np.ldexp(p, e)
+            bad = np.isfinite(p) & (np.ldexp(s, -e) != p)
+        if bad.any():
+            i, j = (int(t) for t in np.argwhere(bad)[0])
+            raise ValueError(f"part {q} entry ({i}, {j}) is not scaled exactly by 2^{int(r[i]) + int(c[j])}")
+        out.append(np.ascontiguousarray(s))
+    return out
+
+
+__all__ += ["ruiz_pow2", "scale_pow2"]
 
 
 def qd_add_dd(z0, z1, z2, z3, dh, dl):
