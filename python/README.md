@@ -52,6 +52,10 @@ print(md.isa())                           # the SIMD backend in use, detected at
   parts in any order) plus a double-double one, elementwise in quad-double; returns the four parts of the sum.
 - `qd_axpy(a, x0, x1, x2, x3, y0, y1, y2, y3)`: y + a x for quad-double arrays x and y (normalized parts) and a
   float a, elementwise in quad-double; returns the four parts.
+- `qd_add`, `qd_sub`, `qd_mul`, `qd_div(a0, a1, a2, a3, b0, b1, b2, b3)`: elementwise quad-double operations, each
+  element's four parts in any order (renormalized first), 8 elements at a time on the best SIMD backend and bitwise
+  the same per element on every backend; `qd_op(op, ...)` with op 0 add, 1 mul, 2 div, 3 sub. Each returns the four
+  normalized parts.
 - `od_solve(a0, ..., a7, b0, ..., b7)`: x with A x = b by LU with partial pivoting in octo-double (eight parts,
   about 126 digits), A as eight (n, n) part arrays and b as eight of shape (n,) or (n, k), each entry the exact sum of
   its parts in any order; returns the eight parts of x, to about cond(A) 2^-418. `ODLu(a0, ..., a7)` keeps the factors for several solves, `solve(b0, ..., b7,

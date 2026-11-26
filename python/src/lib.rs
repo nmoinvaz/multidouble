@@ -238,6 +238,115 @@ impl Kernel for QdAddDd<'_> {
     }
 }
 
+/// out = a op b elementwise for quad-double arrays a and b (four parts in any order each, summed exactly as
+/// `QD::from_sum` does): 8 lanes at a time on the backend S, the remainder in scalar quad-double (bitwise the same per
+/// element)
+struct QdElementwise<'a> {
+    op: u8,
+    a: [&'a [f64]; 4],
+    b: [&'a [f64]; 4],
+    out: [&'a mut [f64]; 4],
+}
+
+impl Kernel for QdElementwise<'_> {
+    type Output = ();
+    #[inline(always)]
+    fn run<S: Simd>(self) {
+        let n = self.a[0].len();
+        let full = n / 8 * 8;
+        let (a, b) = (self.a, self.b);
+        let [o0, o1, o2, o3] = self.out;
+        let load = |z: [&[f64]; 4], i: usize| {
+            let q = QV::<S>::load(&z[0][i..i + 8], &z[1][i..i + 8], &z[2][i..i + 8], &z[3][i..i + 8]);
+            QV {
+                c: renorm4_any(q.c[0], q.c[1], q.c[2], q.c[3]),
+            }
+        };
+        for i in (0..full).step_by(8) {
+            let (x, y) = (load(a, i), load(b, i));
+            let r = match self.op {
+                ADD => x + y,
+                MUL => x * y,
+                DIV => x / y,
+                _ => x - y,
+            };
+            r.store(
+                &mut o0[i..i + 8],
+                &mut o1[i..i + 8],
+                &mut o2[i..i + 8],
+                &mut o3[i..i + 8],
+            );
+        }
+        for i in full..n {
+            let x = QD::from_sum(a[0][i], a[1][i], a[2][i], a[3][i]);
+            let y = QD::from_sum(b[0][i], b[1][i], b[2][i], b[3][i]);
+            let r = match self.op {
+                ADD => x + y,
+                MUL => x * y,
+                DIV => x / y,
+                _ => x - y,
+            };
+            (o0[i], o1[i], o2[i], o3[i]) = (r.x[0], r.x[1], r.x[2], r.x[3]);
+        }
+    }
+}
+
+/// (a0 + a1 + a2 + a3) op (b0 + b1 + b2 + b3) elementwise in quad-double, any length: op 0 add, 1 mul, 2 div, 3 sub,
+/// each element's parts in any order (renormalized first, as `qd_add_dd` takes them). Returns the four parts of the
+/// result, normalized.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn qd_op<'py>(
+    py: Python<'py>,
+    op: u8,
+    a0: PyReadonlyArray1<'py, f64>,
+    a1: PyReadonlyArray1<'py, f64>,
+    a2: PyReadonlyArray1<'py, f64>,
+    a3: PyReadonlyArray1<'py, f64>,
+    b0: PyReadonlyArray1<'py, f64>,
+    b1: PyReadonlyArray1<'py, f64>,
+    b2: PyReadonlyArray1<'py, f64>,
+    b3: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Parts<'py>> {
+    if op > SUB {
+        return Err(PyValueError::new_err(format!(
+            "op must be 0 (add), 1 (mul), 2 (div) or 3 (sub), not {op}"
+        )));
+    }
+    let a = [
+        slice(&a0, "a0")?,
+        slice(&a1, "a1")?,
+        slice(&a2, "a2")?,
+        slice(&a3, "a3")?,
+    ];
+    let b = [
+        slice(&b0, "b0")?,
+        slice(&b1, "b1")?,
+        slice(&b2, "b2")?,
+        slice(&b3, "b3")?,
+    ];
+    let n = a[0].len();
+    if a.iter().chain(&b).any(|p| p.len() != n) {
+        return Err(PyValueError::new_err(
+            "a0, a1, a2, a3, b0, b1, b2 and b3 must have the same length",
+        ));
+    }
+    let (mut o0, mut o1, mut o2, mut o3) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    // with the GIL held, as in elementwise
+    simd::dispatch(QdElementwise {
+        op,
+        a,
+        b,
+        out: [&mut o0, &mut o1, &mut o2, &mut o3],
+    });
+    Ok((
+        o0.into_pyarray(py),
+        o1.into_pyarray(py),
+        o2.into_pyarray(py),
+        o3.into_pyarray(py),
+    ))
+}
+
 /// (z0 + z1 + z2 + z3) + (dh + dl) elementwise in quad-double: a quad-double array (four float64 arrays, renormalized
 /// first, so any four parts summing to the value will do) plus a double-double one, e.g. a Newton step applied to a
 /// state kept in quad-double. Returns the four parts of the result, renormalized.
@@ -1070,6 +1179,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(qd_logdet, m)?)?;
     m.add_function(wrap_pyfunction!(qd_add_dd, m)?)?;
     m.add_function(wrap_pyfunction!(qd_axpy, m)?)?;
+    m.add_function(wrap_pyfunction!(qd_op, m)?)?;
     m.add_function(wrap_pyfunction!(isa, m)?)?;
     octo::register(m)?;
     Ok(())
