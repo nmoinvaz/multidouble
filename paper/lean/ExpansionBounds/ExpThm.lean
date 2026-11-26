@@ -95,8 +95,8 @@ noncomputable def expEps (η₁ η₂ : ℝ) (pos : Bool) (e : ℤ) (m : ℕ) (a
     Real.exp δ - 1
 
 /-- Theorem 40 (`thm:exp`), for a case: if `r` is within `δ` of `r_e = x - k ln 2` with `a ≤ |r| ≤ b` and the case's
-sign, and steps (2) to (4) run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`, then `y = 2^k ADDF(t, 1)`, each part
-of the scaling rounded by `S₃`, satisfies `|y - e^x| ≤ ε e^x + nη₃` -/
+sign, and steps (2) to (4) run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`, then `y = 2^k ADDF(t, 1)`, each
+part of the scaling rounded by `S₃`, satisfies `|y - e^x| ≤ ε e^x + nη₃` -/
 theorem thm40_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ η₃ : ℝ}
     {S₁ S₂ S₃ : ℝ → ℝ} (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (hS₃ : Scl p η₃ S₃) (r : ℕ → ℝ)
     (hr : ∀ i < n, F p (r i)) (X : ℝ) (k : ℤ) (δ : ℝ)

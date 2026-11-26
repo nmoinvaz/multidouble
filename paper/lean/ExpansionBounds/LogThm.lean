@@ -783,9 +783,9 @@ noncomputable def logBound (η₁ η₂ ηx ηp ηc ℓ E : ℝ) (πy : ℕ → 
 
 /-- Theorem 42 (`thm:log`) for a case, with `x > 0` and `(n² + n)u < 1`: with the start `y_0` within `E` of `ln x` and
 `ℓ ≥ |ln x|`; EXP's reduction of `-y_0` to `r` within `δ` of `r_e = -y_0 - k ln 2`, with `a ≤ |r| ≤ b` and the case's
-sign; its core run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`; the computed `x'`, each part of `2^kx` rounded
-within `η_x`, with parts within `π^x` and `x'_0 ∈ [1/2, 2]`; the exponents `e_φ`, `e_t` and `e_c` of steps (4) and
-(5) with `∑|v_i| < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)`. The
+sign; its core run with `∑|r_i| < 2^{e+1}`, `m` squarings and degree `d'`; the computed `x'`, each part of `2^kx`
+rounded within `η_x`, with parts within `π^x` and `x'_0 ∈ [1/2, 2]`; the exponents `e_φ`, `e_t` and `e_c` of steps
+(4) and (5) with `∑|v_i| < 2^{e_v+1}`; and `C = e^E - 1 + E_c < 1`: LOG's result `y` satisfies `|y - ln x| ≤ 𝓔(ℓ)`. The
 scalings back of `p` are rounded within `η_p` and those of each `c ⊗ v` within `η_c` -/
 theorem thm42_case (hp : 1 < p) (hn : 1 ≤ n) (hA3 : ((n : ℝ) ^ 2 + n) * u p < 1) {η₁ η₂ ηx ηp ηc : ℝ}
     {S₁ S₂ Sx Sp Sc : ℝ → ℝ} (hS₁ : Scl p η₁ S₁) (hS₂ : Scl p η₂ S₂) (hSx : Scl p ηx Sx) (hSp : Scl p ηp Sp)
