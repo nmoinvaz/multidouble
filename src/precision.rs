@@ -122,6 +122,14 @@ pub trait Precision<S: Simd>: Copy + Send + Sync + 'static {
     fn lu_solve(lu: &Self::Lu, b: &mut [Self::Scalar]);
 }
 
+/// The transpose solve with the factors of A, for the precisions whose LU has one: a trait of its own rather than a
+/// method of [`Precision`], so that an implementation of `Precision` outside the crate needs nothing new. Generic code
+/// that solves with A and A^T bounds its precision by both traits and factors A once.
+pub trait TransposeSolve<S: Simd>: Precision<S> {
+    /// solve A^T x = b in place with the factors of A (`DDLu::solve_t`, `QDLu::solve_t`, `ODLu::solve_t`)
+    fn lu_solve_t(lu: &Self::Lu, b: &mut [Self::Scalar]);
+}
+
 /// Double-double: `DD`, `DV`, `Du`, `Jet<N>`, `DDLu`; its dot product is the plain sum of double-double products
 #[derive(Clone, Copy, Debug)]
 pub struct Double;
@@ -226,6 +234,13 @@ impl<S: Simd> Precision<S> for Double {
     }
 }
 
+impl<S: Simd> TransposeSolve<S> for Double {
+    #[inline]
+    fn lu_solve_t(lu: &DDLu, b: &mut [DD]) {
+        lu.solve_t(b)
+    }
+}
+
 impl<S: Simd> Precision<S> for Quad {
     const PARTS: usize = 4;
     type Scalar = QD;
@@ -315,6 +330,13 @@ impl<S: Simd> Precision<S> for Quad {
     }
 }
 
+impl<S: Simd> TransposeSolve<S> for Quad {
+    #[inline]
+    fn lu_solve_t(lu: &QDLu, b: &mut [QD]) {
+        lu.solve_t(b)
+    }
+}
+
 impl<S: Simd> Precision<S> for Octo {
     const PARTS: usize = 8;
     type Scalar = OD;
@@ -400,6 +422,13 @@ impl<S: Simd> Precision<S> for Octo {
     #[inline]
     fn lu_solve(lu: &ODLu, b: &mut [OD]) {
         lu.solve(b)
+    }
+}
+
+impl<S: Simd> TransposeSolve<S> for Octo {
+    #[inline]
+    fn lu_solve_t(lu: &ODLu, b: &mut [OD]) {
+        lu.solve_t(b)
     }
 }
 
@@ -525,22 +554,26 @@ mod tests {
         };
         let cq = mat(4, 1);
         let mut bq: Vec<QD> = (0..n).map(|i| QD { x: qd_parts(i as u64) }).collect();
-        let mut bq2 = bq.clone();
+        let (mut bq2, mut tq, mut tq2) = (bq.clone(), bq.clone(), bq.clone());
         let lu = <Quad as Precision<N>>::lu_factor(n, ld, cq.clone(), false).unwrap();
         <Quad as Precision<N>>::lu_solve(&lu, &mut bq);
-        QDLu::factor(n, ld, cq.try_into().unwrap(), false)
-            .unwrap()
-            .solve(&mut bq2);
+        <Quad as TransposeSolve<N>>::lu_solve_t(&lu, &mut tq);
+        let own = QDLu::factor(n, ld, cq.try_into().unwrap(), false).unwrap();
+        own.solve(&mut bq2);
+        own.solve_t(&mut tq2);
         assert_eq!(bq, bq2);
+        assert_eq!(tq, tq2);
         let co = mat(8, 2);
         let mut bo: Vec<OD> = (0..n).map(|i| OD { x: od_parts(i as u64) }).collect();
-        let mut bo2 = bo.clone();
+        let (mut bo2, mut to, mut to2) = (bo.clone(), bo.clone(), bo.clone());
         let lu = <Octo as Precision<N>>::lu_factor(n, ld, co.clone(), false).unwrap();
         <Octo as Precision<N>>::lu_solve(&lu, &mut bo);
-        ODLu::factor(n, ld, co.try_into().unwrap(), false)
-            .unwrap()
-            .solve(&mut bo2);
+        <Octo as TransposeSolve<N>>::lu_solve_t(&lu, &mut to);
+        let own = ODLu::factor(n, ld, co.try_into().unwrap(), false).unwrap();
+        own.solve(&mut bo2);
+        own.solve_t(&mut to2);
         assert_eq!(bo, bo2);
+        assert_eq!(to, to2);
         assert!(<Quad as Precision<N>>::lu_factor(n, ld, mat(8, 1), false).is_err());
     }
 
@@ -593,12 +626,84 @@ mod tests {
         let mut b1: Vec<DD> = (0..n)
             .map(|i| DD::new(qd_parts(i as u64)[0], qd_parts(i as u64)[1]))
             .collect();
-        let mut b2 = b1.clone();
+        let (mut b2, mut t1, mut t2) = (b1.clone(), b1.clone(), b1.clone());
         let lu = <D as Precision<N>>::lu_factor(n, ld, vec![hi.clone(), lo.clone()], false).unwrap();
         <D as Precision<N>>::lu_solve(&lu, &mut b1);
-        DDLu::factor(n, ld, hi, lo, false).unwrap().solve(&mut b2);
+        <D as TransposeSolve<N>>::lu_solve_t(&lu, &mut t1);
+        let own = DDLu::factor(n, ld, hi, lo, false).unwrap();
+        own.solve(&mut b2);
+        own.solve_t(&mut t2);
         assert_eq!(b1, b2);
+        assert_eq!(t1, t2);
         assert!(<D as Precision<N>>::lu_factor(n, ld, vec![vec![0.0; ld * n]; 4], false).is_err());
+    }
+
+    /// max_j |b_j - sum_i A_(i,j) x_i| (transpose) or max_i |b_i - sum_j A_(i,j) x_j|, rounded to double-double, for A
+    /// column-major with leading dimension ld in PARTS part arrays
+    fn residual<P: Precision<N>>(
+        n: usize,
+        ld: usize,
+        c: &[Vec<f64>],
+        x: &[P::Scalar],
+        b: &[P::Scalar],
+        t: bool,
+    ) -> f64 {
+        let a = |i: usize, j: usize| P::new(&c.iter().map(|p| p[j * ld + i]).collect::<Vec<_>>());
+        (0..n)
+            .map(|r| {
+                let s = (0..n).fold(P::ZERO, |s, k| s + if t { a(k, r) } else { a(r, k) } * x[k]);
+                let d = P::to_dd(b[r] - s);
+                d.hi.abs()
+            })
+            .fold(0.0, f64::max)
+    }
+
+    /// `lu_solve_t` of a non-symmetric A (n = 13) solves A^T x = b to the precision's accuracy: the residual with A^T
+    /// is below 1e-28, 1e-60 and 1e-120 for double-, quad- and octo-double. Control: the same x's residual with A
+    /// instead of A^T exceeds 1e-3.
+    fn lu_solve_t_solves_the_transpose<P: TransposeSolve<N>>(tol: f64) {
+        let (n, ld) = (13, 16);
+        let c: Vec<Vec<f64>> = (0..P::PARTS)
+            .map(|q| {
+                (0..ld * n)
+                    .map(|i| {
+                        let (r, k) = (i % ld, i / ld);
+                        if r >= n {
+                            0.0
+                        } else if q == 0 {
+                            ((r * 5 + k * 11 + r * k) % 13) as f64 - 6.0 + if r == k { 0.5 } else { 0.0 }
+                        } else {
+                            od_parts(i as u64)[q] * 2f64.powi(-53 * q as i32)
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let normalized: Vec<Vec<f64>> = {
+            let mut o = c.clone();
+            for i in 0..ld * n {
+                let v = P::new(&c.iter().map(|p| p[i]).collect::<Vec<_>>());
+                for (q, p) in o.iter_mut().enumerate() {
+                    p[i] = P::part(v, q);
+                }
+            }
+            o
+        };
+        let b: Vec<P::Scalar> = (0..n).map(|i| P::new(&od_parts(i as u64 + 40)[..P::PARTS])).collect();
+        let lu = P::lu_factor(n, ld, normalized.clone(), false).unwrap();
+        let mut x = b.clone();
+        P::lu_solve_t(&lu, &mut x);
+        let rt = residual::<P>(n, ld, &normalized, &x, &b, true);
+        let ra = residual::<P>(n, ld, &normalized, &x, &b, false);
+        assert!(rt < tol, "{} parts: residual {rt:e}", P::PARTS);
+        assert!(ra > 1e-3, "{} parts: control residual {ra:e}", P::PARTS);
+    }
+
+    #[test]
+    fn precision_lu_solve_t_solves_the_transpose() {
+        lu_solve_t_solves_the_transpose::<Double>(1e-28);
+        lu_solve_t_solves_the_transpose::<Quad>(1e-60);
+        lu_solve_t_solves_the_transpose::<Octo>(1e-120);
     }
 
     /// the control: the same comparison with two parts swapped on input must fail
