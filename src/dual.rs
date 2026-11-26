@@ -1038,7 +1038,7 @@ impl<S: Simd> Div for Ou<S> {
 }
 
 impl<S: Simd> Lane for Ou<S> {
-    const BLOCK_MIN: usize = 32;
+    const BLOCK_MIN: usize = 16;
     fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
         crate::series::block_mul_dual::<S, OV<S>, Self>(x, y, acc, |u| u.split())
     }

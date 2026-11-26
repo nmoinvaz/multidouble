@@ -26,15 +26,16 @@
 //! checked to be under 1/4 before any of the pair's terms is used, so the convolution is exact and its bits depend on
 //! no libm; a pair that fails the check (none has in the tests) is formed term by term ([`Stats::fallback`]). Weights
 //! too small to reach 2^-prec of the smallest term are not formed. The integer at each index is carried into balanced
-//! digits, cut into 53-bit parts from its top bit, as many as the expansion has (2^-53 NP of it or less dropped), and
-//! added into the index's accumulator.
+//! digits and added into the index's accumulator: on octo-double lanes cut into eight 53-bit parts from its top bit
+//! (2^-424 of it or less dropped), on double- and quad-double lanes as chunks of three digits (exact in f64), the top
+//! first, which the accumulator rounds to its precision.
 //!
 //! The bits do not depend on the backend: the transforms' operations are the lanes' own, and their results are
 //! rounded to the exact integers. They differ from the naive sums' bits by about the expansion's rounding.
 //!
-//! J. van der Hoeven, "Making fast multiplication of polynomials numerically stable", Tech. Rep. 2008-02, Universite
-//! Paris-Sud (2008); the blocks are those of F. Johansson's Arb (`arb_poly_mullow_block`), "Arb: efficient
-//! arbitrary-precision midpoint-radius interval arithmetic", IEEE Trans. Comput. 66, 1281-1292 (2017).
+//! J. van der Hoeven, "Making fast multiplication of polynomials numerically stable", preprint, Universite Paris-Sud
+//! (2008); the blocks are those of F. Johansson's Arb (`arb_poly_mullow_block`), "Arb: efficient arbitrary-precision
+//! midpoint-radius interval arithmetic", IEEE Trans. Comput. 66, 1281-1292 (2017), doi:10.1109/TC.2017.2690633.
 //!
 //! # Relaxed products
 //!
@@ -46,7 +47,7 @@
 //! are summed directly when the coefficient is read ([`Relaxed::sum`]), with whatever values the caller has then.
 //! The work of a product to order n is then O(s0 n) direct terms and O(log n) squares of each side, so
 //! O(M(n) log n) with M(n) the cost of an n-term product: J. van der Hoeven, "Relax, but don't be too lazy",
-//! J. Symbolic Comput. 34, 479-542 (2002), section 4.
+//! J. Symbolic Comput. 34, 479-542 (2002), doi:10.1006/jsco.2002.0562.
 use crate::dual::{Du, Lane, Ou, Qu};
 use crate::dv::{DDotAcc, DV};
 use crate::field::Fl;
@@ -76,7 +77,7 @@ type L8 = [f64; LN];
 pub trait Expansion<S: Simd>: Copy + Send + Sync + 'static {
     /// parts per value
     const NP: usize;
-    /// the cost model's seconds per product into the accumulator, 8 lanes (M5 Pro)
+    /// the cost model's seconds per product into the accumulator, 8 lanes (an Apple M5, `examples/series_squares.rs`)
     const PROD_S: f64;
     /// the accumulator of sums of products
     type Acc: Copy + Send + Sync + 'static;
@@ -94,7 +95,7 @@ pub trait Expansion<S: Simd>: Copy + Send + Sync + 'static {
 
 impl<S: Simd> Expansion<S> for DV<S> {
     const NP: usize = 2;
-    const PROD_S: f64 = 3e-9;
+    const PROD_S: f64 = 6e-9;
     type Acc = DDotAcc<S>;
     #[inline(always)]
     fn part(&self, i: usize) -> V8<S> {
@@ -128,7 +129,7 @@ impl<S: Simd> Expansion<S> for DV<S> {
 
 impl<S: Simd> Expansion<S> for QV<S> {
     const NP: usize = 4;
-    const PROD_S: f64 = 30e-9;
+    const PROD_S: f64 = 50e-9;
     type Acc = QDotAcc<S>;
     #[inline(always)]
     fn part(&self, i: usize) -> V8<S> {
@@ -1255,14 +1256,41 @@ fn pair<S: Simd, E: Expansion<S>>(
             carry.to_array().iter().all(|&c| c == 0.0),
             "series: digits past the top"
         );
-        // the integer at index k on each lane, digit 0 of weight 2^(16 q0 + e0), as NP 53-bit parts
         let k = o + mi;
+        let e0: [i32; LN] = std::array::from_fn(|ln| {
+            xa.frame[ln] + xb.frame[ln] - 2 * w - (s[ln] + ds) * k as i32 + DB * q0 as i32 + e2
+        });
+        if E::NP <= 4 {
+            // double- and quad-double: the integer in chunks of three digits, each exact in f64 (an integer below
+            // 2^48), the top chunk first, each scaled by its weight 2^(48 c + e0) and added into the accumulator, which
+            // rounds the sum to the expansion's precision (2^-(53 NP) of the value, about)
+            let (r16, r32) = (V8::splat(R16), V8::splat(R16 * R16));
+            for c in (0..nd.div_ceil(3)).rev() {
+                let q = 3 * c;
+                let mut v = ws.dig[q];
+                if q + 1 < nd {
+                    v = v.add(ws.dig[q + 1].mul(r16));
+                }
+                if q + 2 < nd {
+                    v = v.add(ws.dig[q + 2].mul(r32));
+                }
+                if v.ne(V8::zero()).bits() == 0 {
+                    continue;
+                }
+                let ex: [i32; LN] = std::array::from_fn(|ln| (e0[ln] + 48 * c as i32).clamp(-2044, 2044));
+                let (f1, f2) = pow2_split(&ex);
+                let mut parts = [V8::zero(); 4];
+                parts[0] = v.mul(V8::from_array(f1)).mul(V8::from_array(f2));
+                E::acc_parts(&mut acc[k], &parts[..E::NP]);
+            }
+            continue;
+        }
+        // octo-double: the integer at index k on each lane, digit 0 of weight 2^e0, as eight 53-bit parts
         for (dl, d) in ws.dl.iter_mut().zip(&ws.dig) {
             *dl = d.to_array();
         }
         for (ln, pl) in pv.iter_mut().enumerate() {
-            let e0 = xa.frame[ln] + xb.frame[ln] - 2 * w - (s[ln] + ds) * k as i32 + DB * q0 as i32 + e2;
-            parts_of(&ws.dl[..nd], ln, e0, &mut pl[..E::NP]);
+            parts_of(&ws.dl[..nd], ln, e0[ln], &mut pl[..E::NP]);
         }
         let parts: [V8<S>; 8] = std::array::from_fn(|q| V8::from_array(std::array::from_fn(|ln| pv[ln][q])));
         E::acc_parts(&mut acc[k], &parts[..E::NP]);
@@ -1372,6 +1400,10 @@ impl<T: Lane, const B: usize> Relaxed<T, B> {
         } else {
             self.s0 + 1
         }
+    }
+    /// whether step e forms squares (`step`'s condition): e - 1 a multiple of s0 and at least 2 s0
+    pub fn squares_at(&self, e: usize) -> bool {
+        self.s0 > 0 && e > 2 * self.s0 && (e - 1).is_multiple_of(self.s0)
     }
     /// The squares formed at the end of step e (e = the next step; x and y final to order e - 1): those of side
     /// 2^p >= s0 with (m + 1) 2^p = e - 1, the square at (m 2^p + 1, 2^p + 1) and, for m >= 2, its transpose. The B

@@ -40,6 +40,10 @@
 //!   a constant double-double matrix applied to them ([`field::DMat`]), solves with a `DDLu`, refined in the lane
 //!   type ([`field::FieldSolve`]), and an early end of a series for the tangents ([`field::TangentTail`]): the
 //!   arithmetic of power-series methods.
+//! * [`series`]: products of power series of double-, quad- and octo-double lanes, the truncated product of two known
+//!   series by block scaling and exact integer convolution ([`series::mullow`]) and the relaxed product of two series
+//!   whose coefficients become known one order at a time ([`series::Relaxed`]), with the squares of earlier
+//!   coefficients formed by [`dual::Lane::block_mul`].
 //! * [`linalg`]: dense LU with partial pivoting in double-double (and blocked in f64 for mixed precision) and in
 //!   quad-double ([`linalg::QDLu`], for systems too ill-conditioned for double-double) and in octo-double
 //!   ([`linalg::ODLu`], for those too ill-conditioned for quad-double), solves,

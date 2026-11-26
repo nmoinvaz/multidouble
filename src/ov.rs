@@ -679,7 +679,7 @@ impl<S: Simd> ODotAcc<S> {
 /// in octo-double (`crate::field::FieldSolve::solve_lanes_refine`), and needs about twice the steps of a quad-double
 /// lane.
 impl<S: Simd> crate::dual::Lane for OV<S> {
-    const BLOCK_MIN: usize = 32;
+    const BLOCK_MIN: usize = 16;
     fn block_mul(x: &[Self], y: &[Self], acc: &mut [Self::Acc]) {
         crate::series::block_mul_expansion(x, y, acc)
     }
