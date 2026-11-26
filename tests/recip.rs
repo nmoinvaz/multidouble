@@ -4,10 +4,10 @@
 //! against choptuik-large-d's `recip_parts` and `recip_lane` (hp/src/model.rs, copied below) for every k up to 2^20.
 //!
 //! Pass, fixed before the first run: every part equal to the reference's, bit for bit, on k = 1..=5000, on 4000 random
-//! q < 2^60 with p = 1, and on 4000 random (p, q) with |p| < 2^63, including p > q and negative p, and on p = i64::MIN; the types'
-//! `recip_int` and `from_ratio` equal to those prefixes; hp's parts and lane constants equal bit for bit for
-//! k = 1..=2^20; and x k times 1/k within 2 u^P of x on each type. Control (feature `mutate`), which must fail: the last
-//! part of each type's constant one ulp up (`recip::mutate::LAST_ULP`).
+//! q < 2^60 with p = 1, and on 4000 random (p, q) with |p| < 2^63, including p > q and negative p, and on p = i64::MIN;
+//! the types' `recip_int` and `from_ratio` equal to those prefixes; hp's parts and lane constants equal bit for bit for
+//! k = 1..=2^20; and x k times 1/k within 2 u^P of x on each type. Control (feature `mutate`), which must fail: the
+//! last part of each type's constant one ulp up (`recip::mutate::LAST_ULP`).
 mod common;
 use common::Rng;
 use multidouble::dd::DD;
