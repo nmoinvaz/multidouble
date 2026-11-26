@@ -511,7 +511,7 @@ TOP_N = '''import ExpansionBounds.Trig%N.All
 import ExpansionBounds.TrigN
 
 /-!
-# Theorem 35 at `n = %N` and `p = 53`: the sine and the cosine within `%Cu^%N`, the tangent within `%Tu^%N`
+# Theorem 35 at `n = %N` and `p = 53`: sine and cosine within `%Cu^%N`, tangent within `%Tu^%N`
 
 The remark after Theorem 35 at `n = %N`: SIN and COS with the coefficients and series lengths of
 `Trig%N/Data.lean`, on `x` in `F`, on `H(2)` and with `|x_0| ≤ 2^52`, are within `%Cu^%N` of `sin x` and
@@ -532,8 +532,8 @@ theorem trig%N_tiny : trig%NTab.TinyOk trig%NC := by decide +kernel
 
 variable (p : ℤ) [Prec_gt_0 p]
 
-/-- the remark after Theorem 35 at `n = %N`: the sine and the cosine are within `%Cu^%N` of `sin x` and `cos x`,
-relatively, plus `5E_π` -/
+/-- the remark after Theorem 35 at `n = %N`: the sine and the cosine are within `%Cu^%N` of `sin x` and
+`cos x`, relatively, plus `5E_π` -/
 theorem thm35_sincos_%N (hp : p = 53) (x : ℕ → ℝ) (hx : ∀ i < %N, F p (x i)) (hH : Htheta p %N 2 x)
     (hx0 : |x 0| ≤ 2 ^ 52) (es : ℝ → ℤ) :
     |∑ i ∈ range %N, sinN p %N es trig%NTab.Ks trig%NTab.Kc trig%NTab.FsR trig%NTab.FcR x i -
