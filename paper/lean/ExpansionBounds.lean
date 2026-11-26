@@ -63,6 +63,7 @@ import ExpansionBounds.DWPlusFP
 import ExpansionBounds.DWTimesFP3
 import ExpansionBounds.AccDWPlusDW
 import ExpansionBounds.DWTimesDW2
+import ExpansionBounds.DWTimesDW3
 import ExpansionBounds.DDExpRed
 import ExpansionBounds.DDExpCore
 import ExpansionBounds.DDExp
@@ -91,6 +92,9 @@ import ExpansionBounds.LogEvalLeaf
 import ExpansionBounds.LogEvalCert
 import ExpansionBounds.Log8
 import ExpansionBounds.Log8DD
+import ExpansionBounds.DDTrig
+import ExpansionBounds.DDTrigThm
+import ExpansionBounds.DDTrig2
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono
