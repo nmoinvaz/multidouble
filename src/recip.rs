@@ -3,7 +3,10 @@
 //! arithmetic in u128 ([`ratio_parts`], [`recip_parts`]). A prefix of P parts is then the expansion of P parts in the
 //! form the double-, quad- and octo-double types keep (each part at most half the ulp of the one before, zeros only at
 //! the end), so `DD::recip_int(k)`, `QD::recip_int(k)` and `OD::recip_int(k)` are 1/k rounded to their precision, and
-//! `from_ratio(p, q)` the same for p/q. The lanes' `recip_int` splat them and `mul_recip(k)` multiplies by them.
+//! `from_ratio(p, q)` the same for p/q. A double-double's two parts are made a double word, hi = RN(hi + lo), by their
+//! two-sum: it keeps them, but where lo is half an ulp of an odd hi, a tie possible only for q >= 2^53, it moves hi to
+//! its even neighbor and negates lo, the same value. The lanes' `recip_int` splat them and `mul_recip(k)` multiplies by
+//! them.
 //!
 //! The quotient in the type's arithmetic is not the same constant. `DD::ONE / DD::from_f64(k as f64)` errs by a few
 //! units of 2^-106, and once widened to a quad- or octo-double it keeps that error, 2^-106 relative, far above
@@ -22,10 +25,16 @@ pub mod mutate {
     /// the last part of a type's constant one ulp up (part 1 of a double-double, 3 of a quad-double, 7 of an
     /// octo-double), where `recip_int` and `from_ratio` take their prefix
     pub const LAST_ULP: u32 = 1;
+    /// a double-double's two parts as the greedy prefix, without the two-sum that makes them a double word
+    pub const DD_GREEDY: u32 = 2;
     /// number of ids
-    pub const N: u32 = 1;
+    pub const N: u32 = 2;
     /// the mutations' descriptions, by id
-    pub const NAMES: [&str; 2] = ["none", "reciprocals: the last part one ulp up"];
+    pub const NAMES: [&str; 3] = [
+        "none",
+        "reciprocals: the last part one ulp up",
+        "reciprocals: a double-double's parts without the two-sum",
+    ];
 
     #[cfg(feature = "mutate")]
     thread_local!(static ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) });
@@ -109,24 +118,35 @@ fn prefix<const P: usize>(r: [f64; 8]) -> [f64; P] {
     x
 }
 
+/// the first two parts as a double word, hi = RN(hi + lo): their two-sum, which keeps them unless lo is half an ulp of
+/// an odd hi, a tie it moves to the even neighbor of hi with the same value
+#[inline]
+fn dd_of(r: [f64; 8]) -> DD {
+    let [hi, lo] = prefix::<2>(r);
+    if mutate::on(mutate::DD_GREEDY) {
+        DD { hi, lo }
+    } else {
+        DD::new(hi, lo)
+    }
+}
+
 impl DD {
-    /// 1/k rounded to the nearest double-double (`recip_parts`'s first two parts)
+    /// 1/k rounded to the nearest double-double (`recip_parts`'s first two parts, made a double word by their two-sum)
     ///
     /// # Panics
     ///
     /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> DD {
-        let [hi, lo] = prefix::<2>(recip_parts(k));
-        DD { hi, lo }
+        dd_of(recip_parts(k))
     }
-    /// p/q rounded to the nearest double-double (`ratio_parts`'s first two parts), for any p
+    /// p/q rounded to the nearest double-double (`ratio_parts`'s first two parts, made a double word by their
+    /// two-sum), for any p
     ///
     /// # Panics
     ///
     /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> DD {
-        let [hi, lo] = prefix::<2>(ratio_parts(p, q));
-        DD { hi, lo }
+        dd_of(ratio_parts(p, q))
     }
     /// self times `DD::recip_int(k)`
     pub fn mul_recip(self, k: u64) -> DD {
