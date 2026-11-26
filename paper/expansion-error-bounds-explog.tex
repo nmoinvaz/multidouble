@@ -382,7 +382,8 @@ The steps are those of the proofs above, each operation's error bounded relative
 losses to the subnormals at $n = 2$. The bounds of~\cite{JMP17,MR22} ask double-word operands. A scaling that rounds
 a part to the subnormal grid returns a double word where the leading part is at least $2^{-967}$, and the scaled values
 here ($t$, $x'$, the product of step (4) and each $c \otimes v$) are above it, by the lower ends of the bounds that
-select their exponents. Lemma~\ref{lem:fexact} holds for DWPlusFP where $x'_h \in [\frac12, 2]$, by Sterbenz, and
+select their exponents. With no part bounds, the $|r|$ that select $e$ are at least $2^e(1 - 2^{-46})$, as $|r| \ge
+(|r_h| + |r_l|)(1-u)/(1+u)$ for a double word. Lemma~\ref{lem:fexact} holds for DWPlusFP where $x'_h \in [\frac12, 2]$, by Sterbenz, and
 here $|\ln(2^kx)| \le 0.61$. For the start, with $v = x_l/x_h$, $|v| \le u$, $|\RN(v) - v| \le u|v| + \eta_0$
 and $|y_0 - \ln x| \le \eta_{\rm b}|\ln x_h| + u|v| + \eta_0 + v^2/(2(1-u)) + u|\ln_{\rm b}(x_h) + \RN(v)|$ by
 Lemma~\ref{lem:lnb}, with $|\ln x_h| \le \ell + \delta_1$; and if $x_h \ne 1$ then $|x - 1| \ge u/2$, so for $\ell <
