@@ -57,7 +57,7 @@ fn pow2(e: i64) -> f64 {
     f64::from_bits(((e + 1023) as u64) << 52)
 }
 
-/// p/q in eight parts by greedy round-to-nearest (ties to even), for |p| < 2^63 and 1 <= q < 2^60. The value left is
+/// p/q in eight parts by greedy round-to-nearest (ties to even), for any p and 1 <= q < 2^60 (it panics otherwise). The value left is
 /// (-1)^neg n / (q 2^e) with n an integer; each part is RN(n 2^s / q) 2^-(e + s) for the s that puts n 2^s / q in
 /// [2^52, 2^53), formed by one u128 division, and n becomes the exact remainder. After the first part |n| <= q / 2. The
 /// parts after an exact ratio are zero.
@@ -94,7 +94,7 @@ pub fn ratio_parts(p: i64, q: u64) -> [f64; 8] {
     out
 }
 
-/// 1/k in eight parts by greedy round-to-nearest (`ratio_parts(1, k)`), for 1 <= k < 2^60
+/// 1/k in eight parts by greedy round-to-nearest (`ratio_parts(1, k)`), for 1 <= k < 2^60 (it panics otherwise)
 pub fn recip_parts(k: u64) -> [f64; 8] {
     ratio_parts(1, k)
 }
@@ -110,12 +110,20 @@ fn prefix<const P: usize>(r: [f64; 8]) -> [f64; P] {
 }
 
 impl DD {
-    /// 1/k rounded to the nearest double-double (`recip_parts`'s first two parts), for 1 <= k < 2^60
+    /// 1/k rounded to the nearest double-double (`recip_parts`'s first two parts)
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> DD {
         let [hi, lo] = prefix::<2>(recip_parts(k));
         DD { hi, lo }
     }
-    /// p/q rounded to the nearest double-double (`ratio_parts`'s first two parts)
+    /// p/q rounded to the nearest double-double (`ratio_parts`'s first two parts), for any p
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> DD {
         let [hi, lo] = prefix::<2>(ratio_parts(p, q));
         DD { hi, lo }
@@ -127,13 +135,21 @@ impl DD {
 }
 
 impl QD {
-    /// 1/k rounded to four parts (`recip_parts`'s first four), for 1 <= k < 2^60
+    /// 1/k rounded to four parts (`recip_parts`'s first four)
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> QD {
         QD {
             x: prefix::<4>(recip_parts(k)),
         }
     }
-    /// p/q rounded to four parts (`ratio_parts`'s first four)
+    /// p/q rounded to four parts (`ratio_parts`'s first four), for any p
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> QD {
         QD {
             x: prefix::<4>(ratio_parts(p, q)),
@@ -146,13 +162,21 @@ impl QD {
 }
 
 impl OD {
-    /// 1/k rounded to eight parts (`recip_parts`), for 1 <= k < 2^60
+    /// 1/k rounded to eight parts (`recip_parts`)
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= k < 2^60.
     pub fn recip_int(k: u64) -> OD {
         OD {
             x: prefix::<8>(recip_parts(k)),
         }
     }
-    /// p/q rounded to eight parts (`ratio_parts`)
+    /// p/q rounded to eight parts (`ratio_parts`), for any p
+    ///
+    /// # Panics
+    ///
+    /// Unless 1 <= q < 2^60.
     pub fn from_ratio(p: i64, q: u64) -> OD {
         OD {
             x: prefix::<8>(ratio_parts(p, q)),
