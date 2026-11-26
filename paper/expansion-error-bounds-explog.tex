@@ -208,8 +208,8 @@ c_{L,1}|$ and $E(\ell) = \epsilon_{\rm DW}(\ell + \delta_0) + \delta_0 + \Phi_{\
 \begin{itemize}
 \item $\bar y = \ell + E(\ell)$, and $\pi^y$ the part bounds of a two-part expansion on $H(1)$ with value at most $\bar
   y$; for $k = 0$, $\pi = \pi^y$, $\delta = 0$ and $b \le \bar y$; for $k \ne 0$, $\pi = \pi^r$ and $\delta$ those of
-  Lemma~\ref{lem:expred}(b) with $X = \bar y/(1-u)$, $\bar x_{\rm t} = 2u\bar y$ and $\alpha = \pi^y$; $E_m$, $\psi_m$ and $\bar t_m$
-  those of Lemma~\ref{lem:core};
+  Lemma~\ref{lem:expred}(b) with $X = \bar y/(1-u)$, $\bar x_{\rm t} = 2u\bar y$, $\alpha_i = \pi^y_i$ for $i \ge 1$ and
+  $\bar r = b + \delta^*$ as in Theorem~\ref{thm:exp}; $E_m$, $\psi_m$ and $\bar t_m$ those of Lemma~\ref{lem:core};
 \item $\xi = e^{E + \delta - a} + 2n\eta_0$ for $r \ge 0$ and $e^{E + b + \delta} + 2n\eta_0$ for $r \le 0$,
   $\bar \varphi = \max(\xi - 1, 1 - e^{-(E + b + \delta)} + 2n\eta_0)$, $\pi^x$ the part bounds of an expansion on $H(\theta)$
   with value at most $\xi$, each plus $2\eta_0$, and $(\cdot, \pi^\varphi) = G_{\rm ADDF}(\pi^x, 1;\ \bar \varphi, \bar \varphi + \sum_{i
@@ -296,18 +296,21 @@ fixed, at every $\ell \in [\ell_k^-, X]$.
 \sigma_{j-1}$, larger than the minimum), with $b'$ and $\pi'$ of Lemma~\ref{lem:core} without their minima, and with
 $\bar t_j = 2^jb'$ for $r \le 0$ (larger than $1 - e^{-2^jb'}$), and likewise $\bar \varphi = \max(\xi - 1, E + b + \delta +
 2n\eta_0)$. Then every quantity above is built from $\ell$, for a fixed case, by sums with nonnegative coefficients, by
-products of nonnegative nondecreasing convex functions, which are convex, by maxima, and by $z \mapsto e^z$, $z \mapsto
-e^z - 1 - z$, $z \mapsto z^{q+1}/(1 - z)$ and $z \mapsto 1/(1-z)$ applied to nondecreasing convex arguments with $z <
-1$, all nonnegative, nondecreasing and convex there. For $k = 0$, $\ell$ enters through $E(\ell)$ and $b$; for $k \ne
-0$, through $E(\ell)$, $\bar y = \ell + E(\ell)$ and Lemma~\ref{lem:expred}'s $X = \bar y/(1-u)$, $\bar x_{\rm t} = 2u\bar y$ and
-$\alpha = \pi^y$, all linear in $\ell$. So $\mathcal E$ is nondecreasing and convex in $\ell$ for a fixed case; the
-script evaluates it with every quantity rounded up, which only raises its values at the ends of an interval and keeps
-the chord above $\mathcal E$. On an interval $[\ell_1, \ell_2]$ with $\ell_1 > 0$, write $\ell = \lambda\ell_1 + (1 -
+products of nonnegative nondecreasing convex functions, which are convex, by maxima, and by $z \mapsto e^z$ applied to
+nondecreasing convex arguments, and by $z \mapsto e^z - 1 - z$, $z \mapsto z^{q+1}/(1 - z)$ and $z \mapsto 1/(1-z)$
+applied to such arguments in $[0, 1)$, all nonnegative, nondecreasing and convex there. The argument $\xi - 1$ of a
+maximum with a nonnegative term can be negative; it is nondecreasing and convex, which is all that use needs. For $k =
+0$, $\ell$ enters through $E(\ell)$ and $b$; for $k \ne 0$, through $E(\ell)$, $\bar y = \ell + E(\ell)$ and
+Lemma~\ref{lem:expred}'s $X = \bar y/(1-u)$, $\bar x_{\rm t} = 2u\bar y$, $\alpha_0$ and $\alpha_i = \pi^y_i$ for $i \ge
+1$, all linear in $\ell$. So $\mathcal E$ is nondecreasing and convex in $\ell$ for a fixed case; the script evaluates
+it with every quantity rounded up, which only raises its values at the ends of an interval and keeps the chord above
+$\mathcal E$. On an interval $[\ell_1, \ell_2]$ with $\ell_1 > 0$, write $\ell = \lambda\ell_1 + (1 -
 \lambda)\ell_2$; then $\mathcal E(\ell) \le \lambda\mathcal E(\ell_1) + (1-\lambda)\mathcal E(\ell_2)$, so $\mathcal
 E(\ell)/\ell \le \max(\mathcal E(\ell_1)/\ell_1, \mathcal E(\ell_2)/\ell_2)$, and on $[0, \ell_2]$, $\mathcal E(\ell)
 \le \mathcal E(0) + \ell(\mathcal E(\ell_2) - \mathcal E(0))/\ell_2$. Let $\varepsilon_{\ln}$ be the largest of these
 ratios and slopes over the cases ($k = 0$: each case on $[\ell_e^-, \ell_e^+]$; $k \ne 0$: each case on $[\ell_k^-, 1]$,
-$[1, 4]$ and $[4, X]$, which takes $\mathcal E(\ell)/\ell$ at $\ell_k^-$, 1, 4 and $X$), and $\Phi$ the largest
+$[1, 4]$ and $[4, X]$, which takes $\mathcal E(\ell)/\ell$ at $\ell_k^-$, 1, 4 and $X$; the two ends $\ell_k^-$ and
+$X$ alone give the same maximum, a case being convex on the whole interval), and $\Phi$ the largest
 $\mathcal E(0)$, which only the cases taken on $[0, \ell_e^+]$ have. The values are those of \texttt{explog\_consts.py},
 as in Theorem~\ref{thm:exp}, with four intervals of $|r|$ per case and sign for $k \ne 0$ where $|r|$ exceeds $2^{-12}$.
 \end{proof}

@@ -80,6 +80,17 @@ import ExpansionBounds.DDLog2
 import ExpansionBounds.DDLogAt
 import ExpansionBounds.DDLn
 import ExpansionBounds.DDSpec
+import ExpansionBounds.LogConvex
+import ExpansionBounds.LogConvexCore
+import ExpansionBounds.LogConvexBound
+import ExpansionBounds.LogArgs
+import ExpansionBounds.LogChord
+import ExpansionBounds.LogEval
+import ExpansionBounds.LogEvalSteps
+import ExpansionBounds.LogEvalLeaf
+import ExpansionBounds.LogEvalCert
+import ExpansionBounds.Log8
+import ExpansionBounds.Log8DD
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono

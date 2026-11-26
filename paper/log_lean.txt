@@ -1,0 +1,7 @@
+151 cases with a sign, 302 evaluations, 55 runs of Horner's rule of 882 steps, 150 squarings
+the largest (E - 2^-509)/l on intervals from 0, E/l otherwise: 9.925818771 u^8; the largest E(0): 2^-509.0880; C^M <= 2^-92.25
+within 9.926 u^8 and 2^-509: True
+control, 9.925818 u^8 and 2^-510 must not hold: True
+control, no error of the last ADD, falls below it: True
+modules, estimated seconds: 295, 442, 441, 434, 471, 471, 461, 470, 462
+checks of the parts of t: 151, the largest sum 0.414213562
