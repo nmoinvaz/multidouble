@@ -5,7 +5,8 @@
 //! `QDotAcc::add_prod_mut` and `ODotAcc::add_prod_mut` against `add_prod`, and `field::cs_into`, `cs_range_into`,
 //! `cs_w_into`, `cs_lane_into` and `cs_w_lane_into`, and the split sums `cs_par`, `cs_range_par` and `cs_w_par`,
 //! against `cs`, `cs_range` and `cs_w`; the order-k sums one lane vector at a time, `cs_lane_at` and `cs_w_lane_at`,
-//! and split, `cs_at_par`, `cs_range_at_par` and `cs_w_at_par`, against `cs_at`, `cs_range_at` and `cs_w_at`, and
+//! and split, `cs_at_par`, `cs_range_at_par` and `cs_w_at_par`, against `cs_at`, `cs_range_at` and `cs_w_at`, several
+//! of them at once (`sums_at_par`) against each one's own, and
 //! `cs_w_at` against its terms' whole jets weighted, on random inputs and on jets holding signed zeros, zero parts,
 //! extreme magnitudes, infinities and NaNs. Each check has a control that must fail, the same comparison of a sum with
 //! two of its terms swapped, for the field sums also of a sum without its last term, for the split order-k sums of a
@@ -18,7 +19,7 @@ use multidouble::dv::{DDotAcc, DV};
 use multidouble::field::{
     cs, cs_at, cs_at_cost, cs_at_par, cs_at_splits, cs_into, cs_lane_at, cs_lane_into, cs_par, cs_range, cs_range_at,
     cs_range_at_par, cs_range_into, cs_range_par, cs_splits, cs_w, cs_w_at, cs_w_at_par, cs_w_into, cs_w_lane_at,
-    cs_w_lane_into, cs_w_par, Fl, CS_AT_PAR_MIN,
+    cs_w_lane_into, cs_w_par, sums_at_par, Fl, SumAt, CS_AT_PAR_MIN,
 };
 use multidouble::jet::{Jet, OJet, QJet};
 use multidouble::od::OD;
@@ -775,8 +776,12 @@ fn w_whole<T: Gen>(
 /// `indices(split_terms)` with the ranges 0..=j, j/3..=j - j/4 and an empty one, each written over a random destination:
 /// `cs_lane_at` and `cs_w_lane_at` against lane vector b of `cs_range_at` and `cs_w_at`, and `cs_at_par`,
 /// `cs_range_at_par` and `cs_w_at_par` against `cs_at`, `cs_range_at` and `cs_w_at`, which must split some sums of
-/// every jet lane and none of the other lanes, and `cs_w_at` against the whole weighted jets (`w_whole`). Control:
-/// every split range sum with x[lo] moved by one ulp in its leading part (`ulp_moved`) differs from the reference.
+/// every jet lane and none of the other lanes, `cs_w_at` against the whole weighted jets (`w_whole`), and three sums at
+/// once by `sums_at_par` (the whole sum, the range j/3..=j - j/4 and that range weighted), each against its own, which
+/// must split some calls of every jet lane and none of the other lanes, the weights then taken on rayon's workers, and
+/// on the jets with more than one coefficient some calls none of whose sums splits alone. Controls: every split range sum with x[lo]
+/// moved by one ulp in its leading part (`ulp_moved`) differs from the reference, and in every split `sums_at_par`
+/// call x[0] so moved changes the whole sum and, where the range starts past 0, leaves the range's bits.
 fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
     let field = |r: &mut Rng| Fl::<T, B>(std::array::from_fn(|_| T::gen(r)));
     let n = split_terms::<T>();
@@ -785,9 +790,67 @@ fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
     let (x, y) = (&x[..], &y[..]);
     let w = |i: usize| (2 * i + 1) as f64;
     let (mut checks, mut split, mut controls, mut caught, mut whole) = (0, 0, 0, 0, 0);
+    let (mut many, mut many_split, mut many_caught, mut many_kept, mut many_ranges) = (0, 0, 0, 0, 0);
+    let mut many_sole = 0;
     for j in indices(n) {
         for k in 0..T::NJ.max(1) {
             let bg = field(r);
+            let (lo, hi) = (j / 3, j - j / 4);
+            let (mut wa, mut wb, mut wc) = (bg, bg, bg);
+            cs_at(&mut wa, x, y, j, k);
+            cs_range_at(&mut wb, x, y, j, lo, hi, k);
+            cs_w_at(&mut wc, x, y, j, lo, hi, w, k);
+            // the weights counted where they are taken on rayon's workers, where only a split call's tasks run
+            let on_pool = AtomicUsize::new(0);
+            let wp = |i: usize| {
+                on_pool.fetch_add(rayon::current_thread_index().is_some() as usize, Ordering::Relaxed);
+                w(i)
+            };
+            let wd: &(dyn Fn(usize) -> f64 + Sync) = &wp;
+            let three = |x: &[Fl<T, B>]| {
+                let (mut a, mut b, mut c) = (bg, bg, bg);
+                sums_at_par(
+                    vec![
+                        SumAt::new(&mut a, x, y, j),
+                        SumAt::new(&mut b, x, y, j).range(lo, hi),
+                        SumAt::new(&mut c, x, y, j).range(lo, hi).weighted(wd),
+                    ],
+                    k,
+                );
+                (fl_bits(&a), fl_bits(&b), fl_bits(&c))
+            };
+            let (a, b, c) = three(x);
+            assert_eq!(a, fl_bits(&wa), "{be} {name}: sums_at_par's whole sum, j {j}, k {k}");
+            assert_eq!(
+                b,
+                fl_bits(&wb),
+                "{be} {name}: sums_at_par's range sum, j {j}, {lo}..={hi}, k {k}"
+            );
+            assert_eq!(
+                c,
+                fl_bits(&wc),
+                "{be} {name}: sums_at_par's weighted sum, j {j}, {lo}..={hi}, k {k}"
+            );
+            many += 1;
+            let splits = cs_at_splits::<T>(j + 1 + 2 * (hi + 1 - lo), k);
+            assert_eq!(
+                on_pool.load(Ordering::Relaxed) > 0,
+                splits,
+                "{be} {name}: sums_at_par, j {j}, k {k}: weights on rayon's workers, the call splits: {splits}"
+            );
+            if splits {
+                // no sum of the call splits alone: the batch alone reaches the threshold
+                many_sole += !cs_at_splits::<T>(j + 1, k) as usize;
+                many_split += 1;
+                let mut xs = x.to_vec();
+                xs[0] = ulp_moved(&xs[0]);
+                let (a, b, _) = three(&xs);
+                many_caught += (a != fl_bits(&wa)) as usize;
+                if lo > 0 {
+                    many_ranges += 1;
+                    many_kept += (b == fl_bits(&wb)) as usize;
+                }
+            }
             let (mut want, mut out) = (bg, bg);
             cs_at(&mut want, x, y, j, k);
             cs_at_par(&mut out, x, y, j, k);
@@ -867,9 +930,29 @@ fn at_sums<T: Gen>(r: &mut Rng, be: &str, name: &str) {
         caught, controls,
         "{be} {name}: control: a split order-k sum with a term moved by an ulp has the reference's bits"
     );
+    assert_eq!(
+        many_split > 0,
+        T::NJ > 0,
+        "{be} {name}: {many_split} sums_at_par calls split, a jet lane must split some and another lane none"
+    );
+    assert_eq!(
+        many_caught, many_split,
+        "{be} {name}: control: a split sums_at_par call with x[0] moved by an ulp has the whole sum's bits"
+    );
+    assert_eq!(
+        many_kept, many_ranges,
+        "{be} {name}: a split sums_at_par call with x[0] moved changed a range sum that starts past 0"
+    );
+    assert_eq!(
+        many_sole > 0,
+        T::NJ > 1,
+        "{be} {name}: {many_sole} split sums_at_par calls had no sum long enough to split alone"
+    );
     println!(
         "{be} {name}: {checks} order-k lane and split sums matched, {split} of them split, {whole} weighted ones the \
-         whole weighted jets'; the control caught {caught} of {controls} terms moved by an ulp"
+         whole weighted jets'; the control caught {caught} of {controls} terms moved by an ulp; {many} sums_at_par \
+         calls matched, {many_split} split ({many_sole} with no sum that splits alone), the control caught \
+         {many_caught} of them"
     );
 }
 
@@ -1069,8 +1152,8 @@ fn in_place_sums_are_the_sums() {
 }
 
 /// Control with the crate's built-in breakage: a split order-k sum whose last lane vector is moved by one ulp
-/// (`dual::mutate::CS_AT_SPLIT`) differs from the serial sum, on `Jet<5>`, `QJet<5>` and `OJet<5>`, and without the
-/// mutation it is the serial sum again.
+/// (`dual::mutate::CS_AT_SPLIT`), by `cs_at_par`, `cs_w_at_par` and `sums_at_par`, differs from the serial sum, on
+/// `Jet<5>`, `QJet<5>` and `OJet<5>`, and without the mutation it is the serial sum again.
 #[cfg(feature = "mutate")]
 #[test]
 fn control_split_at_sum_moved_by_an_ulp_is_caught() {
@@ -1089,11 +1172,16 @@ fn control_split_at_sum_moved_by_an_ulp_is_caught() {
         let w = |i: usize| (2 * i + 1) as f64;
         let mut want_w = Fl::zero();
         cs_w_at(&mut want_w, &x, &y, j, 0, j, w, k);
-        let (mut out, mut out_w) = (Fl::zero(), Fl::zero());
+        let (mut out, mut out_w, mut many) = (Fl::zero(), Fl::zero(), Fl::zero());
         mutate::set(mutate::CS_AT_SPLIT);
         cs_at_par(&mut out, &x, &y, j, k);
         cs_w_at_par(&mut out_w, &x, &y, j, 0, j, w, k);
+        sums_at_par(vec![SumAt::new(&mut many, &x, &y, j)], k);
         mutate::set(0);
+        assert!(
+            fl_bits(&many) != fl_bits(&want),
+            "{name}: control: the moved split sums_at_par sum has the serial sum's bits"
+        );
         assert!(
             fl_bits(&out) != fl_bits(&want),
             "{name}: control: the moved split sum has the serial sum's bits"

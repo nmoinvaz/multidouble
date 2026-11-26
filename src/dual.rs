@@ -46,8 +46,8 @@ pub mod mutate {
     pub const OJET_REFINE_QD: u32 = 2;
     /// `crate::dual::Ou`'s product: the tangent's term d o.v dropped
     pub const OU_TAN: u32 = 3;
-    /// `crate::field::cs_range_at_par`'s and `cs_w_at_par`'s split sums: the last lane vector's coefficient k moved by
-    /// one ulp of the leading part of its lane 0
+    /// `crate::field::cs_range_at_par`'s, `cs_w_at_par`'s and `sums_at_par`'s split sums: the last lane vector's
+    /// coefficient k moved by one ulp of the leading part of its lane 0
     pub const CS_AT_SPLIT: u32 = 4;
     /// `crate::dual::Lane::mulf_upto` on the jets: coefficient k left unweighted, so that a weighted order-k sum
     /// (`crate::field::cs_w_at`) takes the products of order k with x_k unweighted
