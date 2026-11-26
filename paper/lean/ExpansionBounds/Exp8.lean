@@ -6,9 +6,9 @@ import ExpansionBounds.Trig8
 
 `EXP_{8,6,43}` with multidouble's constants: for `x` in `F` on `H(2)` with `|x_0| ≤ 745.2`, the result is within
 `3.661u^8 e^x + 8·2^{-1074}` of `e^x`. The scalings round below `2^{-1022}` as binary64 does. The model has no largest
-finite value, so nothing overflows: the bound is the paper's, which takes a finite result. A run falls in a group of exponents `e` of step (2), which share `m` and the
-degree `d'`, and in an interval `[a, b]` of `|r|`; the kernel checked the bound of each (`Exp8/Run0.lean` to
-`Run11.lean`), and `expEps_cert` carries it to the paper's `ε`.
+finite value, so nothing overflows: the bound is the paper's, which takes a finite result. A run falls in a group
+of exponents `e` of step (2), which share `m` and the degree `d'`, and in an interval `[a, b]` of `|r|`; the kernel
+checked the bound of each (`Exp8/Run0.lean` to `Run11.lean`), and `expEps_cert` carries it to the paper's `ε`.
 -/
 
 namespace ExpansionBounds
