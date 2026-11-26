@@ -57,6 +57,12 @@ import ExpansionBounds.DWord
 import ExpansionBounds.DWDiv
 import ExpansionBounds.DWSqrt
 import ExpansionBounds.SqrtDDStart
+import ExpansionBounds.DDOps
+import ExpansionBounds.DDHorner
+import ExpansionBounds.DWPlusFP
+import ExpansionBounds.DWTimesFP3
+import ExpansionBounds.AccDWPlusDW
+import ExpansionBounds.DWTimesDW2
 import ExpansionBounds.AccRun
 import ExpansionBounds.Prop28
 import ExpansionBounds.GMono

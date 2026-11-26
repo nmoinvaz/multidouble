@@ -23,9 +23,11 @@ and \texttt{Trig2/} and \texttt{Trig4/} for the remark after Theorem~\ref{thm:tr
 \texttt{Quot.sound}: the build reads the axioms of every declaration (\texttt{Controls/Axioms.lean}). Each of the
 kernel's checks has controls, the same check on a wrong number, a wrong state or a narrower hypothesis, which the
 kernel proves false (\texttt{Controls/}).
-\item The three published theorems under the double-word start of Theorem~\ref{thm:t8} are proved as well:
-Theorems~4.1 and~7.1 of~\cite{JMP17}, which~\cite{MR22} proved in Coq, and Theorem~3.5 of~\cite{LLMPR23}
-(\texttt{DWord.lean}, \texttt{DWDiv.lean}, \texttt{DWSqrt.lean}).
+\item The published theorems under the double-word start of Theorem~\ref{thm:t8} and under
+Proposition~\ref{prop:ddexplog} are proved as well: Theorems~2.2, 3.1, 4.1, 4.3 and~7.1 of~\cite{JMP17}, which
+\cite{MR22} proved in Coq, Theorem~2.7 of~\cite{MR22} and Theorem~3.5 of~\cite{LLMPR23} (\texttt{DWord.lean},
+\texttt{DWDiv.lean}, \texttt{DWSqrt.lean}, \texttt{DWPlusFP.lean}, \texttt{DWTimesFP3.lean},
+\texttt{AccDWPlusDW.lean}, \texttt{DWTimesDW2.lean}).
 \item Two statements are proved in part. Theorem~\ref{thm:log} is proved for each case, and its constant at
 $n = 8$ is computed (\texttt{explog\_consts.py}). Proposition~\ref{prop:ddexplog} is proved for its start.
 \end{itemize}
@@ -103,6 +105,10 @@ Lemma~\ref{lem:fexact} & \texttt{FExact.lean}, \texttt{LogRange.lean} & \texttt{
 Theorem~\ref{thm:log} & \texttt{LogThm.lean}, \texttt{LogRange.lean} & \texttt{thm42\_case},
   \texttt{thm42\_case\_ladder} \\
 Lemma~\ref{lem:lnb} & \texttt{LnB.lean} & \texttt{lemma43} \\
+Proposition~\ref{prop:ddexplog}, its operations & \texttt{DDOps.lean}, \texttt{DDHorner.lean},
+  \texttt{DWPlusFP.lean}, \texttt{DWTimesFP3.lean}, \texttt{AccDWPlusDW.lean}, \texttt{DWTimesDW2.lean} &
+  \texttt{dd\_horner\_step}, \texttt{dwPlusFP\_good}, \texttt{dwPlusFP\_sub\_one}, \texttt{dwTimesFP3\_good},
+  \texttt{accDWPlusDW\_good}, \texttt{dwTimesDW2\_good} \\
 Proposition~\ref{prop:ddexplog} & \texttt{DDLog.lean} & \texttt{prop44\_start}, \texttt{prop44\_start\_exact},
   \texttt{prop44\_start\_small} \\
 \bottomrule
