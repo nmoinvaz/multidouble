@@ -704,6 +704,150 @@ fn dd_matrix(
     Ok((n, ld, h, l))
 }
 
+/// b as nrhs rows of n double-doubles in the layout of `DDLu::solve_many` ((nrhs, n) row-major hi and lo), each entry
+/// the exact sum of its two parts (`DD::new`): two part arrays of shape (n,) (nrhs = 1) or (n, k), row-major. Returns
+/// b's shape and the rows. Raises ValueError for another shape, unequal shapes or an entry that is not finite.
+fn dd_rhs(
+    bh: &PyReadonlyArrayDyn<'_, f64>,
+    bl: &PyReadonlyArrayDyn<'_, f64>,
+    n: usize,
+) -> PyResult<(Vec<usize>, Vec<f64>, Vec<f64>)> {
+    let shape = bh.shape().to_vec();
+    let k = match shape[..] {
+        [r] if r == n => 1,
+        [r, k] if r == n => k,
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "b must be of shape (n,) or (n, k), n = {n} the order of A"
+            )))
+        }
+    };
+    if bl.shape() != shape {
+        return Err(PyValueError::new_err("bh and bl must have the same shape"));
+    }
+    let (sh, sl) = (rows(bh, "bh")?, rows(bl, "bl")?);
+    let (mut h, mut l) = (vec![0.0; n * k], vec![0.0; n * k]);
+    for i in 0..n {
+        for j in 0..k {
+            let v = DD::new(sh[i * k + j], sl[i * k + j]);
+            if !(v.hi.is_finite() && v.lo.is_finite()) {
+                return Err(PyValueError::new_err(if shape.len() == 1 {
+                    format!("b has a non-finite entry at {i}")
+                } else {
+                    format!("b has a non-finite entry at ({i}, {j})")
+                }));
+            }
+            (h[j * n + i], l[j * n + i]) = (v.hi, v.lo);
+        }
+    }
+    Ok((shape, h, l))
+}
+
+type DynPair<'py> = (Bound<'py, PyArrayDyn<f64>>, Bound<'py, PyArrayDyn<f64>>);
+
+/// The double-double LU of A with partial pivoting (the crate's `DDLu`), factored once for several solves: DDLu(ah,
+/// al) with A as (n, n) row-major hi and lo arrays, each entry the exact sum of its two parts, or `factor_f64(a)`, the
+/// f64 LU of an f64 matrix (lo = 0), whose solves still run in double-double. Raises ValueError if A is singular or
+/// has a non-finite entry.
+#[pyclass(name = "DDLu", module = "multidouble._multidouble", frozen)]
+struct PyDdLu {
+    lu: DDLu,
+}
+
+#[pymethods]
+impl PyDdLu {
+    /// factor A in double-double (`DDLu::factor`); par: update the trailing columns on rayon's threads
+    #[new]
+    #[pyo3(signature = (ah, al, par = false))]
+    fn new(py: Python<'_>, ah: PyReadonlyArray2<'_, f64>, al: PyReadonlyArray2<'_, f64>, par: bool) -> PyResult<Self> {
+        let (n, ld, h, l) = dd_matrix(&ah, &al)?;
+        let lu = py
+            .detach(|| DDLu::factor(n, ld, h, l, par))
+            .map_err(PyValueError::new_err)?;
+        Ok(PyDdLu { lu })
+    }
+
+    /// factor an f64 matrix A ((n, n), row-major) in f64 (`DDLu::factor_f64`, the blocked LU in plain f64), stored
+    /// with lo = 0 so that the double-double solves use these factors as they are
+    #[staticmethod]
+    #[pyo3(signature = (a, par = false))]
+    fn factor_f64(py: Python<'_>, a: PyReadonlyArray2<'_, f64>, par: bool) -> PyResult<Self> {
+        let n = a.shape()[0];
+        if a.shape() != [n, n] {
+            return Err(PyValueError::new_err("A must be (n, n)"));
+        }
+        let s = rows(&a, "a")?;
+        let ld = ld_for(n);
+        let mut c = vec![0.0; ld * n];
+        for i in 0..n {
+            for j in 0..n {
+                let v = s[i * n + j];
+                if !v.is_finite() {
+                    return Err(PyValueError::new_err(format!("A has a non-finite entry at ({i}, {j})")));
+                }
+                c[j * ld + i] = v;
+            }
+        }
+        let lu = py
+            .detach(|| DDLu::factor_f64(n, ld, c, par))
+            .map_err(PyValueError::new_err)?;
+        Ok(PyDdLu { lu })
+    }
+
+    /// the order n of A
+    #[getter]
+    fn n(&self) -> usize {
+        self.lu.n
+    }
+
+    /// x with A x = b (A^T x = b when transpose) in double-double: b as hi and lo arrays of shape (n,) or (n, k),
+    /// each entry the exact sum of its two parts. One right-hand side of shape (n,) takes `DDLu::solve` (`solve_t`),
+    /// k of them `DDLu::solve_many`, eight to a lane vector and the groups of eight on rayon's threads when par, each
+    /// column bitwise its own solve. Returns the (hi, lo) arrays of x, of b's shape. Raises ValueError if b has a
+    /// non-finite entry or the wrong shape.
+    #[pyo3(signature = (bh, bl, transpose = false, par = false))]
+    fn solve<'py>(
+        &self,
+        py: Python<'py>,
+        bh: PyReadonlyArrayDyn<'py, f64>,
+        bl: PyReadonlyArrayDyn<'py, f64>,
+        transpose: bool,
+        par: bool,
+    ) -> PyResult<DynPair<'py>> {
+        let n = self.lu.n;
+        let (shape, mut h, mut l) = dd_rhs(&bh, &bl, n)?;
+        let k = if shape.len() == 1 { 1 } else { shape[1] };
+        let lu = &self.lu;
+        py.detach(|| {
+            if shape.len() == 1 {
+                let mut b: Vec<DD> = h.iter().zip(&l).map(|(&hi, &lo)| DD { hi, lo }).collect();
+                if transpose {
+                    lu.solve_t(&mut b);
+                } else {
+                    lu.solve(&mut b);
+                }
+                for (i, v) in b.iter().enumerate() {
+                    (h[i], l[i]) = (v.hi, v.lo);
+                }
+            } else {
+                lu.solve_many(&mut h, &mut l, k, transpose, par);
+            }
+        });
+        // the (k, n) rows back in b's (n, k) layout
+        let part = |v: &[f64]| -> PyResult<Bound<'py, PyArrayDyn<f64>>> {
+            let mut o = vec![0.0; n * k];
+            for i in 0..n {
+                for j in 0..k {
+                    o[i * k + j] = v[j * n + i];
+                }
+            }
+            let a = ArrayD::from_shape_vec(IxDyn(&shape), o).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(a.into_pyarray(py))
+        };
+        Ok((part(&h)?, part(&l)?))
+    }
+}
+
 /// The breakage `dd_logdet` and `qd_logdet` apply for the tests' controls (their argument `control`): "none";
 /// "no_pivot", the LU without row interchanges (`DdLuControl::NoPivot`, `QdLuControl::NoPivot`); "no_swap_sign", the
 /// sign without its flip per row interchange; and, for `qd_logdet` only, "update_dd", every trailing update rounded to
@@ -919,6 +1063,7 @@ fn _multidouble(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dd_matvec, m)?)?;
     m.add_function(wrap_pyfunction!(dd_horner, m)?)?;
     m.add_function(wrap_pyfunction!(dd_solve, m)?)?;
+    m.add_class::<PyDdLu>()?;
     m.add_function(wrap_pyfunction!(qd_solve, m)?)?;
     m.add_class::<PyQdLu>()?;
     m.add_function(wrap_pyfunction!(dd_logdet, m)?)?;

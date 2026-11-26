@@ -27,6 +27,12 @@ print(md.isa())                           # the SIMD backend in use, detected at
   a))` bit for bit, 8 values at a time; returns the (hi, lo) arrays of the n sums. Float64 powers a**k would carry
   about 2^-53 of each term unless a is a power of two.
 - `dd_solve(Ah, Al, bh, bl)`: x with A x = b by LU with partial pivoting, A as (n, n) row-major hi and lo arrays.
+  `DDLu(Ah, Al, par=False)` factors A once (each entry the exact sum of its two parts), and `DDLu.factor_f64(a)` factors
+  a float64 matrix in f64 (lo = 0), the preconditioner of a mixed-precision solve. Their `solve(bh, bl,
+  transpose=False, par=False)` solves A x = b (or A^T x = b) in double-double for b of shape (n,) or (n, k), k
+  right-hand sides eight to a lane vector, each column bitwise its own solve. With the factors of `DDLu(Ah, Al)`,
+  normalized parts and `transpose=False` it gives the bits of `dd_solve`. Both raise `ValueError` for a singular A and
+  for entries that are not finite.
 - `qd_solve(a0, a1, a2, a3, b0, b1, b2, b3)`: x with A x = b by LU with partial pivoting in quad-double, A as four
   (n, n) part arrays and b as four part arrays of shape (n,) or (n, k) (k right-hand sides), each entry the exact sum of
   its parts in any order; returns the four parts of x, of b's shape, to about cond(A) 2^-209. `QDLu(a0, a1, a2, a3)`
