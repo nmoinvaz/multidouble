@@ -7,6 +7,7 @@ import Controls.Exp8
 import Controls.ExpRed8
 import Controls.Log8
 import Controls.Log8DD
+import Controls.Mullow
 import Controls.Prop28
 import Controls.Recip
 import Controls.Tan8
