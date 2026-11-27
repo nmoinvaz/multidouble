@@ -63,14 +63,14 @@ dependencies = [
 
 [[package]]
 name = "multidouble"
-version = "6.0.0"
+version = "6.1.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "multidouble-python"
-version = "6.0.0"
+version = "6.1.0"
 dependencies = [
  "multidouble",
  "numpy",
