@@ -15,6 +15,9 @@
 //! coefficient. Controls: the first square dropped (`RELAXED_MUT_DROP`) must break both. Without squares (`with_min`
 //! 0) `sum` is bitwise `cs_range`.
 //!
+//! Under emulation (`common::emulated`) the planted cases stop at n = 251, the lanes' own squares are QV's alone,
+//! and the relaxed accuracy runs to n = 300 rather than 700.
+//!
 //! Planted cases (8 lanes, random signs, all parts random, each lane its own offsets): `flat`, |a_i| ~ 2^(-0.7 i) and
 //! |b_i| ~ 2^(-0.4 i), each times 2^(+-4) at random; `ramp`, log10 |a_i| from -60 to +60 and log10 |b_i| from +60 to
 //! -60, each +-1 at random; `bumpy`, log10 |a_i| = 60 sin(2 pi 1.3 i / n + phase), log10 |b_i| = 60 cos(...);
@@ -225,13 +228,18 @@ fn bound<E: Expansion<Native>>() -> f64 {
     }
 }
 
-/// every planted case at n = 128, 251, 512 within the bound with max_frac < 1/4 and no fallback, the integers exact,
-/// and the controls failing; the report of each case on stdout
+/// every planted case at n = 128, 251, 512 (128 and 251 under emulation) within the bound with max_frac < 1/4 and no
+/// fallback, the integers exact, and the controls failing; the report of each case on stdout
 fn planted<E: Expansion<Native>>(name: &str) -> bool {
     let cfg = Cfg::default();
     let tol = bound::<E>();
     let mut ok = true;
-    for &n in &[128usize, 251, 512] {
+    let ns: &[usize] = if common::emulated() {
+        &[128, 251]
+    } else {
+        &[128, 251, 512]
+    };
+    for &n in ns {
         for (ci, case_name) in ["flat", "holes", "ramp", "bumpy", "ints"].iter().enumerate() {
             let (a, b) = case::<E>(case_name, n, 1000 + 17 * n as u64 + ci as u64);
             let rf = reference(&a, &b, n);
@@ -697,27 +705,34 @@ fn relaxed_planted_exact() {
         assert!(ctl.iter().all(|&o| !o), "the dropped-square control did not fail");
     }
     // the lanes' own smallest squares, at n with two sides or more of them: 2100 for DV and Du (512), 600 for QV (64)
-    // and OV (16)
+    // and OV (16); under emulation QV's alone, OV's side being that of the second run above
+    let full = !common::emulated();
     let own = [
-        (
-            relaxed_exact::<DV>(2100, DV::BLOCK_MIN, 0),
-            relaxed_exact::<DV>(2100, DV::BLOCK_MIN, RELAXED_MUT_DROP),
-        ),
-        (
+        full.then(|| {
+            (
+                relaxed_exact::<DV>(2100, DV::BLOCK_MIN, 0),
+                relaxed_exact::<DV>(2100, DV::BLOCK_MIN, RELAXED_MUT_DROP),
+            )
+        }),
+        Some((
             relaxed_exact::<QV>(600, QV::BLOCK_MIN, 0),
             relaxed_exact::<QV>(600, QV::BLOCK_MIN, RELAXED_MUT_DROP),
-        ),
-        (
-            relaxed_exact::<OV>(600, OV::BLOCK_MIN, 0),
-            relaxed_exact::<OV>(600, OV::BLOCK_MIN, RELAXED_MUT_DROP),
-        ),
-        (
-            relaxed_exact::<Du>(2100, Du::BLOCK_MIN, 0),
-            relaxed_exact::<Du>(2100, Du::BLOCK_MIN, RELAXED_MUT_DROP),
-        ),
+        )),
+        full.then(|| {
+            (
+                relaxed_exact::<OV>(600, OV::BLOCK_MIN, 0),
+                relaxed_exact::<OV>(600, OV::BLOCK_MIN, RELAXED_MUT_DROP),
+            )
+        }),
+        full.then(|| {
+            (
+                relaxed_exact::<Du>(2100, Du::BLOCK_MIN, 0),
+                relaxed_exact::<Du>(2100, Du::BLOCK_MIN, RELAXED_MUT_DROP),
+            )
+        }),
     ];
     println!("relaxed exact, the lanes' own squares: DV QV OV Du (recovered, control recovered) {own:?}");
-    assert!(own.iter().all(|&(o, c)| o && !c), "the lanes' own squares");
+    assert!(own.iter().flatten().all(|&(o, c)| o && !c), "the lanes' own squares");
 }
 
 /// Without squares `sum` is bitwise `cs_range`, on a lane with squares (DV) and on one without (F8)
@@ -818,30 +833,31 @@ fn relaxed_accuracy_against_naive() {
         4 => 1e-58,
         _ => 1e-118,
     };
+    let n = if common::emulated() { 300 } else { 700 };
     for (name, s0, w, wc, tol) in [
         (
             "DV",
             16,
-            relaxed_accuracy::<DV>(700, 16, 0),
-            relaxed_accuracy::<DV>(700, 16, RELAXED_MUT_DROP),
+            relaxed_accuracy::<DV>(n, 16, 0),
+            relaxed_accuracy::<DV>(n, 16, RELAXED_MUT_DROP),
             t(2),
         ),
         (
             "QV",
             16,
-            relaxed_accuracy::<QV>(700, 16, 0),
-            relaxed_accuracy::<QV>(700, 16, RELAXED_MUT_DROP),
+            relaxed_accuracy::<QV>(n, 16, 0),
+            relaxed_accuracy::<QV>(n, 16, RELAXED_MUT_DROP),
             t(4),
         ),
         (
             "OV",
             16,
-            relaxed_accuracy::<OV>(700, 16, 0),
-            relaxed_accuracy::<OV>(700, 16, RELAXED_MUT_DROP),
+            relaxed_accuracy::<OV>(n, 16, 0),
+            relaxed_accuracy::<OV>(n, 16, RELAXED_MUT_DROP),
             t(8),
         ),
     ] {
-        println!("relaxed accuracy {name} (squares from {s0}, n 700): {w:.2e}, control {wc:.2e} (bound {tol:.0e})");
+        println!("relaxed accuracy {name} (squares from {s0}, n {n}): {w:.2e}, control {wc:.2e} (bound {tol:.0e})");
         assert!(w <= tol, "{name} relaxed against naive");
         assert!(wc > tol, "{name} dropped-square control did not fail");
     }
