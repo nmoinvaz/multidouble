@@ -6,8 +6,8 @@
 
 The statements of these appendices are proved in Lean~4~\cite{Lean4} with Mathlib~\cite{Mathlib}, on
 FloatSpec~\cite{FloatSpec}, a port of Flocq~\cite{BM11} that supplies the rounding and the theorems of $\TwoSum$ and
-$\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md}. Table~\ref{tab:lean} gives the
-files of \texttt{ExpansionBounds/} and the theorems for each statement.
+$\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md}. Tables~\ref{tab:lean}
+and~\ref{tab:lean2} give the files of \texttt{ExpansionBounds/} and the theorems for each statement.
 \begin{itemize}
 \item The proofs hold for every precision $p \ge 2$, except that Lemmas~\ref{lem:red} and~\ref{lem:lnb},
 Theorem~\ref{thm:trig}, Proposition~\ref{prop:ddexplog} and the constants at $n = 8$ are stated at $p = 53$, and
@@ -86,6 +86,19 @@ Theorem~\ref{thm:acc}, Table~\ref{tab:dot} & \texttt{AccThm.lean}, \texttt{AccK.
 Proposition~\ref{prop:acc-low} & \texttt{Prop28.lean}, \texttt{AccRun.lean}, \texttt{RoundEval.lean},
   \texttt{Dyadic.lean} & \texttt{prop28}, \texttt{prop28\_terms}, \texttt{prop28\_W}, \texttt{prop28\_256},
   \texttt{prop28\_512}, \texttt{prop28\_1024}, \texttt{accRun\_prefix}, \texttt{cast\_rn}, \texttt{dyF\_of\_all} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{table*}[tp]
+\centering
+\caption{The Lean proof of each statement, continued from Table~\ref{tab:lean}.}
+\label{tab:lean2}
+\footnotesize
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{8.6cm}@{}}
+\toprule
+statement & files & theorems \\
+\midrule
 Theorem~\ref{thm:sloppy} & \texttt{Sloppy.lean}, \texttt{Sloppy8.lean} & \texttt{thm30a}, \texttt{thm30b},
   \texttt{thm30c}, \texttt{sloppy8\_mul} \\
 Lemma~\ref{lem:red} & \texttt{Red.lean} & \texttt{lemma32\_k}, \texttt{lemma32\_r}, \texttt{lemma32\_re},

@@ -1,15 +1,15 @@
-"""The paper's table of Lean proofs (expansion-error-bounds-lean.tex) against the Lean sources: every Lean file at
-the top of lean/ExpansionBounds is named in a row, every file a row names exists, and every theorem a row names is
-declared in one of that row's files, outside any comment. The modules in the folders under lean/ExpansionBounds
-are not read: they hold the kernel's checks and their data, and the files of the rows import them. Each of those
-folders is named in the appendix's text.
+"""The paper's table of Lean proofs (expansion-error-bounds-lean.tex), set as two floats, against the Lean sources:
+every Lean file at the top of lean/ExpansionBounds is named in a row, every file a row names exists, and every theorem
+a row names is declared in one of that row's files, outside any comment. The modules in the folders under
+lean/ExpansionBounds are not read: they hold the kernel's checks and their data, and the files of the rows import
+them. Each of those folders is named in the appendix's text.
 
 usage: lean_refs.py          prints the counts and PASS, or what is wrong
        lean_refs.py check    also the controls, each of which must be reported: a theorem that no file declares, a
                              file that does not exist, a Lean file left out of the table, a theorem inside a
                              comment, one inside a nested comment, one inside a string, one after a string that
-                             holds a comment's opening, which must still be found, a row that TeX comments out, and
-                             a folder that the appendix does not name"""
+                             holds a comment's opening, which must still be found, a row that TeX comments out, a
+                             folder that the appendix does not name, and the second float left out"""
 import os
 import re
 import sys
@@ -21,16 +21,16 @@ DECL = re.compile(r"^(?:private |noncomputable |protected )*(?:theorem|lemma|def
 
 
 def rows(tex):
-    """the table's rows as (statement, files, theorems), without what TeX comments out"""
+    """the tables' rows as (statement, files, theorems), without what TeX comments out"""
     tex = re.sub(r"(?<!\\)%.*", "", tex)
-    body = tex[tex.index(r"\midrule"):tex.index(r"\bottomrule")]
     out = []
-    for row in body.split(r"\\"):
-        cells = row.split("&")
-        if len(cells) != 3:
-            continue
-        names = [re.findall(r"\\texttt\{([^}]*)\}", c) for c in cells[1:]]
-        out.append((" ".join(cells[0].split()), names[0], [n.replace(r"\_", "_") for n in names[1]]))
+    for body in re.findall(r"\\midrule(.*?)\\bottomrule", tex, re.S):
+        for row in body.split(r"\\"):
+            cells = row.split("&")
+            if len(cells) != 3:
+                continue
+            names = [re.findall(r"\\texttt\{([^}]*)\}", c) for c in cells[1:]]
+            out.append((" ".join(cells[0].split()), names[0], [n.replace(r"\_", "_") for n in names[1]]))
     return out
 
 
@@ -132,16 +132,17 @@ if __name__ == "__main__":
                faults(table, hidden[1]),
                faults(table, quoted),
                faults(gone, decl),
-               unnamed(tex, dirs + ["NoSuchFolder"])]
+               unnamed(tex, dirs + ["NoSuchFolder"]),
+               faults(rows(tex[:tex.rindex(r"\begin{table*}")]), decl)]
         caught = [any("no_such_theorem" in x for x in ctl[0]), any("NoSuchFile.lean" in x for x in ctl[1]),
                   any("is in no row" in x for x in ctl[2]), any(t[0] + " is not declared" in x for x in ctl[3]),
                   any(t[0] + " is not declared" in x for x in ctl[4]),
                   any(t[0] + " is not declared" in x for x in ctl[5]), t[0] in after,
                   len(gone) == len(table) - 1 and any("is in no row" in x for x in ctl[6]),
-                  any("NoSuchFolder" in x for x in ctl[7])]
+                  any("NoSuchFolder" in x for x in ctl[7]), any("is in no row" in x for x in ctl[8])]
         print("controls, a theorem no file declares, a file that does not exist, a file left out, a theorem in a "
               "comment, in a nested comment, in a string, after a string with a comment's opening (found), a row "
-              "commented out, a folder not named:", caught)
+              "commented out, a folder not named, the second float left out:", caught)
         ok = ok and all(caught)
     print("PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
