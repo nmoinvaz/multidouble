@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+# A push to a pull request cancels the run of its previous commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   CARGO_TERM_COLOR: always
 jobs:
