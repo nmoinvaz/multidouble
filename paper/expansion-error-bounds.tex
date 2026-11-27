@@ -119,7 +119,7 @@ $n = 4$, and Section~\ref{sec:qd} lists the differences:
 \end{itemize}
 \end{samepage}
 The main text states the results and shows why they hold. The full statements and proofs are in the appendix, and
-its last section gives the Lean~4 proof of each statement (Table~\ref{tab:lean}).
+its last section gives the Lean~4 proof of each statement (Tables~\ref{tab:lean} and~\ref{tab:lean2}).
 
 \section{Expansions and their arithmetic}
 
@@ -578,10 +578,10 @@ cited there, and the build fails on a proof left unfinished.
 \input{expansion-error-bounds-checks}
 \input{expansion-error-bounds-lean}
 
-% The tables of the last two appendices come out first, so that the references are not split around them. The second
-% fills 0.62 of a page: unless it may take a float page, \clearpage leaves the column after it at the height under it.
-% The trigger balances the two columns of the references.
-\renewcommand{\dblfloatpagefraction}{0.5}
+% The tables of the last two appendices come out first, so that the references are not split around them. The Lean
+% table's two floats fill about half a page each: unless each may take a float page, \clearpage leaves the
+% column after one at the height under it. The trigger balances the two columns of the references.
+\renewcommand{\dblfloatpagefraction}{0.3}
 \clearpage
 \IEEEtriggeratref{15}
 \begin{thebibliography}{99}

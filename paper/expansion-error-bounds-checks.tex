@@ -72,11 +72,12 @@ the hypotheses, with the inputs of Proposition~\ref{prop:worst} and Table~\ref{t
 exponential and the logarithm against a reference accurate to $2^{-1600}$. & The reference is checked against planted
 truth. \\ \addlinespace
 Lean & The statements of the appendices are proved in Lean~4, and its kernel evaluates their constants
-(Appendix~\ref{sec:lean}). Table~\ref{tab:lean} is checked against the sources: every file at the top of
-\texttt{ExpansionBounds/} is in a row, every folder under it is named in that appendix, and every theorem named is
-declared in its row's files (\texttt{lean\_refs.py}). & The build reports a theorem that rests on a planted axiom,
-and the kernel proves each check false on a wrong number or state (\texttt{Controls/}). The table's check reports a
-theorem and a file that do not exist, and a folder that the appendix does not name. \\
+(Appendix~\ref{sec:lean}). Tables~\ref{tab:lean} and~\ref{tab:lean2} are checked against the sources: every file
+at the top of \texttt{ExpansionBounds/} is in a row, every folder under it is named in that appendix, and every
+theorem named is declared in its row's files (\texttt{lean\_refs.py}). & The build reports a theorem that rests on a
+planted axiom, and the kernel proves each check false on a wrong number or state (\texttt{Controls/}). The tables'
+check reports a theorem and a file that do not exist, a folder that the appendix does not name, and the files of
+Table~\ref{tab:lean2} when it is left out. \\
 \bottomrule
 \end{tabular}
 \end{table*}
