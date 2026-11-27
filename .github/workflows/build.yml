@@ -51,30 +51,63 @@ jobs:
             os: ubuntu-24.04-arm
             cargo-args: --features portable
 
-          # The rest of Ubuntu's architectures, cross compiled and run under QEMU. S390X is big-endian.
+          # The rest of Ubuntu's architectures, cross compiled and run under QEMU. S390X is big-endian. Each runs
+          # tests/series.rs and tests/inplace.rs, the slowest, apart from the other tests.
+          - name: Ubuntu ARMv7 series and inplace
+            os: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            gnu: arm-linux-gnueabihf
+            cargo-args: --target armv7-unknown-linux-gnueabihf
+            shard: heavy
+
           - name: Ubuntu ARMv7
             os: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
             gnu: arm-linux-gnueabihf
             cargo-args: --target armv7-unknown-linux-gnueabihf
+            shard: rest
+
+          - name: Ubuntu PPC64LE series and inplace
+            os: ubuntu-latest
+            target: powerpc64le-unknown-linux-gnu
+            gnu: powerpc64le-linux-gnu
+            cargo-args: --target powerpc64le-unknown-linux-gnu
+            shard: heavy
 
           - name: Ubuntu PPC64LE
             os: ubuntu-latest
             target: powerpc64le-unknown-linux-gnu
             gnu: powerpc64le-linux-gnu
             cargo-args: --target powerpc64le-unknown-linux-gnu
+            shard: rest
+
+          - name: Ubuntu RISC-V 64 series and inplace
+            os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+            gnu: riscv64-linux-gnu
+            cargo-args: --target riscv64gc-unknown-linux-gnu
+            shard: heavy
 
           - name: Ubuntu RISC-V 64
             os: ubuntu-latest
             target: riscv64gc-unknown-linux-gnu
             gnu: riscv64-linux-gnu
             cargo-args: --target riscv64gc-unknown-linux-gnu
+            shard: rest
+
+          - name: Ubuntu S390X series and inplace
+            os: ubuntu-latest
+            target: s390x-unknown-linux-gnu
+            gnu: s390x-linux-gnu
+            cargo-args: --target s390x-unknown-linux-gnu
+            shard: heavy
 
           - name: Ubuntu S390X
             os: ubuntu-latest
             target: s390x-unknown-linux-gnu
             gnu: s390x-linux-gnu
             cargo-args: --target s390x-unknown-linux-gnu
+            shard: rest
 
           - name: macOS ARM64 NEON
             os: macos-latest
@@ -163,11 +196,31 @@ jobs:
           fi
 
       # Release mode: the accuracy tests run tens of thousands of quad-double operations against exact arithmetic.
-      # Under QEMU (the targets with matrix.gnu) they take 27 to 31 minutes, so those get twice the native limit.
       - name: Run tests
-        if: ${{ !matrix.msrv && (!matrix.needs-cpu || steps.cpu.outputs.run == 'true') }}
-        timeout-minutes: ${{ matrix.gnu && 60 || 30 }}
+        if: ${{ !matrix.shard && !matrix.msrv && (!matrix.needs-cpu || steps.cpu.outputs.run == 'true') }}
+        timeout-minutes: 30
         run: cargo test --release ${{ matrix.cargo-args }}
+
+      - name: Install nextest
+        if: matrix.shard
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # Under QEMU nextest runs the test binaries at once, where cargo test runs them in turn; the doctests, which
+      # nextest does not run, go with the other tests. The limit is twice the native one.
+      - name: Run tests (QEMU)
+        if: matrix.shard
+        timeout-minutes: 60
+        env:
+          HEAVY: binary(=series) | binary(=inplace)
+        run: |
+          if [ "${{ matrix.shard }}" = heavy ]; then
+            cargo nextest run --release ${{ matrix.cargo-args }} -E "$HEAVY"
+          else
+            cargo nextest run --release ${{ matrix.cargo-args }} -E "not ($HEAVY)"
+            cargo test --release --doc ${{ matrix.cargo-args }}
+          fi
 
       # Checks that the benchmarks compile and link, with the tests' profile and on their build.
       # cargo bench would build them again with fat LTO and rebuild every dependency.
