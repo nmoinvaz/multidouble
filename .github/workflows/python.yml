@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# A push to a pull request cancels the run of its previous commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Python ${{ matrix.python }} on ${{ matrix.os }}
