@@ -1,37 +1,41 @@
 //! Products of power series whose coefficients are double-, quad- or octo-double lanes.
 //!
 //! * [`mullow`]: the truncated product c_k = sum_(i=0..=k) a_i b_(k-i), k < n, of two series of an [`Expansion`]
-//!   ([`DV`], [`QV`], [`OV`]) on each of the 8 lanes, by block scaling and exact integer convolution, added into the
+//!   ([`DV`], [`QV`], [`OV`]) on each of the 8 lanes, by block scaling and integer convolution, added into the
 //!   expansion's accumulators; [`mullow_naive`] is its reference, each sum formed term by term.
 //! * [`Relaxed`]: the product of two series of fields whose coefficients become known one order at a time, as in a
 //!   recurrence that solves for order k with the products' coefficients of order k. The products of blocks of earlier
 //!   coefficients are formed ahead by [`Lane::block_mul`] (by `mullow` on `DV`, `QV`, `OV` and their dual lanes), and
 //!   the terms with a recent coefficient are summed directly.
 //!
-//! # The exact product
+//! # The block-scaled product
 //!
 //! Scaling. a_i and b_i are multiplied by 2^(s i) on each lane, s an integer slope from the series' leading exponents
 //! (least squares), which multiplies c_k by 2^(s k) exactly.
 //!
-//! Blocks. Each scaled series is cut into runs of indices whose leading exponents lie within h bits on every lane. In
-//! a block of largest exponent F (per lane) the coefficient becomes the integer X_i = a_i 2^(s i + W - F) with each
-//! part rounded, W = 16 t - 2 bits for t digits, so it keeps W - h - 5 bits or more. Every pair of blocks whose
-//! product reaches below n is multiplied exactly, and the pair's terms then err by 2^-prec of its smallest term or
-//! less, prec = 53 times the expansion's parts by default ([`Cfg::prec`]). The slope (from both series, from a or from
-//! b) and h ([`Cfg::spread`] times 1, 2 or 4) are those of least estimated cost: flat series are one block each.
+//! Blocks. Each scaled series is cut into runs of indices whose leading exponents lie within h bits on every lane. In a
+//! block of largest exponent F (per lane) the coefficient becomes the integer X_i = a_i 2^(s i + W - F) with each part
+//! rounded, W = 16 t - 2 bits for t digits, so it keeps W - h - 5 bits or more. Every pair of blocks whose product
+//! reaches below n is multiplied as integers, and with the convolution exact the pair's terms then err by 2^-prec of
+//! its smallest term or less, prec = 53 times the expansion's parts by default ([`Cfg::prec`]). The slope (from both
+//! series, from a or from b) and h ([`Cfg::spread`] times 1, 2 or 4) are those of least estimated cost: flat series are
+//! one block each.
 //!
 //! Convolution. Each integer is t balanced 16-bit digits. The digit sequences are transformed by f64 FFTs (two real
 //! sequences per complex transform), the digit products summed by weight r + r' in the frequency domain, and the
-//! weights transformed back. Every value is then an integer below 2^44. Its distance from the computed value is
-//! checked to be under 1/4 before any of the pair's terms is used, so the convolution is exact and its bits depend on
-//! no libm; a pair that fails the check (none has in the tests) is formed term by term ([`Stats::fallback`]). Weights
-//! too small to reach 2^-prec of the smallest term are not formed. The integer at each index is carried into balanced
+//! weights transformed back. The exact weights are integers below 2^44, and each computed value is rounded to the
+//! nearest integer, which is the exact weight if the transform errs by less than 1/2; that bound is not proven. Each
+//! value is checked to lie within 1/4 of an integer before any of the pair's terms is used, and a pair that fails the
+//! check (none has in the tests) is formed term by term ([`Stats::fallback`]). The check catches an error between 1/4
+//! and 3/4, not one near a whole number. Exact weights depend on no libm. Weights too small to reach 2^-prec of the
+//! smallest term are not formed. The integer at each index is carried into balanced
 //! digits and added into the index's accumulator: on octo-double lanes cut into eight 53-bit parts from its top bit
 //! (2^-424 of it or less dropped), on double- and quad-double lanes as chunks of three digits (exact in f64), the top
 //! first, which the accumulator rounds to its precision.
 //!
-//! The bits do not depend on the backend: the transforms' operations are the lanes' own, and their results are
-//! rounded to the exact integers. They differ from the naive sums' bits by about the expansion's rounding.
+//! The bits do not depend on the backend: the transforms' operations are the lanes' own, so every backend computes the
+//! same values and rounds them to the same integers. They differ from the naive sums' bits by about the expansion's
+//! rounding.
 //!
 //! J. van der Hoeven, "Making fast multiplication of polynomials numerically stable", preprint, Universite Paris-Sud
 //! (2008); the blocks are those of F. Johansson's Arb (`arb_poly_mullow_block`), "Arb: efficient arbitrary-precision
@@ -271,8 +275,9 @@ pub struct Stats {
     pub fallback: usize,
     /// blocks of a and of b
     pub blocks: (usize, usize),
-    /// the largest distance of an inverse transform's value from its integer (exact while below 1/2); infinite when a
-    /// factor is not finite (the product then formed term by term)
+    /// the largest distance of an inverse transform's value from the nearest integer, which the check keeps below 1/4
+    /// (it does not show the integer exact); infinite when a factor is not finite (the product then formed term by
+    /// term)
     pub max_frac: f64,
     /// digits per coefficient (largest over the pairs)
     pub digits: usize,
@@ -306,7 +311,7 @@ pub fn mullow_naive<S: Simd, E: Expansion<S>>(a: &[E], b: &[E], n: usize) -> Vec
         .collect()
 }
 
-/// c_k for k < n added into acc\[k\] (acc of n entries or more) by the block-scaled exact product (module doc)
+/// c_k for k < n added into acc\[k\] (acc of n entries or more) by the block-scaled product (module doc)
 pub fn mullow<S: Simd, E: Expansion<S>>(a: &[E], b: &[E], n: usize, cfg: &Cfg, acc: &mut [E::Acc]) -> Stats {
     mullow_pow2(a, b, n, cfg, 0, acc)
 }

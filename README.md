@@ -107,16 +107,17 @@ On Hilbert matrices, whose condition number grows like e^(3.5 n), the solves kee
 
 | Type | What it is |
 |---|---|
-| `series::mullow`, `series::mullow_naive` | the truncated product of two series of `DV`, `QV` or `OV` lanes, by block scaling and exact integer convolution, accurate to the precision relative to the sum of the terms' magnitudes; and the same product term by term |
+| `series::mullow`, `series::mullow_naive` | the truncated product of two series of `DV`, `QV` or `OV` lanes, by block scaling and integer convolution, accurate to the precision relative to the sum of the terms' magnitudes; and the same product term by term |
 | `series::Relaxed` | the product of two series of fields whose coefficients become known one order at a time, as in a recurrence solved order by order |
 | `dual::Lane::block_mul`, `dual::Lane::BLOCK_MIN` | a square block of such a product, by `mullow` on `DV`, `QV`, `OV`, `Du`, `Qu` and `Ou` and term by term on the other lanes, and the side from which `mullow` is the faster |
 
 `mullow` scales each series by a power of two per index so that its coefficients have about one size, cuts it into
 blocks whose coefficients lie within a few dozen bits of each other, writes each block's coefficients as integers of
-16-bit digits, and multiplies the integers exactly by floating-point FFTs, whose results are rounded to the exact
-integers. This is van der Hoeven's stable fast multiplication [[8]](#ref-vdh08) with the blocks of Arb
-[[9]](#ref-arb17). Its results are the products' to the precision's rounding, but not bit for bit the sums of their
-terms.
+16-bit digits, and multiplies the integers by floating-point FFTs, whose results are rounded to integers. The
+rounding gives the exact products if the transforms err by less than 1/2, which is not proven; each value is checked
+to lie within 1/4 of an integer, and a pair that fails is formed term by term. This is van der Hoeven's stable fast
+multiplication [[8]](#ref-vdh08) with the blocks of Arb [[9]](#ref-arb17). Its results are the products' to the
+precision's rounding, but not bit for bit the sums of their terms.
 
 `Relaxed` forms the products of earlier coefficients in squares of side 2^p, each once its coefficients are known and
 before its first output is needed, and sums the terms with a recent coefficient directly when a coefficient is read: the
