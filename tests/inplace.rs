@@ -347,8 +347,9 @@ fn every_lane<S: Simd>(c: &mut impl Check) {
     // last, so that the checks above keep their seeds
     own::<S, OJet<S, 5>>(c, "OJet<5>");
     own::<S, Counted<OJet<S, 5>>>(c, "Counted<OJet<5>>");
-    // optimized builds only: unoptimized (the coverage run) its sums take minutes, and the code is OJet<5>'s
-    if !cfg!(debug_assertions) {
+    // optimized and native builds only: unoptimized (the coverage run) or emulated its sums take minutes, and the
+    // code is OJet<5>'s
+    if !cfg!(debug_assertions) && !common::emulated() {
         own::<S, OJet<S, 24>>(c, "OJet<24>");
     }
     own::<S, Ou<S>>(c, "Ou");
@@ -1112,8 +1113,8 @@ impl Kernel for EdgeAtSums {
         edge_own::<S, QJet<S, 5>>(302, "QJet<5>");
         edge_own::<S, OJet<S, 5>>(303, "OJet<5>");
         edge_own::<S, Counted<OJet<S, 5>>>(304, "Counted<OJet<5>>");
-        // optimized builds only, as in every_lane
-        if !cfg!(debug_assertions) {
+        // optimized and native builds only, as in every_lane
+        if !cfg!(debug_assertions) && !common::emulated() {
             edge_own::<S, QJet<S, 24>>(305, "QJet<24>");
             edge_own::<S, OJet<S, 24>>(306, "OJet<24>");
         }

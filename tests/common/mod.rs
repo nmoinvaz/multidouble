@@ -92,3 +92,10 @@ pub fn big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T
         .join()
         .unwrap_or_else(|e| std::panic::resume_unwind(e))
 }
+
+/// Whether the tests run under QEMU (`MULTIDOUBLE_EMULATED`, set by CI), whose software floating point runs the
+/// expansions about 300 times slower than native. The slowest checks then take fewer or smaller cases; the native runs
+/// take them all.
+pub fn emulated() -> bool {
+    std::env::var_os("MULTIDOUBLE_EMULATED").is_some()
+}

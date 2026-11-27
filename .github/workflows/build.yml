@@ -158,7 +158,8 @@ jobs:
         if: matrix.target
         run: rustup target add ${{ matrix.target }}
 
-      # The cross compiler brings the target's C library, and binfmt hands what gets built to QEMU.
+      # The cross compiler brings the target's C library, and binfmt hands what gets built to QEMU. Under
+      # MULTIDOUBLE_EMULATED the slowest tests take fewer cases (tests/common/mod.rs, `emulated`).
       - name: Install cross toolchain
         if: matrix.gnu
         run: |
@@ -169,6 +170,7 @@ jobs:
           {
             echo "CARGO_TARGET_${target^^}_LINKER=${{ matrix.gnu }}-gcc"
             echo "QEMU_LD_PREFIX=/usr/${{ matrix.gnu }}"
+            echo "MULTIDOUBLE_EMULATED=1"
           } >> "$GITHUB_ENV"
 
       # The library alone at the MSRV; the dev-dependencies (criterion) may need a newer compiler.
