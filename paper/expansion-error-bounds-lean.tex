@@ -10,9 +10,9 @@ $\FastTwoSum$. The proofs are in \texttt{paper/lean/} of the repository~\cite{md
 and~\ref{tab:lean2} give the files of \texttt{ExpansionBounds/} and the theorems for each statement.
 \begin{itemize}
 \item The proofs hold for every precision $p \ge 2$, except that Lemmas~\ref{lem:red} and~\ref{lem:lnb},
-Theorem~\ref{thm:trig}, Propositions~\ref{prop:ddexplog} and~\ref{prop:ratio}, the octo-double part of
-Corollary~\ref{cor:mulrecip} and the constants at $n = 8$ are stated at $p = 53$, Proposition~\ref{prop:ddmul} and the
-double-double part of Corollary~\ref{cor:mulrecip} from $p = 3$, and each published double-word theorem from its own
+Theorem~\ref{thm:trig}, Propositions~\ref{prop:ddexplog}, \ref{prop:ratio} and~\ref{prop:mullow}, the octo-double part
+of Corollary~\ref{cor:mulrecip} and the constants at $n = 8$ are stated at $p = 53$, Proposition~\ref{prop:ddmul} and
+the double-double part of Corollary~\ref{cor:mulrecip} from $p = 3$, and each published double-word theorem from its own
 precision, 3 to 7.
 \item A constant is evaluated by Lean's kernel on a copy of its recursion over the rationals, which a lemma equates
 with the recursion over the reals. Where exact values grow too long the copy rounds up, which the bounds of
@@ -37,6 +37,8 @@ the model having no largest number. The second step of their scaling by $2^k$ do
 for $k > 0$, exactly in binary64. A binary64 run must also meet (A2$'$). The
 logarithm's constant is proved on the convex variant of its bound, at the two ends of each case, from the start that
 Proposition~\ref{prop:ddexplog} computes.
+\item Proposition~\ref{prop:mullow} takes the inverse transform's rounded weights as exact (\texttt{FftExact}), and
+proves (c) from the pairs' bounds of (b) and the products' parts.
 \end{itemize}
 
 \begin{table*}[tp]
@@ -158,6 +160,10 @@ Corollary~\ref{cor:mulrecip} & \texttt{MulRecip.lean} & \texttt{mul\_greedy\_err
   \texttt{od\_mul\_greedy} \\
 Proposition~\ref{prop:relaxed} & \texttt{Relaxed.lean} & \texttt{mem\_relStep}, \texttt{relaxed\_cover},
   \texttt{relStep\_terms}, \texttt{relaxed\_direct} \\
+Proposition~\ref{prop:mullow} & \texttt{MullowPair.lean}, \texttt{MullowDigits.lean}, \texttt{MullowCode.lean},
+  \texttt{MullowLoad.lean}, \texttt{MullowOD.lean} & \texttt{magic\_rnd}, \texttt{step\_exact}, \texttt{cRem\_eq},
+  \texttt{cDig\_eq}, \texttt{coef\_err}, \texttt{alpha\_bounds}, \texttt{coef\_ok}, \texttt{pair\_err},
+  \texttt{plan\_rho}, \texttt{pair\_value}, \texttt{rd\_sum}, \texttt{rd\_H}, \texttt{mullow\_od} \\
 \bottomrule
 \end{tabular}
 \end{table*}

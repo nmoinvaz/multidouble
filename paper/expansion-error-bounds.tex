@@ -117,6 +117,8 @@ $n = 4$, and Section~\ref{sec:qd} lists the differences:
 \item multidouble's double-double product, which is not a published algorithm, is accurate to $6.000001\,u^2$,
   and its constants $p/q$ are the nearest expansions, by integer arithmetic that never overflows
   (Propositions~\ref{prop:ddmul} and~\ref{prop:ratio});
+\item its product of octo-double series is within $2^{-424}|c_m| + 4.15 \cdot 2^{-424}\sum|a_ib_{m-i}|$ at each
+  index whose accumulator receives at most 50 terms, given exact transforms (Proposition~\ref{prop:mullow});
 \item the renormalization is exact until its last step, whatever the order of its input terms
   (Theorem~\ref{thm:renorm}), and the other bounds rest on this.
 \end{itemize}
@@ -587,7 +589,7 @@ cited there, and the build fails on a proof left unfinished.
 % column after one at the height under it. The trigger balances the two columns of the references.
 \renewcommand{\dblfloatpagefraction}{0.3}
 \clearpage
-\IEEEtriggeratref{15}
+\IEEEtriggeratref{17}
 \begin{thebibliography}{99}
 \bibitem{Priest91} D. M. Priest. Algorithms for arbitrary precision floating point arithmetic. \emph{ARITH-10},
 132--143, 1991. doi:10.1109/ARITH.1991.145549.
@@ -650,6 +652,10 @@ doi:10.1145/3372885.3373824.
 \emph{ARITH-20}, 243--252, 2011. doi:10.1109/ARITH.2011.40.
 \bibitem{vdH02} J. van der Hoeven. Relax, but don't be too lazy. \emph{J. Symbolic Comput.} 34(6),
 479--542, 2002. doi:10.1006/jsco.2002.0562.
+\bibitem{vdH08} J. van der Hoeven. Making fast multiplication of polynomials numerically stable. Preprint, Universit\'e
+Paris-Sud, 2008. \url{https://www.texmacs.org/joris/stablemult/stablemult.pdf}.
+\bibitem{Johansson17} F. Johansson. Arb: efficient arbitrary-precision midpoint-radius interval arithmetic. \emph{IEEE
+Trans. Comput.} 66(8), 1281--1292, 2017. doi:10.1109/TC.2017.2690633.
 \end{thebibliography}
 
 \end{document}

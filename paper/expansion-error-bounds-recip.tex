@@ -6,7 +6,8 @@
 A precision-generic power series needs constants such as $1/k$ in its own rounding: \texttt{DD::ONE / k} widened to
 eight parts keeps an error of $2^{-106}$. multidouble's \texttt{recip::ratio\_parts(p, q)} forms $p/q$ as its greedy
 expansion by integer arithmetic, and \texttt{mul\_recip(k)} multiplies by it. Its \texttt{series::Relaxed} sums the
-Cauchy products of a recurrence in van der Hoeven's squares~\cite{vdH02}.
+Cauchy products of a recurrence in van der Hoeven's squares~\cite{vdH02}, and \texttt{series::mullow} forms products of
+series by an exact integer convolution.
 
 \begin{lemma}\label{lem:greedy}
 Let $x$ be real, $r_0 = \RN(x)$ and $r_i = \RN(x - r_0 - \dots - r_{i-1})$. Then $|r_{i+1}| \le u|r_i|$, so $r_0,
@@ -93,6 +94,53 @@ side $2^{\lfloor\log_2 i'\rfloor}$, with $m \ge 2$; a square's $j' \in [s, 2s)$ 
 fixes $m$, so no other square holds it. The square of $(s, m)$ belongs to step $(m + 1)s + 1$ alone.
 \end{proof}
 
-The bound of \texttt{series::mullow}, each block pair within $2^{-\mathrm{prec}}$ of its smallest term, is tested, not
-proved; the integer convolution is exact by its check at run time, and the coefficients' rounding and the dropped
-digit weights are what a proof would bound.
+\texttt{series::mullow} multiplies two series block by block, as Arb does~\cite{Johansson17} after van der
+Hoeven~\cite{vdH08}. In a block of spread $h$ it scales the coefficient $a_i$ to $\alpha_i = 2^{k_i}a_i$, $W - h \le
+e_i + k_i \le W$, where $2^{e_i - 1} \le |a_{i,0}| < 2^{e_i}$ and $W = 16t - 2$; rounds each part to an integer; and
+writes their sum as $t$ balanced 16-bit digits, $|d_r| \le 2^{15}$. Binary64 FFTs convolve the digit sequences, and
+each weight $C_q = \sum_{r + r' = q} d_rd'_{r'}$, $q \ge q_0$, is rounded to an integer; the weights below $q_0$ are
+not formed. The integer of an output index, carried into balanced digits, is cut into eight 53-bit parts from its top
+bit and deposited in the index's accumulator.
+
+\begin{proposition}\label{prop:mullow}
+Let $p = 53$, let each part of a coefficient be at most $u$ times the one before, and let the rounded weights of the
+inverse transform be the exact $C_q$.
+\begin{itemize}
+\item[(a)] Every floating-point operation that forms the digits is exact but $\RN(x + M)$, $M = 3 \cdot 2^{51}$, which
+rounds a scaled remainder $x$ to an integer. A zero coefficient has zero digits; any other's digits are an integer
+within $1/(1 - u)$ of $\alpha_i$, and $2^{W-h-1}(1 - 2u) \le |\alpha_i| \le 2^W(1 + 2u)$.
+\item[(b)] Let $W \ge \mathrm{prec} + h + 5$ for both blocks, $l_at \le 2^{20}$, and $q_0 = 0$ or $16q_0 \le 2W - h_a
+- h_b - \mathrm{prec} - 16 - \lambda$ with $t\min(l_a, l_b) \le 2^\lambda$. A block pair's integer at index $m$, times
+its scale, is within $1.13 \cdot 2^{-\mathrm{prec}}\sum|a_ib_j|$ of $\sum a_ib_j$, both sums over the pair's terms
+with $i + j = m$.
+\item[(c)] At octo-double, $\mathrm{prec} = 424$, its eight parts lie on $H(2)$ within $2^{-423}$ of it. An index whose
+accumulator receives $K \le 50$ terms, block pairs and products formed term by term, gets $c_m$ within $2^{-424}|c_m|
++ 4.15 \cdot 2^{-424}\sum_{i+j=m}|a_ib_j|$.
+\end{itemize}
+\end{proposition}
+
+The octo-double bound is that of a dot product, at most $5.15 \cdot 2^{-424}\sum|a_ib_j|$. The transform's exactness
+is assumed. The code checks that each weight lies within $1/4$ of an integer, which a transform error near 1 also
+passes; a bound below $1/2$ on the binary64 FFT's error would remove the assumption. At double- and quad-double (a) and
+(b) hold; their read-out and accumulators are not proved.
+
+\begin{proof}
+(a) $\RN(\RN(x + M) - M)$ is an integer within $1/2$ of $x$ for $|x| < 2^{51}$: $x + M$ lies
+in $(2^{52}, 2^{53})$, where the floats are the integers. The code's $r_{\rm hi}$ keeps each argument of this rounding
+below $2^{16}$. The update $\mathit{rem} - q2^{16r}$ of the remainder is exact by Sterbenz's lemma, and so are the
+digits' sums and carries, integers below $2^{53}$; so the loop computes its model in real numbers. A part loses at most
+itself below 1. A part of at least 1 is a multiple of its lowest digit's weight by the code's $r_{\rm lo}$, and loses
+nothing, unless $r_{\rm lo} = 0$, where it loses at most $1/2$. A part of at least $2^{52}$ is an integer, so only the
+last part of at least 1 can lose $1/2$, and the losses sum to at most $1/(1 - u)$. The top digit carries nothing out,
+as $|\alpha_i| + 2 \le 0.49 \cdot 2^{16t}$.
+
+(b) A term errs by at most $(\eta/L_a + \eta/L_b + \eta^2/(L_aL_b))|\alpha_i\beta_j|$ with $\eta = 1/(1 - u)$ and $L =
+2^{W-h-1}(1 - 2u)$. Each weight is at most $t2^{30}$ per term, so the dropped weights add at most $t2^{30}2^{16q_0}/
+((2^{16} - 1)L_aL_b)$ times $|\alpha_i\beta_j|$, and the four terms sum to at most $1.13 \cdot 2^{-\mathrm{prec}}$.
+The weights are below $2^{50}$, so their carry into digits is exact.
+
+(c) With $h_b$ the top bit of the integer, the first $j + 1$ chunks are the integer truncated below bit $b_j = h_b - 52
+- 53j$, so the eight lose less than $2^{h_b - 423}$. Chunk $j \ge 1$ is below $2^{53 + b_j}$, at most $2^{1 - 53j} \le
+(2u)^j$ times the first. Theorem~\ref{thm:acc} for $K \le 50$ terms on $H(2)$ (Table~\ref{tab:acc-k}) gives
+$2^{-424}(|Z| + \sum_k\mu_k)$, and $\sum_k\mu_k \le 1.0001\sum|a_ib_j|$.
+\end{proof}

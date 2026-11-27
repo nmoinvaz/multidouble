@@ -114,3 +114,8 @@ import ExpansionBounds.RatioBounds
 import ExpansionBounds.DDMul
 import ExpansionBounds.MulRecip
 import ExpansionBounds.Relaxed
+import ExpansionBounds.MullowPair
+import ExpansionBounds.MullowDigits
+import ExpansionBounds.MullowCode
+import ExpansionBounds.MullowLoad
+import ExpansionBounds.MullowOD
